@@ -136,7 +136,7 @@ async fn create_draft_reply_without_body_is_error() {
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let mut existing_message =
+    let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
@@ -185,7 +185,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let mut existing_message =
+    let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
@@ -290,7 +290,7 @@ async fn create_draft_reply_impl(
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let mut existing_message =
+    let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), user_ctx.user_stash())
             .await
             .unwrap();
@@ -307,6 +307,7 @@ async fn create_draft_reply_impl(
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
         remote_existing_message
+            .body
             .attachments
             .iter()
             .filter(|a| {
@@ -521,7 +522,8 @@ fn expected_create_reply_draft_params(
 fn draft_message_with_attachments() -> ApiMessage {
     let mut remote_existing_message = message_body_test_message_simple();
     let normal_attchment = gen_normal_attachment();
-    remote_existing_message.attachments = vec![gen_inline_attachment(), normal_attchment.clone()];
+    remote_existing_message.body.attachments =
+        vec![gen_inline_attachment(), normal_attchment.clone()];
 
     remote_existing_message
         .metadata

@@ -102,7 +102,7 @@ async fn main() {
 
     for m in messages {
         let m = session.api().get_message(m.id).await.unwrap();
-        println!("{:?}", m.message.attachments);
+        println!("{:?}", m.message.body.attachments);
     }
 
     session.logout().await.unwrap();
