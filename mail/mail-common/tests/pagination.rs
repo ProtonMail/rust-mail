@@ -17,8 +17,9 @@ use proton_mail_common::db::migrations::migrate_db;
 use proton_mail_common::models::PaginatorSearchOptions;
 use proton_mail_common::models::{Conversation, Message, PaginatorFilter};
 use proton_mail_common::{MailUserContext, Mailbox};
-use proton_mail_test_utils::common::{create_address, TestContext};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
+use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::utils::create_address;
 use proton_mail_test_utils::{conversation, message};
 use stash::orm::Model;
 use stash::params;
@@ -29,8 +30,8 @@ use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn paginate_conversations() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;
     let conversation_count = 6_usize;
@@ -135,8 +136,8 @@ async fn paginate_conversations() {
 
 #[tokio::test]
 async fn paginate_messages() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;
     let conversation_count = 6_usize;
@@ -368,8 +369,8 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
 #[tokio::test]
 async fn paginate_conversations_for_label_with_filter() {
     // Create a test context
-    let context = TestContext::new().await;
-    let user_ctx = context.user_context().await;
+    let context = MailTestContext::new().await;
+    let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
     migrate_core_db(&stash).await.unwrap();
@@ -492,8 +493,8 @@ async fn paginate_conversations_for_label_with_filter() {
 #[tokio::test]
 async fn paginate_messages_for_label_with_filter() {
     // Create a test context
-    let context = TestContext::new().await;
-    let user_ctx = context.user_context().await;
+    let context = MailTestContext::new().await;
+    let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
     migrate_core_db(&stash).await.unwrap();
@@ -604,8 +605,8 @@ async fn paginate_messages_for_label_with_filter() {
 #[tokio::test]
 async fn paginate_search() {
     // Create a test context
-    let context = TestContext::new().await;
-    let user_ctx = context.user_context().await;
+    let context = MailTestContext::new().await;
+    let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
     migrate_core_db(&stash).await.unwrap();

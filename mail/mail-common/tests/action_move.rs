@@ -13,8 +13,8 @@ use proton_mail_common::actions::conversations;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::collections::HashMap;
 use velcro::hash_map;
@@ -22,8 +22,8 @@ use velcro::hash_map;
 #[tokio::test]
 #[ignore]
 async fn test_move_between_folders() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let folder_id = LabelId::from("myfolder");
     let conv_id = RemoteId::from("conv_id");
     let labels = hash_map! {
@@ -75,12 +75,13 @@ async fn test_move_between_folders() {
     mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(!has_conversation(&mailbox_folder, local_conv_id).await);
 
     // submit action
@@ -137,8 +138,8 @@ async fn test_move_between_folders() {
 #[tokio::test]
 #[ignore]
 async fn test_move_from_label_does_not_unlabel() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let label_id = LabelId::from("mylabel");
     let conv_id = RemoteId::from("conv_id");
     let labels = hash_map! {
@@ -182,12 +183,13 @@ async fn test_move_from_label_does_not_unlabel() {
     mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
 
     // submit action
@@ -223,8 +225,8 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     // setup
     //   + Create Conversation in inbox with a label
 
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
@@ -290,12 +292,13 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(has_conversation(&mailbox_all_mail, local_conv_id).await);
     assert!(!has_conversation(&mailbox_trash, local_conv_id).await);
     assert!(has_conversation(&mailbox_label, local_conv_id).await);
@@ -357,8 +360,8 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 async fn test_move_into_spam_remove_labels() {
     // setup
     //   + Create Conversation in inbox
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
@@ -417,12 +420,13 @@ async fn test_move_into_spam_remove_labels() {
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(!has_conversation(&mailbox_spam, local_conv_id).await);
     assert!(has_conversation(&mailbox_label, local_conv_id).await);
     assert!(has_conversation(&mailbox_all_mail, local_conv_id).await);
@@ -464,8 +468,8 @@ async fn move_out_of_trash_set_almost_all_mail() {
     // setup
     //   + Create a Conversation in trash
 
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
 
     let init_params =
@@ -503,12 +507,13 @@ async fn move_out_of_trash_set_almost_all_mail() {
         .await
         .expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(!has_conversation(&mailbox_almost_all_mail, local_conv_id).await);
 
@@ -546,8 +551,8 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     // setup
     //   + Create Conversation in spam
 
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
 
     let init_params =
@@ -585,12 +590,13 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
         .await
         .expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let local_conv_id =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .local_id
+            .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(!has_conversation(&mailbox_almost_all_mail, local_conv_id).await);
 

@@ -7,14 +7,14 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 
 #[tokio::test]
 #[ignore]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -37,11 +37,11 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.user_context().await).await;
+    ctx.init_user(ctx.mail_user_context().await).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
-        ctx.user_context().await,
+        ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
             .clone()
@@ -52,7 +52,7 @@ async fn test_new_mailbox_sync_conversations() {
 
     // Create another mailbox
     let mailbox2 = Mailbox::with_remote_id(
-        ctx.user_context().await,
+        ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
             .clone()
@@ -77,7 +77,7 @@ async fn test_new_mailbox_sync_conversations() {
 #[ignore]
 async fn test_new_mailbox_sync_messages() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     let mut mail_settings = ApiMailSettings::default();
     mail_settings.view_mode = ApiViewMode::Messages;
@@ -129,11 +129,11 @@ async fn test_new_mailbox_sync_messages() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.user_context().await).await;
+    ctx.init_user(ctx.mail_user_context().await).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
-        ctx.user_context().await,
+        ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
             .clone()
@@ -144,7 +144,7 @@ async fn test_new_mailbox_sync_messages() {
 
     // Create another mailbox
     let mailbox2 = Mailbox::with_remote_id(
-        ctx.user_context().await,
+        ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
             .clone()
@@ -170,7 +170,7 @@ async fn test_new_mailbox_sync_messages() {
 #[ignore]
 async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     // For view mode to conversations.
     let mut mail_settings = ApiMailSettings::default();
@@ -223,15 +223,15 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.user_context().await).await;
+    ctx.init_user(ctx.mail_user_context().await).await;
 
     // Create a drafts mailbox
-    let mailbox_drafts = Mailbox::with_remote_id(ctx.user_context().await, LabelId::drafts())
+    let mailbox_drafts = Mailbox::with_remote_id(ctx.mail_user_context().await, LabelId::drafts())
         .await
         .unwrap();
 
     // Create sent mailbox
-    let mailbox_sent = Mailbox::with_remote_id(ctx.user_context().await, LabelId::sent())
+    let mailbox_sent = Mailbox::with_remote_id(ctx.mail_user_context().await, LabelId::sent())
         .await
         .unwrap();
 

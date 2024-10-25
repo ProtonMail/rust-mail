@@ -1,4 +1,4 @@
-use super::TestContext;
+use crate::test_context::TestContext;
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
 };

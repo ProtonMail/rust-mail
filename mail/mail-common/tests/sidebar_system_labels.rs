@@ -7,8 +7,8 @@ use proton_core_common::datatypes::{Id, LabelId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use std::default::Default;
 use test_case::test_case;
 use velcro::hash_map;
@@ -51,7 +51,7 @@ async fn sidebar_system_labels(
     //     + Create all system mailbox
     //     + Add message where needed
     //   * Create Sidebar
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(
         almost_all_mail,
         show_moved,
@@ -63,7 +63,7 @@ async fn sidebar_system_labels(
 
     ctx.catch_all().await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 

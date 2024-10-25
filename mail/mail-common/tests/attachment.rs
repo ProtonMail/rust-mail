@@ -7,8 +7,8 @@ use proton_mail_common::Mailbox;
 use proton_mail_test_utils::attachment::{
     testdata_attachment_data, testdata_expected_attachment_decrypted,
 };
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
 use std::fs;
@@ -16,9 +16,9 @@ use std::fs;
 #[tokio::test]
 #[ignore]
 async fn test_load_attachment_buffer() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -71,9 +71,9 @@ async fn test_load_attachment_buffer() {
 #[tokio::test]
 #[ignore]
 async fn load_attachment_from_cache() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -123,9 +123,9 @@ async fn load_attachment_content_first_time() {
     // Setup
     //   * Create an attachment
     //   * Check cache is empty
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
     attachment.save_using(user_ctx.user_stash()).await.unwrap();
@@ -163,9 +163,9 @@ async fn load_attachment_content_from_cache() {
     // Setup
     //   * Create an attachment
     //   * Add attachment data into cache
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let attachment_local_id = 42.into();
     let attachment =

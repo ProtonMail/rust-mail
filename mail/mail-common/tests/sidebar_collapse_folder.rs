@@ -4,9 +4,9 @@ use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::common::TestContext;
-use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::init::Params;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -19,10 +19,10 @@ async fn folder_expansion() {
     //     + Create a Custom Folders not expanded
     //   * Create Sidebar
     let name = "foo";
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, false)).await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
@@ -51,10 +51,10 @@ async fn folder_collapse() {
     //     + Create a Custom Folders expanded
     //   * Create Sidebar
     let name = "foo";
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, true)).await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
