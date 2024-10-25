@@ -1,5 +1,4 @@
 //! Message body related state and test data
-
 use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -10,8 +9,9 @@ use proton_api_core::services::proton::response_data::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_api_mail::services::proton::response_data::{
-    MailSettings as ApiMailSettings, Message as ApiMessage, MessageFlags as ApiMessageFlags,
-    MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
+    MailSettings as ApiMailSettings, Message as ApiMessage, MessageAddress,
+    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::LabelId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
@@ -22,9 +22,11 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
 use proton_mail_common::datatypes::SystemLabelId;
+use std::collections::HashMap;
 use std::iter;
 
-pub fn message_body_test_params() -> TestParams {
+#[must_use]
+pub fn message_body_test_params() -> crate::init::Params {
     TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
@@ -44,6 +46,7 @@ pub const TEST_USER_PASSWORD: &str = "password";
 
 pub const TEST_MESSAGE_BODY_DECRYPTED: &str = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div>"#;
 
+#[must_use]
 pub fn message_body_test_user_info() -> ApiUser {
     ApiUser {
         id: ApiRemoteId::from(TEST_USER_ID),
@@ -102,6 +105,7 @@ fn message_body_test_user_key() -> LockedKey {
     }
 }
 
+#[must_use]
 pub fn message_body_test_addresses() -> Vec<ApiAddress> {
     vec![ApiAddress {
         id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
@@ -113,7 +117,7 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
         address_type: ApiAddressType::Original,
         order: 0,
         display_name: "rust_test".to_owned(),
-        signature: "".to_owned(),
+        signature: String::new(),
         keys: ApiAddressKeys(
             vec![LockedKey{
                 id: KeyId::from("gzKDANARz0i8OHhGuZV-oFfURju0I3XeW_hNn09g13dS_NJ57UbW420UAcWb-0s93xoav22O_jARq61FyL3guw=="),
@@ -144,6 +148,8 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
     }]
 }
 
+#[must_use]
+#[allow(clippy::field_reassign_with_default)]
 pub fn message_body_test_mail_settings() -> ApiMailSettings {
     ApiMailSettings {
         view_mode: ApiViewMode::Messages,
@@ -165,6 +171,7 @@ pub fn message_body_test_mail_settings() -> ApiMailSettings {
     ]
 }*/
 
+#[must_use]
 pub fn message_body_test_message_simple() -> ApiMessage {
     ApiMessage {
         metadata: ApiMessageMetadata {
@@ -175,13 +182,13 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             label_ids: vec![LabelId::inbox().into()],
             external_id: None,
             subject: "Mail with test body".to_owned(),
-            sender: Default::default(),
+            sender: MessageAddress::default(),
             to_list: vec![],
             cc_list: vec![],
             bcc_list: vec![],
             reply_tos: vec![],
             flags: ApiMessageFlags::DKIM_FAIL,
-            time:  1715863508,
+            time:  1_715_863_508,
             size: 333,
             unread: false,
             is_replied: false,
@@ -193,13 +200,14 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             attachments_metadata: vec![],
         },
         header: String::new(),
-        parsed_headers: Default::default(),
+        parsed_headers: HashMap::default(),
         body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
         mime_type: ApiMimeType::TextHtml,
         attachments: vec![],
     }
 }
 
+/// # Panics
 pub fn message_body_test_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),

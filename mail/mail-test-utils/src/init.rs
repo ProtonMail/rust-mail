@@ -1,19 +1,15 @@
-use super::account::{
-    testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
-    TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
-};
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
-use crate::common::TestContext;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
-    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
-    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat,
-    Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
-    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
-    ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
-    TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
-    UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
-    UserType as ApiUserType, WeekStart as ApiWeekStart,
+    Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
+    AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
+    ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, Density as ApiDensity,
+    Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth,
+    Password as ApiPassword, Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace,
+    SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
+    TwoFa as ApiTwoFa, User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus,
+    UserSettings as ApiUserSettings, UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
 use proton_api_core::services::proton::responses::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
@@ -22,23 +18,30 @@ use proton_api_core::services::proton::responses::{
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
-    Attachment as ApiAttachment, Conversation as ApiConversation,
-    ConversationCount as ApiConversationCount, ConversationLabel as ApiConversationLabel,
-    Label as ApiLabel, MailSettings as ApiMailSettings, MessageAddress as ApiMessageAddress,
-    MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
+    AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
+    Conversation as ApiConversation, ConversationCount as ApiConversationCount,
+    ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
+    MessageAddress as ApiMessageAddress, MessageButtons, MessageCount as ApiMessageCount,
+    MessageMetadata as ApiMessageMetadata, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
+    SwipeAction, ViewLayout, ViewMode,
 };
+
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetLabelsResponse, GetMessagesCountResponse, GetMessagesResponse,
     GetSettingsResponse as GetMailSettingsResponse,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_test_utils::account::{
+    testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
+    TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
+};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, ALL_LABEL_TYPES,
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
@@ -100,6 +103,7 @@ impl Params {
     /// information to use to test against. Specifically, it sets up a single
     /// label, a single address, a single conversation, and the related counts.
     ///
+    #[must_use]
     pub fn default_basic() -> Self {
         Self {
             last_event_id: None,
@@ -135,7 +139,7 @@ impl Params {
                 keys: testdata_address_keys_for_user_address(),
                 catch_all: false,
                 proton_mx: false,
-                signed_key_list: Default::default(),
+                signed_key_list: AddressSignedKeyList::default(),
             }],
             conversations: vec![ApiConversation {
                 id: ApiRemoteId::from("myconv"),
@@ -167,7 +171,7 @@ impl Params {
                 }],
                 display_snooze_reminder: false,
                 attachments_metadata: vec![testdata_attachment_metadata()],
-                attachment_info: Default::default(),
+                attachment_info: BTreeMap::default(),
             }],
             attachments: vec![testdata_attachment_metadata_complete(
                 ApiRemoteId::from("mymessage "),
@@ -189,7 +193,7 @@ impl Params {
     }
 }
 
-impl TestContext {
+impl MailTestContext {
     /// Set up basic user data.
     ///
     /// This function sets up basic user data that should be fetched after login
@@ -209,6 +213,7 @@ impl TestContext {
     ///
     /// * `params` - The parameters to use for the setup.
     ///
+    /// # Panics
     pub async fn init_user(&self, user_ctx: Arc<MailUserContext>) {
         let cb = NullCallback {};
 
@@ -227,6 +232,7 @@ impl TestContext {
     /// * `params`          - The parameters to use for the setup.
     /// * `number_of_calls` - The number of times the mocked requests will be called.
     ///
+    #[allow(clippy::too_many_lines)]
     pub async fn setup_user_repeated(&self, mut params: Params, number_of_calls: u64) {
         // Latest event id
         Mock::given(method("GET"))
@@ -356,32 +362,32 @@ impl TestContext {
                         signature: String::new(),
                         theme: String::new(),
                         auto_save_contacts: false,
-                        composer_mode: Default::default(),
-                        message_buttons: Default::default(),
-                        show_images: Default::default(),
-                        show_moved: Default::default(),
+                        composer_mode: ComposerMode::default(),
+                        message_buttons: MessageButtons::default(),
+                        show_images: ShowImages::default(),
+                        show_moved: ShowMoved::default(),
                         auto_delete_spam_and_trash_days: None,
-                        almost_all_mail: Default::default(),
+                        almost_all_mail: AlmostAllMail::default(),
                         next_message_on_move: None,
-                        view_mode: Default::default(),
-                        view_layout: Default::default(),
-                        swipe_left: Default::default(),
-                        swipe_right: Default::default(),
+                        view_mode: ViewMode::default(),
+                        view_layout: ViewLayout::default(),
+                        swipe_left: SwipeAction::default(),
+                        swipe_right: SwipeAction::default(),
                         shortcuts: false,
-                        pm_signature: Default::default(),
+                        pm_signature: PmSignature::default(),
                         pm_signature_referral_link: false,
                         image_proxy: 0,
                         num_message_per_page: 0,
-                        draft_mime_type: Default::default(),
-                        receive_mime_type: Default::default(),
-                        show_mime_type: Default::default(),
+                        draft_mime_type: MimeType::default(),
+                        receive_mime_type: MimeType::default(),
+                        show_mime_type: MimeType::default(),
                         enable_folder_color: false,
                         inherit_parent_folder_color: false,
                         submission_access: false,
-                        right_to_left: Default::default(),
+                        right_to_left: ComposerDirection::default(),
                         attach_public_key: false,
                         sign: false,
-                        pgp_scheme: Default::default(),
+                        pgp_scheme: PgpScheme::default(),
                         prompt_pin: false,
                         sticky_labels: false,
                         confirm_link: false,
@@ -524,7 +530,7 @@ impl TestContext {
         let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/conversations"));
 
         if let Some(id) = end_id {
-            mock = mock.and(query_param("EndID", id.to_string()))
+            mock = mock.and(query_param("EndID", id.to_string()));
         }
         if let Some(time) = end_time {
             mock = mock.and(query_param("End", time.to_string()));
@@ -592,7 +598,7 @@ impl TestContext {
         let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
 
         if let Some(id) = end_id {
-            mock = mock.and(query_param("EndID", id.to_string()))
+            mock = mock.and(query_param("EndID", id.to_string()));
         }
         if let Some(time) = end_time {
             mock = mock.and(query_param("End", time.to_string()));

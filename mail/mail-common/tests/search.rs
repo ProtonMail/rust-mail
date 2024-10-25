@@ -5,12 +5,12 @@ use proton_core_common::{
     models::{Address, ModelExtension},
 };
 use proton_mail_common::models::{Conversation, Label, Message};
-use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 
 #[tokio::test]
 async fn unsynced_conversations() {
-    let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
     let api = user_context.session().api();
 
@@ -39,15 +39,19 @@ async fn unsynced_conversations() {
 
 #[tokio::test]
 async fn unsynced_messages() {
-    let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
     let api = user_context.session().api();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
     let addrs = ctx.get_test_addrs();
-    ctx.mock_get_address(addrs[0].clone()).await;
-    ctx.mock_get_address(addrs[1].clone()).await;
+    ctx.core_test_context
+        .mock_get_address(addrs[0].clone())
+        .await;
+    ctx.core_test_context
+        .mock_get_address(addrs[1].clone())
+        .await;
     ctx.mock_get_messages(ctx.get_test_msgs()).await;
 
     let options = GetMessagesOptions::default();

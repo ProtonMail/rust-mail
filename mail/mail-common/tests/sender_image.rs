@@ -5,17 +5,17 @@ use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::fs;
 
 #[tokio::test]
 async fn get_sender_image() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     params
         .labels
         .get_mut(&ApiLabelType::Label)

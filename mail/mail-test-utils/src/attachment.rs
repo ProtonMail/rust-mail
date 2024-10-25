@@ -1,10 +1,11 @@
-use crate::{account::TEST_ADDRESS_ID, common::TestContext};
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
+use proton_core_test_utils::account::TEST_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_common::datatypes::attachment;
 use wiremock::matchers::{method, path};
@@ -14,6 +15,7 @@ const TEST_ATTACHMENT_ID: &str =
     "5OkOlBi3Swa4cHRyChyUazwt8GYDBLIAX-ZYnGg8-nAHNKjj5EgR5uH-GePQFaWQPgS60aoJ1Dl2s6UI4BmwNw==";
 
 /// The metadata for the default attachment.
+#[must_use]
 pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
     ApiAttachmentMetadata {
         id: ApiRemoteId::from(TEST_ATTACHMENT_ID),
@@ -27,6 +29,7 @@ pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
 /// The complete metadata for the default attachment.
 ///
 /// The attachment is encrypted with the default test account address key.
+#[must_use]
 pub fn testdata_attachment_metadata_complete(
     message_id: ApiRemoteId,
     conversation_id: ApiRemoteId,
@@ -50,6 +53,7 @@ pub fn testdata_attachment_metadata_complete(
 }
 
 /// The encrypted data of the default attachment.
+#[must_use]
 pub fn testdata_attachment_data() -> Vec<u8> {
     vec![
         210, 59, 1, 75, 249, 106, 13, 153, 197, 164, 144, 235, 96, 92, 106, 220, 206, 208, 189, 17,
@@ -60,11 +64,12 @@ pub fn testdata_attachment_data() -> Vec<u8> {
 }
 
 /// The expected plaintext content of the default test attachment.
+#[must_use]
 pub fn testdata_expected_attachment_decrypted() -> Vec<u8> {
     b"attachment".to_vec()
 }
 
-impl TestContext {
+impl MailTestContext {
     /// Generate new mock for retrieving complete attachment metadata.
     ///
     /// This function will mock the response for the give attachment metadata.
@@ -100,7 +105,7 @@ impl TestContext {
         attachment_id: ApiRemoteId,
         attachment_content: Vec<u8>,
     ) {
-        let path_for_attachment = format!("api/mail/v4/attachments/{}", attachment_id);
+        let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
         Mock::given(method("GET"))
             .and(path(path_for_attachment))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))

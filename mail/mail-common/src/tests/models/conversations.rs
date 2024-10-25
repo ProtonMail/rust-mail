@@ -15,16 +15,16 @@ use proton_api_mail::services::proton::response_data::{
     Disposition as ApiDisposition,
 };
 use proton_core_common::datatypes::{Id, LabelId};
-use proton_mail_test_utils::common::{
-    create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
-    MY_LABEL_ID1, MY_LABEL_ID2,
-};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
     new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
 };
 use proton_mail_test_utils::label;
+use proton_mail_test_utils::search::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
+    MY_LABEL_ID1, MY_LABEL_ID2,
+};
 use proton_mail_test_utils::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
     prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
@@ -704,7 +704,7 @@ mod available_move_to_actions {
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{common::remote_counterpart, conversation, label, rid};
+    use proton_mail_test_utils::{conversation, label, rid, search::remote_counterpart};
     use std::sync::LazyLock;
     use test_case::test_case;
 

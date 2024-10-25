@@ -22,13 +22,13 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::attachment::KeyPackets;
-use proton_mail_test_utils::common::{
-    create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
-    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
-};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
+use proton_mail_test_utils::search::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
+    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use proton_mail_test_utils::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
@@ -439,7 +439,7 @@ mod available_move_to_actions {
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{common::remote_counterpart, conversation, label, message, rid};
+    use proton_mail_test_utils::{conversation, label, message, rid, search::remote_counterpart};
     use std::sync::LazyLock;
     use test_case::test_case;
 

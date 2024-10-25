@@ -28,21 +28,22 @@ use proton_mail_common::models::{
     Attachment, Conversation, MailSettings, Message, NewDraftMetadata,
 };
 use proton_mail_common::MailContextError;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
+use proton_mail_test_utils::test_context::MailTestContext;
+use secrecy::zeroize::__internal::AssertZeroize;
 use stash::orm::Model;
 
 #[tokio::test]
 async fn create_empty_draft() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts().into());
@@ -81,7 +82,7 @@ async fn create_empty_draft() {
     );
 
     // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts().into()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
     let _ = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
@@ -120,13 +121,13 @@ async fn create_empty_draft() {
 #[tokio::test]
 async fn create_draft_reply_without_body_is_error() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -167,13 +168,13 @@ async fn create_draft_reply_without_body_is_error() {
 #[tokio::test]
 async fn create_draft_reply_should_fail_for_drafts() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -274,13 +275,13 @@ async fn create_draft_reply_impl(
     reply_mode: ReplyMode,
 ) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
@@ -367,7 +368,7 @@ async fn create_draft_reply_impl(
     );
 
     // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts().into()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
     let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())

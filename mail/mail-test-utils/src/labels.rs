@@ -1,4 +1,5 @@
-use crate::common::TestContext;
+use crate::test_context::MailTestContext;
+use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::PatchLabelRequest;
 use proton_api_mail::services::proton::response_data::{Label as ApiLabel, OperationResult};
 use proton_api_mail::services::proton::responses::{GetLabelsResponse, PatchLabelResponse};
@@ -6,7 +7,7 @@ use proton_core_common::datatypes::LabelId;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-impl TestContext {
+impl MailTestContext {
     // Gets 3 labels called Label1, Label2, Label3
     pub async fn mock_get_all_labels(&self, labels: Vec<ApiLabel>) {
         let response = GetLabelsResponse { labels };
@@ -36,11 +37,11 @@ impl TestContext {
         let response = PatchLabelResponse {
             responses: vec![OperationResult {
                 id: label_id.clone().into(),
-                response: Default::default(),
+                response: ApiErrorInfo::default(),
             }],
         };
         Mock::given(method("PATCH"))
-            .and(path(format!("/api/core/v4/labels/{}", label_id)))
+            .and(path(format!("/api/core/v4/labels/{label_id}")))
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)

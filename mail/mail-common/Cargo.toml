@@ -45,7 +45,6 @@ lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
-proton-mail-test-utils = { workspace = true }
 secrecy = { workspace = true }
 serde_with = { workspace = true }
 tempdir = { workspace = true }
@@ -55,6 +54,7 @@ tracing-subscriber = { workspace = true }
 #tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = { workspace = true }
 wiremock = { workspace = true }
+proton-mail-test-utils = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]
