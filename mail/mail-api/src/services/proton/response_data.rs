@@ -1336,6 +1336,6 @@ pub struct UndoToken {
     pub token: String,
 
     /// TODO: Document this field.
-    #[serde(rename = "ID")]
+    #[serde(rename = "ValidUntil")]
     pub valid_until: u64,
 }
