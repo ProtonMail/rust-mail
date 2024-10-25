@@ -5,13 +5,14 @@ use crate::messages::Messages;
 use crate::widgets::{utils, TextInput, TextInputState};
 use crossterm::event::KeyCode;
 use proton_core_common::datatypes::LocalId;
+use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear};
+use ratatui::widgets::{Block, Borders, Clear, List};
 use ratatui::Frame;
 use std::io::Cursor;
 use std::sync::Arc;
@@ -20,7 +21,7 @@ use tui_textarea::TextArea;
 
 /// Composer to edit and view drafts.
 pub struct Composer {
-    _draft: Draft,
+    draft: Draft,
     text_area: TextArea<'static>,
     selected_input: SelectedInput,
     sender_input_state: TextInputState,
@@ -131,7 +132,7 @@ impl Composer {
         let text_area = TextArea::new(text.split('\n').map(str::to_owned).collect());
         let subject = draft.subject.clone();
         Self {
-            _draft: draft,
+            draft,
             text_area,
             selected_input: SelectedInput::To,
             sender_input_state: TextInputState::with_value(sender),
@@ -150,6 +151,7 @@ impl StateHandler for Composer {
             vertical: 2,
         });
 
+        frame.render_widget(Clear {}, area);
         frame.render_widget(Block::new().title("Composer").borders(Borders::ALL), area);
 
         let area = area.inner(Margin {
@@ -157,9 +159,7 @@ impl StateHandler for Composer {
             vertical: 1,
         });
 
-        frame.render_widget(Clear {}, area);
-
-        let [sender_area, to_area, cc_area, bcc_area, subject_area, box_area, message_area, footer] =
+        let [sender_area, to_area, cc_area, bcc_area, subject_area, _, message_area, footer] =
             Layout::vertical([
                 Constraint::Length(3),
                 Constraint::Length(3),
@@ -208,9 +208,34 @@ impl StateHandler for Composer {
             }
         }
 
-        frame.render_widget(Block::new().borders(Borders::TOP), box_area);
+        let [attachment_list_area, _, body_area] = Layout::horizontal([
+            Constraint::Length(20),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(message_area);
 
-        frame.render_widget(&self.text_area, message_area);
+        frame.render_widget(
+            List::new(self.draft.attachments.iter().map(|a| {
+                Line::from(vec![
+                    Span::from(if a.disposition == Disposition::Inline {
+                        "I:"
+                    } else {
+                        "A:"
+                    })
+                    .bold(),
+                    a.filename.clone().into(),
+                ])
+            }))
+            .block(Block::new().title("Attachments").borders(Borders::TOP)),
+            attachment_list_area,
+        );
+
+        frame.render_widget(
+            Block::new().borders(Borders::TOP | Borders::LEFT),
+            body_area,
+        );
+        frame.render_widget(&self.text_area, body_area.inner(Margin::new(1, 1)));
 
         let help_text = vec![
             Span::from(" Esc: ").bold(),

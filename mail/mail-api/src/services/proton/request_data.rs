@@ -19,6 +19,7 @@
 
 use crate::services::proton::response_data::MimeType;
 use proton_api_core::services::proton::common::RemoteId;
+use proton_crypto_inbox::attachment::KeyPackets;
 use proton_crypto_inbox::message::EncryptedDraft;
 use serde::Serialize;
 use serde_repr::Serialize_repr;
@@ -41,7 +42,7 @@ pub enum MessageMetadataSortMode {
 }
 
 /// Draft action.
-#[derive(Clone, Debug, Serialize_repr, Eq, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Serialize_repr, Eq, Hash, PartialEq)]
 #[repr(u8)]
 pub enum DraftAction {
     /// Reply to sender.
@@ -114,4 +115,4 @@ pub struct DraftParams {
     pub mime_type: MimeType,
 }
 
-pub type DraftAttachmentKeyPackets = HashMap<RemoteId, String>;
+pub type DraftAttachmentKeyPackets = HashMap<RemoteId, KeyPackets>;

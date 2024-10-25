@@ -172,6 +172,8 @@ impl From<AppError> for UserLoginFlowError {
             AppError::InvalidMobileActions(_) => Self::Unexpected(Unexpected::Api),
             AppError::UserNotFound => Self::Unexpected(Unexpected::Internal),
             AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::UnknownMessage(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

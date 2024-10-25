@@ -17,7 +17,7 @@ use proton_api_mail::services::proton::responses::{
 };
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -175,14 +175,21 @@ impl MailTestContext {
     ///
     /// # Parameters
     ///
-    /// * `params` - Expected draft params.
-    /// * `reply`  - Expected server reply.
+    /// * `params`                 - Expected draft params.
+    /// * `action`                 - Draft action (Reply, ReplyAll, Forward)
+    /// * `reply`                  - Expected server reply.
+    /// * `parent_id`              - Parent id to from which we are
+    ///                              replying/forwarding to/from
+    /// * `attachment_key_packets` - Attachment key packets for the attachment.
+    ///                              included in this request.
+    #[allow(clippy::doc_markdown)]
     pub async fn mock_create_draft(
         &self,
         params: DraftParams,
         action: DraftAction,
         reply: ApiMessage,
         parent_id: Option<ApiRemoteId>,
+        attachment_key_packets: DraftAttachmentKeyPackets,
     ) {
         let response = PostCreateDraftResponse { message: reply };
         Mock::given(method("POST"))
@@ -190,7 +197,7 @@ impl MailTestContext {
                 PostCreateDraftRequest {
                     message: params,
                     action,
-                    attachment_key_packets: HashMap::default(),
+                    attachment_key_packets,
                     parent_id,
                 },
             )))

@@ -1,17 +1,18 @@
 use crate::actions::draft::Create;
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    MessageAddress, MessageAddresses, MessageFlags, MimeType, PmSignature, SystemLabelId,
+    Disposition, MessageAddress, MessageAddresses, MessageFlags, MimeType, PmSignature,
+    SystemLabelId,
 };
 use crate::models::{
-    Conversation, Label, MailSettings, Message, MessageBodyMetadata, NewDraftMetadata,
+    Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata, NewDraftMetadata,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use chrono::DateTime;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::request_data::{
-    DraftAction, DraftParams, DraftRecipient, DraftSender,
+    DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
@@ -49,6 +50,8 @@ pub enum Error {
     CreateMetadataNotFound(LocalId),
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalId),
+    #[error("Attachment {0} does not have key packets")]
+    AttachmentDoesNotHaveKeyPackets(LocalId),
     #[error("Can't reply or forward to a draft message {0}")]
     ReplyOrForwardToDraft(LocalId),
 }
@@ -113,6 +116,8 @@ pub struct Draft {
     pub subject: String,
     /// Unencrypted body of the draft.
     pub body: String,
+    /// Attachment associated with this draft
+    pub attachments: Vec<Attachment>,
 }
 
 impl Draft {
@@ -151,6 +156,7 @@ impl Draft {
             address_id: message.remote_address_id,
             subject: message.subject,
             body: body.body,
+            attachments: body.metadata.attachments,
         })
     }
 
@@ -287,6 +293,7 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: message.subject,
             body,
+            attachments: Vec::new(),
         })
     }
 
@@ -329,7 +336,6 @@ impl Draft {
         }
 
         // Message body must be present to create a reply.
-        //TODO: Handle attachments (ET-1362)
         let Some(source_body_metadata) = MessageBodyMetadata::find_first(
             "WHERE local_message_id=?",
             params![message_id],
@@ -406,15 +412,20 @@ impl Draft {
             error!("Error creating new draft locally: {e}");
         })?;
 
-        //TODO: Handle attachments (ET-1362)
-        //      - Reply / Reply All: Transfer embedded images
-        //      - Forward, transfer all attachments
         let mut message_body_metadata = MessageBodyMetadata {
             local_message_id: message.local_id,
             remote_message_id: None,
             header: "".to_string(),
             mime_type: mail_settings.draft_mime_type,
-            attachments: Default::default(),
+            attachments: if reply_mode == ReplyMode::Forward {
+                source_body_metadata.attachments
+            } else {
+                source_body_metadata
+                    .attachments
+                    .into_iter()
+                    .filter(|attachment| attachment.disposition == Disposition::Inline)
+                    .collect()
+            },
             parsed_headers: Default::default(),
             row_id: None,
             stash: None,
@@ -466,6 +477,7 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: message.subject,
             body,
+            attachments: message_body_metadata.attachments,
         })
     }
 
@@ -498,12 +510,28 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = crate_draft_params(message, message_body_metadata, encrypted);
 
+        let mut attachment_key_packets =
+            DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        for attachment in &message_body_metadata.attachments {
+            let Some(remote_id) = attachment.remote_id.clone() else {
+                return Err(
+                    AppError::AttachmentDoesNotHaveRemoteId(attachment.local_id.unwrap()).into(),
+                );
+            };
+            let Some(key_packets) = attachment.key_packets.clone() else {
+                return Err(
+                    Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
+                );
+            };
+            attachment_key_packets.insert(remote_id.into(), key_packets.value.clone());
+        }
+
         let response = session
             .api()
             .create_draft(
                 params,
                 action,
-                Default::default(),
+                attachment_key_packets,
                 parent_id.map(Into::into),
             )
             .await?;
