@@ -1,0 +1,5 @@
+---
+source: mail/mail-common/src/tests/draft.rs
+expression: signature
+---
+<br><br>My Address Signature<br><br>Mail settings signature<br><br>Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email.

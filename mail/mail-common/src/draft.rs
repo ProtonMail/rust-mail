@@ -1,7 +1,8 @@
 use crate::actions::draft::Create;
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    Disposition, MessageAddress, MessageAddresses, MessageFlags, MimeType, SystemLabelId,
+    Disposition, MessageAddress, MessageAddresses, MessageFlags, MimeType, PmSignature,
+    SystemLabelId,
 };
 use crate::models::{
     Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata, NewDraftMetadata,
@@ -712,16 +713,34 @@ fn crate_draft_params(
 
 /// Build signature from mail settings.
 fn get_signature(address: &Address, mail_settings: &MailSettings) -> String {
+    let line_break = if mail_settings.draft_mime_type == MimeType::TextHtml {
+        HTML_LINE_BREAK
+    } else {
+        "\n"
+    };
     let mut signature = if mail_settings.signature.is_empty() {
         address.signature.clone()
     } else if address.signature.is_empty() {
         mail_settings.signature.clone()
     } else {
-        format!("{}\n\n{}", address.signature, mail_settings.signature)
+        format!(
+            "{}{line_break}{line_break}{}",
+            address.signature, mail_settings.signature
+        )
     };
 
+    if mail_settings.pm_signature != PmSignature::Disabled {
+        signature.push_str(line_break);
+        signature.push_str(line_break);
+        if mail_settings.draft_mime_type == MimeType::TextHtml {
+            signature.push_str(PM_SIGNATURE_HTML);
+        } else {
+            signature.push_str(PM_SIGNATURE_PLAIN_TEXT);
+        }
+    }
+
     if !signature.is_empty() {
-        signature.insert_str(0, "\n\n");
+        signature.insert_str(0, &format!("{line_break}{line_break}"));
     }
 
     signature
@@ -929,6 +948,10 @@ pub const BEGIN_BLOCKQUOTE: &str = "<blockquote class=\"protonmail_quote\">";
 pub const CLOSE_QUOTE: &str = "</div>";
 pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
 pub const HTML_LINE_BREAK: &str = "<br>";
+
+const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
+
+const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
 
 fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
     let trimmed_subject = subject.trim();
