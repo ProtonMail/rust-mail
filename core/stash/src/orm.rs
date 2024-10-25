@@ -582,8 +582,6 @@ where
                             if let Some(record) = records.into_iter().next() {
                                 return Some(ResultsetChange::Updated(record));
                             }
-                            // This could happen, in which case we log it and carry on
-                            warn!("No record found for the rowid said to have changed");
                         }
                         Err(error) => {
                             // In theory this should never happen, but we also can't do anything with it

@@ -857,34 +857,43 @@ pub struct MailSettings {
     pub view_mode: ViewMode,
 }
 
-/// TODO: Document this struct.
+/// Represents a message with its metadata and its body.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct Message {
-    /// TODO: Document this field.
+    #[serde(flatten)]
+    pub metadata: MessageMetadata,
+
+    #[serde(flatten)]
+    pub body: MessageBody,
+}
+
+/// Contains metadata associated with the message body.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[serde(rename_all = "PascalCase")]
+pub struct MessageBody {
+    /// Attachment metadata associated with the message.
     #[serde(default)]
     pub attachments: Vec<MessageAttachment>,
 
-    /// TODO: Document this field.
+    /// Encrypted message body
     pub body: String,
 
-    /// TODO: Document this field.
+    /// Unparsed RFC822 message headers.
     pub header: String,
 
-    /// TODO: Document this field.
+    /// Mime type of the body.
     #[serde(rename = "MIMEType")]
     pub mime_type: MimeType,
 
-    /// TODO: Document this field.
+    /// Parsed RFC822 message headers .
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
     pub parsed_headers: HashMap<String, serde_json::Value>,
-
-    /// TODO: Document this field.
-    #[serde(flatten)]
-    pub metadata: MessageMetadata,
 }
 
 /// TODO: Document this struct.
@@ -922,20 +931,6 @@ pub struct MessageAttachment {
 
     /// TODO: Document this field.
     pub size: u64,
-}
-
-#[cfg(any(test, debug_assertions))]
-impl Default for Message {
-    fn default() -> Self {
-        Self {
-            attachments: Vec::default(),
-            body: String::default(),
-            header: String::default(),
-            mime_type: MimeType::TextPlain,
-            parsed_headers: HashMap::default(),
-            metadata: MessageMetadata::default(),
-        }
-    }
 }
 
 /// TODO: Document this struct.
@@ -1336,6 +1331,6 @@ pub struct UndoToken {
     pub token: String,
 
     /// TODO: Document this field.
-    #[serde(rename = "ID")]
+    #[serde(rename = "ValidUntil")]
     pub valid_until: u64,
 }

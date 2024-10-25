@@ -3,7 +3,7 @@
 mod tests;
 
 use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Label, Message};
+use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
@@ -31,6 +31,7 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// ## Parameters
 ///
 /// * `$item` - The type of the item to sync. This is a token which allows the macro to put proper typing.
+/// * `$class` - Implementation of the type which contains `save_using`.
 /// * `$stash` - The local database instance to use for syncing.
 /// * `$batch` - The number of items to sync in a single batch.
 /// * `$api_request` - The API request to make to get the items. It is expected to be a clousure
@@ -43,7 +44,7 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// As sync_all method. This is only a helper macro to reduce code duplication.
 ///
 macro_rules! sync_any {
-    ($item:tt, $stash:expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
+    ($item:tt, $class:tt, $stash:expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
         let stash = $stash;
         let items = Self::find_by_kind(RollbackItemType::$item, stash).await?;
         let batch = $batch.into().unwrap_or(items.len() + 1);
@@ -51,7 +52,7 @@ macro_rules! sync_any {
 
         stream::iter(&chunked_remote_ids)
             .then(|remote_ids| async {
-                let items: Mutex<Vec<$item>> = Mutex::new(Vec::new());
+                let items: Mutex<Vec<$class>> = Mutex::new(Vec::new());
 
                 stream::iter(remote_ids)
                     .map(|remote_id| {
@@ -78,7 +79,7 @@ macro_rules! sync_any {
                 let tx = stash.transaction().await?;
 
                 for item in items.iter_mut() {
-                    let result = $item::save_using(item, &tx).await;
+                    let result = $class::save_using(item, &tx).await;
 
                     if let Err(err) = result {
                         error!(
@@ -251,7 +252,7 @@ impl RollbackItem {
     {
         use proton_api_mail::services::proton::responses::GetLabelsResponse;
 
-        sync_any!(Label, stash, batch => |remote_id| async {
+        sync_any!(Label, Label, stash, batch => |remote_id| async {
             api.get_labels_by_ids(vec![remote_id.into()]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
@@ -269,10 +270,12 @@ impl RollbackItem {
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Message, stash, batch => |remote_id| async {
+        sync_any!(Message, MessageAndBodyMetadata, stash, batch => |remote_id| async {
             api.get_message(remote_id.into()).await
         } => |api_message: GetMessageResponse| async {
-            Result::<_, AppError>::Ok(Some(Message::from_api_data(api_message.message, stash).await?))
+            let remote_id = api_message.message.metadata.id.clone().into();
+            let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, stash).await?;
+            Result::<_, AppError>::Ok(Some(MessageAndBodyMetadata{message_metadata: metadata,body_metadata,remote_id:Some(remote_id)}))
         })
     }
 
@@ -291,7 +294,7 @@ impl RollbackItem {
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Conversation, stash, batch => |remote_id| async {
+        sync_any!(Conversation, Conversation, stash, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
                 ids: Some(vec![remote_id.into()]),
                 ..Default::default()
@@ -346,6 +349,24 @@ impl RollbackItem {
             )
             .await?;
 
+        Ok(())
+    }
+}
+
+// Wrapper type so both the body and metadata are synced.
+struct MessageAndBodyMetadata {
+    message_metadata: Message,
+    body_metadata: MessageBodyMetadata,
+    remote_id: Option<RemoteId>,
+}
+
+impl MessageAndBodyMetadata {
+    async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.message_metadata.save_using(interface).await?;
+        self.body_metadata.save_using(interface).await?;
         Ok(())
     }
 }

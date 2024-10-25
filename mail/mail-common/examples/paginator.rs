@@ -101,9 +101,10 @@ async fn main() {
             &user_ctx,
             label.local_id.unwrap(),
             page_count,
-            None,
             PaginatorFilter::default(),
             PaginatorSearchOptions::default(),
+            true,
+            None,
         )
         .await
         .unwrap();
@@ -113,8 +114,9 @@ async fn main() {
             &user_ctx,
             label.local_id.unwrap(),
             page_count,
-            None,
             PaginatorFilter::default(),
+            true,
+            None,
         )
         .await
         .unwrap();

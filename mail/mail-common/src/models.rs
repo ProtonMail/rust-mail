@@ -73,7 +73,9 @@ use proton_api_mail::services::proton::requests::{
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
     ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
-    Message as ApiMessage, MessageMetadata as ApiMessageMetadata, MessageMetadata, OperationResult,
+    Message as ApiMessage, MessageAttachment as ApiMessageAttachment,
+    MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata, MessageMetadata,
+    OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetAttachmentMetadataResponse, GetMessagesResponse,
@@ -109,7 +111,6 @@ use std::future::Future;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
 use tracing::{debug, error, info, warn};
@@ -528,91 +529,6 @@ impl Attachment {
         Ok(Some(()))
     }
 
-    /// This function syncs the message attachments headers detailed in step 5
-    /// of the documentation of [`Attachment`] for the given `message`.
-    ///
-    /// This is the last piece of metadata which completes the attachment type.
-    ///
-    /// # Error
-    ///
-    /// Return error if the query failed.
-    pub async fn update_headers_from_api_message<A>(
-        message: &ApiMessage,
-        interface: &A,
-    ) -> Result<Vec<Self>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let mut result = Vec::with_capacity(message.attachments.len());
-
-        for message_attachment in &message.attachments {
-            let remote_id: RemoteId = message_attachment.id.clone().into();
-            let Some(mut attachment) = Attachment::find_by_id(remote_id, interface).await? else {
-                if message_attachment.disposition
-                    != proton_api_mail::services::proton::response_data::Disposition::Inline
-                {
-                    return Err(AppError::UnknownAttachment(
-                        message_attachment.id.clone().into(),
-                    ));
-                }
-
-                // If it's an inline attachment it's the first time we are
-                // seeing this data.
-                let mut new_attachment = Attachment {
-                    local_id: None,
-                    remote_id: Some(message_attachment.id.clone().into()),
-                    local_address_id: None,
-                    remote_address_id: Some(message.metadata.address_id.clone().into()),
-                    local_conversation_id: None,
-                    remote_conversation_id: Some(message.metadata.conversation_id.clone().into()),
-                    local_message_id: None,
-                    remote_message_id: Some(message.metadata.id.clone().into()),
-                    disposition: message_attachment.disposition.into(),
-                    enc_signature: message_attachment.enc_signature.clone().map(Into::into),
-                    is_auto_forwardee: false,
-                    key_packets: Some(message_attachment.key_packets.clone().into()),
-                    mime_type: attachment::MimeType::from_str(&message_attachment.mime_type)?,
-                    filename: message_attachment.name.clone(),
-                    sender: Some(message.metadata.sender.clone().into()),
-                    signature: message_attachment.signature.clone().map(Into::into),
-                    size: message_attachment.size,
-                    cached: false,
-                    content_id: message_attachment.headers.content_id.clone(),
-                    transfer_encoding: message_attachment.headers.content_transfer_encoding.clone(),
-                    image_width: message_attachment.headers.image_width.clone(),
-                    image_height: message_attachment.headers.image_height.clone(),
-                    row_id: None,
-                    stash: None,
-                };
-                new_attachment
-                    .save_using(interface)
-                    .await
-                    .inspect_err(|e| {
-                        error!(
-                            "Failed to save new inline attachment {}:{e}",
-                            message_attachment.id
-                        )
-                    })?;
-                result.push(new_attachment);
-                continue;
-            };
-
-            attachment.content_id = message_attachment.headers.content_id.clone();
-            attachment.transfer_encoding =
-                message_attachment.headers.content_transfer_encoding.clone();
-            attachment.image_width = message_attachment.headers.image_width.clone();
-            attachment.image_height = message_attachment.headers.image_height.clone();
-            attachment.signature = message_attachment.signature.clone().map(Into::into);
-            attachment.key_packets = Some(message_attachment.key_packets.clone().into());
-            attachment.enc_signature = message_attachment.enc_signature.clone().map(Into::into);
-            attachment.disposition = message_attachment.disposition.into();
-            attachment.save_using(interface).await?;
-            result.push(attachment);
-        }
-
-        Ok(result)
-    }
-
     /// Get all attachments for a given message with `local_message_id`.
     ///
     /// # Errors
@@ -684,6 +600,37 @@ impl From<ApiAttachment> for Attachment {
             transfer_encoding: None,
             image_width: None,
             image_height: None,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<ApiMessageAttachment> for Attachment {
+    fn from(value: ApiMessageAttachment) -> Self {
+        Self {
+            local_id: None,
+            remote_id: Some(value.id.into()),
+            local_address_id: None,
+            remote_address_id: None,
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_message_id: None,
+            remote_message_id: None,
+            disposition: value.disposition.into(),
+            enc_signature: value.enc_signature.clone().map(|v| v.into()),
+            is_auto_forwardee: false,
+            key_packets: Some(value.key_packets.clone().into()),
+            mime_type: value.mime_type.parse().unwrap_or_default(),
+            filename: value.name,
+            sender: None,
+            signature: value.signature.map(|v| v.into()),
+            size: value.size,
+            cached: false,
+            content_id: value.headers.content_id,
+            transfer_encoding: value.headers.content_transfer_encoding,
+            image_width: value.headers.image_width,
+            image_height: value.headers.image_height,
             row_id: None,
             stash: None,
         }
@@ -3326,10 +3273,15 @@ impl Conversation {
     /// # Params
     ///
     /// * `context`        - Active user context.
-    /// * `local_label_id` - Label where to paginate in.
+    /// * `local_label_id` - Label to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `queue`          - Optional subscriber for changes.
     /// * `filter`         - Filter options for pagination.
+    /// * `local_first`    - Load local data immediately, to return to the
+    ///                      caller without the delay of remote lookup. If set
+    ///                      to `false`, no results will be returned until the
+    ///                      remote API calls have completed. This only affects
+    ///                      the first call to the paginator.
+    /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
@@ -3339,8 +3291,9 @@ impl Conversation {
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
+        local_first: bool,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
         let remote_source =
             ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
@@ -3382,6 +3335,7 @@ impl Conversation {
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
+                local_first,
                 queue,
             )
             .await?,
@@ -5630,7 +5584,7 @@ impl Message {
         let encrypted_body = if let Some(body) = body {
             body
         } else {
-            self.get_api_message(api).await?.body
+            self.get_api_message(api).await?.body.body
         };
         Ok(EncryptedMessageBody {
             encrypted_body,
@@ -5664,13 +5618,20 @@ impl Message {
         } else {
             let message = self.get_api_message(api).await?;
 
-            let (metadata, body) = MessageBodyMetadata::save_from_api_data(
-                message,
-                Some(self.local_id.unwrap()),
-                interface,
-            )
-            .await?;
-            (metadata, Some(body))
+            let (mut message, mut body_metadata, body) = Message::from_api_data(message, interface)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to convert message from api: {e}");
+                })?;
+            message.save_using(interface).await.inspect_err(|e| {
+                error!("Failed to save message metadata: {e}");
+            })?;
+
+            body_metadata.save_using(interface).await.inspect_err(|e| {
+                error!("Failed to save message body metadata: {e}");
+            })?;
+
+            (body_metadata, Some(body))
         };
         Ok(mdata)
     }
@@ -6201,7 +6162,12 @@ impl Message {
         Ok(())
     }
 
-    /// Converts an [`ApiMessage`] into a [`Message`].
+    /// Converts an [`ApiMessage`] into its components.
+    ///
+    /// Returns, in order:
+    /// * [`Message`]: Message metadata
+    /// * [`MessageBodyMetadata`]: Messge body metadata
+    /// * Message body
     ///
     /// # Parameters
     ///
@@ -6209,11 +6175,25 @@ impl Message {
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the records.
     ///
-    pub async fn from_api_data<A>(value: ApiMessage, interface: &A) -> Result<Self, AppError>
+    pub async fn from_api_data<A>(
+        value: ApiMessage,
+        interface: &A,
+    ) -> Result<(Self, MessageBodyMetadata, String), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        Message::from_api_metadata(value.metadata, interface).await
+        let remote_address_id = value.metadata.address_id.clone();
+        let remote_message_id = value.metadata.id.clone();
+        let remote_conversation_id = value.metadata.conversation_id.clone();
+        let metadata = Message::from_api_metadata(value.metadata, interface).await?;
+        let (body_metadata, body) = MessageBodyMetadata::from_api_message_body(
+            value.body,
+            remote_message_id.into(),
+            remote_conversation_id.into(),
+            remote_address_id.into(),
+        );
+
+        Ok((metadata, body_metadata, body))
     }
 
     /// Converts an [`ApiMessageMetadata`] into a [`Message`].
@@ -6677,11 +6657,16 @@ impl Message {
     /// # Params
     ///
     /// * `context`        - Active user context.
-    /// * `local_label_id` - Label where to paginate in.
+    /// * `local_label_id` - Label to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `queue`          - Optional subscriber for changes.
     /// * `filter`         - Filter options for pagination.
     /// * `options`        - Search options for pagination.
+    /// * `local_first`    - Load local data immediately, to return to the
+    ///                      caller without the delay of remote lookup. If set
+    ///                      to `false`, no results will be returned until the
+    ///                      remote API calls have completed. This only affects
+    ///                      the first call to the paginator.
+    /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
@@ -6691,9 +6676,10 @@ impl Message {
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
+        local_first: bool,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
         let remote_source =
             MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
@@ -6746,6 +6732,7 @@ impl Message {
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
+                local_first,
                 queue,
             )
             .await?,
@@ -7078,6 +7065,28 @@ impl MessageBodyMetadata {
     /// See [`Model::save()`].
     ///
     pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        if self.local_message_id.is_none() {
+            if let Some(remote_id) = self.remote_message_id.clone() {
+                if let Some(existing) = Self::find_first(
+                    "WHERE remote_message_id=?",
+                    params![remote_id.clone()],
+                    interface,
+                )
+                .await?
+                {
+                    self.local_message_id = existing.local_message_id;
+                    self.row_id = existing.row_id;
+                } else {
+                    let Some(message) = Message::find_by_id(remote_id, interface).await? else {
+                        return Err(StashError::Custom(format!(
+                            "Failed to find message with remote id {}",
+                            self.remote_message_id.as_ref().unwrap()
+                        )));
+                    };
+                    self.local_message_id = message.local_id;
+                }
+            }
+        }
         // Update all attachment links - When creating drafts we can update
         // and create new ones.
         interface
@@ -7086,7 +7095,8 @@ impl MessageBodyMetadata {
                 params![self.local_message_id],
             )
             .await?;
-        for attachment in &self.attachments {
+        for attachment in &mut self.attachments {
+            attachment.save_using(interface).await?;
             interface
                 .execute(
                     "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
@@ -7118,63 +7128,45 @@ impl MessageBodyMetadata {
         .await
     }
 
-    /// Save the message body metadata from a `message`.
+    /// Create a [`MessageBodyMetadata`] from an [`ApiMessageBody`].
     ///
-    /// If the `local_message_id` is known, it can be passed in. If `None` it
-    /// will be resolved from the database.
+    /// The local and remote ids are required to correctly fill out
+    /// all the attachment metadata.
     ///
-    /// This function also takes care of updating the attachments' metadata
-    /// that is present in `message` and correctly applies this information
-    /// to the returned type.
-    ///
-    /// Returns the saved metadata and the message body.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries fail.
-    pub async fn save_from_api_data<A>(
-        message: ApiMessage,
-        local_message_id: Option<LocalId>,
-        interface: &A,
-    ) -> Result<(Self, String), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let attachments = Attachment::update_headers_from_api_message(&message, interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update attachment headers: {e}");
-            })?;
+    /// Returns an instance of [`Self`] and the message body.
+    pub fn from_api_message_body(
+        api_message_body: ApiMessageBody,
+        remote_message_id: RemoteId,
+        remote_conversation_id: RemoteId,
+        remote_address_id: RemoteId,
+    ) -> (Self, String) {
+        let attachments = api_message_body
+            .attachments
+            .into_iter()
+            .map(|a| {
+                let mut attachment = Attachment::from(a);
+                attachment.remote_message_id = Some(remote_message_id.clone());
+                attachment.remote_conversation_id = Some(remote_conversation_id.clone());
+                attachment.remote_address_id = Some(remote_address_id.clone());
+                attachment
+            })
+            .collect();
 
-        let local_message_id = if let Some(id) = local_message_id {
-            id
-        } else {
-            let remote_id: RemoteId = message.metadata.id.clone().into();
-            remote_id
-                .counterpart::<Message, _>(interface)
-                .await?
-                .ok_or(AppError::UnknownMessage(remote_id))?
-        };
-
-        // create message in the database and store body in the cache.
-        let mut metadata = MessageBodyMetadata {
-            local_message_id: Some(local_message_id),
-            remote_message_id: Some(message.metadata.id.into()),
-            header: message.header.clone(),
-            parsed_headers: ParsedHeaders {
-                headers: message.parsed_headers,
+        (
+            Self {
+                local_message_id: None,
+                remote_message_id: Some(remote_message_id),
+                header: api_message_body.header,
+                mime_type: api_message_body.mime_type.into(),
+                parsed_headers: ParsedHeaders {
+                    headers: api_message_body.parsed_headers,
+                },
+                attachments,
+                row_id: None,
+                stash: None,
             },
-            mime_type: message.mime_type.into(),
-            attachments,
-            row_id: None,
-            stash: Some(interface.stash().clone()),
-        };
-        metadata
-            .save_using(interface)
-            .await
-            .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
-
-        Ok((metadata, message.body))
+            api_message_body.body,
+        )
     }
 }
 

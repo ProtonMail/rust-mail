@@ -473,8 +473,9 @@ pub async fn paginate_conversations_for_label(
             &context,
             RealLocalId::from(label_id),
             50,
-            Some(msg_sender),
             RealPaginatorFilter::from(filter),
+            true,
+            Some(msg_sender),
         )
         .await?;
         Ok(ConversationPaginator {

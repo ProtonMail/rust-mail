@@ -183,8 +183,8 @@ impl proton_action_queue::action::Handler for Handler {
 
         // Update message metadata
         message_body_metadata.remote_message_id = message.remote_id.clone();
-        message_body_metadata.header = new_message.header.clone();
-        message_body_metadata.parsed_headers.headers = new_message.parsed_headers.clone();
+        message_body_metadata.header = new_message.body.header.clone();
+        message_body_metadata.parsed_headers.headers = new_message.body.parsed_headers.clone();
 
         // Update conversation
         conversation
@@ -193,7 +193,7 @@ impl proton_action_queue::action::Handler for Handler {
             .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
 
         // Update message data
-        message = Message::from_api_data(new_message, &tether)
+        message = Message::from_api_metadata(new_message.metadata, &tether)
             .await
             .inspect_err(|e| {
                 error!("Failed to convert api message: {e}");

@@ -25,6 +25,13 @@ pub enum Messages {
     DismissPopup,
 }
 
+impl Messages {
+    /// Utility helper to create raise popup messages.
+    pub fn raise_popup(pop_up: impl Popup + Send + 'static) -> Self {
+        Self::RaisePopup(Box::new(pop_up))
+    }
+}
+
 impl From<MailContextError> for Messages {
     fn from(value: MailContextError) -> Self {
         Self::DisplayError(None, anyhow!("{value}"))
