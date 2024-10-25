@@ -8,12 +8,12 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, BlockQuote, RemoteContent};
+use super::datatypes::{AllBottomBarMessageActions, BlockQuote, Message, RemoteContent};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailSessionResult, MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::mail::datatypes::{Message, MessageSearchOptions};
+use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -863,39 +863,45 @@ pub async fn delete_messages(
     .await
 }
 
-/// Move given messages from a label into another.
+/// Gets the embedded attachment by cid for a message.
+/// Returns None if it does not exist
 ///
 /// # Parameters
 ///
-/// * `session`        - The session to use for the request.
-/// * `source_id`      - The local ID of the source label.
-/// * `destination_id` - The local ID of the destination label.
-/// * `message_ids`    - The local IDs of the messages to move.
-///
-/// # Errors
-///
-/// Returns an error if the action can not be executed.
+/// * `mailbox`  - The current Mailbox.
+/// * `id`       - The id of the message
+/// * `cid`      - The cid of the attachment
 ///
 #[uniffi::export]
-pub async fn move_messages(
-    session: Arc<MailUserSession>,
-    source_id: Id,
-    destination_id: Id,
-    message_ids: Vec<Id>,
-) -> Result<(), MailSessionError> {
-    let user_context = session.ctx();
+pub async fn get_embedded_attachment(
+    mailbox: Arc<Mailbox>,
+    id: Id,
+    cid: String,
+) -> Result<Option<EmbeddedAttachmentInfo>, MailboxError> {
     uniffi_async(async move {
-        RealMessage::action_move(
-            user_context.session(),
-            user_context.queue(),
-            source_id.into(),
-            destination_id.into(),
-            message_ids.into_iter().map(Into::into).collect(),
-        )
-        .await?;
-        Ok(())
+        let Some(att) =
+            models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(EmbeddedAttachmentInfo {
+            data: att.data,
+            mime: att.mime,
+            height: att.height,
+            width: att.width,
+        }))
     })
     .await
+}
+
+/// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
+#[derive(Clone, uniffi::Record)]
+pub struct EmbeddedAttachmentInfo {
+    /// The bytes of the attachment
+    pub data: Vec<u8>,
+    pub mime: String,
+    pub height: Option<String>,
+    pub width: Option<String>,
 }
 
 /// Change Labels of a list of messages and optionally archive them.
@@ -939,6 +945,41 @@ pub async fn label_messages_as(
             must_archive,
         )
         .await?)
+    })
+    .await
+}
+
+/// Move given messages from a label into another.
+///
+/// # Parameters
+///
+/// * `session`        - The session to use for the request.
+/// * `source_id`      - The local ID of the source label.
+/// * `destination_id` - The local ID of the destination label.
+/// * `message_ids`    - The local IDs of the messages to move.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn move_messages(
+    session: Arc<MailUserSession>,
+    source_id: Id,
+    destination_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_move(
+            user_context.session(),
+            user_context.queue(),
+            source_id.into(),
+            destination_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
     })
     .await
 }

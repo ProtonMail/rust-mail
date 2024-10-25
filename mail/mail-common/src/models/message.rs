@@ -6,10 +6,10 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
-use crate::datatypes::{ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
-use crate::find_in_query;
+use crate::datatypes::{Disposition, ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
 use crate::models::{Label, Message};
-use crate::AppError;
+use crate::{find_in_query, Mailbox};
+use crate::{AppError, MailboxError};
 use anyhow::anyhow;
 use itertools::Itertools as _;
 use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, Queue};
@@ -22,6 +22,8 @@ use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
 use tracing::{error, warn};
+
+use super::MessageBodyMetadata;
 
 impl Message {
     /// Label multiple messages.
@@ -513,6 +515,44 @@ impl Message {
         Message::find(query, params, interface, None).await
     }
 
+    /// Gets the embedded attachment by cid for a message.
+    /// Returns None if it does not exist
+    ///
+    /// # Parameters
+    ///
+    /// * `mailbox`  - The current Mailbox.
+    /// * `id`       - The id of the message
+    /// * `cid`      - The cid of the attachment
+    ///
+    pub async fn get_embedded_attachment(
+        mailbox: &Mailbox,
+        id: LocalId,
+        cid: &str,
+    ) -> Result<Option<EmbeddedAttachmentInfo>, MailboxError> {
+        let mdata = MessageBodyMetadata::for_message(id, mailbox.stash())
+            .await?
+            .ok_or(AppError::MessageBodyMetadataMissing(id))?;
+
+        let Some(att) = mdata
+            .attachments
+            .into_iter()
+            .filter(|at| matches!(at.disposition, Disposition::Inline))
+            .find(|at| at.content_id.as_deref() == Some(cid))
+        else {
+            return Ok(None);
+        };
+
+        // PERF: Optimize this part
+        let path = mailbox.get_attachment_content(&att).await?;
+        let data = tokio::fs::read(path).await?;
+        Ok(Some(EmbeddedAttachmentInfo {
+            data,
+            mime: att.mime_type.to_string(),
+            height: att.image_height.clone(),
+            width: att.image_width.clone(),
+        }))
+    }
+
     /// Get the available actions from bottom bar for given messages
     ///
     /// # Parameters
@@ -639,4 +679,11 @@ impl Message {
         }
         Ok(())
     }
+}
+
+pub struct EmbeddedAttachmentInfo {
+    pub data: Vec<u8>,
+    pub mime: String,
+    pub height: Option<String>,
+    pub width: Option<String>,
 }

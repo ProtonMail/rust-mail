@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Added `get_embedded_attachment()`
+
 ## [0.17.0] - 2024-10-28
 
 ### Added
