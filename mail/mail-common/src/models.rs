@@ -42,9 +42,8 @@ use crate::actions::{
     ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
     MessageAvailableActions, MoveAction, ReplyAction,
 };
-use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    self, attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
+    attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
     AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
     Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
     MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
@@ -52,8 +51,10 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabel, SystemLabelId,
     ViewLayout, ViewMode,
 };
-use crate::decrypted_message::DecryptedMessageBody;
-use crate::{find_in_query, MailContextResult};
+use crate::find_in_query;
+use crate::mailbox::decrypted_message::DecryptedMessageBody;
+use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
+use crate::MailContextResult;
 use crate::{AppError, MailUserContext, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
@@ -108,6 +109,7 @@ use std::future::Future;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
 use tracing::{debug, error, info, warn};
@@ -243,6 +245,22 @@ pub struct Attachment {
     #[DbField]
     pub cached: bool,
 
+    #[DbField]
+    /// Content id of the attachment if inlined in the message.
+    pub content_id: Option<String>,
+
+    #[DbField]
+    /// Encoding of the attachment in the message.
+    pub transfer_encoding: Option<String>,
+
+    #[DbField]
+    /// Custom proton width for this image. Yes, API is returning this as a string.
+    pub image_width: Option<String>,
+
+    /// Custom proton Height for this image. Yes, API is returning this as a string.
+    #[DbField]
+    pub image_height: Option<String>,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -277,12 +295,15 @@ impl From<AttachmentMetadata> for Attachment {
             signature: None,
             size: value.size,
             cached: false,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
             row_id: None,
             stash: None,
         }
     }
 }
-
 impl From<Attachment> for AttachmentMetadata {
     fn from(value: Attachment) -> Self {
         Self {
@@ -392,6 +413,22 @@ impl Attachment {
             }
         }
 
+        if self.local_message_id.is_none() {
+            if let Some(remote_message_id) = self.remote_message_id.clone() {
+                self.local_message_id = remote_message_id
+                    .counterpart::<Message, _>(interface)
+                    .await?;
+            }
+        }
+
+        if self.local_conversation_id.is_none() {
+            if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
+                self.local_conversation_id = remote_conversation_id
+                    .counterpart::<Conversation, _>(interface)
+                    .await?;
+            }
+        }
+
         <Self as Model>::save_using(self, interface).await
     }
 
@@ -490,6 +527,117 @@ impl Attachment {
         *self = attachment;
         Ok(Some(()))
     }
+
+    /// This function syncs the message attachments headers detailed in step 5
+    /// of the documentation of [`Attachment`] for the given `message`.
+    ///
+    /// This is the last piece of metadata which completes the attachment type.
+    ///
+    /// # Error
+    ///
+    /// Return error if the query failed.
+    pub async fn update_headers_from_api_message<A>(
+        message: &ApiMessage,
+        interface: &A,
+    ) -> Result<Vec<Self>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut result = Vec::with_capacity(message.attachments.len());
+
+        for message_attachment in &message.attachments {
+            let remote_id: RemoteId = message_attachment.id.clone().into();
+            let Some(mut attachment) = Attachment::find_by_id(remote_id, interface).await? else {
+                if message_attachment.disposition
+                    != proton_api_mail::services::proton::response_data::Disposition::Inline
+                {
+                    return Err(AppError::UnknownAttachment(
+                        message_attachment.id.clone().into(),
+                    ));
+                }
+
+                // If it's an inline attachment it's the first time we are
+                // seeing this data.
+                let mut new_attachment = Attachment {
+                    local_id: None,
+                    remote_id: Some(message_attachment.id.clone().into()),
+                    local_address_id: None,
+                    remote_address_id: Some(message.metadata.address_id.clone().into()),
+                    local_conversation_id: None,
+                    remote_conversation_id: Some(message.metadata.conversation_id.clone().into()),
+                    local_message_id: None,
+                    remote_message_id: Some(message.metadata.id.clone().into()),
+                    disposition: message_attachment.disposition.into(),
+                    enc_signature: message_attachment.enc_signature.clone().map(Into::into),
+                    is_auto_forwardee: false,
+                    key_packets: Some(message_attachment.key_packets.clone().into()),
+                    mime_type: attachment::MimeType::from_str(&message_attachment.mime_type)?,
+                    filename: message_attachment.name.clone(),
+                    sender: Some(message.metadata.sender.clone().into()),
+                    signature: message_attachment.signature.clone().map(Into::into),
+                    size: message_attachment.size,
+                    cached: false,
+                    content_id: message_attachment.headers.content_id.clone(),
+                    transfer_encoding: message_attachment.headers.content_transfer_encoding.clone(),
+                    image_width: message_attachment.headers.image_width.clone(),
+                    image_height: message_attachment.headers.image_height.clone(),
+                    row_id: None,
+                    stash: None,
+                };
+                new_attachment
+                    .save_using(interface)
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to save new inline attachment {}:{e}",
+                            message_attachment.id
+                        )
+                    })?;
+                result.push(new_attachment);
+                continue;
+            };
+
+            attachment.content_id = message_attachment.headers.content_id.clone();
+            attachment.transfer_encoding =
+                message_attachment.headers.content_transfer_encoding.clone();
+            attachment.image_width = message_attachment.headers.image_width.clone();
+            attachment.image_height = message_attachment.headers.image_height.clone();
+            attachment.signature = message_attachment.signature.clone().map(Into::into);
+            attachment.key_packets = Some(message_attachment.key_packets.clone().into());
+            attachment.enc_signature = message_attachment.enc_signature.clone().map(Into::into);
+            attachment.disposition = message_attachment.disposition.into();
+            attachment.save_using(interface).await?;
+            result.push(attachment);
+        }
+
+        Ok(result)
+    }
+
+    /// Get all attachments for a given message with `local_message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn for_message<A>(
+        local_message_id: LocalId,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Attachment::find(
+            indoc! {"
+            WHERE local_id IN (
+                SELECT local_attachment_id FROM message_attachments
+                WHERE local_message_id=?
+            )
+        "},
+            params![local_message_id],
+            interface,
+            None,
+        )
+        .await
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't
@@ -532,6 +680,10 @@ impl From<ApiAttachment> for Attachment {
             signature: value.signature.map(|v| v.into()),
             size: value.size,
             cached: false,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
             row_id: None,
             stash: None,
         }
@@ -2681,7 +2833,7 @@ impl Conversation {
             if !is_conversation_in_view {
                 return Err(AppError::ConversationDoesNotHaveLabel(
                     conversation.local_id.unwrap(),
-                    view.name,
+                    view.name.clone(),
                 ));
             }
         }
@@ -2910,7 +3062,7 @@ impl Conversation {
     // TODO: Figure out how we want to do this in the future.
     ///
     /// Intended for testing only
-    ///
+    /// (local_attachment_id, local_message_id)
     /// Sets a conversation to be deleted in `expire_in` ms
     pub async fn set_expiration_time_in<A>(
         id: LocalId,
@@ -3177,37 +3329,55 @@ impl Conversation {
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
     /// * `queue`          - Optional subscriber for changes.
+    /// * `filter`         - Filter options for pagination.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+        filter: PaginatorFilter,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
-        let remote_source = ConversationDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
+
+        let mut query = formatdoc!(
+            "
+            JOIN conversation_labels
+                ON conversations.local_id = conversation_labels.local_conversation_id
+            WHERE
+                conversation_labels.local_label_id = ?
+            AND
+                conversation_labels.deleted = 0
+            "
+        );
+
+        let params = vec![Param::Integer(
+            i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+            })?,
+        )];
+
+        if let Some(unread) = filter.unread {
+            query += &format!(
+                "AND conversation_labels.context_num_unread {} 0 ",
+                if unread { ">" } else { "=" }
+            );
+        }
+
+        query += "ORDER BY
+            conversation_labels.context_time DESC,
+            conversations.display_order DESC
+        ";
+
         Ok(PaginatorCompat::new(
             Paginator::new(
-                formatdoc!(
-                    "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                ORDER BY
-                    conversation_labels.context_time DESC,
-                    conversations.display_order DESC
-                "
-                ),
-                vec![Param::Integer(
-                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
-                            err,
-                        )))
-                    })?,
-                )],
+                query,
+                params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
@@ -4198,35 +4368,30 @@ impl From<ApiLabel> for Label {
     }
 }
 
-#[cfg(test)]
-mod default_label {
-    use crate::{datatypes::LabelType, models::Label};
-
-    impl Default for Label {
-        fn default() -> Self {
-            Self {
-                label_type: LabelType::Label,
-                local_id: Default::default(),
-                remote_id: Default::default(),
-                local_parent_id: Default::default(),
-                remote_parent_id: Default::default(),
-                color: Default::default(),
-                display: Default::default(),
-                expanded: Default::default(),
-                initialized_conv: Default::default(),
-                initialized_msg: Default::default(),
-                name: Default::default(),
-                notify: Default::default(),
-                display_order: Default::default(),
-                path: Default::default(),
-                sticky: Default::default(),
-                total_conv: Default::default(),
-                total_msg: Default::default(),
-                unread_conv: Default::default(),
-                unread_msg: Default::default(),
-                row_id: Default::default(),
-                stash: Default::default(),
-            }
+impl Default for Label {
+    fn default() -> Self {
+        Self {
+            label_type: LabelType::Label,
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            local_parent_id: Default::default(),
+            remote_parent_id: Default::default(),
+            color: Default::default(),
+            display: Default::default(),
+            expanded: Default::default(),
+            initialized_conv: Default::default(),
+            initialized_msg: Default::default(),
+            name: Default::default(),
+            notify: Default::default(),
+            display_order: Default::default(),
+            path: Default::default(),
+            sticky: Default::default(),
+            total_conv: Default::default(),
+            total_msg: Default::default(),
+            unread_conv: Default::default(),
+            unread_msg: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }
@@ -5494,33 +5659,19 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let conn = self.stash().ok_or(StashError::NoStashAvailable)?;
-
-        let mut mdata = if let Some(metadata) = self.get_message_body_metadata().await? {
+        let mdata = if let Some(metadata) = self.get_message_body_metadata(interface).await? {
             (metadata, None)
         } else {
             let message = self.get_api_message(api).await?;
 
-            // create message in the database and store body in the cache.
-            let mut metadata = MessageBodyMetadata {
-                local_message_id: self.local_id,
-                remote_message_id: self.remote_id.clone(),
-                header: message.header.clone(),
-                parsed_headers: datatypes::ParsedHeaders {
-                    headers: message.parsed_headers,
-                },
-                mime_type: message.mime_type.into(),
-                row_id: None,
-                stash: Some(conn.clone()),
-            };
-            metadata
-                .save()
-                .await
-                .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
-            (metadata, Some(message.body))
+            let (metadata, body) = MessageBodyMetadata::save_from_api_data(
+                message,
+                Some(self.local_id.unwrap()),
+                interface,
+            )
+            .await?;
+            (metadata, Some(body))
         };
-
-        mdata.0.save_using(interface).await?;
         Ok(mdata)
     }
 
@@ -5530,18 +5681,18 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    async fn get_message_body_metadata(&self) -> Result<Option<MessageBodyMetadata>, AppError> {
-        let Some(conn) = self.stash() else {
-            return Err(StashError::NoStashAvailable.into());
-        };
-
-        Ok(MessageBodyMetadata::find_first(
-            "WHERE local_message_id = ?",
-            params![self.local_id],
-            conn,
+    async fn get_message_body_metadata<A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<MessageBodyMetadata>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(
+            MessageBodyMetadata::for_message(self.local_id.unwrap(), interface)
+                .await
+                .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?,
         )
-        .await
-        .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?)
     }
 
     /// Get message from remote
@@ -5842,7 +5993,7 @@ impl Message {
         let mut file = File::open(file_path)?;
         let mut body = String::new();
         file.read_to_string(&mut body)?;
-        let metadata = self.get_message_body_metadata().await?;
+        let metadata = self.get_message_body_metadata(interface).await?;
         let metadata = metadata.ok_or(AppError::MessageBodyMetadataMissing(
             self.local_id.expect("Should be set"),
         ))?;
@@ -6529,38 +6680,68 @@ impl Message {
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
     /// * `queue`          - Optional subscriber for changes.
+    /// * `filter`         - Filter options for pagination.
+    /// * `options`        - Search options for pagination.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+        filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
-        let remote_source = MessageDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
+                .await?;
+        let mut conditions = vec!["messages.deleted = 0".to_owned()];
+
+        if let Some(unread) = filter.unread {
+            conditions.push(format!("messages.unread = {}", if unread { 1 } else { 0 }));
+        }
+        if let Some(keywords) = options.keywords {
+            let mut keyword_conditions = Vec::new();
+            for word in keywords.split_whitespace() {
+                keyword_conditions.push(formatdoc!(
+                    "(
+                        messages.subject LIKE '%{word}%' OR
+                        messages.to_list LIKE '%{word}%' OR
+                        messages.sender LIKE '%{word}%'
+                    )"
+                ));
+            }
+            if !keyword_conditions.is_empty() {
+                conditions.push(keyword_conditions.join(" AND "));
+            }
+        }
+
+        let query = formatdoc!(
+            "
+            JOIN message_labels
+                ON messages.local_id = message_labels.local_message_id
+            WHERE
+                message_labels.local_label_id = ?
+                AND {}
+            ORDER BY
+                messages.time DESC
+            ",
+            conditions.join(" AND ")
+        );
+
+        let params = vec![Param::Integer(
+            i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+            })?,
+        )];
+
         Ok(PaginatorCompat::new(
             Paginator::new(
-                formatdoc!(
-                    "
-                JOIN message_labels
-                    ON messages.local_id = message_labels.local_message_id
-                WHERE
-                    message_labels.local_label_id = ?
-                    AND messages.deleted = 0
-                ORDER BY
-                    messages.time DESC,
-                    messages.display_order DESC
-                "
-                ),
-                vec![Param::Integer(
-                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
-                            err,
-                        )))
-                    })?,
-                )],
+                query,
+                params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
@@ -6721,47 +6902,42 @@ impl MessageLabelStats {
     }
 }
 
-#[cfg(test)]
-mod default_message {
-    use super::*;
-
-    impl Default for Message {
-        fn default() -> Self {
-            Self {
-                local_address_id: 0.into(),
-                remote_address_id: RemoteId::new(Default::default()),
-                // The rest are by default default.
-                flags: Default::default(),
-                local_id: Default::default(),
-                remote_id: Default::default(),
-                local_conversation_id: Default::default(),
-                remote_conversation_id: Default::default(),
-                attachments_metadata: Default::default(),
-                bcc_list: Default::default(),
-                cc_list: Default::default(),
-                deleted: Default::default(),
-                expiration_time: Default::default(),
-                external_id: Default::default(),
-                is_forwarded: Default::default(),
-                is_replied: Default::default(),
-                is_replied_all: Default::default(),
-                label_ids: Default::default(),
-                exclusive_location: Default::default(),
-                num_attachments: Default::default(),
-                display_order: Default::default(),
-                reply_tos: Default::default(),
-                sender: Default::default(),
-                size: Default::default(),
-                snooze_time: Default::default(),
-                subject: Default::default(),
-                time: Default::default(),
-                to_list: Default::default(),
-                unread: Default::default(),
-                cached: false,
-                custom_labels: Default::default(),
-                row_id: Default::default(),
-                stash: Default::default(),
-            }
+impl Default for Message {
+    fn default() -> Self {
+        Self {
+            local_address_id: 0.into(),
+            remote_address_id: RemoteId::new(Default::default()),
+            // The rest are by default default.
+            flags: Default::default(),
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            local_conversation_id: Default::default(),
+            remote_conversation_id: Default::default(),
+            attachments_metadata: Default::default(),
+            bcc_list: Default::default(),
+            cc_list: Default::default(),
+            deleted: Default::default(),
+            expiration_time: Default::default(),
+            external_id: Default::default(),
+            is_forwarded: Default::default(),
+            is_replied: Default::default(),
+            is_replied_all: Default::default(),
+            label_ids: Default::default(),
+            exclusive_location: Default::default(),
+            num_attachments: Default::default(),
+            display_order: Default::default(),
+            reply_tos: Default::default(),
+            sender: Default::default(),
+            size: Default::default(),
+            snooze_time: Default::default(),
+            subject: Default::default(),
+            time: Default::default(),
+            to_list: Default::default(),
+            unread: Default::default(),
+            cached: false,
+            custom_labels: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }
@@ -6778,6 +6954,7 @@ mod default_message {
 ///
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
+#[ModelActions(on_load, on_save)]
 pub struct MessageBodyMetadata {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -6804,6 +6981,9 @@ pub struct MessageBodyMetadata {
     /// TODO: Document this field.
     #[DbField]
     pub parsed_headers: ParsedHeaders,
+
+    /// Attachments associated with the message body.
+    pub attachments: Vec<Attachment>,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
@@ -6872,6 +7052,129 @@ impl MessageBodyMetadata {
         }
 
         <Self as Model>::save_using(self, interface).await
+    }
+
+    /// Extends [`Model::load()`] to pre-load attachments.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    pub async fn on_load<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.attachments = Attachment::for_message(self.local_message_id.unwrap(), interface)
+            .await
+            .inspect_err(|e| error!("Failed to load attachments for body metadata: {e}"))?;
+
+        Ok(())
+    }
+
+    /// Extends [`Model::on_save()`] to insert attachment links.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        // Update all attachment links - When creating drafts we can update
+        // and create new ones.
+        interface
+            .execute(
+                "DELETE FROM message_attachments WHERE local_message_id=?",
+                params![self.local_message_id],
+            )
+            .await?;
+        for attachment in &self.attachments {
+            interface
+                .execute(
+                    "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
+                    params![attachment.local_id.unwrap(), self.local_message_id],
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Load a message for the message with `local_message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn for_message<A>(
+        local_message_id: LocalId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        // There is no local id on this type so we can't use find_by_id.
+        Self::find_first(
+            "WHERE local_message_id =?",
+            params![local_message_id],
+            interface,
+        )
+        .await
+    }
+
+    /// Save the message body metadata from a `message`.
+    ///
+    /// If the `local_message_id` is known, it can be passed in. If `None` it
+    /// will be resolved from the database.
+    ///
+    /// This function also takes care of updating the attachments' metadata
+    /// that is present in `message` and correctly applies this information
+    /// to the returned type.
+    ///
+    /// Returns the saved metadata and the message body.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fail.
+    pub async fn save_from_api_data<A>(
+        message: ApiMessage,
+        local_message_id: Option<LocalId>,
+        interface: &A,
+    ) -> Result<(Self, String), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let attachments = Attachment::update_headers_from_api_message(&message, interface)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to update attachment headers: {e}");
+            })?;
+
+        let local_message_id = if let Some(id) = local_message_id {
+            id
+        } else {
+            let remote_id: RemoteId = message.metadata.id.clone().into();
+            remote_id
+                .counterpart::<Message, _>(interface)
+                .await?
+                .ok_or(AppError::UnknownMessage(remote_id))?
+        };
+
+        // create message in the database and store body in the cache.
+        let mut metadata = MessageBodyMetadata {
+            local_message_id: Some(local_message_id),
+            remote_message_id: Some(message.metadata.id.into()),
+            header: message.header.clone(),
+            parsed_headers: ParsedHeaders {
+                headers: message.parsed_headers,
+            },
+            mime_type: message.mime_type.into(),
+            attachments,
+            row_id: None,
+            stash: Some(interface.stash().clone()),
+        };
+        metadata
+            .save_using(interface)
+            .await
+            .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
+
+        Ok((metadata, message.body))
     }
 }
 
@@ -6979,19 +7282,35 @@ impl ConversationMessageLabelStats {
 pub struct ConversationDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
 }
 
 impl ConversationDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    ///
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -7003,6 +7322,7 @@ impl ConversationDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
         })
     }
 }
@@ -7033,6 +7353,7 @@ impl DataSource for ConversationDataSource {
                 desc: Some(true),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -7057,6 +7378,11 @@ impl DataSource for ConversationDataSource {
         elements: Vec<Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
+        if elements.is_empty() {
+            warn!("No element to sync");
+            return Ok(vec![]);
+        }
+
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
@@ -7091,6 +7417,7 @@ impl DataSource for ConversationDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -7145,19 +7472,39 @@ impl ConversationDataSource {
 pub struct MessageDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
+
+    /// Search options for pagination.
+    options: PaginatorSearchOptions,
 }
 
 impl MessageDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    /// * `options`  - Search options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -7169,6 +7516,8 @@ impl MessageDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
+            options,
         })
     }
 }
@@ -7198,6 +7547,8 @@ impl DataSource for MessageDataSource {
                 desc: Some(true),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
@@ -7222,6 +7573,11 @@ impl DataSource for MessageDataSource {
         elements: Vec<Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
+        if elements.is_empty() {
+            warn!("No element to sync");
+            return Ok(vec![]);
+        }
+
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
@@ -7244,6 +7600,8 @@ impl DataSource for MessageDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
@@ -7342,4 +7700,18 @@ impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
     pub async fn reload(&self) -> Result<Vec<T>, StashError> {
         self.paginator.reload().await
     }
+}
+
+/// Filter options for pagination
+#[derive(Clone, Debug, Default)]
+pub struct PaginatorFilter {
+    /// If true, only return unread conversations/messages
+    pub unread: Option<bool>,
+}
+
+/// Search options for pagination
+#[derive(Clone, Debug, Default)]
+pub struct PaginatorSearchOptions {
+    /// Keywords to use in search.
+    pub keywords: Option<String>,
 }

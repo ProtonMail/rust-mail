@@ -145,6 +145,9 @@
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
 use proton_core_common::datatypes::LocalId as RealLocalId;
+use proton_mail_common::models::{
+    PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
+};
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};
 use stash::stash::{AgnosticInterface, Interface, StashError};
@@ -395,4 +398,50 @@ pub fn watch_channel<T: Send + 'static>(
     });
 
     Arc::new(watcher)
+}
+
+/// Filter options for pagination
+#[derive(uniffi::Record)]
+pub struct PaginatorFilter {
+    /// If true, only return unread conversations/messages
+    pub unread: Option<bool>,
+}
+
+impl From<PaginatorFilter> for RealPaginatorFilter {
+    fn from(filter: PaginatorFilter) -> Self {
+        RealPaginatorFilter {
+            unread: filter.unread,
+        }
+    }
+}
+
+impl From<RealPaginatorFilter> for PaginatorFilter {
+    fn from(filter: RealPaginatorFilter) -> Self {
+        PaginatorFilter {
+            unread: filter.unread,
+        }
+    }
+}
+
+/// Search options for pagination
+#[derive(uniffi::Record)]
+pub struct PaginatorSearchOptions {
+    /// Keywords to use in search.
+    pub keywords: Option<String>,
+}
+
+impl From<PaginatorSearchOptions> for RealPaginatorSearchOptions {
+    fn from(filter: PaginatorSearchOptions) -> Self {
+        RealPaginatorSearchOptions {
+            keywords: filter.keywords,
+        }
+    }
+}
+
+impl From<RealPaginatorSearchOptions> for PaginatorSearchOptions {
+    fn from(filter: RealPaginatorSearchOptions) -> Self {
+        PaginatorSearchOptions {
+            keywords: filter.keywords,
+        }
+    }
 }

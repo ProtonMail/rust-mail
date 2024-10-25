@@ -1,13 +1,11 @@
-mod common;
-
-use common::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn test_mock_context() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     Mock::given(method("GET"))
         .and(path("/api/tests/ping"))
         .respond_with(ResponseTemplate::new(200))

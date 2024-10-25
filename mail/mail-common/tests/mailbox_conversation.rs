@@ -1,7 +1,3 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -12,13 +8,15 @@ use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -100,7 +98,7 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
     ctx.catch_all().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     ctx.init_user(user_ctx.clone()).await;
 
@@ -113,10 +111,11 @@ async fn test_new_mailbox_sync_conversations() {
     mailbox.sync(10).await.unwrap();
 
     // Get conversations for mailbox.
-    let conversation = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let conversation =
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap();
 
     // Get the message for a conversation.
 
@@ -152,7 +151,7 @@ async fn test_new_mailbox_sync_conversations() {
 //     // messages.
 //
 //     // Set up a user and initialise the inbox
-//     let ctx = TestContext::new();
+//     let ctx = MailTestContext::new();
 //     let mut params = TestParams::default_basic();
 //     params
 //         .labels
@@ -220,7 +219,7 @@ async fn test_new_mailbox_sync_conversations() {
 //         attachments: vec![],
 //     };
 //
-//     let user_context = ctx.user_context();
+//     let user_context = ctx.mail_user_context();
 //
 //     ctx.async_runtime().block_on(async {
 //         ctx.setup_user(params.clone()).await;
@@ -235,7 +234,7 @@ async fn test_new_mailbox_sync_conversations() {
 //             .expect("failed to initialize");
 //     });
 //
-//     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
+//     let mailbox = Mailbox::with_remote_id(ctx.mail_user_context(), LabelId::inbox()).unwrap();
 //
 //     // Sync a message
 //     ctx.async_runtime().block_on(async {

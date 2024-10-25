@@ -1,7 +1,7 @@
 //! Everything Proton Mailbox related.
 
 pub mod actions;
-mod context;
+pub mod context;
 pub mod datatypes;
 pub mod db;
 pub mod errors;
@@ -15,10 +15,12 @@ pub mod draft;
 #[cfg(test)]
 mod tests;
 
-pub use context::*;
-pub use mailbox::*;
-pub use sidebar::*;
-pub use user_context::*;
+pub use context::{MailContext, MailContextError, MailContextResult};
+pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
+pub use sidebar::{Sidebar, SidebarError, SidebarResult};
+pub use user_context::{
+    cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
+};
 
 // re-exports
 use crate::datatypes::LabelType;
@@ -58,6 +60,10 @@ pub enum AppError {
     ActionStillQueued(ActionId),
     #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalId),
+    #[error("Unknown attachment with remote id {0}")]
+    UnknownAttachment(RemoteId),
+    #[error("Attachment {0} does not have a remote id")]
+    AttachmentDoesNotHaveRemoteId(LocalId),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Conversation with ID {0} has no messages")]
@@ -86,6 +92,8 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalId),
+    #[error("Unknown Message with remote id {0}")]
+    UnknownMessage(RemoteId),
     #[error("No conversation found in the current page which has a remote id")]
     NoConversationWithValidRemoteIdFoundInPage,
     #[error("No message found in the current page which has a remote id")]

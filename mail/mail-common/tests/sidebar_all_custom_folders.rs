@@ -1,13 +1,11 @@
-use crate::common::init::Params as TestParams;
-use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use test_case::test_case;
 use velcro::hash_map;
-
-mod common;
 
 #[test_case(&[], &[]; "empty")]
 #[test_case(&[
@@ -23,12 +21,12 @@ async fn sidebar_all_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], 
     //   * Setup User:
     //     + Create Custom Folders
     //   * Create Sidebar
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(labels)).await;
 
     ctx.catch_all().await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 

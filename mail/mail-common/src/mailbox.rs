@@ -18,8 +18,6 @@ use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tracing::{debug, error};
 
-pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
-
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
     #[error("Could not find label with local id '{0}'")]
@@ -91,15 +89,16 @@ pub struct Mailbox {
     view_mode: ViewMode,
 }
 
-pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
-    fn on_background_result(&self, result: MailboxResult<T>);
-}
-
-impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> for F {
-    fn on_background_result(&self, result: MailboxResult<T>) {
-        (self)(result);
-    }
-}
+// TODO: Work out why this isn't used
+// pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
+//     fn on_background_result(&self, result: MailboxResult<T>);
+// }
+//
+// impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> for F {
+//     fn on_background_result(&self, result: MailboxResult<T>) {
+//         (self)(result);
+//     }
+// }
 
 impl Mailbox {
     pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {

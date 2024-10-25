@@ -97,17 +97,15 @@ impl CoreAccount {
         }
     }
 
-    /// Find the primary account.
-    ///
-    /// This simply retrieves the account with the most recent `primary_at` timestamp.
+    /// List all accounts, ordered by the primary timestamp.
     ///
     /// # Errors
     ///
-    /// Returns error if we fail to retrieve the primary account from the db.
-    pub async fn find_primary(
+    /// Returns error if the retrieval fails.
+    pub async fn by_primary_at(
         interface: &(impl Into<AgnosticInterface> + Interface),
-    ) -> Result<Option<Self>, StashError> {
-        Self::find_first("ORDER BY primary_at DESC", vec![], interface).await
+    ) -> Result<Vec<Self>, StashError> {
+        Self::find("ORDER BY primary_at DESC", vec![], interface, None).await
     }
 
     /// Update the user info of the account.

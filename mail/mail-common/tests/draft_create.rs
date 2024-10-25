@@ -1,8 +1,3 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::message_body::*;
-use common::TestContext;
 use proton_action_queue::queue::ActionError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -10,31 +5,44 @@ use proton_api_core::services::proton::response_data::{
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
 use proton_api_mail::services::proton::request_data::{
-    DraftAction, DraftParams, DraftRecipient, DraftSender,
+    DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
-use proton_api_mail::services::proton::response_data::MessageFlags;
+use proton_api_mail::services::proton::response_data::{AttachmentMetadata, MessageFlags};
+use proton_api_mail::services::proton::response_data::{
+    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
+};
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
+use proton_crypto_inbox::attachment::KeyPackets;
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
-use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::draft::{Draft, Error, ReplyMode, DEFAULT_SUBJECT, REPLY_PREFIX};
-use proton_mail_common::models::{Conversation, MailSettings, Message, NewDraftMetadata};
+use proton_mail_common::datatypes::{MimeType, SystemLabelId};
+use proton_mail_common::decrypted_message::DecryptedMessageBody;
+use proton_mail_common::draft::{
+    Draft, Error, ReplyMode, DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX,
+};
+use proton_mail_common::models::{
+    Attachment, Conversation, MailSettings, Message, NewDraftMetadata,
+};
 use proton_mail_common::MailContextError;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::message_body::*;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
+
 #[tokio::test]
 async fn create_empty_draft() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts().into());
@@ -47,6 +55,7 @@ async fn create_empty_draft() {
         DraftAction::Reply,
         message.clone(),
         None,
+        DraftAttachmentKeyPackets::new(),
     )
     .await;
     ctx.catch_all().await;
@@ -72,7 +81,7 @@ async fn create_empty_draft() {
     );
 
     // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts().into()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
     let _ = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
@@ -111,13 +120,13 @@ async fn create_empty_draft() {
 #[tokio::test]
 async fn create_draft_reply_without_body_is_error() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -158,13 +167,13 @@ async fn create_draft_reply_without_body_is_error() {
 #[tokio::test]
 async fn create_draft_reply_should_fail_for_drafts() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -205,18 +214,76 @@ async fn create_draft_reply_should_fail_for_drafts() {
 }
 
 #[tokio::test]
-async fn create_draft_reply() {
+async fn create_draft_reply_html() {
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Sender).await;
+    insta::assert_snapshot!(draft_body.body)
+}
+
+#[tokio::test]
+async fn create_draft_reply_plain_text() {
+    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    insta::assert_snapshot!(draft_body.body)
+}
+
+#[tokio::test]
+async fn create_draft_reply_inherits_only_inline_attachments() {
+    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    assert_eq!(draft_body.metadata.attachments.len(), 1);
+    let attachment = draft_body.metadata.attachments.first().unwrap();
+    let inline_attachment = gen_inline_attachment();
+    compare_inline_attachment(attachment, inline_attachment);
+}
+
+#[tokio::test]
+async fn create_draft_forward_inherits_all_attachments() {
+    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Forward).await;
+    assert_eq!(draft_body.metadata.attachments.len(), 2);
+
+    let attachment_1 = &draft_body.metadata.attachments[1];
+    let attachment_2 = &draft_body.metadata.attachments[0];
+
+    let inline_attachment = gen_inline_attachment();
+    let normal_attachment = gen_normal_attachment();
+
+    compare_inline_attachment(&attachment_1, inline_attachment);
+    assert_eq!(
+        attachment_2.remote_id.clone().unwrap(),
+        normal_attachment.id.into()
+    );
+    assert_eq!(
+        attachment_2.disposition,
+        normal_attachment.disposition.into()
+    );
+    assert_eq!(attachment_2.filename, normal_attachment.name);
+    assert_eq!(attachment_2.size, normal_attachment.size);
+}
+
+fn compare_inline_attachment(attachment: &Attachment, inline_attachment: MessageAttachment) {
+    assert_eq!(
+        attachment.remote_id.clone().unwrap(),
+        inline_attachment.id.into()
+    );
+    assert_eq!(attachment.disposition, inline_attachment.disposition.into());
+    assert_eq!(attachment.filename, inline_attachment.name);
+    assert_eq!(attachment.size, inline_attachment.size);
+    assert_eq!(attachment.content_id, inline_attachment.headers.content_id);
+}
+
+async fn create_draft_reply_impl(
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let params = draft_test_params_with_mime_type(mime_type);
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
-    let mut remote_existing_message = message_body_test_message_simple();
+    let mut remote_existing_message = draft_message_with_attachments();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
@@ -233,10 +300,24 @@ async fn create_draft_reply() {
         .unwrap();
     let existing_message = existing_message;
 
-    let expected_draft_params = expected_create_reply_draft_params(&existing_message);
+    let expected_draft_params =
+        expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts().into());
 
+    let key_packets = DraftAttachmentKeyPackets::from_iter(
+        remote_existing_message
+            .attachments
+            .iter()
+            .filter(|a| {
+                if reply_mode == ReplyMode::Forward {
+                    true
+                } else {
+                    a.disposition == Disposition::Inline
+                }
+            })
+            .map(|a| (a.id.clone(), a.key_packets.clone())),
+    );
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
@@ -244,9 +325,10 @@ async fn create_draft_reply() {
     .await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        DraftAction::from(reply_mode),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap().into()),
+        key_packets,
     )
     .await;
     ctx.catch_all().await;
@@ -257,9 +339,9 @@ async fn create_draft_reply() {
         .unwrap();
 
     // Create draft.
-    let draft_output = Draft::action_create_reply(
+    let draft_output = Draft::action_create_reply_utc(
         user_ctx.queue(),
-        ReplyMode::Sender,
+        reply_mode,
         existing_message.local_id.unwrap(),
     )
     .await
@@ -285,10 +367,10 @@ async fn create_draft_reply() {
     );
 
     // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts().into()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let _ = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -312,14 +394,24 @@ async fn create_draft_reply() {
             .is_none()
     );
 
-    //TODO(ET-1361): Check body
+    draft_body
 }
 
 fn draft_test_params() -> TestParams {
+    draft_test_params_impl(None)
+}
+fn draft_test_params_with_mime_type(mime_type: MimeType) -> TestParams {
+    draft_test_params_impl(Some(mime_type))
+}
+fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
+    let mut mail_settings = message_body_test_mail_settings();
+    if let Some(mime_type) = mime_type {
+        mail_settings.draft_mime_type = mime_type.into();
+    }
     let mut params = TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
-        mail_settings: Some(message_body_test_mail_settings()),
+        mail_settings: Some(mail_settings),
         ..Default::default()
     };
 
@@ -384,10 +476,22 @@ fn expected_create_draft_params() -> DraftParams {
         mime_type: MailSettings::default().draft_mime_type.into(),
     }
 }
-fn expected_create_reply_draft_params(message: &Message) -> DraftParams {
+fn expected_create_reply_draft_params(
+    message: &Message,
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+) -> DraftParams {
     let address = message_body_test_addresses();
-    DraftParams {
-        subject: format!("{} {}", REPLY_PREFIX, message.subject),
+    let mut params = DraftParams {
+        subject: format!(
+            "{} {}",
+            if reply_mode == ReplyMode::Forward {
+                FORWARD_PREFIX
+            } else {
+                REPLY_PREFIX
+            },
+            message.subject
+        ),
         unread: false,
         sender: DraftSender {
             address: address[0].email.clone(),
@@ -403,6 +507,71 @@ fn expected_create_reply_draft_params(message: &Message) -> DraftParams {
         external_id: None,
         draft_flags: 0,
         body: EncryptedDraft(String::new()),
-        mime_type: MailSettings::default().draft_mime_type.into(),
+        mime_type: mime_type.into(),
+    };
+
+    if reply_mode == ReplyMode::Forward {
+        params.to_list.clear();
+        params.cc_list.clear();
+    }
+
+    params
+}
+
+fn draft_message_with_attachments() -> ApiMessage {
+    let mut remote_existing_message = message_body_test_message_simple();
+    let normal_attchment = gen_normal_attachment();
+    remote_existing_message.attachments = vec![gen_inline_attachment(), normal_attchment.clone()];
+
+    remote_existing_message
+        .metadata
+        .attachments_metadata
+        .push(AttachmentMetadata {
+            id: normal_attchment.id,
+            disposition: normal_attchment.disposition,
+            mime_type: normal_attchment.mime_type,
+            name: normal_attchment.name,
+            size: normal_attchment.size,
+        });
+
+    remote_existing_message
+}
+
+fn gen_inline_attachment() -> MessageAttachment {
+    MessageAttachment {
+        id: "MyInlineAttachment".into(),
+        disposition: Disposition::Inline,
+        enc_signature: None,
+        headers: MessageAttachmentHeaders {
+            content_disposition: "inline".to_owned(),
+            content_id: Some("InlineCID".to_owned()),
+            content_transfer_encoding: None,
+            image_height: None,
+            image_width: None,
+        },
+        key_packets: KeyPackets::from("inline_key_packets"),
+        mime_type: "image/jpeg".to_owned(),
+        name: "image.jpeg".to_owned(),
+        signature: None,
+        size: 123,
+    }
+}
+fn gen_normal_attachment() -> MessageAttachment {
+    MessageAttachment {
+        id: "MyAttachment".into(),
+        disposition: Disposition::Attachment,
+        enc_signature: None,
+        headers: MessageAttachmentHeaders {
+            content_disposition: "attachment".to_owned(),
+            content_id: None,
+            content_transfer_encoding: None,
+            image_height: None,
+            image_width: None,
+        },
+        key_packets: KeyPackets::from("key_packets"),
+        mime_type: "application/pdf".to_owned(),
+        name: "doc.pdf".to_owned(),
+        signature: None,
+        size: 1024,
     }
 }

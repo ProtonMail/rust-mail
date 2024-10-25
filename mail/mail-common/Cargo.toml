@@ -9,10 +9,12 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+html2text = { workspace = true }
 lazy_static = { workspace = true }
 mime = { workspace = true }
 proton-action-queue = { workspace = true }
@@ -38,19 +40,21 @@ url = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
+insta = { workspace = true }
 lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
-secrecy = { version = "0.8", features = ["serde"] }
+secrecy = { workspace = true }
 serde_with = { workspace = true }
-tempdir = "0.3.1"
-tempfile = "3.10.1"
+tempdir = { workspace = true }
+tempfile = { workspace = true }
 test-case = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
-velcro = "0.5.4"
+#tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
+velcro = { workspace = true }
 wiremock = { workspace = true }
+proton-mail-test-utils = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]

@@ -105,31 +105,35 @@ pub enum CoreAccountState {
 
 impl CoreAccountState {
     fn of(account: &CoreAccount, sessions: &[CoreSession]) -> Self {
-        if !account.is_ready {
-            return CoreAccountState::NotReady;
-        }
-
         let mut sessions_by_state = (sessions.iter())
             .map(|session| (CoreSessionState::of(session), session.remote_id.clone()))
             .into_group_map();
 
+        // Does the account have any fully authenticated sessions?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::Authenticated) {
             return CoreAccountState::LoggedIn(sessions);
         }
 
+        // Does the account have any sessions that are awaiting a mailbox password?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
             if account.password_mode.want_mbp() {
                 return CoreAccountState::NeedMbp(sessions);
             }
         }
 
+        // Does the account have any sessions that are awaiting a second factor?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
             if account.second_factor_mode.want_tfa() {
                 return CoreAccountState::NeedTfa(sessions);
             }
         }
 
-        CoreAccountState::LoggedOut
+        // Is the account ready for use?
+        if account.is_ready {
+            return CoreAccountState::LoggedOut;
+        }
+
+        CoreAccountState::NotReady
     }
 }
 
@@ -367,19 +371,17 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
-        let Some(account) = CoreAccount::find_primary(&self.stash).await? else {
-            return Ok(None);
-        };
+        for account in CoreAccount::by_primary_at(&self.stash).await? {
+            let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
+                continue;
+            };
 
-        let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
-            return Ok(None);
-        };
-
-        if let CoreAccountState::LoggedIn(_) = state {
-            Ok(Some(account))
-        } else {
-            Ok(None)
+            if let CoreAccountState::LoggedIn(_) = state {
+                return Ok(Some(account));
+            }
         }
+
+        Ok(None)
     }
 
     /// Set the account considered to be the primary account.

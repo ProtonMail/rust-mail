@@ -1,5 +1,3 @@
-use crate::common::init::Params as TestParams;
-use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -21,12 +19,12 @@ use proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
 use std::collections::HashMap;
 use velcro::hash_map;
-
-mod common;
 
 const TEST_USER_ID: &str =
     "jctxnoKsvmlISYpOtESCWNC4tcFbddXmcQ6yyM94YP4tBngrw4O9IKf8jxSLThqZyqFlX972kKwQCPriEeh4qg==";
@@ -46,8 +44,8 @@ async fn label_as_without_archive() {
     //   + one with 1 + 3
     //   + one with all three labels
     //
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
@@ -212,8 +210,8 @@ async fn label_as_with_archive() {
     //   + one without label
     //   + one with all three labels
     //
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)

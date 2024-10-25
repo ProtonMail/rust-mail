@@ -39,7 +39,7 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    pub(crate) async fn new(
+    pub async fn new(
         mail_context: MailContext,
         user_context: UserContext,
     ) -> MailContextResult<Arc<Self>> {

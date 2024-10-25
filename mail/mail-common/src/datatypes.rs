@@ -1166,6 +1166,15 @@ impl From<ApiMessageAddress> for MessageAddress {
     }
 }
 
+impl From<&str> for MessageAddress {
+    fn from(value: &str) -> Self {
+        Self {
+            address: value.to_owned(),
+            ..Default::default()
+        }
+    }
+}
+
 sql_using_serde!(MessageAddress);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]

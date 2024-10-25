@@ -1,7 +1,3 @@
-mod common;
-
-use common::message_body::*;
-use common::TestContext;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -9,19 +5,24 @@ use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::message_body::{
+    message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
+    TEST_MESSAGE_BODY_DECRYPTED, TEST_USER_ID,
+};
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::io::read_to_string;
 
 #[tokio::test]
 async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = message_body_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let message = message_body_test_message_simple();
 
