@@ -1,9 +1,12 @@
+use std::sync::Arc;
+
 use crate::core::datatypes::Id;
+use crate::errors::user_actions::UserActionError;
 use crate::mail::datatypes::MessageAddress;
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
-use proton_mail_common::MailContextError;
+use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -25,7 +28,7 @@ pub struct Draft {
     draft: RealDraft,
 }
 
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 impl Draft {
     /// Create a new draft with the given `create_mode`.
     ///
@@ -36,7 +39,7 @@ impl Draft {
     pub async fn new(
         session: &MailUserSession,
         create_mode: DraftCreateMode,
-    ) -> Result<Self, MailSessionError> {
+    ) -> Result<Arc<Draft>, UserActionError> {
         let ctx = session.ctx();
         uniffi_async(async move {
             let queue_output = match create_mode {
@@ -51,13 +54,14 @@ impl Draft {
                     RealDraft::action_create_reply(ctx.queue(), ReplyMode::Forward, id.into()).await
                 }
             }
-            .map_err(MailContextError::from)?;
+            .map_err(RealUserActionError::from)?;
 
-            Ok(Self {
+            Result::<_, RealUserActionError>::Ok(Arc::new(Self {
                 draft: queue_output.local,
-            })
+            }))
         })
         .await
+        .map_err(Into::into)
     }
 
     #[uniffi::constructor]
@@ -66,14 +70,18 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed or the message is not a draft.
-    pub async fn open(session: &MailUserSession, message_id: Id) -> Result<Self, MailSessionError> {
+    pub async fn open(
+        session: &MailUserSession,
+        message_id: Id,
+    ) -> Result<Arc<Draft>, UserActionError> {
         let ctx = session.ctx();
         uniffi_async(async move {
-            Ok(Self {
+            Result::<_, RealUserActionError>::Ok(Arc::new(Self {
                 draft: RealDraft::open(&ctx, message_id.into()).await?,
-            })
+            }))
         })
         .await
+        .map_err(Into::into)
     }
 
     /// Get the sender of the draft.

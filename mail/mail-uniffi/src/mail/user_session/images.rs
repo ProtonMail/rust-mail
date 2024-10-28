@@ -1,10 +1,11 @@
+use crate::errors::user_session::UserSessionError;
 use crate::mail::MailUserSession;
-use crate::mail::{MailSessionError, MailSessionResult};
 use crate::uniffi_async;
-use anyhow::anyhow;
 use proton_core_common::datatypes::LightOrDarkMode;
+use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
 
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 impl MailUserSession {
     /// Get a path to the sender image.
     ///
@@ -31,7 +32,7 @@ impl MailUserSession {
         size: Option<u32>,
         mode: Option<String>,
         format: Option<String>,
-    ) -> MailSessionResult<Option<String>> {
+    ) -> Result<Option<String>, UserSessionError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
@@ -46,29 +47,26 @@ impl MailUserSession {
                 )
                 .await?
             {
-                Ok(Some(
-                    path.to_str()
-                        .ok_or(MailSessionError::Other(anyhow!(
-                            "Can't convert image path into string"
-                        )))?
-                        .to_owned(),
+                Result::<_, RealUserSessionError>::Ok(Some(
+                    path.to_str().ok_or(Unexpected::Unknown)?.to_owned(),
                 ))
             } else {
                 Ok(None)
             }
         })
         .await
+        .map_err(Into::into)
     }
 }
 
 fn light_or_dark_mode_from_string(
     mode: Option<String>,
-) -> MailSessionResult<Option<LightOrDarkMode>> {
+) -> Result<Option<LightOrDarkMode>, Unexpected> {
     let mode = match mode {
         Some(m) => match m.as_str() {
             "light" | "Light" => Some(LightOrDarkMode::Light),
             "dark" | "Dark" => Some(LightOrDarkMode::Dark),
-            _ => return Err(MailSessionError::InvalidImageMode(m)),
+            _ => return Err(Unexpected::InvalidArgument),
         },
         None => None,
     };

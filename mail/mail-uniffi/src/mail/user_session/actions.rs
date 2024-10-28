@@ -1,16 +1,19 @@
-use super::{MailSessionError, MailUserSession};
+use super::MailUserSession;
+use crate::errors::user_session::VoidUserSessionResult;
 
 #[uniffi::export]
 impl MailUserSession {
     /// Execute exactly one pending action.
-    pub fn execute_pending_action(&self) -> Result<(), MailSessionError> {
+    #[must_use]
+    pub fn execute_pending_action(&self) -> VoidUserSessionResult {
         drop(self.ctx.execute_pending_action());
-        Ok(())
+        VoidUserSessionResult::Ok
     }
 
     /// Execute exactly all pending actions.
-    pub fn execute_pending_actions(&self) -> Result<(), MailSessionError> {
+    #[must_use]
+    pub fn execute_pending_actions(&self) -> VoidUserSessionResult {
         drop(self.ctx.execute_pending_actions());
-        Ok(())
+        VoidUserSessionResult::Ok
     }
 }

@@ -71,10 +71,15 @@ pub fn export_result(_attr: TokenStream, item: TokenStream) -> TokenStream {
         syn::Item::Impl(impl_block) => {
             let mut new_impl_items = Vec::new();
             let mut new_enums = Vec::new();
+            let impl_type = if let syn::Type::Path(ref path) = impl_block.self_ty.as_ref() {
+                path.path.segments.last().map(|s| s.ident.to_string())
+            } else {
+                None
+            };
 
             for item in impl_block.items.iter().cloned() {
                 if let syn::ImplItem::Fn(method) = item {
-                    let tokens = export_single_method(method);
+                    let tokens = export_single_method(&impl_type, method);
                     let new_func = tokens.new_func;
 
                     new_impl_items.push(parse_quote!(#new_func));
@@ -165,7 +170,7 @@ fn export_single_function(mut input: syn::ItemFn) -> GeneratedTokens {
 
 /// Export a single method from an impl block
 ///
-fn export_single_method(mut input: syn::ImplItemFn) -> GeneratedTokens {
+fn export_single_method(impl_type: &Option<String>, mut input: syn::ImplItemFn) -> GeneratedTokens {
     let fn_name = &input.sig.ident;
 
     // Extract the Ok and Error types from the Result
@@ -181,10 +186,12 @@ fn export_single_method(mut input: syn::ImplItemFn) -> GeneratedTokens {
     };
 
     // Create a new enum name
-    let enum_name = syn::Ident::new(
-        &format!("{fn_name}_result").to_pascal_case(),
-        proc_macro2::Span::call_site(),
-    );
+    let enum_name = if let Some(impl_type) = impl_type {
+        format!("{impl_type}_{fn_name}_result").to_pascal_case()
+    } else {
+        format!("{fn_name}_result").to_pascal_case()
+    };
+    let enum_name = syn::Ident::new(&enum_name, proc_macro2::Span::call_site());
 
     let new_enum = create_enum_type(enum_name.clone(), ok_type, err_type);
 

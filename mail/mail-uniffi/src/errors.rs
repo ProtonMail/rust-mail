@@ -2,6 +2,7 @@ pub(crate) mod api_service_error;
 pub(crate) mod login_flow;
 pub(crate) mod unexpected;
 pub(crate) mod user_actions;
+pub(crate) mod user_session;
 
 #[macro_export]
 macro_rules! export_void_result {

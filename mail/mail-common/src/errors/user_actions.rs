@@ -194,10 +194,11 @@ impl From<ActionError> for UserActionError {
 impl<T> From<InternalActionError<T>> for UserActionError
 where
     T: Action,
-    T::Error: Into<ActionError>,
+    T::Error: Into<Self>,
 {
     fn from(error: InternalActionError<T>) -> Self {
         match error {
+            #[allow(clippy::useless_conversion)] // It is not useless clippy
             InternalActionError::Action(error) => Self::from(error.into()),
             InternalActionError::Queue(error) => Self::from(error),
         }
