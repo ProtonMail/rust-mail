@@ -2827,13 +2827,18 @@ impl Worker {
                 // thread while we loop through them. This way, we can offload the sending
                 // as an async task, plus the subscriber list is a safe snapshot from this
                 // point in time.
+
+                // Remove any subscribers that have perished.
+                // TODO(ET-1400): Proper unsubscribe API.
+                self.subscribers.retain(|s| !s.is_disconnected());
+
                 let subscribers = self.subscribers.clone();
                 drop(self.runtime.spawn(async move {
                     for subscriber in subscribers {
-                        if subscriber.send_async(notification.clone()).await.is_err() {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Queue error: Failed to send a Notification to a subscriber");
-                        }
+                        // Because there is no way to unsubscribe right now
+                        // this can fail very frequently. We used to log the
+                        // errors here, but that can lead to log spam.
+                        drop(subscriber.send_async(notification.clone()).await);
                     }
                 }));
             }
