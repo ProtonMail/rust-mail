@@ -1050,11 +1050,9 @@ where
                             T::handle_notification(notification, &mut ids, &stash, &changed_query)
                                 .await
                         {
+                            // TODO(ET-1400): Proper unsubscribe support
                             if queue.send_async(change).await.is_err() {
-                                // In theory this should never happen, but we also can't do anything with it
-                                error!(
-                                    "Queue error: Failed to send a ResultsetChange to a subscriber"
-                                );
+                                break;
                             }
                         }
                     }
