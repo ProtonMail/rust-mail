@@ -5,7 +5,7 @@ use crate::actions::messages::r#move::Move;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
-use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
+use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{Disposition, ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
 use crate::models::{Label, Message};
 use crate::{find_in_query, Mailbox};
@@ -569,13 +569,32 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        let inbox = MovableSystemFolderAction::inbox(interface).await?;
+        let archive = MovableSystemFolderAction::archive(interface).await?;
+        let trash = MovableSystemFolderAction::trash(interface).await?;
+        let spam = MovableSystemFolderAction::spam(interface).await?;
+
         let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
         let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
         let messages = Self::find_by_ids(message_ids.to_vec(), interface).await?;
-        let visible_bottom_bar_actions =
-            Self::visible_bottom_bar_actions(&current_label, &messages, &bottom_bar_actions)?;
-        let hidden_bottom_bar_actions =
-            Self::hidden_bottom_bar_actions(current_label, &messages, &visible_bottom_bar_actions);
+        let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
+            &current_label,
+            &messages,
+            &bottom_bar_actions,
+            &inbox,
+            &archive,
+            &trash,
+            &spam,
+        )?;
+        let hidden_bottom_bar_actions = Self::hidden_bottom_bar_actions(
+            current_label,
+            &messages,
+            &visible_bottom_bar_actions,
+            &inbox,
+            &archive,
+            &trash,
+            &spam,
+        );
 
         Ok(AllBottomBarMessageActions {
             hidden_bottom_bar_actions,
@@ -588,6 +607,10 @@ impl Message {
         current_label: &LabelId,
         messages: &[Self],
         bottom_bar_actions: &[MobileActions],
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
     ) -> Result<Vec<BottomBarActions>, AppError> {
         let any_unread = messages.iter().any(|m| m.unread);
         let all_starred = messages.iter().all(|m| m.is_starred());
@@ -595,7 +618,16 @@ impl Message {
         let mut result: Vec<_> = bottom_bar_actions
             .iter()
             .filter_map(|a| {
-                BottomBarActions::from_mobile_actions(a, any_unread, all_starred, current_label)
+                BottomBarActions::from_mobile_actions(
+                    a,
+                    any_unread,
+                    all_starred,
+                    current_label,
+                    inbox,
+                    archive,
+                    trash,
+                    spam,
+                )
             })
             .collect();
         if result.len() > 5 {
@@ -611,6 +643,10 @@ impl Message {
         current_label: LabelId,
         messages: &[Self],
         visible_actions: &[BottomBarActions],
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
     ) -> Vec<BottomBarActions> {
         let any_unread = messages.iter().any(|m| m.unread);
         let any_read = messages.iter().any(|m| !m.unread);
@@ -624,6 +660,10 @@ impl Message {
             any_unstarred,
             any_starred,
             visible_actions,
+            inbox,
+            archive,
+            trash,
+            spam,
         )
     }
 
