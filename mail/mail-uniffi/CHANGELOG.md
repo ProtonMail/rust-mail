@@ -11,11 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - `UserLoginFlowVoidResult` was renamed to `VoidUserLoginFlowResult`
-  - `LoginFlow::user_id()` method now return `UserIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
-  - `LoginFlow::session_id()` method now return `SessionIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
-  - `LoginFlow::to_user_context()` method now return `ToUserContextResult` instead of `UserLoginFlowArcMailUserSessionResult` which differ only by a name.
-  - `MailSession::new_login_flow()` method now return `NewLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
-  - `MailSession::resume_login_flow()` method now return `ResumeLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `LoginFlow::user_id()` method now return `LoginFlowUserIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::session_id()` method now return `LoginFlowSessionIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::to_user_context()` method now return `LoginFlowToUserContextResult` instead of `UserLoginFlowArcMailUserSessionResult` which differ only by a name.
+  - `MailSession::new_login_flow()` method now return `MailSessionNewLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `MailSession::resume_login_flow()` method now return `MailSessionResumeLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
   - `apply_label_to_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
   - `delete_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
   - `available_actions_for_conversations` function now returns `AvailableActionsForConversationsResult` instead of `Result<ConversationAvailableActions, MailboxError>`.
@@ -60,13 +60,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `delete_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
   - `move_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
   - `label_messages_as` function now returns `LabelMessagesAsResult` instead of `Result<bool, MailSessionError>`.
-  - `Sidebar::system_labels` method now returns `SystemLabelsResult` instead of `SidebarResult<Vec<SidebarSystemLabel>>`.
-  - `Sidebar::custom_folders` method now returns `CustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
-  - `Sidebar::all_custom_folders` method now returns `AllCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
-  - `Sidebar::custom_labels` method now returns `CustomLabelsResult` instead of `SidebarResult<Vec<SidebarCustomLabel>>`.
-  - `Sidebar::collapse_folder` method now returns `VoidUserActionResult` instead of `SidebarResult<()>`.
-  - `Sidebar::expand_folder` method now returns `VoidUserActionResult` instead of `SidebarResult<()>`.
-  - `Sidebar::watch_labels` method now returns `WatchLabelsResult` instead of `SidebarResult<Arc<WatchHandle>>`.
+  - `Sidebar::system_labels` method now returns `SidebarSystemLabelsResult` instead of `SidebarResult<Vec<SidebarSystemLabel>>`.
+  - `Sidebar::custom_folders` method now returns `SidebarCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::all_custom_folders` method now returns `SidebarAllCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::custom_labels` method now returns `SidebarCustomLabelsResult` instead of `SidebarResult<Vec<SidebarCustomLabel>>`.
+  - `Sidebar::collapse_folder` method now returns `SidebarVoidUserActionResult` instead of `SidebarResult<()>`.
+  - `Sidebar::expand_folder` method now returns `SidebarVoidUserActionResult` instead of `SidebarResult<()>`.
+  - `Mailbox::new()` method now returns `MailboxNewResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::inbox()` method now returns `MailboxInboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::with_label_id()` method now returns `MailboxNewResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::unread_count()` method now returns `MailboxUnreadCountResult` instead of `MailboxResult<u64>`.
+  - `Mailbox::watch_unread_count()` method now returns `MailboxWatchUnreadCountResult` instead of `MailboxResult<Arc<WatchHandle>>`.
+  - `MailSession::new()` method now returns `MailSessionNewResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `MailSession::user_context_from_session()` method now returns `MailSessionUserContextFromSessionResult` instead of `MailSessionResult<Arc<MailUserSession>>`.
+  - `MailSession::get_accounts()` method now returns `MailSessionGetAccountsResult` instead of `MailSessionResult<Vec<Arc<StoredAccount>>>`.
+  - `MailSession::watch_accounts()` method now returns `MailSessionWatchAccountsResult` instead of `MailSessionResult<WatchedAccounts>`.
+  - `MailSession::get_account()` method now returns `MailSessionGetAccountResult` instead of `MailSessionResult<Option<Arc<StoredAccount>>>`.
+  - `MailSession::get_sessions()` method now returns `MailSessionGetSessionsResult` instead of `MailSessionResult<Vec<Arc<StoredSession>>>`.
+  - `MailSession::watch_sessions()` method now returns `MailSessionWatchSessionsResult` instead of `MailSessionResult<WatchedSessions>`.
+  - `MailSession::get_session()` method now returns `MailSessionGetSessionResult` instead of `MailSessionResult<Option<Arc<StoredSession>>>`.
+  - `MailSession::get_account_state()` method now returns `MailSessionGetAccountStateResult` instead of `MailSessionResult<Option<StoredAccountState>>`.
+  - `MailSession::get_session_state()` method now returns `MailSessionGetSessionStateResult` instead of `MailSessionResult<Option<StoredSessionState>>`.
+  - `MailSession::get_primary_account()` method now returns `MailSessionGetPrimaryAccountResult` instead of `MailSessionResult<Option<Arc<StoredAccount>>>`.
+  - `MailSession::set_primary_account()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailSession::logout_account()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailSession::delete_account()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::logout()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::fork()` method now returns `MailUserSessionForkResult` instead of `MailSessionResult<String>`.
+  - `MailUserSession::user()` method now returns `MailUserSessionUserResult` instead of `MailSessionResult<User>`.
+  - `MailUserSession::initialize()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::movable_folders()` method now returns `MailUserSessionMovableFoldersResult` instead of `MailSessionResult<Vec<SidebarCustomFolder>>`.
+  - `MailUserSession::applicable_labels()` method now returns `MailUserSessionApplicableLabelsResult` instead of `MailSessionResult<Vec<SidebarCustomLabel>>`.
+  - `MailUserSession::get_sender_image()` method now returns `MailUserSessionGetSenderImageResult` instead of `MailSessionResult<Option<String>>`.
+  - `MailUserSession::execute_pending_action()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::execute_pending_actions()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
+  - `watch_mail_settings()` function now returns `WatchMailSettingsResult` instead of `MailSessionResult<SettingsWatcher>`.
+  - `Draft::new()` function now returns `DraftNewResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `Draft::open()` function now returns `DraftOpenResult` instead of `MailSessionResult<Arc<Self>>`.
+
+
+### Removed
+
+  - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
 
 ## [0.16.0] - 2024-10-24
 
