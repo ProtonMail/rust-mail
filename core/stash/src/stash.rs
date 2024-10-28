@@ -407,8 +407,11 @@ use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
+#[cfg(feature = "stats_log")]
 use tokio::time::interval;
-use tracing::{debug, error, info, warn};
+#[cfg(feature = "stats_log")]
+use tracing::info;
+use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
 
@@ -1883,6 +1886,7 @@ impl Drop for Tether {
             stats.max_tether_lifetime = (time, Arc::downgrade(&self.handle).as_ptr() as usize);
         }
         drop(stats);
+        #[cfg(feature = "stats_log")]
         debug!(
             "Tether ({:p}): Drop (lived for {}µs)",
             Arc::as_ptr(&self.handle),
@@ -2111,6 +2115,7 @@ impl TetheredWorker {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
                                 drop(stats);
+                                #[cfg(feature = "stats_log")]
                                 debug!(
                                     "Tether ({:p}): Transaction comitted (id: {}, lived for {}µs)",
                                     conn_handle.as_ptr(),
@@ -2170,6 +2175,7 @@ impl TetheredWorker {
                         stats.max_query_runtime = (time, instruction.id);
                     }
                     drop(stats);
+                    #[cfg(feature = "stats_log")]
                     debug!(
                         "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
                         instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2217,6 +2223,7 @@ impl TetheredWorker {
                         stats.max_query_runtime = (time, query.id);
                     }
                     drop(stats);
+                    #[cfg(feature = "stats_log")]
                     debug!(
                         "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
                         query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2262,6 +2269,7 @@ impl TetheredWorker {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
                                 drop(stats);
+                                #[cfg(feature = "stats_log")]
                                 debug!(
                                     "Tether ({:p}): Transaction rolled back (id: {}, lived for {}µs)",
                                     conn_handle.as_ptr(),
@@ -2781,6 +2789,7 @@ impl Worker {
                                         stats.max_query_runtime = (time, instruction.id);
                                     }
                                     drop(stats);
+                                    #[cfg(feature = "stats_log")]
                                     debug!(
                                         "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
                                         instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2864,6 +2873,7 @@ impl Worker {
                                         stats.max_query_runtime = (time, query.id);
                                     }
                                     drop(stats);
+                                    #[cfg(feature = "stats_log")]
                                     debug!(
                                         "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
                                         query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2989,6 +2999,7 @@ impl Worker {
                 tethers: HashMap::new(),
             };
 
+            #[cfg(feature = "stats_log")]
             let _handle = worker.runtime.spawn(async move {
                 let mut last_stats = None;
                 let mut stats_interval = interval(Duration::from_secs(1));
@@ -3563,9 +3574,10 @@ trait OperationLogic {
     /// * `result` - The result to send back to the caller.
     /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
-    fn send_back(&mut self, result: Result<Self::Output, StashError>, stash: &Stash) {
+    fn send_back(&mut self, result: Result<Self::Output, StashError>, _stash: &Stash) {
+        #[cfg(feature = "stats_log")]
         if result.is_err() {
-            error!("Stats at time of error: {:?}", stash.stats());
+            error!("Stats at time of error: {:?}", _stash.stats());
         }
         if let Some(channel) = self.channel().take() {
             // If sending down the oneshot channel fails, send() returns the message to
