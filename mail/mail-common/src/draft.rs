@@ -1,23 +1,19 @@
-use crate::actions::draft::Create;
-use crate::cache::{CacheMessageConfig, CacheMessageKey};
-use crate::datatypes::{
-    Disposition, MessageAddress, MessageAddresses, MessageFlags, MimeType, PmSignature,
-    SystemLabelId,
-};
+use crate::actions::draft::Save;
+use crate::cache::CacheMessageKey;
+use crate::datatypes::{Disposition, MessageAddress, MimeType, PmSignature};
 use crate::models::{
-    Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata, NewDraftMetadata,
+    Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use chrono::DateTime;
-use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_action_queue::queue::Queue;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_core_common::KeyHandlingError;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
@@ -25,19 +21,20 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
-use stash::exports::{FromSql, ToSql, ToSqlOutput};
+use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::fmt::Display;
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::error;
+use tracing::{debug, error};
 
 #[cfg(test)]
 #[path = "tests/draft.rs"]
 mod tests;
 
+/// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("No addresses found for current user")]
@@ -54,6 +51,8 @@ pub enum Error {
     AttachmentDoesNotHaveKeyPackets(LocalId),
     #[error("Can't reply or forward to a draft message {0}")]
     ReplyOrForwardToDraft(LocalId),
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
 }
 
 /// Draft reply mode.
@@ -96,20 +95,29 @@ impl From<ReplyMode> for DraftAction {
 }
 
 /// Represent a new message that is being drafted.
-#[derive(Debug)]
+///
+/// When creating a new draft, empty or reply, we calculate what the
+/// new draft should look like, but we never save it to disk until
+/// the user calls [`save()`].
+///
+/// Since there is associated metadata with these operations, we create
+/// a new [`DraftMetadata`] structure whenever we open or create a draft
+/// so we can track auxiliary data such as the message id.
+///
+/// This metadata is kept alive as long as the message it references is alive
+/// or the draft is discarded/deleted.
+#[derive(Debug, Clone)]
 pub struct Draft {
-    /// Sender
-    pub sender: MessageAddress,
-    /// To Recipients
-    pub to_list: Vec<MessageAddress>,
-    /// CC Recipients
-    pub cc_list: Vec<MessageAddress>,
-    /// BCC recipients
-    pub bcc_list: Vec<MessageAddress>,
-    /// Local id of the message this conversation belongs to
-    pub message_id: LocalId,
-    /// Local id of the conversation this message belongs to
-    pub conversation_id: LocalId,
+    /// Id of the associated metadata.
+    pub metadata_id: MetadataId,
+    /// Sender email address
+    pub sender: String,
+    /// To Recipients addresses
+    pub to_list: Vec<String>,
+    /// CC Recipients addresses
+    pub cc_list: Vec<String>,
+    /// BCC recipients addresses
+    pub bcc_list: Vec<String>,
     /// Address used to send the message
     pub address_id: RemoteId,
     /// Draft subject
@@ -129,6 +137,7 @@ impl Draft {
     ///
     /// Returns error if the draft failed to load, the message can't be found
     /// or the message is not a draft.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn open(
         context: &MailUserContext,
         message_id: LocalId,
@@ -147,14 +156,54 @@ impl Draft {
                 error!("Failed to get message body from cache: {e}");
             })?;
 
-        //TODO: Handle attachments (ET-1362)
+        let tether = context.user_stash().connection();
+
+        let metadata_id = if let Some(metadata) =
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+                .await
+                .inspect_err(|e| error!("Failed to load draft metadata: {e}"))?
+        {
+            debug!("Found existing metadata with id {}", metadata.id.unwrap());
+            metadata.id.unwrap()
+        } else {
+            debug!("No metadata found, creating new entry");
+            let mut metadata = DraftMetadata {
+                id: None,
+                local_message_id: Some(message.local_id.unwrap()),
+                local_conversation_id: Some(message.local_id.unwrap()),
+                local_parent_id: None,
+                reply_mode: None,
+                row_id: None,
+                stash: None,
+            };
+            metadata
+                .save_using(&tether)
+                .await
+                .inspect_err(|e| error!("Failed to create new metadata: {e}"))?;
+            metadata.id.unwrap()
+        };
+
         Ok(Self {
-            sender: message.sender,
-            to_list: message.to_list.value,
-            cc_list: message.cc_list.value,
-            bcc_list: message.bcc_list.value,
-            message_id,
-            conversation_id: message.local_conversation_id.unwrap(),
+            metadata_id,
+            sender: message.sender.address,
+            to_list: message
+                .to_list
+                .value
+                .into_iter()
+                .map(|v| v.address)
+                .collect(),
+            cc_list: message
+                .cc_list
+                .value
+                .into_iter()
+                .map(|v| v.address)
+                .collect(),
+            bcc_list: message
+                .bcc_list
+                .value
+                .into_iter()
+                .map(|v| v.address)
+                .collect(),
             address_id: message.remote_address_id,
             subject: message.subject,
             body: body.body,
@@ -169,16 +218,11 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context,interface))]
-    pub(crate) async fn empty<A>(
-        context: &MailUserContext,
-        interface: &A,
-    ) -> Result<Self, MailContextError>
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(interface))]
+    pub async fn empty<A>(interface: &A) -> Result<Self, MailContextError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let local_draft_label_id = local_draft_label_id(interface).await?;
-
         // Default address should have display_order 0
         let addresses = Address::find(
             "ORDER BY display_order ASC LIMIT 1",
@@ -197,108 +241,40 @@ impl Draft {
         }
 
         let mail_settings = MailSettings::get(interface).await?.unwrap_or_default();
-        let conv_display_order = Conversation::next_display_order(interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to get conversation display order: {e}");
-            })?;
-        let msg_display_order = Message::next_display_order(interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to get message display order: {e}");
-            })?;
-
         let address = &addresses[0];
 
-        let body = get_signature(address, &mail_settings);
-
-        let mut message = create_new_message(address, msg_display_order, body.len());
-
-        // Create new conversation
-        let mut conversation = Conversation {
-            num_messages: 1,
-            senders: MessageAddresses {
-                value: vec![message.sender.clone()],
-            },
-            subject: message.subject.clone(),
-            size: message.size,
-            is_known: true,
-            has_messages: true,
-            display_order: conv_display_order,
-            ..Default::default()
-        };
-
-        conversation
-            .save_using(interface)
+        let metadata = DraftMetadata::empty(interface)
             .await
-            .inspect_err(|e| error!("Failed to save conversation :{e}"))?;
+            .inspect_err(|e| error!("Failed to create new empty draft metadata: {e}"))?;
 
-        message.local_conversation_id = conversation.local_id;
+        Ok(Self::new_empty_draft(
+            metadata.id.unwrap(),
+            address,
+            &mail_settings,
+        ))
+    }
 
-        message.save_using(interface).await.inspect_err(|e| {
-            error!("Error creating new draft locally: {e}");
-        })?;
-
-        //NOTE: Headers are initialized by the server.
-        let mut message_body_metadata = MessageBodyMetadata {
-            local_message_id: message.local_id,
-            remote_message_id: None,
-            header: "".to_string(),
-            mime_type: mail_settings.draft_mime_type,
-            parsed_headers: Default::default(),
-            attachments: Default::default(),
-            row_id: None,
-            stash: None,
-        };
-
-        // Apply drafts label
-        Conversation::apply_label(
-            local_draft_label_id,
-            std::iter::once(conversation.local_id.unwrap()),
-            interface,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to apply Draft label: {e}"))?;
-
-        message_body_metadata
-            .save_using(interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to save new draft body metadata :{e}");
-            })?;
-
-        let mut metadata = NewDraftMetadata {
-            local_message_id: message.local_id.unwrap(),
-            remote_parent_id: None,
-            reply_mode: None,
-            row_id: None,
-            stash: None,
-        };
-
-        metadata.save_using(interface).await.inspect_err(|e| {
-            error!("Failed to save new draft metadata :{e}");
-        })?;
-
-        // Store body in cache.
-        store_body_in_cache(context.messages_cache(), &message, &body, interface).inspect_err(
-            |e| {
-                error!("Failed to store draft body in cache :{e}");
-            },
-        )?;
-
-        Ok(Self {
-            sender: message.sender,
-            to_list: message.to_list.value,
-            cc_list: message.cc_list.value,
-            bcc_list: message.bcc_list.value,
-            message_id: message.local_id.unwrap(),
-            conversation_id: message.local_conversation_id.unwrap(),
+    /// Create new empty draft from `address`.
+    ///
+    /// Note: This is split up from [`Self::empty()`] for testing.
+    fn new_empty_draft(
+        metadata_id: MetadataId,
+        address: &Address,
+        mail_settings: &MailSettings,
+    ) -> Self {
+        let body = get_signature(address, mail_settings);
+        Self {
+            metadata_id,
+            sender: address.email.clone(),
+            to_list: Vec::new(),
+            cc_list: Vec::new(),
+            bcc_list: Vec::new(),
             address_id: address.remote_id.clone().unwrap(),
-            subject: message.subject,
+            subject: DEFAULT_SUBJECT.to_owned(),
             body,
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
-        })
+        }
     }
 
     /// Create a draft as reply/forward to an existing message with `message_id`.
@@ -311,21 +287,16 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context,interface))]
-    pub(crate) async fn reply<A>(
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
+    pub async fn reply(
         context: &MailUserContext,
         message_id: LocalId,
         reply_mode: ReplyMode,
         use_utc: bool,
-        interface: &A,
-    ) -> Result<Self, MailContextError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let local_draft_label_id = local_draft_label_id(interface).await?;
-
+    ) -> Result<Self, MailContextError> {
+        let tether = context.user_stash().connection();
         // Load the message we reply to.
-        let Some(mut source_message) = Message::find_by_id(message_id, interface).await? else {
+        let Some(source_message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
@@ -343,7 +314,7 @@ impl Draft {
         let Some(source_body_metadata) = MessageBodyMetadata::find_first(
             "WHERE local_message_id=?",
             params![message_id],
-            interface,
+            &tether,
         )
         .await
         .inspect_err(|e| {
@@ -356,12 +327,12 @@ impl Draft {
 
         // Find out which address this message has and use that to craft te reply.
         let Some(address) =
-            Address::find_by_id(source_message.remote_address_id.clone(), interface).await?
+            Address::find_by_id(source_message.remote_address_id.clone(), &tether).await?
         else {
             return Err(Error::AddressNotFound(source_message.remote_address_id.clone()).into());
         };
 
-        let key = CacheMessageKey::from_message(&source_message, interface);
+        let key = CacheMessageKey::from_message(&source_message, &tether);
         let Some(source_body_reader) =
             context.messages_cache().get_item(&key).inspect_err(|e| {
                 error!("Failed to get source body: {e}");
@@ -375,52 +346,76 @@ impl Draft {
             error!("Failed to read body into string: {e}");
         })?;
 
-        let mail_settings = MailSettings::get(interface).await?.unwrap_or_default();
+        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
 
-        let display_order = Message::next_display_order(interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to get message display order: {e}");
-            })?;
+        let metadata = DraftMetadata::reply(
+            reply_mode,
+            source_message.local_id.unwrap(),
+            source_message.local_conversation_id.unwrap(),
+            &tether,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to create new reply draft metadata: {e}"))?;
 
-        let mut body = get_signature(&address, &mail_settings);
+        Ok(Self::new_draft_reply(
+            metadata.id.unwrap(),
+            reply_mode,
+            &address,
+            &mail_settings,
+            &source_message,
+            source_body_metadata,
+            source_body,
+            use_utc,
+        ))
+    }
+
+    /// Create a draft reply.
+    ///
+    /// # Params
+    ///
+    /// `metadata_id`    - Metadata id for this draft.
+    /// `reply_mode`     - Draft reply mode.
+    /// `address`        - Sender address.
+    /// `source_message` - Metadata of the message we are replying to.
+    /// `source_body_metadata` - Body metadata of the message we are replying to.
+    /// `source_body`          - Body of the message we are replying to.
+    /// `use_utc`              - Whether to use utc over local timezone.
+    ///
+    /// Note: This function is separate so it is easier to test.
+    #[allow(clippy::too_many_arguments)]
+    fn new_draft_reply(
+        metadata_id: MetadataId,
+        reply_mode: ReplyMode,
+        address: &Address,
+        mail_settings: &MailSettings,
+        source_message: &Message,
+        source_body_metadata: MessageBodyMetadata,
+        source_body: String,
+        use_utc: bool,
+    ) -> Self {
+        let mut body = get_signature(address, mail_settings);
 
         if mail_settings.draft_mime_type == MimeType::TextHtml {
-            prepare_html_reply(&mut body, &source_message, &source_body, use_utc);
+            prepare_html_reply(&mut body, source_message, &source_body, use_utc);
         } else {
             prepare_plain_text_reply(
                 &mut body,
-                &source_message,
+                source_message,
                 source_body,
                 source_body_metadata.mime_type,
                 use_utc,
             );
         }
 
-        let mut message = create_new_draft_with_reply_mode(
-            &mut source_message,
-            reply_mode,
-            &address,
-            display_order,
-            body.len(),
-        );
-
-        source_message
-            .save_using(interface)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update source message: {e}");
-            })?;
-
-        message.save_using(interface).await.inspect_err(|e| {
-            error!("Error creating new draft locally: {e}");
-        })?;
-
-        let mut message_body_metadata = MessageBodyMetadata {
-            local_message_id: message.local_id,
-            remote_message_id: None,
-            header: "".to_string(),
-            mime_type: mail_settings.draft_mime_type,
+        let mut draft = Self {
+            metadata_id,
+            sender: address.email.clone(),
+            to_list: vec![],
+            cc_list: vec![],
+            bcc_list: vec![],
+            address_id: address.remote_id.clone().unwrap(),
+            subject: String::new(),
+            body,
             attachments: if reply_mode == ReplyMode::Forward {
                 source_body_metadata.attachments
             } else {
@@ -430,60 +425,12 @@ impl Draft {
                     .filter(|attachment| attachment.disposition == Disposition::Inline)
                     .collect()
             },
-            parsed_headers: Default::default(),
-            row_id: None,
-            stash: None,
-        };
-
-        message_body_metadata
-            .save_using(interface)
-            .await
-            .map_err(|e| {
-                error!("Failed to save new draft body metadata :{e}");
-                e
-            })?;
-
-        // Apply draft an all other message labels
-        Message::apply_label(
-            local_draft_label_id,
-            std::iter::once(message.local_id.unwrap()),
-            interface,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
-
-        let mut metadata = NewDraftMetadata {
-            local_message_id: message.local_id.unwrap(),
-            remote_parent_id: Some(source_message.remote_id.unwrap()),
-            reply_mode: Some(reply_mode),
-            row_id: None,
-            stash: None,
-        };
-
-        metadata.save_using(interface).await.inspect_err(|e| {
-            error!("Failed to save new draft metadata :{e}");
-        })?;
-
-        // Store body in cache.
-        store_body_in_cache(context.messages_cache(), &message, &body, interface).inspect_err(
-            |e| {
-                error!("Failed to store draft body in cache :{e}");
-            },
-        )?;
-
-        Ok(Self {
-            sender: message.sender,
-            to_list: message.to_list.value,
-            cc_list: message.cc_list.value,
-            bcc_list: message.bcc_list.value,
-            message_id: message.local_id.unwrap(),
-            conversation_id: message.local_conversation_id.unwrap(),
-            address_id: address.remote_id.clone().unwrap(),
-            subject: message.subject,
-            body,
-            attachments: message_body_metadata.attachments,
             mime_type: mail_settings.draft_mime_type,
-        })
+        };
+
+        patch_draft_with_reply_mode(&mut draft, source_message, reply_mode);
+
+        draft
     }
 
     /// Create new draft on the server
@@ -548,147 +495,91 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    pub async fn action_create_empty(
-        queue: &Queue,
-    ) -> Result<QueuedActionOutput<Create>, ActionError<Create>> {
-        queue.queue_action(Create::empty()).await
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(queue))]
+    pub async fn save(&self, queue: &Queue) -> Result<(), MailContextError> {
+        queue.queue_action(self.to_save_action()).await?;
+        Ok(())
     }
 
-    /// Apply an action which will create reply draft with `reply_mode` to the
-    /// message with `message_id`.
+    /// Create a save action for the current state of the draft.
+    ///
+    /// This method is here to provide greater flexibility of integration
+    /// when used in multithreaded contexts.
     ///
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    pub async fn action_create_reply(
-        queue: &Queue,
-        reply_mode: ReplyMode,
-        message_id: LocalId,
-    ) -> Result<QueuedActionOutput<Create>, ActionError<Create>> {
-        queue
-            .queue_action(Create::reply(reply_mode, message_id, false))
-            .await
+    pub fn to_save_action(&self) -> Save {
+        Save::new(self)
     }
 
-    /// Same as [`Self::action_create_reply()`] but uses the Utc timezone
-    /// rather than the local time zone to calculate the date string.
+    /// Get the message id associated with this draft.
+    ///
+    /// This method can return `None` if the message has not been
+    /// created yet.
     ///
     /// # Errors
     ///
-    /// See [`Self::action_create_reply()`].
-    pub async fn action_create_reply_utc(
-        queue: &Queue,
-        reply_mode: ReplyMode,
-        message_id: LocalId,
-    ) -> Result<QueuedActionOutput<Create>, ActionError<Create>> {
-        queue
-            .queue_action(Create::reply(reply_mode, message_id, true))
-            .await
+    /// Returns error if the query failed.
+    pub async fn message_id<A>(&self, interface: &A) -> Result<Option<LocalId>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, interface).await? else {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
+
+        Ok(metadata.local_message_id)
     }
-}
 
-/// Create new message for a sender with `address`.
-///
-/// Returns a newly initialized message and a body with a signature
-/// associated with that address and the mail settings.
-fn create_new_message(address: &Address, display_order: u64, body_len: usize) -> Message {
-    let time = create_timestamp();
+    /// Get the conversation id associated with this draft.
+    ///
+    /// This method can return `None` if the draft is a new empty reply
+    /// and the conversation has not yet been created.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn conversation_id<A>(&self, interface: &A) -> Result<Option<LocalId>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, interface).await? else {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
 
-    Message {
-        local_id: None,
-        remote_id: None,
-        local_conversation_id: None,
-        remote_conversation_id: None,
-        local_address_id: address.local_id.unwrap(),
-        remote_address_id: address.remote_id.clone().unwrap(),
-        attachments_metadata: vec![],
-        cc_list: Default::default(),
-        bcc_list: Default::default(),
-        deleted: false,
-        exclusive_location: None,
-        expiration_time: 0,
-        external_id: None,
-        flags: Default::default(),
-        is_forwarded: false,
-        is_replied: false,
-        is_replied_all: false,
-        label_ids: vec![],
-        num_attachments: 0,
-        display_order,
-        reply_tos: Default::default(),
-        sender: MessageAddress {
-            address: address.email.clone(),
-            bimi_selector: None,
-            display_sender_image: false,
-            is_proton: false,
-            is_simple_login: false,
-            name: address.display_name.clone(),
-        },
-        size: body_len as u64,
-        snooze_time: 0,
-        subject: DEFAULT_SUBJECT.to_owned(),
-        time,
-        to_list: Default::default(),
-        unread: false,
-        custom_labels: vec![],
-        cached: false,
-        row_id: None,
-        stash: None,
+        Ok(metadata.local_conversation_id)
     }
-}
-
-/// Create a new daft message based on `source_message` with `address` and
-/// `reply_mode`.
-///
-/// `source_message` will be updated to reflect the reply status.
-fn create_new_draft_with_reply_mode(
-    source_message: &mut Message,
-    reply_mode: ReplyMode,
-    address: &Address,
-    display_order: u64,
-    body_len: usize,
-) -> Message {
-    let mut message = create_new_message(address, display_order, body_len);
-    patch_message_with_reply_mode(&mut message, source_message, reply_mode);
-    message
 }
 
 /// Copy all the data from the `source_message` into `message` taking
 /// into account `reply_mode` of the draft.
-fn patch_message_with_reply_mode(
-    message: &mut Message,
-    source_message: &mut Message,
-    reply_mode: ReplyMode,
-) {
-    // Set conversation ids.
-    message.local_conversation_id = source_message.local_conversation_id;
-    message.remote_conversation_id = source_message.remote_conversation_id.clone();
-
+fn patch_draft_with_reply_mode(draft: &mut Draft, source_message: &Message, reply_mode: ReplyMode) {
     // Copy over the addresses based on reply mode
     match reply_mode {
         ReplyMode::Sender => {
-            message.to_list = MessageAddresses {
-                value: vec![source_message.sender.clone()],
-            };
-            message.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
-            source_message.is_replied = true;
-            source_message.flags |= MessageFlags::REPLIED;
+            draft.to_list = vec![source_message.sender.address.clone()];
+            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::All => {
-            message.to_list.value = vec![source_message.sender.clone()];
-            message
-                .to_list
+            draft.to_list = vec![source_message.sender.address.clone()];
+            draft.to_list.extend(
+                source_message
+                    .to_list
+                    .value
+                    .iter()
+                    .map(|v| v.address.clone()),
+            );
+            draft.cc_list = source_message
+                .cc_list
                 .value
-                .extend_from_slice(&source_message.to_list.value);
-            message.cc_list = source_message.cc_list.clone();
-            message.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
-            source_message.is_replied_all = true;
-            source_message.flags |= MessageFlags::REPLIED_ALL;
+                .iter()
+                .map(|v| v.address.clone())
+                .collect();
+            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::Forward => {
-            message.subject = apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject);
-            source_message.is_forwarded = true;
-            source_message.flags |= MessageFlags::FORWARDED;
+            draft.subject = apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject);
         }
     }
 }
@@ -800,43 +691,12 @@ async fn encrypt_draft_body(
         })
 }
 
-/// Store the message body in the cache.
-fn store_body_in_cache<A>(
-    cache: &ProtonCache<CacheMessageConfig>,
-    message: &Message,
-    body: &str,
-    interface: &A,
-) -> Result<(), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let key = CacheMessageKey::from_message(message, interface);
-
-    cache.add_item(key, body.as_bytes()).map_err(|e| {
-        error!("Failed to store draft body in cache: {e}");
-        AppError::Cache(e)
-    })?;
-    Ok(())
-}
-
 /// Create a new timestamp.
-fn create_timestamp() -> u64 {
+pub(crate) fn create_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system time before Unix epoch")
         .as_secs()
-}
-/// Resolve the Drafts local label id.
-async fn local_draft_label_id<A>(interface: &A) -> Result<LocalId, MailContextError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let Some(local_draft_label_id) = LabelId::drafts().counterpart::<Label, _>(interface).await?
-    else {
-        return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
-    };
-
-    Ok(local_draft_label_id)
 }
 
 /// Generate HTML reply body for a message.

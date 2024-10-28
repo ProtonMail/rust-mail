@@ -1,10 +1,12 @@
 use crate::core::datatypes::Id;
-use crate::mail::datatypes::{AttachmentMetadata, MessageAddress, MimeType};
+use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
+use parking_lot::RwLock;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
-use proton_mail_common::MailContextError;
+use proton_mail_common::{MailContextError, MailUserContext};
+use std::sync::Arc;
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -23,7 +25,8 @@ pub enum DraftCreateMode {
 /// to an existing message.
 #[derive(uniffi::Object)]
 pub struct Draft {
-    draft: RealDraft,
+    draft: RwLock<RealDraft>,
+    ctx: Arc<MailUserContext>,
 }
 
 #[uniffi::export]
@@ -40,22 +43,23 @@ impl Draft {
     ) -> Result<Self, MailSessionError> {
         let ctx = session.ctx();
         uniffi_async(async move {
-            let queue_output = match create_mode {
-                DraftCreateMode::Empty => RealDraft::action_create_empty(ctx.queue()).await,
+            let draft = match create_mode {
+                DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
                 DraftCreateMode::Reply(id) => {
-                    RealDraft::action_create_reply(ctx.queue(), ReplyMode::Sender, id.into()).await
+                    RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
                 }
                 DraftCreateMode::ReplyAll(id) => {
-                    RealDraft::action_create_reply(ctx.queue(), ReplyMode::All, id.into()).await
+                    RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
                 }
                 DraftCreateMode::Forward(id) => {
-                    RealDraft::action_create_reply(ctx.queue(), ReplyMode::Forward, id.into()).await
+                    RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
                 }
             }
             .map_err(MailContextError::from)?;
 
             Ok(Self {
-                draft: queue_output.local,
+                draft: RwLock::new(draft),
+                ctx,
             })
         })
         .await
@@ -71,60 +75,47 @@ impl Draft {
         let ctx = session.ctx();
         uniffi_async(async move {
             Ok(Self {
-                draft: RealDraft::open(&ctx, message_id.into()).await?,
+                draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
+                ctx,
             })
         })
         .await
     }
 
     /// Get the sender of the draft.
-    pub fn sender(&self) -> MessageAddress {
-        self.draft.sender.clone().into()
+    pub fn sender(&self) -> String {
+        self.draft.read().sender.clone()
     }
 
     /// Get the To recipients of the draft.
-    pub fn to_recipients(&self) -> Vec<MessageAddress> {
-        self.draft
-            .to_list
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    pub fn to_recipients(&self) -> Vec<String> {
+        self.draft.read().to_list.clone()
     }
 
     /// Get the To recipients of the draft.
-    pub fn cc_recipients(&self) -> Vec<MessageAddress> {
-        self.draft
-            .cc_list
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    pub fn cc_recipients(&self) -> Vec<String> {
+        self.draft.read().cc_list.clone()
     }
 
     /// Get the To recipients of the draft.
-    pub fn bcc_recipients(&self) -> Vec<MessageAddress> {
-        self.draft
-            .bcc_list
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    pub fn bcc_recipients(&self) -> Vec<String> {
+        self.draft.read().bcc_list.clone()
     }
 
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
-        self.draft.subject.clone()
+        self.draft.read().subject.clone()
     }
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        self.draft.body.clone()
+        self.draft.read().body.clone()
     }
 
     /// Get the draft's attachments
     pub fn attachments(&self) -> Vec<AttachmentMetadata> {
         self.draft
+            .read()
             .attachments
             .clone()
             .into_iter()
@@ -134,6 +125,29 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        self.draft.mime_type.into()
+        self.draft.read().mime_type.into()
+    }
+
+    /// Save the current draft.
+    ///
+    /// Schedules an action to create or save the current draft.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn save(&self) -> Result<(), MailSessionError> {
+        let action = {
+            let draft = self.draft.read();
+            draft.to_save_action()
+        };
+        let ctx = Arc::clone(&self.ctx);
+        uniffi_async(async move {
+            ctx.queue()
+                .queue_action(action)
+                .await
+                .map_err(MailContextError::from)?;
+            Ok(())
+        })
+        .await
     }
 }

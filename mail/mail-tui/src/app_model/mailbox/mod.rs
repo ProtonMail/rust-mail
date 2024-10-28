@@ -33,6 +33,7 @@ pub enum Message {
     OpenComposer(Composer),
     CloseComposer,
     NewLabelWatcher(WatchHandle),
+    Composer(ComposerMessage),
 }
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
@@ -76,6 +77,17 @@ pub enum MessageMessage {
 impl From<MessageMessage> for Messages {
     fn from(value: MessageMessage) -> Self {
         Message::MessageState(value).into()
+    }
+}
+
+/// Message related to the composer.
+pub enum ComposerMessage {
+    Save,
+}
+
+impl From<ComposerMessage> for Messages {
+    fn from(value: ComposerMessage) -> Self {
+        Message::Composer(value).into()
     }
 }
 

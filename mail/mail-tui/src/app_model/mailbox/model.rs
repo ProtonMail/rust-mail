@@ -365,6 +365,7 @@ impl AppStateHandler for Model {
                 self.label_watcher = Some(handle);
                 Command::None
             }
+            Message::Composer(_) => Command::None,
         }
     }
 
