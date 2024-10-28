@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - `Draft::attachments()`
+  - `Draft::mime_type()`
+
 ### Fixed
 
   - Fixed user settings update in event loop.
