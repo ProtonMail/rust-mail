@@ -118,6 +118,8 @@ pub struct Draft {
     pub body: String,
     /// Attachment associated with this draft
     pub attachments: Vec<Attachment>,
+    /// Draft's mime type
+    pub mime_type: MimeType,
 }
 
 impl Draft {
@@ -157,6 +159,7 @@ impl Draft {
             subject: message.subject,
             body: body.body,
             attachments: body.metadata.attachments,
+            mime_type: body.metadata.mime_type,
         })
     }
 
@@ -294,6 +297,7 @@ impl Draft {
             subject: message.subject,
             body,
             attachments: Vec::new(),
+            mime_type: mail_settings.draft_mime_type,
         })
     }
 
@@ -478,6 +482,7 @@ impl Draft {
             subject: message.subject,
             body,
             attachments: message_body_metadata.attachments,
+            mime_type: mail_settings.draft_mime_type,
         })
     }
 

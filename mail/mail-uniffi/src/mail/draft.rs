@@ -1,7 +1,8 @@
 use crate::core::datatypes::Id;
-use crate::mail::datatypes::MessageAddress;
+use crate::mail::datatypes::{AttachmentMetadata, MessageAddress, MimeType};
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
+use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
 use proton_mail_common::MailContextError;
 
@@ -119,5 +120,20 @@ impl Draft {
     /// Get the draft's body.
     pub fn body(&self) -> String {
         self.draft.body.clone()
+    }
+
+    /// Get the draft's attachments
+    pub fn attachments(&self) -> Vec<AttachmentMetadata> {
+        self.draft
+            .attachments
+            .clone()
+            .into_iter()
+            .map(|v| RealAttachmentMetadata::from(v).into())
+            .collect()
+    }
+
+    /// Get the draft's body mime type.
+    pub fn mime_type(&self) -> MimeType {
+        self.draft.mime_type.into()
     }
 }
