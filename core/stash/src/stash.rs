@@ -2732,6 +2732,7 @@ impl Worker {
                     // thread while we loop through them. This way, we can offload the sending
                     // as an async task, plus the subscriber list is a safe snapshot from this
                     // point in time.
+                    //TODO(ET-1400) - Proper unsubscribe support
                     let subscribers = self.subscribers.clone();
                     let debug_string = format!(
                         "Stash: Publishing {} from Tether {:p}",
@@ -2742,10 +2743,7 @@ impl Worker {
                         debug!("{}", debug_string);
                         for notification in notifications {
                             for subscriber in &subscribers {
-                                if subscriber.send_async(notification.clone()).await.is_err() {
-                                    // In theory this should never happen, but we also can't do anything with it
-                                    error!("Queue error: Failed to send a Notification to a subscriber");
-                                }
+                                drop(subscriber.send_async(notification.clone()).await);
                             }
                         }
                     }));
