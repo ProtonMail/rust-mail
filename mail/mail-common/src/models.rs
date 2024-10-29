@@ -39,7 +39,7 @@ mod draft;
 mod tests;
 
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
+    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction, MessageAction,
     MessageAvailableActions, MoveAction, RealMoveItemAction, ReplyAction,
 };
 use crate::datatypes::{
@@ -2824,6 +2824,7 @@ impl Conversation {
         Ok(ConversationAvailableActions::builder()
             .move_actions(move_actions)
             .conversation_actions(conversation_actions)
+            .general_actions(GeneralActions::all_but_phishing())
             .build())
     }
 

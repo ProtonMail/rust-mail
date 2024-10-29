@@ -388,6 +388,7 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
+            .general_actions(GeneralActions::all_but_phishing())
             .build()),
     });
 
@@ -431,6 +432,7 @@ mod available_actions {
                 ConversationAction::Pin,
                 ConversationAction::LabelAs,
             ])
+            .general_actions(GeneralActions::all_but_phishing())
             .build()),
     });
 
@@ -469,6 +471,7 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
+            .general_actions(GeneralActions::all_but_phishing())
             .build()),
     });
 
@@ -513,6 +516,7 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
+            .general_actions(GeneralActions::all_but_phishing())
             .build()),
     });
 
