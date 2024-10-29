@@ -2757,7 +2757,6 @@ impl Conversation {
         let mut starred = true;
         let mut deleted = true;
         let mut unread = false;
-        let mut reply_all = false;
 
         for conversation in conversations.iter() {
             if !conversation.is_starred() {
@@ -2768,9 +2767,6 @@ impl Conversation {
             }
             if conversation.num_unread > 0 {
                 unread = true;
-            }
-            if conversation.recipients.value.len() > 1 {
-                reply_all = true;
             }
             let is_conversation_in_view = conversation
                 .labels
@@ -2821,18 +2817,12 @@ impl Conversation {
                 })
             })
             .collect_vec();
-        let reply_actions = if reply_all {
-            ReplyAction::all()
-        } else {
-            ReplyAction::single_address()
-        };
 
         let move_actions = MoveAction::system(move_actions);
         let move_actions = RealMoveItemAction::from_actions(move_actions);
 
         Ok(ConversationAvailableActions::builder()
             .move_actions(move_actions)
-            .reply_actions(reply_actions)
             .conversation_actions(conversation_actions)
             .build())
     }
