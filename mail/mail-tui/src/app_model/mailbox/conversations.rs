@@ -124,11 +124,11 @@ impl StateHandler for ConversationsState {
         }
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.table_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 Command::None
             }

@@ -240,13 +240,13 @@ impl StateHandler for MessagesState {
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
             match key.code {
-                KeyCode::Up => {
+                KeyCode::Char('k') | KeyCode::Up => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
                         state.scroll_state.scroll_up();
                         return Command::None;
                     }
                 }
-                KeyCode::Down => {
+                KeyCode::Char('j') | KeyCode::Down => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
                         state.scroll_state.scroll_down();
                         return Command::None;
@@ -257,11 +257,11 @@ impl StateHandler for MessagesState {
         }
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.table_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 Command::None
             }

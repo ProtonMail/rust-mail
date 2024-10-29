@@ -48,11 +48,11 @@ impl AppStateHandler for Model {
         match key.code {
             KeyCode::Char('n') => Command::message(Message::NewAccount.into()),
             KeyCode::Char('d') => Command::message(Message::Delete.into()),
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.session_list_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.session_list_state.next();
                 Command::None
             }
