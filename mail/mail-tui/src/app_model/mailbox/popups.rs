@@ -49,11 +49,11 @@ impl crate::app_model::Popup for MoveItemPopup {
         };
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.list_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.list_state.next();
                 Command::None
             }
@@ -116,11 +116,11 @@ impl crate::app_model::Popup for LabelItemPopup {
         };
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.list_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.list_state.next();
                 Command::None
             }
@@ -251,12 +251,12 @@ impl crate::app_model::Popup for LabelSelectPopup {
         };
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 let (_, list_state) = self.selected_label_list();
                 list_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 let (_, list_state) = self.selected_label_list();
                 list_state.next();
                 Command::None
