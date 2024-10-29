@@ -42,6 +42,8 @@ pub enum ConversationMessage {
     MoveConversation(LocalId, LocalId),
     LabelConversation(LocalId, LocalId),
     UnlabelConversation(LocalId, LocalId),
+    StarConversation(LocalId),
+    UnstarConversation(LocalId),
     OpenConversation(LocalId),
     OpenConversationSuccess(Box<MessagesState>),
     OpenConversationFailed(anyhow::Error),
@@ -67,6 +69,8 @@ pub enum MessageMessage {
     UnlabelMessage(LocalId, LocalId),
     MarkMessageRead(LocalId),
     MarkMessageUnread(LocalId),
+    StarMessage(LocalId),
+    UnstarMessage(LocalId),
 }
 
 impl From<MessageMessage> for Messages {

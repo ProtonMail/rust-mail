@@ -295,9 +295,15 @@ impl StateHandler for MessagesState {
                         .map(|id| Composer::reply(mbox.user_context(), id, ReplyMode::Forward))
                         .unwrap_or_default()
                 } else {
-                    Command::None
+                    self.selected_message_id()
+                        .map(|id| Command::message(MessageMessage::StarMessage(id).into()))
+                        .unwrap_or_default()
                 }
             }
+            KeyCode::Char('F') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::UnstarMessage(id).into()))
+                .unwrap_or_default(),
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
@@ -371,6 +377,12 @@ impl StateHandler for MessagesState {
             }
             MessageMessage::MarkMessageUnread(id) => {
                 return mark_message_unread(mbox, id);
+            }
+            MessageMessage::StarMessage(id) => {
+                return star_message(mbox, id);
+            }
+            MessageMessage::UnstarMessage(id) => {
+                return unstar_message(mbox, id);
             }
         }
         Command::None
@@ -605,6 +617,34 @@ fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
             }
         })),
     ))
+}
+
+fn star_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match MailMessage::action_star(ctx.session(), ctx.queue(), vec![id]).await {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to apply label to message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+
+fn unstar_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match MailMessage::action_unstar(ctx.session(), ctx.queue(), vec![id]).await {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to apply label to message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
 }
 fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
