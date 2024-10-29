@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `all_available_bottom_bar_actions_for_message` and `all_available_bottom_bar_actions_for_conversations` now contains local_id for `Labels`
+
 ## [0.18.0] - 2024-10-28
 
 ### Added

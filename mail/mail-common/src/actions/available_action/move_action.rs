@@ -3,7 +3,7 @@
 mod tests;
 
 use crate::datatypes::labels::color_to_display;
-use crate::datatypes::MovableSystemFolder;
+use crate::datatypes::{MovableSystemFolder, SystemLabelId};
 use crate::{
     datatypes::{
         labels::hierarchy::{self, Hierarchy},
@@ -12,7 +12,7 @@ use crate::{
     models::Label,
     AppError,
 };
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
 use std::collections::BTreeMap;
@@ -45,11 +45,9 @@ impl MoveAction {
     ) -> Vec<Self> {
         iter.into_iter()
             .filter_map(|label| match label.label_type {
-                LabelType::System => Some(MoveAction::SystemFolder(MovableSystemFolderAction {
-                    local_id: label.local_id?,
-                    name: MovableSystemFolder::new(label)?,
-                    is_selected: Some(is_selected(label)),
-                })),
+                LabelType::System => Some(MoveAction::SystemFolder(
+                    MovableSystemFolderAction::from_label(label, is_selected(label))?,
+                )),
 
                 LabelType::Folder => Some(MoveAction::CustomFolder(CustomFolderAction {
                     local_id: label.local_id?,
@@ -238,7 +236,7 @@ pub struct SystemFolderAction {
 
 /// This struct represents a system folder that can be used as an action.
 ///
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct MovableSystemFolderAction {
     /// The database id of the label.
     pub local_id: LocalId,
@@ -257,6 +255,73 @@ pub struct MovableSystemFolderAction {
     /// Option type was chosen over dedicated enum to make it easier to calculate the final state of the folder.
     /// Due to the fact algorithm calculate this value multiple times and then modify already existing fields.
     pub is_selected: Option<bool>,
+}
+
+impl MovableSystemFolderAction {
+    pub(crate) fn from_label(label: &Label, is_selected: bool) -> Option<Self> {
+        Some(Self {
+            local_id: label.local_id?,
+            name: MovableSystemFolder::new(label)?,
+            is_selected: Some(is_selected),
+        })
+    }
+
+    pub(crate) async fn inbox<A>(interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::inbox().into_inner(), interface)
+            .await?
+            .expect("Should be set");
+        Ok(Self {
+            local_id,
+            name: MovableSystemFolder::Inbox,
+            is_selected: Some(false),
+        })
+    }
+
+    pub(crate) async fn archive<A>(interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_id =
+            RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), interface)
+                .await?
+                .expect("Should be set");
+        Ok(Self {
+            local_id,
+            name: MovableSystemFolder::Archive,
+            is_selected: Some(false),
+        })
+    }
+
+    pub(crate) async fn trash<A>(interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::trash().into_inner(), interface)
+            .await?
+            .expect("Should be set");
+        Ok(Self {
+            local_id,
+            name: MovableSystemFolder::Trash,
+            is_selected: Some(false),
+        })
+    }
+
+    pub(crate) async fn spam<A>(interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::spam().into_inner(), interface)
+            .await?
+            .expect("Should be set");
+        Ok(Self {
+            local_id,
+            name: MovableSystemFolder::Spam,
+            is_selected: Some(false),
+        })
+    }
 }
 
 /// This struct represents a custom folder that can be used as an action.
