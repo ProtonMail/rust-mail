@@ -1,5 +1,5 @@
-use super::{GeneralActions, ReplyAction};
-use crate::mail::datatypes::MovableSystemFolderAction;
+use super::GeneralActions;
+use crate::mail::datatypes::MoveItemAction;
 use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_mail_common::actions::ConversationAction as RealConversationAction;
@@ -10,16 +10,14 @@ use proton_mail_common::actions::ConversationAvailableActions as RealConversatio
 ///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
 pub struct ConversationAvailableActions {
-    pub reply_actions: Vec<ReplyAction>,
     pub conversation_actions: Vec<ConversationAction>,
-    pub move_actions: Vec<MovableSystemFolderAction>,
+    pub move_actions: Vec<MoveItemAction>,
     pub general_actions: Vec<GeneralActions>,
 }
 
 impl From<RealConversationAvailableActions> for ConversationAvailableActions {
     fn from(value: RealConversationAvailableActions) -> Self {
         ConversationAvailableActions {
-            reply_actions: value.reply_actions.into_iter().map_into().collect(),
             conversation_actions: value.conversation_actions.into_iter().map_into().collect(),
             move_actions: value.move_actions.into_iter().map_into().collect(),
             general_actions: value.general_actions.into_iter().map_into().collect(),
@@ -29,7 +27,7 @@ impl From<RealConversationAvailableActions> for ConversationAvailableActions {
 
 /// Actions that can be taken on a conversation.
 /// It reflects with low granularity what can be done.
-/// Each of the options are meant to display a button.
+/// Each of the options is meant to display a button.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum ConversationAction {
