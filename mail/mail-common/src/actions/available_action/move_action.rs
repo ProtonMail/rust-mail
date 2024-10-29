@@ -16,6 +16,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
 use std::collections::BTreeMap;
+use std::iter::once;
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
@@ -424,5 +425,30 @@ impl MoveActionMap {
                 Some(action)
             }
         })
+    }
+}
+
+/// Represent all the actions to move a message.
+/// Either move to a system folder or open a dialog to choose a custom folder.
+///
+#[derive(Debug, Clone, PartialEq)]
+pub enum RealMoveItemAction {
+    MoveToSystemFolder(MovableSystemFolderAction),
+    MoveTo,
+}
+
+impl RealMoveItemAction {
+    pub(crate) fn from_actions(actions: Vec<MovableSystemFolderAction>) -> Vec<Self> {
+        actions
+            .into_iter()
+            .map(RealMoveItemAction::from)
+            .chain(once(Self::MoveTo))
+            .collect()
+    }
+}
+
+impl From<MovableSystemFolderAction> for RealMoveItemAction {
+    fn from(value: MovableSystemFolderAction) -> Self {
+        Self::MoveToSystemFolder(value)
     }
 }

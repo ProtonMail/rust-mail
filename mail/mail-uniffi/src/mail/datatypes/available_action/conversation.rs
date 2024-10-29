@@ -1,5 +1,5 @@
 use super::{GeneralActions, ReplyAction};
-use crate::mail::datatypes::MovableSystemFolderAction;
+use crate::mail::datatypes::MoveItemAction;
 use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_mail_common::actions::ConversationAction as RealConversationAction;
@@ -12,7 +12,7 @@ use proton_mail_common::actions::ConversationAvailableActions as RealConversatio
 pub struct ConversationAvailableActions {
     pub reply_actions: Vec<ReplyAction>,
     pub conversation_actions: Vec<ConversationAction>,
-    pub move_actions: Vec<MovableSystemFolderAction>,
+    pub move_actions: Vec<MoveItemAction>,
     pub general_actions: Vec<GeneralActions>,
 }
 

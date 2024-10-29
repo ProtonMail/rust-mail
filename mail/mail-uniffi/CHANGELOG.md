@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Added `get_embedded_attachment()`
 
+### Changed
+
+  - Adapt the `available_actions_for_*`
+
 ### Fixed
 
   - Reduce error log spam.

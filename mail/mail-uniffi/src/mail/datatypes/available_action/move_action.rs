@@ -8,6 +8,7 @@ use super::IsSelected;
 use crate::mail::datatypes::system_folder::MovableSystemFolder;
 use crate::mail::datatypes::{Id, LabelColor};
 use crate::{UniffiEnum, UniffiRecord};
+use proton_mail_common::actions::RealMoveItemAction;
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
@@ -74,6 +75,26 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
             color: value.color.map(Into::into),
             children: value.children.into_iter().map(Into::into).collect(),
             is_selected: IsSelected::new(value.is_selected),
+        }
+    }
+}
+
+/// Represent all the actions to move a message.
+/// Either move to a system folder or open a dialog to choose a custom folder.
+///
+#[derive(Debug, Clone, PartialEq, UniffiEnum)]
+pub enum MoveItemAction {
+    MoveToSystemFolder(MovableSystemFolderAction),
+    MoveTo,
+}
+
+impl From<RealMoveItemAction> for MoveItemAction {
+    fn from(value: RealMoveItemAction) -> Self {
+        match value {
+            RealMoveItemAction::MoveToSystemFolder(action) => {
+                Self::MoveToSystemFolder(action.into())
+            }
+            RealMoveItemAction::MoveTo => Self::MoveTo,
         }
     }
 }

@@ -86,17 +86,21 @@ mod available_actions {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
+                RealMoveItemAction::MoveTo,
             ])
             .message_actions(vec![
                 MessageAction::Unstar,
@@ -120,22 +124,27 @@ mod available_actions {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Inbox,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
+                RealMoveItemAction::MoveTo,
             ])
             .message_actions(vec![
                 MessageAction::Star,
@@ -158,17 +167,21 @@ mod available_actions {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Inbox,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
+                RealMoveItemAction::MoveTo,
             ])
             .message_actions(vec![
                 MessageAction::Star,
@@ -198,17 +211,21 @@ mod available_actions {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
-                },
+                }
+                .into(),
+                RealMoveItemAction::MoveTo,
             ])
             .message_actions(vec![
                 MessageAction::Star,
@@ -272,7 +289,9 @@ mod available_actions {
         match result {
             Ok(mut actual) => {
                 actual.move_actions.iter_mut().for_each(|action| {
-                    action.local_id = 0.into(); // To be able to compare with expected
+                    if let RealMoveItemAction::MoveToSystemFolder(action) = action {
+                        action.local_id = 0.into(); // To be able to compare with expected
+                    }
                 });
 
                 assert_eq!(&actual, test_case.expected.as_ref().unwrap());

@@ -40,7 +40,7 @@ mod tests;
 
 use crate::actions::{
     ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
-    MessageAvailableActions, MoveAction, ReplyAction,
+    MessageAvailableActions, MoveAction, RealMoveItemAction, ReplyAction,
 };
 use crate::datatypes::{
     attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
@@ -2827,8 +2827,11 @@ impl Conversation {
             ReplyAction::single_address()
         };
 
+        let move_actions = MoveAction::system(move_actions);
+        let move_actions = RealMoveItemAction::from_actions(move_actions);
+
         Ok(ConversationAvailableActions::builder()
-            .move_actions(MoveAction::system(move_actions))
+            .move_actions(move_actions)
             .reply_actions(reply_actions)
             .conversation_actions(conversation_actions)
             .build())
@@ -5754,9 +5757,11 @@ impl Message {
         } else {
             ReplyAction::single_address()
         };
+        let move_actions = MoveAction::system(move_actions);
+        let move_actions = RealMoveItemAction::from_actions(move_actions);
 
         Ok(MessageAvailableActions::builder()
-            .move_actions(MoveAction::system(move_actions))
+            .move_actions(move_actions)
             .reply_actions(reply_actions)
             .message_actions(message_actions)
             .build())

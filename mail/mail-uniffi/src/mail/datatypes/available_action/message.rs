@@ -1,5 +1,5 @@
 use super::{GeneralActions, ReplyAction};
-use crate::mail::datatypes::MovableSystemFolderAction;
+use crate::mail::datatypes::MoveItemAction;
 use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_mail_common::actions::MessageAction as RealMessageAction;
@@ -12,7 +12,7 @@ use proton_mail_common::actions::MessageAvailableActions as RealMessageAvailable
 pub struct MessageAvailableActions {
     pub reply_actions: Vec<ReplyAction>,
     pub message_actions: Vec<MessageAction>,
-    pub move_actions: Vec<MovableSystemFolderAction>,
+    pub move_actions: Vec<MoveItemAction>,
     pub general_actions: Vec<GeneralActions>,
 }
 
@@ -29,7 +29,7 @@ impl From<RealMessageAvailableActions> for MessageAvailableActions {
 
 /// Actions that can be taken on a message.
 /// It reflects with low granularity what can be done.
-/// Each of the options are meant to display a button.
+/// Each of the options is meant to display a button.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum MessageAction {
