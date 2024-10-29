@@ -1,14 +1,12 @@
-use proton_mail_common::actions::MoveAction as RealMoveAction;
 use proton_mail_common::actions::{
     CustomFolderAction as RealCustomFolderAction,
-    MovableSystemFolderAction as RealMovableSystemFolderAction,
+    MovableSystemFolderAction as RealMovableSystemFolderAction, MoveAction as RealMoveAction,
+    MoveItemAction as RealMoveItemAction,
 };
 
-use super::IsSelected;
 use crate::mail::datatypes::system_folder::MovableSystemFolder;
 use crate::mail::datatypes::{Id, LabelColor};
 use crate::{UniffiEnum, UniffiRecord};
-use proton_mail_common::actions::RealMoveItemAction;
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
@@ -36,7 +34,6 @@ impl From<RealMoveAction> for MoveAction {
 pub struct MovableSystemFolderAction {
     pub local_id: Id,
     pub name: MovableSystemFolder,
-    pub is_selected: IsSelected,
 }
 
 impl From<RealMovableSystemFolderAction> for MovableSystemFolderAction {
@@ -44,7 +41,6 @@ impl From<RealMovableSystemFolderAction> for MovableSystemFolderAction {
         Self {
             local_id: value.local_id.into(),
             name: value.name.into(),
-            is_selected: IsSelected::new(value.is_selected),
         }
     }
 }
@@ -63,8 +59,6 @@ pub struct CustomFolderAction {
 
     /// It holds folder structure as self reference within vector.
     pub children: Vec<CustomFolderAction>,
-
-    pub is_selected: IsSelected,
 }
 
 impl From<RealCustomFolderAction> for CustomFolderAction {
@@ -74,7 +68,6 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
             name: value.name.clone(),
             color: value.color.map(Into::into),
             children: value.children.into_iter().map(Into::into).collect(),
-            is_selected: IsSelected::new(value.is_selected),
         }
     }
 }

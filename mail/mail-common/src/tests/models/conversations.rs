@@ -364,22 +364,19 @@ mod available_actions {
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
-                    is_selected: Some(false),
                 }
                 .into(),
-                RealMoveItemAction::MoveTo,
+                MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
                 ConversationAction::Unstar,
@@ -403,28 +400,24 @@ mod available_actions {
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Inbox,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
-                    is_selected: Some(false),
                 }
                 .into(),
-                RealMoveItemAction::MoveTo,
+                MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
                 ConversationAction::Star,
@@ -447,22 +440,19 @@ mod available_actions {
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Inbox,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
-                    is_selected: Some(false),
                 }
                 .into(),
-                RealMoveItemAction::MoveTo,
+                MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
                 ConversationAction::Star,
@@ -492,22 +482,19 @@ mod available_actions {
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Spam,
-                    is_selected: Some(false),
                 }
                 .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Trash,
-                    is_selected: Some(false),
                 }
                 .into(),
-                RealMoveItemAction::MoveTo,
+                MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
                 ConversationAction::Star,
@@ -564,7 +551,7 @@ mod available_actions {
         match result {
             Ok(mut actual) => {
                 actual.move_actions.iter_mut().for_each(|action| {
-                    if let RealMoveItemAction::MoveToSystemFolder(action) = action {
+                    if let MoveItemAction::MoveToSystemFolder(action) = action {
                         action.local_id = 0.into(); // To be able to compare with expected
                     }
                 });
@@ -754,7 +741,6 @@ mod available_move_to_actions {
     struct ExpectedSystemFolder {
         label_id: LabelId,
         name: MovableSystemFolder,
-        is_selected: Option<bool>,
     }
 
     impl ExpectedSystemFolder {
@@ -765,7 +751,6 @@ mod available_move_to_actions {
                         .await
                         .into(),
                     name: action.name,
-                    is_selected: action.is_selected,
                 },
                 _ => panic!("ExpectedSystemFolder::new called with non-SystemFolder action"),
             }
@@ -776,7 +761,6 @@ mod available_move_to_actions {
     struct ExpectedCustomFolder {
         label_id: LabelId,
         name: String,
-        is_selected: Option<bool>,
         children: Vec<ExpectedCustomFolder>,
     }
 
@@ -792,7 +776,6 @@ mod available_move_to_actions {
                         .unwrap()
                         .into(),
                     name: action.name,
-                    is_selected: action.is_selected,
                     children: stream::iter(action.children)
                         .then(|child| async move {
                             Box::pin(ExpectedCustomFolder::new(
@@ -845,28 +828,23 @@ mod available_move_to_actions {
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: MovableSystemFolder::Archive,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
                 name: MovableSystemFolder::Spam,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
                 name: MovableSystemFolder::Trash,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
                 label_id: "label1".into(),
                 name: "label1".into(),
-                is_selected: Some(false),
                 children: vec![],
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
                 label_id: "label2".into(),
                 name: "label2".into(),
-                is_selected: Some(false),
                 children: vec![]
             }),
         ]); "TEST2: conversations without labels")]
@@ -892,22 +870,18 @@ mod available_move_to_actions {
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: MovableSystemFolder::Inbox,
-                is_selected: None,
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: MovableSystemFolder::Archive,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
                 name: MovableSystemFolder::Spam,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
                 name: MovableSystemFolder::Trash,
-                is_selected: Some(false),
             }),
         ]); "TEST4: One conversation in Inbox, other in Outbox when view is STARRED")]
     #[test_case(
@@ -923,33 +897,27 @@ mod available_move_to_actions {
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: MovableSystemFolder::Inbox,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: MovableSystemFolder::Archive,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
                 name: MovableSystemFolder::Spam,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
                 name: MovableSystemFolder::Trash,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
                 label_id: "label1".into(),
                 name: "label1".into(),
-                is_selected: Some(false),
                 children: vec![]
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
                 label_id: "1234".into(),
                 name: "My custom folder".into(),
-                is_selected: Some(true),
                 children: vec![],
             }),
         ]); "TEST5: Conversation in custom folder, when viewed from custom folder")]
@@ -999,42 +967,34 @@ mod available_move_to_actions {
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: MovableSystemFolder::Inbox,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: MovableSystemFolder::Archive,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
                 name: MovableSystemFolder::Spam,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
                 name: MovableSystemFolder::Trash,
-                is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
                 label_id: "folder1".into(),
                 name: "folder1".into(),
-                is_selected: Some(false),
                 children: vec![
                     ExpectedCustomFolder {
                         label_id: "folder2".into(),
                         name: "folder2".into(),
-                        is_selected: Some(true),
                         children: vec![
                             ExpectedCustomFolder {
                                 label_id: "folder3".into(),
                                 name: "folder3".into(),
-                                is_selected: Some(false),
                                 children: vec![
                                     ExpectedCustomFolder {
                                         label_id: "folder4".into(),
                                         name: "folder4".into(),
-                                        is_selected: Some(false),
                                         children: vec![]
                                     }
                                 ]
@@ -1112,43 +1072,38 @@ mod available_move_to_actions {
     async fn to_remove() {
         test_move_to_actions(
             &INBOX,
-                             vec![
-                                 ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
-                                 ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
-                             ],
-                             vec![
-                                 label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-                                 label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
-                             ],
-                             Ok(&[
-                                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                                     label_id: SystemLabel::Archive.label_id(),
-                                     name: MovableSystemFolder::Archive,
-                                     is_selected: Some(false),
-                                 }),
-                                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                                     label_id: SystemLabel::Spam.label_id(),
-                                     name: MovableSystemFolder::Spam,
-                                     is_selected: Some(false),
-                                 }),
-                                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                                     label_id: SystemLabel::Trash.label_id(),
-                                     name: MovableSystemFolder::Trash,
-                                     is_selected: Some(false),
-                                 }),
-                                 ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
-                                     label_id: "label1".into(),
-                                     name: "label1".into(),
-                                     is_selected: Some(false),
-                                     children: vec![],
-                                 }),
-                                 ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
-                                     label_id: "label2".into(),
-                                     name: "label2".into(),
-                                     is_selected: Some(false),
-                                     children: vec![]
-                                 }),
-                             ])).await
+            vec![
+                ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
+                ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
+            ],
+            vec![
+                label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
+            ],
+            Ok(&[
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Archive.label_id(),
+                name: MovableSystemFolder::Archive,
+            }),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Spam.label_id(),
+                name: MovableSystemFolder::Spam,
+            }),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Trash.label_id(),
+                name: MovableSystemFolder::Trash,
+            }),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label1".into(),
+                name: "label1".into(),
+                children: vec![],
+            }),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label2".into(),
+                name: "label2".into(),
+                children: vec![]
+            }),
+        ])).await
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{GeneralActions, ReplyAction};
-use crate::actions::RealMoveItemAction;
+use crate::actions::MoveItemAction;
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
@@ -10,7 +10,7 @@ pub struct MessageAvailableActions {
     #[builder(default = ReplyAction::single_address())]
     pub reply_actions: Vec<ReplyAction>, // TODO: check reply_all field
     pub message_actions: Vec<MessageAction>,
-    pub move_actions: Vec<RealMoveItemAction>,
+    pub move_actions: Vec<MoveItemAction>,
     #[builder(default = GeneralActions::all())]
     pub general_actions: Vec<GeneralActions>,
 }
