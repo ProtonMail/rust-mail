@@ -1202,7 +1202,6 @@ pub struct MessageMetadata {
     pub snooze_time: u64,
 
     /// TODO: Document this field.
-    #[serde(default)]
     pub subject: String,
 
     /// TODO: Document this field.
