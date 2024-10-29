@@ -1,7 +1,7 @@
 [package]
 name = "proton-mail-html-transformer"
 version = "0.2.1"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 # kuchikiki requires this verion of html5ever at this time.
