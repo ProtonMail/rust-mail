@@ -7,7 +7,7 @@ use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::login_flow::UserLoginFlowArcLoginFlowResult;
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{
@@ -636,7 +636,7 @@ impl WatchedAccounts {
         receiver: ChangeReceiver<CoreAccount>,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        let handle = watch_channel(receiver, callback);
+        let handle = watch_channel_nodamp(receiver, callback);
 
         WatchedAccounts { accounts, handle }
     }
@@ -658,7 +658,7 @@ impl WatchedSessions {
         receiver: ChangeReceiver<CoreSession>,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        let handle = watch_channel(receiver, callback);
+        let handle = watch_channel_nodamp(receiver, callback);
 
         WatchedSessions { sessions, handle }
     }
