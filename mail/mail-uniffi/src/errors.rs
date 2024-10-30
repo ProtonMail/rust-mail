@@ -10,6 +10,7 @@ pub(crate) mod user_session;
 macro_rules! export_void_result {
     ($name: ident, $type:ty) => {
         #[allow(clippy::large_enum_variant)]
+        #[allow(dead_code)]
         #[derive(uniffi::Object)]
         pub enum $name {
             Ok,
@@ -37,6 +38,7 @@ macro_rules! export_void_result {
 macro_rules! export_typed_result {
     ($name: ident, $ok_type: ty, $err_type: ty) => {
         #[allow(clippy::large_enum_variant)]
+        #[allow(dead_code)]
         #[derive(uniffi::Object)]
         pub enum $name {
             Ok($ok_type),

@@ -167,6 +167,7 @@ impl From<AppError> for UpdateEventError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::UserNotFound => Self::Unexpected(Unexpected::Unknown),
+            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
         }
     }
 }

@@ -91,6 +91,7 @@ impl From<DraftError> for UserDraftError {
             DraftError::ReplyOrForwardToDraft(_local_id) => {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
+            DraftError::MetadataNotFound(_metadata_id) => Self::Unexpected(Unexpected::Database),
         }
     }
 }
@@ -185,6 +186,7 @@ impl From<AppError> for UserDraftError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::UserNotFound => Self::Unexpected(Unexpected::Unknown),
+            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
         }
     }
 }

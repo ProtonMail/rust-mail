@@ -13,7 +13,7 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::errors::user_actions::UserActionError;
+use crate::errors::user_actions::{UserActionError, VoidUserActionResult};
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};

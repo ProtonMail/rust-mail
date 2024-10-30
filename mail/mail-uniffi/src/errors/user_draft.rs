@@ -3,9 +3,9 @@ use proton_mail_common::errors::user_draft::UserDraftError as RealUserDraftError
 
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
-// use crate::export_void_result;
+use crate::export_void_result;
 
-// export_void_result!(VoidUserDraftResult, UserDraftError);
+export_void_result!(VoidUserDraftResult, UserDraftError);
 
 #[derive(Debug, uniffi::Enum)]
 pub enum UserDraftError {

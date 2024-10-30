@@ -53,6 +53,79 @@ pub struct MailSessionParams {
     pub api_env_config: Option<ApiConfig>,
 }
 
+// NOTE: Callbacks can not be stored in record types, which is why they are still in the
+// constructor.
+/// Create a new mail session.
+///
+/// # Parameters
+///
+/// * `params`: See [`MailSessionParams`] for parameter details.
+/// * `key_chain`: Keychain implementation.
+/// * `network_callback`: Optional network status changes callback.
+///
+/// # Panics
+///
+/// Panics if the API URL is invalid. In this situation we cannot proceed.
+///
+/// TODO: An error type needs to be added for this later.
+///
+#[must_use]
+#[proton_uniffi_macros::export_result]
+pub fn create_mail_session(
+    params: MailSessionParams,
+    key_chain: Box<dyn OSKeyChain>,
+    network_callback: Option<Box<dyn NetworkStatusChanged>>,
+) -> Result<Arc<MailSession>, UserSessionError> {
+    async_runtime()
+        .block_on(async move {
+            let mut log_path = PathBuf::from(params.log_dir);
+            std::fs::create_dir_all(&log_path)?;
+            log_path.push("proton-mail-uniffi.log");
+
+            init_log(&log_path, params.log_debug)?;
+
+            let session_path = PathBuf::from(params.session_dir);
+            let user_path = PathBuf::from(params.user_dir);
+            let mail_cache_path = PathBuf::from(params.mail_cache_dir);
+
+            // create directories.
+            debug!("Creating directories");
+            std::fs::create_dir_all(&session_path)?;
+            std::fs::create_dir_all(&user_path)?;
+            std::fs::create_dir_all(&mail_cache_path)?;
+
+            // Generate session key;
+            debug!("Checking keychain");
+            if key_chain.get().map_err(|_| Unexpected::Os)?.is_none() {
+                debug!("Key chain has no key, generating");
+                let key = SessionEncryptionKey::random();
+                key_chain.store(key.to_base64()).map_err(|_e| {
+                    tracing::error!("Failed to store key in keychain");
+                    Unexpected::Os
+                })?;
+            }
+
+            // Creating client.
+            let api_env_config = params.api_env_config.unwrap_or_default();
+
+            debug!("Creating Context");
+            let mail_ctx = MailContext::new(
+                session_path,
+                user_path,
+                mail_cache_path,
+                params.mail_cache_size,
+                Arc::from(FFIKeyChain::from(key_chain)),
+                api_env_config.into(),
+                network_callback.map(|v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
+                    Box::new(FFINetworkStatusChanged::from(v))
+                }),
+            )
+            .await?;
+            Result::<_, RealUserSessionError>::Ok(Arc::new(MailSession { ctx: mail_ctx }))
+        })
+        .map_err(Into::into)
+}
+
 #[proton_uniffi_macros::export_result]
 impl MailSession {
     /// Start new login flow.
@@ -87,80 +160,6 @@ impl MailSession {
         })
         .await
         .map_err(Into::into)
-    }
-
-    // NOTE: Callbacks can not be stored in record types, which is why they are still in the
-    // constructor.
-    /// Create a new mail session.
-    ///
-    /// # Parameters
-    ///
-    /// * `params`: See [`MailSessionParams`] for parameter details.
-    /// * `key_chain`: Keychain implementation.
-    /// * `network_callback`: Optional network status changes callback.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the API URL is invalid. In this situation we cannot proceed.
-    ///
-    /// TODO: An error type needs to be added for this later.
-    ///
-    #[uniffi::constructor]
-    pub fn create(
-        params: MailSessionParams,
-        key_chain: Box<dyn OSKeyChain>,
-        network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> Result<Arc<MailSession>, UserSessionError> {
-        async_runtime()
-            .block_on(async move {
-                let mut log_path = PathBuf::from(params.log_dir);
-                std::fs::create_dir_all(&log_path)?;
-                log_path.push("proton-mail-uniffi.log");
-
-                init_log(&log_path, params.log_debug)?;
-
-                let session_path = PathBuf::from(params.session_dir);
-                let user_path = PathBuf::from(params.user_dir);
-                let mail_cache_path = PathBuf::from(params.mail_cache_dir);
-
-                // create directories.
-                debug!("Creating directories");
-                std::fs::create_dir_all(&session_path)?;
-                std::fs::create_dir_all(&user_path)?;
-                std::fs::create_dir_all(&mail_cache_path)?;
-
-                // Generate session key;
-                debug!("Checking keychain");
-                if key_chain.get().map_err(|_| Unexpected::Os)?.is_none() {
-                    debug!("Key chain has no key, generating");
-                    let key = SessionEncryptionKey::random();
-                    key_chain.store(key.to_base64()).map_err(|_e| {
-                        tracing::error!("Failed to store key in keychain");
-                        Unexpected::Os
-                    })?;
-                }
-
-                // Creating client.
-                let api_env_config = params.api_env_config.unwrap_or_default();
-
-                debug!("Creating Context");
-                let mail_ctx = MailContext::new(
-                    session_path,
-                    user_path,
-                    mail_cache_path,
-                    params.mail_cache_size,
-                    Arc::from(FFIKeyChain::from(key_chain)),
-                    api_env_config.into(),
-                    network_callback.map(
-                        |v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
-                            Box::new(FFINetworkStatusChanged::from(v))
-                        },
-                    ),
-                )
-                .await?;
-                Result::<_, RealUserSessionError>::Ok(Arc::new(Self { ctx: mail_ctx }))
-            })
-            .map_err(Into::into)
     }
 
     /// Create an user context from a stored session.

@@ -66,12 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Sidebar::custom_labels` method now returns `SidebarCustomLabelsResult` instead of `SidebarResult<Vec<SidebarCustomLabel>>`.
   - `Sidebar::collapse_folder` method now returns `SidebarVoidUserActionResult` instead of `SidebarResult<()>`.
   - `Sidebar::expand_folder` method now returns `SidebarVoidUserActionResult` instead of `SidebarResult<()>`.
-  - `Mailbox::new()` method now returns `MailboxNewResult` instead of `MailboxResult<Arc<Self>>`.
-  - `Mailbox::inbox()` method now returns `MailboxInboxResult` instead of `MailboxResult<Arc<Self>>`.
-  - `Mailbox::with_label_id()` method now returns `MailboxNewResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::new()` method is now a function `new_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::inbox()` method is now a function `inbox_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::all_mail()` method is now a function `all_mail_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::with_label_id()` method is now a function `with_label_id_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
   - `Mailbox::unread_count()` method now returns `MailboxUnreadCountResult` instead of `MailboxResult<u64>`.
   - `Mailbox::watch_unread_count()` method now returns `MailboxWatchUnreadCountResult` instead of `MailboxResult<Arc<WatchHandle>>`.
-  - `MailSession::new()` method now returns `MailSessionNewResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `MailSession::create()` method is now a function `create_mail_session` and returns `CreateMailSessionResult` instead of `MailSessionResult<Arc<Self>>`.
   - `MailSession::user_context_from_session()` method now returns `MailSessionUserContextFromSessionResult` instead of `MailSessionResult<Arc<MailUserSession>>`.
   - `MailSession::get_accounts()` method now returns `MailSessionGetAccountsResult` instead of `MailSessionResult<Vec<Arc<StoredAccount>>>`.
   - `MailSession::watch_accounts()` method now returns `MailSessionWatchAccountsResult` instead of `MailSessionResult<WatchedAccounts>`.
@@ -95,8 +96,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MailUserSession::execute_pending_action()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
   - `MailUserSession::execute_pending_actions()` method now returns `VoidUserSessionResult` instead of `MailSessionResult<()>`.
   - `watch_mail_settings()` function now returns `WatchMailSettingsResult` instead of `MailSessionResult<SettingsWatcher>`.
-  - `Draft::new()` function now returns `DraftNewResult` instead of `MailSessionResult<Arc<Self>>`.
-  - `Draft::open()` function now returns `DraftOpenResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `Draft::new()` method is now a function `new_draft` and returns `NewDraftResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `Draft::open()` method is now a function `open_draft` and returns `NewDraftResult` instead of `MailSessionResult<Arc<Self>>`.
 
 
 ### Removed

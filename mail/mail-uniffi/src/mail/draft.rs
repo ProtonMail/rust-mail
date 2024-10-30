@@ -1,7 +1,5 @@
-use std::sync::Arc;
-
 use crate::core::datatypes::Id;
-use crate::errors::user_draft::UserDraftError;
+use crate::errors::user_draft::{UserDraftError, VoidUserDraftResult};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
@@ -33,64 +31,64 @@ pub struct Draft {
     ctx: Arc<MailUserContext>,
 }
 
-#[proton_uniffi_macros::export_result]
-impl Draft {
-    /// Create a new draft with the given `create_mode`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if action failed.
-    #[uniffi::constructor]
-    pub async fn new(
-        session: &MailUserSession,
-        create_mode: DraftCreateMode,
-    ) -> Result<Arc<Draft>, UserDraftError> {
-        let ctx = session.ctx();
-        uniffi_async(async move {
-            let draft = match create_mode {
-                DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
-                DraftCreateMode::Reply(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
-                }
-                DraftCreateMode::ReplyAll(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
-                }
-                DraftCreateMode::Forward(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
-                }
+export_typed_result!(NewDraftResult, Arc<Draft>, UserDraftError);
+
+/// Create a new draft with the given `create_mode`.
+///
+/// # Errors
+///
+/// Return error if action failed.
+///
+
+#[uniffi::export]
+pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) -> NewDraftResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        let draft = match create_mode {
+            DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
+            DraftCreateMode::Reply(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
             }
-            .map_err(RealUserDraftError::from)?;
+            DraftCreateMode::ReplyAll(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
+            }
+            DraftCreateMode::Forward(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
+            }
+        }
+        .map_err(RealUserDraftError::from)?;
 
-            Result::<_, RealUserDraftError>::Ok(Self {
-                draft: RwLock::new(draft),
-                ctx,
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
+        Result::<_, RealUserDraftError>::Ok(Arc::new(Draft {
+            draft: RwLock::new(draft),
+            ctx,
+        }))
+    })
+    .await
+    .into()
+}
 
-    #[uniffi::constructor]
-    /// Open an existing draft with `message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed or the message is not a draft.
-    pub async fn open(
-        session: &MailUserSession,
-        message_id: Id,
-    ) -> Result<Arc<Draft>, UserDraftError> {
-        let ctx = session.ctx();
-        uniffi_async(async move {
-            Result::<_, RealUserDraftError>::Ok(Self {
-                draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
-                ctx,
-            })
-        })
-        .await
-        .map_err(Into::into)
-    }
+/// Open an existing draft with `message_id`.
+///
+/// # Errors
+///
+/// Returns error if the query failed or the message is not a draft.
+///
 
+#[uniffi::export]
+pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        Result::<_, RealUserDraftError>::Ok(Arc::new(Draft {
+            draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
+            ctx,
+        }))
+    })
+    .await
+    .into()
+}
+
+#[uniffi::export]
+impl Draft {
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
         self.draft.read().sender.clone()
@@ -161,7 +159,10 @@ impl Draft {
     pub fn mime_type(&self) -> MimeType {
         self.draft.read().mime_type.into()
     }
+}
 
+#[uniffi::export]
+impl Draft {
     /// Save the current draft.
     ///
     /// Schedules an action to create or save the current draft.
@@ -169,7 +170,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(&self) -> Result<(), MailSessionError> {
+    pub async fn save(&self) -> VoidUserDraftResult {
         let action = {
             let draft = self.draft.read();
             draft.to_save_action()
@@ -179,9 +180,10 @@ impl Draft {
             ctx.queue()
                 .queue_action(action)
                 .await
-                .map_err(MailContextError::from)?;
-            Ok(())
+                .map_err(RealUserDraftError::from)?;
+            Result::<_, RealUserDraftError>::Ok(())
         })
         .await
+        .into()
     }
 }

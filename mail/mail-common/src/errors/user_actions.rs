@@ -97,6 +97,7 @@ impl From<AppError> for UserActionError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::UserNotFound => Self::InvalidAction(Reason::InvalidParameter),
+            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
         }
     }
 }

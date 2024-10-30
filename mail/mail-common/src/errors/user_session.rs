@@ -76,35 +76,14 @@ impl From<MailContextError> for UserSessionError {
 }
 
 impl From<DraftError> for UserSessionError {
-    fn from(error: DraftError) -> Self {
-        match error {
-            DraftError::UserHasNoAddresses => Self::Unexpected(Unexpected::Database),
-            DraftError::AddressNotFound(_remote_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::MessageNotADraft(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-            DraftError::CreateMetadataNotFound(_local_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::MessageBodyMissing(_local_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::AttachmentDoesNotHaveKeyPackets(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-            DraftError::ReplyOrForwardToDraft(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-        }
+    fn from(_error: DraftError) -> Self {
+        Self::Unexpected(Unexpected::Draft)
     }
 }
 
 impl From<EventLoopError> for UserSessionError {
-    fn from(error: EventLoopError) -> Self {
-        match error {
-            EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
-                Self::from(anyhow)
-            }
-            EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
-            EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
-            EventLoopError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
-        }
+    fn from(_error: EventLoopError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
     }
 }
 
@@ -170,6 +149,7 @@ impl From<AppError> for UserSessionError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::UserNotFound => Self::Unexpected(Unexpected::Unknown),
+            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
         }
     }
 }
@@ -186,15 +166,8 @@ impl From<ContactError> for UserSessionError {
 }
 
 impl From<SubscriberError> for UserSessionError {
-    fn from(error: SubscriberError) -> Self {
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(anyhow) => Self::from(anyhow),
-            SubscriberError::Send | SubscriberError::Receive => {
-                Self::Unexpected(Unexpected::Internal)
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
-        }
+    fn from(_error: SubscriberError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
     }
 }
 
