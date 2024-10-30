@@ -379,12 +379,40 @@ pub fn watch_channel<T: Send + 'static>(
     channel: flume::Receiver<T>,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let callback = damp(callback);
     let watcher = WatchHandle::new();
-    let watcher_cloned = watcher.clone();
-    spawn_async(async move {
+
+    watch_channel_inner(watcher.clone(), channel, damp(callback));
+
+    Arc::new(watcher)
+}
+
+/// Watch a notification channel for changes and trigger the callback
+/// once a message has been received.
+///
+/// The callback is __not__ "dampened"; use with caution.
+///
+/// See [`watch_channel()`] for a dampened version.
+///
+#[must_use]
+pub fn watch_channel_nodamp<T: Send + 'static>(
+    channel: flume::Receiver<T>,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Arc<WatchHandle> {
+    let watcher = WatchHandle::new();
+
+    watch_channel_inner(watcher.clone(), channel, move || callback.on_update());
+
+    Arc::new(watcher)
+}
+
+fn watch_channel_inner<T: Send + 'static>(
+    watcher: WatchHandle,
+    channel: flume::Receiver<T>,
+    callback: impl Fn() + Send + 'static,
+) {
+    drop(spawn_async(async move {
         loop {
-            if watcher_cloned.should_stop() {
+            if watcher.should_stop() {
                 return;
             }
 
@@ -394,9 +422,7 @@ pub fn watch_channel<T: Send + 'static>(
 
             callback();
         }
-    });
-
-    Arc::new(watcher)
+    }));
 }
 
 /// Filter options for pagination

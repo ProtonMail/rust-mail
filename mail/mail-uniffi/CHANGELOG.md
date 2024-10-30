@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `all_available_bottom_bar_actions_for_message()` and
     `all_available_bottom_bar_actions_for_conversations()` now contains
     `local_id` for `Labels`.
+  - Remove damping on account and session watchers
 
 
 ## [0.18.0] - 2024-10-28
