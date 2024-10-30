@@ -124,6 +124,31 @@ impl Mailbox {
         .await
     }
 
+    /// Create a new mailbox for all mail items.
+    ///
+    /// This mailbox will contain all mail items, from all labels, using the
+    /// special system label "All Mail".
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx` - The mail user session. Note that this is a session that is
+    ///           already authenticated and has a valid user context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mailbox could not be created or synced.
+    ///
+    #[uniffi::constructor]
+    pub async fn all_mail(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
+        let ctx = ctx.ctx().clone();
+        uniffi_async(async move {
+            let mbox =
+                proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::all_mail()).await?;
+            Self::sync(mbox).await
+        })
+        .await
+    }
+
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
     pub async fn with_label_id(ctx: &MailUserSession, label_id: Id) -> MailboxResult<Arc<Self>> {
