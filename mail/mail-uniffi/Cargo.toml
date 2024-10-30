@@ -12,6 +12,7 @@ crate-type = ["staticlib", "cdylib"]
 anyhow = { workspace = true }
 flume = { workspace = true }
 itertools = { workspace = true }
+parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }

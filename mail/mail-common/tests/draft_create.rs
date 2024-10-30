@@ -1,4 +1,3 @@
-use proton_action_queue::queue::ActionError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -24,9 +23,7 @@ use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{
     Draft, Error, ReplyMode, DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX,
 };
-use proton_mail_common::models::{
-    Attachment, Conversation, MailSettings, Message, NewDraftMetadata,
-};
+use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
@@ -62,37 +59,55 @@ async fn create_empty_draft() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft_output = Draft::action_create_empty(user_ctx.queue()).await.unwrap();
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
 
     // Load the draft.
-    let draft_message = Message::load(draft_output.local.message_id, user_ctx.user_stash())
+    let draft_message_id = draft
+        .message_id(user_ctx.user_stash())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let draft_conversation_id = draft
+        .conversation_id(user_ctx.user_stash())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let draft_message = Message::load(draft_message_id, user_ctx.user_stash())
         .await
         .unwrap()
         .expect("failed to load message");
     assert_eq!(draft_message.remote_id, Some(message.metadata.id.into()));
 
-    // Local conversation id should still be the same.
+    // Local conversation id should have been assigned.
+    assert!(draft_message.local_conversation_id.is_some());
     assert_eq!(
+        draft_conversation_id,
         draft_message.local_conversation_id.unwrap(),
-        draft_output.local.conversation_id
     );
 
     // Check the draft has the draft label.
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let _ = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let message_body_metadata = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
         .await
         .unwrap();
 
-    let conversation =
-        Conversation::find_by_id(draft_output.local.conversation_id, user_ctx.user_stash())
-            .await
-            .unwrap()
-            .unwrap();
+    assert!(message_body_metadata.metadata.attachments.is_empty());
+
+    let conversation = Conversation::find_by_id(
+        draft_message.local_conversation_id.unwrap(),
+        user_ctx.user_stash(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     // Conversation remote id has been set.
     assert_eq!(
@@ -106,15 +121,8 @@ async fn create_empty_draft() {
         .find(|l| { l.remote_label_id == LabelId::drafts().into() })
         .is_some());
 
-    //TODO(ET-1361): Check body
-
-    // Draft metadata should no longer exist.
-    assert!(
-        NewDraftMetadata::find_by_id(draft_message.local_id.unwrap(), user_ctx.user_stash())
-            .await
-            .unwrap()
-            .is_none()
-    );
+    // Opening this draft should work;
+    Draft::open(&user_ctx, draft_message_id).await.unwrap();
 }
 
 #[tokio::test]
@@ -149,18 +157,17 @@ async fn create_draft_reply_without_body_is_error() {
     ctx.catch_all().await;
 
     // Create draft.
-    let result = Draft::action_create_reply(
-        user_ctx.queue(),
-        ReplyMode::Sender,
+    let result = Draft::reply(
+        &user_ctx,
         existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
     )
     .await;
 
     assert!(matches!(
         result,
-        Err(ActionError::Action(MailContextError::Draft(
-            Error::MessageBodyMissing(_)
-        )))
+        Err(MailContextError::Draft(Error::MessageBodyMissing(_)))
     ));
 }
 
@@ -198,19 +205,76 @@ async fn create_draft_reply_should_fail_for_drafts() {
     ctx.catch_all().await;
 
     // Create draft.
-    let result = Draft::action_create_reply(
-        user_ctx.queue(),
-        ReplyMode::Sender,
+    let result = Draft::reply(
+        &user_ctx,
         existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
     )
     .await;
 
     assert!(matches!(
         result,
-        Err(ActionError::Action(MailContextError::Draft(
-            Error::ReplyOrForwardToDraft(_)
-        )))
+        Err(MailContextError::Draft(Error::ReplyOrForwardToDraft(_)))
     ));
+}
+
+#[tokio::test]
+async fn metadata_is_create_for_existing_not_opened_draft() {
+    // Simulate opening a draft that was created in another session. We should
+    // create metadata for this message so the `Save` action works correctly.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        RemoteId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts().into());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mut message = Message::from_api_metadata(message.metadata, user_ctx.user_stash())
+        .await
+        .unwrap();
+
+    // Save message.
+    message.save_using(user_ctx.user_stash()).await.unwrap();
+
+    assert!(
+        DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // Create draft.
+    let draft = Draft::open(&user_ctx, message.local_id.unwrap())
+        .await
+        .unwrap();
+
+    let draft_by_message_id =
+        DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(draft.metadata_id, draft_by_message_id.id.unwrap());
+    drop(draft);
+
+    // Opening this draft again should not create new metadata;
+    let draft = Draft::open(&user_ctx, message.local_id.unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(draft.metadata_id, draft_by_message_id.id.unwrap());
 }
 
 #[tokio::test]
@@ -228,6 +292,7 @@ async fn create_draft_reply_plain_text() {
 #[tokio::test]
 async fn create_draft_reply_inherits_only_inline_attachments() {
     let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    assert_eq!(draft_body.metadata.attachments.len(), 1);
     assert_eq!(draft_body.metadata.attachments.len(), 1);
     let attachment = draft_body.metadata.attachments.first().unwrap();
     let inline_attachment = gen_inline_attachment();
@@ -303,6 +368,13 @@ async fn create_draft_reply_impl(
     let expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
     let mut message = message_body_test_message_simple();
+    message.body.attachments = remote_existing_message.body.attachments.clone();
+    if reply_mode != ReplyMode::Forward {
+        message
+            .body
+            .attachments
+            .retain(|a| a.disposition == Disposition::Inline)
+    }
     message.metadata.label_ids.push(LabelId::drafts().into());
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
@@ -340,30 +412,45 @@ async fn create_draft_reply_impl(
         .unwrap();
 
     // Create draft.
-    let draft_output = Draft::action_create_reply_utc(
-        user_ctx.queue(),
-        reply_mode,
+    let draft = Draft::reply(
+        &user_ctx,
         existing_message.local_id.unwrap(),
+        reply_mode,
+        true,
     )
     .await
     .unwrap();
+    draft.save(user_ctx.queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
 
+    let draft_message_id = draft
+        .message_id(user_ctx.user_stash())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let draft_conversation_id = draft
+        .conversation_id(user_ctx.user_stash())
+        .await
+        .unwrap()
+        .unwrap();
+
     // Load the draft.
-    let draft_message = Message::load(draft_output.local.message_id, user_ctx.user_stash())
+    let draft_message = Message::load(draft_message_id, user_ctx.user_stash())
         .await
         .unwrap()
         .expect("failed to load message");
     assert_eq!(draft_message.remote_id, Some(message.metadata.id.into()));
-    // Local conversation id should still be the same.
+
+    // Local conversation id match the source message,
     assert_eq!(
         draft_message.local_conversation_id.unwrap(),
-        draft_output.local.conversation_id
+        existing_message.local_conversation_id.unwrap(),
     );
     assert_eq!(
-        draft_message.local_conversation_id.unwrap(),
+        draft_conversation_id,
         existing_message.local_conversation_id.unwrap(),
     );
 
@@ -375,11 +462,13 @@ async fn create_draft_reply_impl(
         .await
         .unwrap();
 
-    let conversation =
-        Conversation::find_by_id(draft_output.local.conversation_id, user_ctx.user_stash())
-            .await
-            .unwrap()
-            .unwrap();
+    let conversation = Conversation::find_by_id(
+        draft_message.local_conversation_id.unwrap(),
+        user_ctx.user_stash(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     // Conversation remote id has been set.
     assert_eq!(
@@ -387,13 +476,8 @@ async fn create_draft_reply_impl(
         message.metadata.conversation_id.into()
     );
 
-    // Draft metadata should no longer exist.
-    assert!(
-        NewDraftMetadata::find_by_id(draft_message.local_id.unwrap(), user_ctx.user_stash())
-            .await
-            .unwrap()
-            .is_none()
-    );
+    // Opening this draft should work;
+    Draft::open(&user_ctx, draft_message_id).await.unwrap();
 
     draft_body
 }

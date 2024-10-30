@@ -1,9 +1,9 @@
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::Message;
+use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
-use crate::widgets::{utils, TextInput, TextInputState};
-use crossterm::event::KeyCode;
+use crate::widgets::{TextInput, TextInputState};
+use crossterm::event::{KeyCode, KeyModifiers};
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::{Draft, ReplyMode};
@@ -29,6 +29,7 @@ pub struct Composer {
     cc_input_state: TextInputState,
     bcc_input_state: TextInputState,
     subject_input_state: TextInputState,
+    attachment_infos: Vec<AttachmentInfo>,
 }
 
 impl Composer {
@@ -41,16 +42,13 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::action_create_empty(ctx.queue()).await {
-                        Ok(queue_result) => Command::message(
-                            Message::OpenComposer(Composer::new(queue_result.local)).into(),
-                        ),
+                    match Draft::empty(ctx.user_stash()).await {
+                        Ok(draft) => {
+                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
+                        }
                         Err(e) => {
                             error!("Failed to create new draft:{e}");
-                            Command::Message(Messages::DisplayError(
-                                None,
-                                MailContextError::from(e).into(),
-                            ))
+                            Command::Message(Messages::DisplayError(None, e.into()))
                         }
                     },
                 ])
@@ -73,11 +71,10 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::action_create_reply(context.queue(), reply_mode, message_id).await
-                    {
-                        Ok(queue_output) => Command::message(
-                            Message::OpenComposer(Composer::new(queue_output.local)).into(),
-                        ),
+                    match Draft::reply(&context, message_id, reply_mode, false).await {
+                        Ok(draft) => {
+                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
+                        }
                         Err(e) => {
                             error!("Failed to open message in composer: {e}");
                             Command::batch([
@@ -119,11 +116,33 @@ impl Composer {
         ])
     }
 
+    /// Save a draft.
+    fn save(&self, context: Arc<MailUserContext>) -> Command<Messages> {
+        let save_action = self.draft.to_save_action();
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Saving draft...".to_owned(),
+            )),
+            Command::task(async move {
+                Command::batch([
+                    Command::message(Messages::DismissBackgroundProgress),
+                    match context.queue().queue_action(save_action).await {
+                        Ok(_) => Command::none(),
+                        Err(e) => {
+                            error!("Failed to save draft: {e}");
+                            Command::batch([Command::message(MailContextError::from(e).into())])
+                        }
+                    },
+                ])
+            }),
+        ])
+    }
+
     fn new(draft: Draft) -> Self {
-        let sender = utils::format_sender(&draft.sender);
-        let to_list = utils::format_senders_slice(&draft.to_list);
-        let cc_list = utils::format_senders_slice(&draft.cc_list);
-        let bcc_list = utils::format_senders_slice(&draft.bcc_list);
+        let sender = draft.sender.clone();
+        let to_list = draft.to_list.clone().join(", ");
+        let cc_list = draft.cc_list.clone().join(", ");
+        let bcc_list = draft.bcc_list.clone().join(", ");
         let config = html2text::config::plain();
         let cursor = Cursor::new(&draft.body);
         let text = config
@@ -131,6 +150,14 @@ impl Composer {
             .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
         let text_area = TextArea::new(text.split('\n').map(str::to_owned).collect());
         let subject = draft.subject.clone();
+        let attachment_infos = draft
+            .attachments
+            .iter()
+            .map(|attachment| AttachmentInfo {
+                disposition: attachment.disposition,
+                filename: attachment.filename.clone(),
+            })
+            .collect();
         Self {
             draft,
             text_area,
@@ -140,10 +167,15 @@ impl Composer {
             cc_input_state: TextInputState::with_value(cc_list),
             bcc_input_state: TextInputState::with_value(bcc_list),
             subject_input_state: TextInputState::with_value(subject),
+            attachment_infos,
         }
     }
 }
 
+struct AttachmentInfo {
+    disposition: Disposition,
+    filename: String,
+}
 impl StateHandler for Composer {
     fn view(&mut self, frame: &mut Frame, area: Rect) {
         let area = area.inner(Margin {
@@ -216,7 +248,7 @@ impl StateHandler for Composer {
         .areas(message_area);
 
         frame.render_widget(
-            List::new(self.draft.attachments.iter().map(|a| {
+            List::new(self.attachment_infos.iter().map(|a| {
                 Line::from(vec![
                     Span::from(if a.disposition == Disposition::Inline {
                         "I:"
@@ -224,7 +256,7 @@ impl StateHandler for Composer {
                         "A:"
                     })
                     .bold(),
-                    a.filename.clone().into(),
+                    a.filename.as_str().into(),
                 ])
             }))
             .block(Block::new().title("Attachments").borders(Borders::TOP)),
@@ -283,6 +315,11 @@ impl StateHandler for Composer {
                     };
                     return Command::none();
                 }
+                KeyCode::Char('s') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return Command::message(ComposerMessage::Save.into());
+                    }
+                }
                 _ => {}
             };
         }
@@ -310,11 +347,17 @@ impl StateHandler for Composer {
     fn update(
         &mut self,
         _ctx: &MailContext,
-        _message: Message,
-        _mbox: &Mailbox,
+        message: Message,
+        mbox: &Mailbox,
         _mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
-        Command::none()
+        let Message::Composer(message) = message else {
+            return Command::none();
+        };
+
+        match message {
+            ComposerMessage::Save => self.save(mbox.user_context()),
+        }
     }
 }
 

@@ -554,6 +554,37 @@ impl Attachment {
         )
         .await
     }
+
+    /// Get all attachments with the given IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_ids` - List of local attachment ids.
+    /// * `interface` - The database interface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
+    pub async fn find_by_ids<A>(
+        attachment_ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let params: Vec<Box<dyn ToSql + Send>> = attachment_ids
+            .into_iter()
+            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
+            .collect();
+        Attachment::find(
+            format!("WHERE local_id IN ({})", vec!["?"; params.len()].join(","),),
+            params,
+            interface,
+            None,
+        )
+        .await
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't
