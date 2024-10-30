@@ -60,6 +60,14 @@ pub(crate) fn new_action_factory() -> Factory {
     factory
         .register::<messages::unlabel::Unlabel>()
         .expect(ERR_MSG);
+    factory.register::<messages::r#move::Move>().expect(ERR_MSG);
+    factory
+        .register::<messages::delete::Delete>()
+        .expect(ERR_MSG);
+    factory.register::<messages::read::Read>().expect(ERR_MSG);
+    factory
+        .register::<messages::unread::Unread>()
+        .expect(ERR_MSG);
     factory.register::<draft::Save>().expect(ERR_MSG);
     factory
 }

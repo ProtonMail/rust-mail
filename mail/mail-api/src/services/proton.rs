@@ -716,7 +716,6 @@ pub trait ProtonMail: ApiService {
     ///
     ///  * `message_id`  - message id to update
     ///  * `message`     - Draft message details
-    ///  * `action`      - The draft's action.
     ///  * `attachments` - Map of attachment id to attachment to base64 encoded
     ///                    key packet.
     ///
@@ -727,14 +726,12 @@ pub trait ProtonMail: ApiService {
         &self,
         message_id: RemoteId,
         message: DraftParams,
-        action: DraftAction,
         attachments: DraftAttachmentKeyPackets,
     ) -> Result<PutUpdateDraftResponse, ApiServiceError> {
         self.put::<_, Json<_>>(
             &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
             PutUpdateDraftRequest {
                 message,
-                action,
                 attachment_key_packets: attachments,
             },
             None,

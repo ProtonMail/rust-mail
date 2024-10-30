@@ -490,6 +490,60 @@ impl Draft {
         Ok(response.message)
     }
 
+    /// Update an existing draft on the server
+    ///
+    /// # Params
+    ///
+    /// * `context`                : Mail user context to access the cache and crypto keys.
+    /// * `session`                : Networks session
+    /// * `address_id`             : Address id to with witch to encrypt the message.
+    /// * `message`                : Message metadata form which to create a draft.
+    /// * `message_body_metadata`  : Message body metadata from which to create a draft.
+    /// * `message_body`           : Body of the draft
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request failed or if the body could not be
+    /// encrypted.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn remote_update(
+        context: &MailUserContext,
+        session: &Session,
+        address_id: RemoteId,
+        message: &Message,
+        message_body_metadata: &MessageBodyMetadata,
+        message_body: &str,
+    ) -> Result<ApiMessage, MailContextError> {
+        let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
+        let params = crate_draft_params(message, message_body_metadata, encrypted);
+
+        let mut attachment_key_packets =
+            DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        for attachment in &message_body_metadata.attachments {
+            let Some(remote_id) = attachment.remote_id.clone() else {
+                return Err(
+                    AppError::AttachmentDoesNotHaveRemoteId(attachment.local_id.unwrap()).into(),
+                );
+            };
+            let Some(key_packets) = attachment.key_packets.clone() else {
+                return Err(
+                    Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
+                );
+            };
+            attachment_key_packets.insert(remote_id.into(), key_packets.value.clone());
+        }
+
+        let response = session
+            .api()
+            .update_draft(
+                message.remote_id.clone().unwrap().into(),
+                params,
+                attachment_key_packets,
+            )
+            .await?;
+        Ok(response.message)
+    }
+
     /// Apply an action which will create a new draft.
     ///
     /// # Errors

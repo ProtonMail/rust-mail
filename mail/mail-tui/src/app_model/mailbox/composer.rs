@@ -4,8 +4,9 @@ use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
+use log::info;
 use proton_core_common::datatypes::LocalId;
-use proton_mail_common::datatypes::Disposition;
+use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
@@ -117,7 +118,15 @@ impl Composer {
     }
 
     /// Save a draft.
-    fn save(&self, context: Arc<MailUserContext>) -> Command<Messages> {
+    fn save(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
+        // We are TUI, what else can we do?
+        self.draft.mime_type = MimeType::TextPlain;
+        self.draft.subject = self.subject_input_state.value().to_owned();
+        self.draft.body = self.text_area.lines().join("\n");
+        info!("\n{}", self.draft.body);
+        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value());
+        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value());
+        self.draft.to_list = recipients_value_to_list(self.to_input_state.value());
         let save_action = self.draft.to_save_action();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
@@ -368,4 +377,8 @@ enum SelectedInput {
     Bcc,
     Subject,
     Body,
+}
+
+fn recipients_value_to_list(recipients: &str) -> Vec<String> {
+    recipients.split(',').map(ToOwned::to_owned).collect()
 }
