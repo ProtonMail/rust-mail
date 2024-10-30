@@ -1024,7 +1024,7 @@ where
                 Ok((row_id, id))
             })
             .collect::<Result<HashMap<u64, T::IdType>, StashError>>()?;
-        let receiver = interface.stash().subscribe().await?;
+        let receiver = interface.stash().subscribe_to(T::table_name()).await?;
         let stash = interface.stash().clone();
 
         // Spawn a thread to listen for notifications
