@@ -29,8 +29,6 @@ use tracing::{debug, error};
 #[derive(Serialize, Deserialize)]
 pub struct Save {
     metadata_id: MetadataId,
-    /// Sender email
-    sender: String,
     /// To Recipients - only email to preserve display name privacy
     to_list: Vec<String>,
     /// CC Recipients - only email to preserve display name privacy
@@ -70,7 +68,6 @@ impl Save {
     pub fn new(draft: &Draft) -> Self {
         Self {
             metadata_id: draft.metadata_id,
-            sender: draft.sender.clone(),
             to_list: draft.to_list.clone(),
             cc_list: draft.cc_list.clone(),
             bcc_list: draft.bcc_list.clone(),
@@ -158,6 +155,7 @@ impl proton_action_queue::action::Handler for Handler {
                 .await
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e}"))?;
             let mut conversation = action.create_new_conversation(
+                &address,
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
@@ -171,29 +169,39 @@ impl proton_action_queue::action::Handler for Handler {
             conversation.local_id.unwrap()
         };
 
+        let time = draft::create_timestamp();
         let message = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
-            let Some(message) = Message::find_by_id(message_id, tether)
+            let Some(mut message) = Message::find_by_id(message_id, tether)
                 .await
                 .inspect_err(|e| error!("Failed to load message: {e}"))?
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
 
-            // TODO(ET-1353): Update existing message
-            let Some(_body_metadata) =
-                MessageBodyMetadata::for_message(message_id, tether)
-                    .await
-                    .inspect_err(|e| error!("Failed to load message metadata: {e}"))?
+            action.update_message(&address, &mut message, attachment_metadata, body_len, time);
+
+            message.save_using(tether).await.inspect_err(|e| {
+                error!("Failed to update draft message: {e}");
+            })?;
+
+            let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, tether)
+                .await
+                .inspect_err(|e| error!("Failed to load message metadata: {e}"))?
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
-            // TODO(ET-1353): Update existing message metadata
+
+            body_metadata.attachments = attachments;
+            body_metadata.mime_type = action.mime_type;
+
+            body_metadata.save_using(tether).await.inspect_err(|e| {
+                error!("Failed to update draft body metadata: {e}");
+            })?;
 
             message
         } else {
             debug!("Local message id is not set, creating new draft");
-            let time = draft::create_timestamp();
             let display_order = Message::next_display_order(tether)
                 .await
                 .inspect_err(|e| error!("Failed to get next message display order: {e}"))?;
@@ -301,8 +309,6 @@ impl proton_action_queue::action::Handler for Handler {
         session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        //TODO: detect if create or update and act accordingly
-        // most of the code should be the same.
         let tether = stash.connection();
 
         let message_id = action.message_id.expect("Should be set");
@@ -351,7 +357,11 @@ impl proton_action_queue::action::Handler for Handler {
         };
 
         let mut message_body = String::with_capacity(usize::try_from(message.size).unwrap_or(0));
-        message_body_reader.read_to_string(&mut message_body)?;
+        message_body_reader
+            .read_to_string(&mut message_body)
+            .inspect_err(|e| {
+                error!("Failed to read message_body: {e}");
+            })?;
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -370,7 +380,18 @@ impl proton_action_queue::action::Handler for Handler {
                 error!("Failed to create draft on remote: {e}");
             })?
         } else {
-            todo!()
+            Draft::remote_update(
+                ctx,
+                session,
+                action.address_id.clone(),
+                &message,
+                &message_body_metadata,
+                &message_body,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to update draft on remote: {e}");
+            })?
         };
 
         // Note: This section will be generalized as part of ET-1353 when
@@ -480,8 +501,38 @@ impl Save {
         }
     }
 
+    fn update_message(
+        &self,
+        address: &Address,
+        message: &mut Message,
+        attachments: Vec<AttachmentMetadata>,
+        body_len: u64,
+        time: u64,
+    ) {
+        let num_attachments = attachments.len();
+        message.local_address_id = address.local_id.unwrap();
+        message.remote_address_id = address.remote_id.clone().unwrap();
+        message.attachments_metadata = attachments;
+        message.to_list = to_message_addresses(&self.to_list);
+        message.cc_list = to_message_addresses(&self.cc_list);
+        message.bcc_list = to_message_addresses(&self.bcc_list);
+        message.num_attachments = num_attachments.try_into().unwrap_or_default();
+        message.sender = MessageAddress {
+            address: address.email.clone(),
+            bimi_selector: None,
+            display_sender_image: false,
+            is_proton: false,
+            is_simple_login: false,
+            name: address.display_name.clone(),
+        };
+        message.size = body_len;
+        message.subject = self.subject.clone();
+        message.time = time;
+    }
+
     fn create_new_conversation(
         &self,
+        address: &Address,
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
@@ -501,7 +552,7 @@ impl Save {
             num_unread: 0,
             display_order,
             recipients: Default::default(),
-            senders: to_message_addresses(std::iter::once(&self.sender)),
+            senders: to_message_addresses(std::iter::once(&address.email)),
             size: body_len,
             subject: self.subject.clone(),
             is_known: false,

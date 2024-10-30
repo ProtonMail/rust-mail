@@ -8,7 +8,8 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::{AttachmentMetadata, MessageFlags};
 use proton_api_mail::services::proton::response_data::{
-    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
+    Disposition, Message as ApiMessage, MessageAddress as ApiMessageAddress, MessageAttachment,
+    MessageAttachmentHeaders,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
@@ -123,6 +124,140 @@ async fn create_empty_draft() {
 
     // Opening this draft should work;
     Draft::open(&user_ctx, draft_message_id).await.unwrap();
+}
+
+#[tokio::test]
+async fn create_empty_draft_and_save_twice() {
+    // Create a new draft, save once to create, save again to trigger
+    // update on server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        RemoteId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts().into());
+
+    let new_subject = "My New Subject";
+    let new_body = "Hello world";
+    let new_to_list = vec!["to@list.info".to_owned()];
+    let new_cc_list = vec!["cc@list.info".to_owned()];
+    let new_bcc_list = vec!["bcc@list.info".to_owned()];
+
+    let mut updated_message = message.clone();
+    updated_message.metadata.subject = new_subject.into();
+    updated_message.metadata.to_list = new_to_list
+        .iter()
+        .cloned()
+        .map(|v| ApiMessageAddress {
+            address: v,
+            ..Default::default()
+        })
+        .collect();
+    updated_message.metadata.cc_list = new_cc_list
+        .iter()
+        .cloned()
+        .map(|v| ApiMessageAddress {
+            address: v,
+            ..Default::default()
+        })
+        .collect();
+    updated_message.metadata.bcc_list = new_bcc_list
+        .iter()
+        .cloned()
+        .map(|v| ApiMessageAddress {
+            address: v,
+            ..Default::default()
+        })
+        .collect();
+
+    let expected_draft_params = expected_create_draft_params();
+    let expected_update_draft_params = {
+        let mut params = expected_create_draft_params();
+        params.subject = new_subject.to_owned();
+        params.to_list = new_to_list
+            .iter()
+            .cloned()
+            .map(|v| DraftRecipient {
+                address: v,
+                name: String::new(),
+                group: None,
+            })
+            .collect();
+        params.cc_list = new_cc_list
+            .iter()
+            .cloned()
+            .map(|v| DraftRecipient {
+                address: v,
+                name: String::new(),
+                group: None,
+            })
+            .collect();
+        params.bcc_list = new_bcc_list
+            .iter()
+            .cloned()
+            .map(|v| DraftRecipient {
+                address: v,
+                name: String::new(),
+                group: None,
+            })
+            .collect();
+        params
+    };
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        DraftAction::Reply,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_update_draft(
+        updated_message.metadata.id.clone(),
+        expected_update_draft_params,
+        updated_message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.queue()).await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // Update the draft
+    draft.subject = new_subject.to_owned();
+    draft.body = new_body.to_owned();
+    draft.to_list = new_to_list.clone();
+    draft.cc_list = new_cc_list.clone();
+    draft.bcc_list = new_bcc_list.clone();
+    draft.save(user_ctx.queue()).await.unwrap();
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    let draft_message_id = draft
+        .message_id(user_ctx.user_stash())
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Opening the draft and check if all the information is up to date
+    let draft = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(draft.body, new_body);
+    assert_eq!(draft.subject, new_subject);
+    assert_eq!(draft.to_list, new_to_list);
+    assert_eq!(draft.cc_list, new_cc_list);
+    assert_eq!(draft.bcc_list, new_bcc_list);
 }
 
 #[tokio::test]

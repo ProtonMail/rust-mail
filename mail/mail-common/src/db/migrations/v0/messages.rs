@@ -157,7 +157,7 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
         indoc! {"
         CREATE TABLE draft_metadata (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            local_message_id INTEGER DEFAULT NULL,
+            local_message_id INTEGER DEFAULT NULL UNIQUE,
             local_conversation_id INTEGER DEFAULT NULL,
             local_parent_id INTEGER DEFAULT NULL,
             reply_mode INTEGER DEFAULT NULL,
