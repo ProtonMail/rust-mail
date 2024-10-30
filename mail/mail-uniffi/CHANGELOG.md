@@ -8,10 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Added `Mailbox::all_mail()` constructor.
+
 ### Changed
 
-  - Refactor the `available_actions_for_messages` and `available_actions_for_conversations` functions
-  - `all_available_bottom_bar_actions_for_message` and `all_available_bottom_bar_actions_for_conversations` now contains local_id for `Labels`
+  - Refactored the `available_actions_for_messages()` and
+    `available_actions_for_conversations()` functions.
+  - `all_available_bottom_bar_actions_for_message()` and
+    `all_available_bottom_bar_actions_for_conversations()` now contains
+    `local_id` for `Labels`.
+
 
 ## [0.18.0] - 2024-10-28
 
@@ -22,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Reduce error log spam.
+
 
 ## [0.17.0] - 2024-10-28
 
