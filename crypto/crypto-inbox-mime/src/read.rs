@@ -8,6 +8,7 @@ use std::str::FromStr;
 use mail_parser::{Header, MimeHeaders};
 use mail_parser::{Message, MessageParser};
 use rand::RngCore;
+use serde::{Deserialize, Serialize};
 
 use crate::constants::mime_extensions;
 use crate::Disposition;
@@ -38,7 +39,7 @@ pub trait ProcessMime {
 }
 
 /// An attachment extracted and from a mime message and processed.
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ProcessedAttachment {
     /// Unique id across all attachments in an inbox.
     pub id: String,

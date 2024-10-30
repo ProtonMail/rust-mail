@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+- Make `ProcessedAttachment` serializable/deserializable.
+
 ## [0.3.1] - 2024-10-22
 
 ### Changed
