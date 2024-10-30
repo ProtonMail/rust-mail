@@ -113,6 +113,19 @@ impl Mailbox {
     }
 
     /// Create a new mailbox for Inbox.
+    ///
+    /// This mailbox will contain mail items from the Inbox alone, which is a
+    /// special system label.
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx` - The mail user session. Note that this is a session that is
+    ///           already authenticated and has a valid user context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mailbox could not be created or synced.
+    ///
     #[uniffi::constructor]
     pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
         let ctx = ctx.ctx().clone();
@@ -124,11 +137,49 @@ impl Mailbox {
         .await
     }
 
+    /// Create a new mailbox for all mail items.
+    ///
+    /// This mailbox will contain all mail items, from all labels, using the
+    /// special system label "All Mail".
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx` - The mail user session. Note that this is a session that is
+    ///           already authenticated and has a valid user context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mailbox could not be created or synced.
+    ///
+    #[uniffi::constructor]
+    pub async fn all_mail(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
+        let ctx = ctx.ctx().clone();
+        uniffi_async(async move {
+            let mbox =
+                proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::all_mail()).await?;
+            Self::sync(mbox).await
+        })
+        .await
+    }
+
     /// Create a new mailbox for a given label id.
+    ///
+    /// This mailbox will contain mail items from the specified label only.
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx`      - The mail user session. Note that this is a session that
+    ///                is already authenticated and has a valid user context.
+    /// * `label_id` - The local ID of the label to create the mailbox for.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mailbox could not be created or synced.
+    ///
     #[uniffi::constructor]
     pub async fn with_label_id(ctx: &MailUserSession, label_id: Id) -> MailboxResult<Arc<Self>> {
-        // Note: This is a workaround for the default constructor not being able to be
-        // generated on Kotlin.
+        // Note: This is a workaround for the default constructor not being able to
+        // be generated on Kotlin.
         Self::new(ctx, label_id).await
     }
 
