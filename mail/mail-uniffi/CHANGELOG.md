@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remove damping on account and session watchers
 
 
+### Fixed
+  - Live query updates should be sent only to the table they apply to
+
+
 ## [0.18.0] - 2024-10-28
 
 ### Added

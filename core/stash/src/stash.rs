@@ -1453,11 +1453,45 @@ impl Stash {
     /// * [`Notification`]
     ///
     pub async fn subscribe(&self) -> Result<QueueReceiver<Notification>, StashError> {
+        self.subscribe_internal(None).await
+    }
+
+    /// Subscribes to notifications of changes to a specific table.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::subscribe()`].
+    pub async fn subscribe_to(
+        &self,
+        table: &str,
+    ) -> Result<QueueReceiver<Notification>, StashError> {
+        self.subscribe_internal(Some(table.to_owned())).await
+    }
+
+    /// Internal helper method to handle database change subscriptions.
+    ///
+    /// # Parameters
+    ///
+    /// * `table` - Optional table name to subscribe to. If None, subscribes to all tables.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    /// * [`StashError::OneShotError`]
+    /// * [`StashError::QueueError`]
+    /// * [`StashError::SubscriptionError`]
+    ///
+    async fn subscribe_internal(
+        &self,
+        table: Option<String>,
+    ) -> Result<QueueReceiver<Notification>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let (sender, receiver) = flume::unbounded::<Notification>();
         let operation = Operation::Subscribe(Subscription {
             channel: Some(that_end),
             queue: sender,
+            table,
         });
         self.queue
             .send_async(operation)
@@ -1683,6 +1717,9 @@ struct Subscription {
     /// received them from the database, it will then send them to all
     /// subscribers, with this being a subscriber-specific queue.
     queue: QueueSender<Notification>,
+
+    /// The table to subscribe to. If [`None`], all tables are subscribed to.
+    table: Option<String>,
 }
 
 impl OperationLogic for Subscription {
@@ -2626,7 +2663,7 @@ struct Worker {
 
     /// The list of subscribers to the stash. This is used to send notifications
     /// whenever changes are made to the database.
-    subscribers: Vec<QueueSender<Notification>>,
+    subscribers: Vec<(QueueSender<Notification>, Option<String>)>,
 
     /// The [`Stash] instance that the worker belongs to.
     stash: Stash,
@@ -2742,8 +2779,11 @@ impl Worker {
                     drop(self.runtime.spawn(async move {
                         debug!("{}", debug_string);
                         for notification in notifications {
-                            for subscriber in &subscribers {
-                                drop(subscriber.send_async(notification.clone()).await);
+                            #[allow(clippy::pattern_type_mismatch)]
+                            for (subscriber, table) in &subscribers {
+                                if table.as_ref().is_none_or(|t| t == &notification.table) {
+                                    drop(subscriber.send_async(notification.clone()).await);
+                                }
                             }
                         }
                     }));
@@ -2828,15 +2868,18 @@ impl Worker {
 
                 // Remove any subscribers that have perished.
                 // TODO(ET-1400): Proper unsubscribe API.
-                self.subscribers.retain(|s| !s.is_disconnected());
+                #[allow(clippy::pattern_type_mismatch)]
+                self.subscribers.retain(|(s, _)| !s.is_disconnected());
 
                 let subscribers = self.subscribers.clone();
                 drop(self.runtime.spawn(async move {
-                    for subscriber in subscribers {
-                        // Because there is no way to unsubscribe right now
-                        // this can fail very frequently. We used to log the
-                        // errors here, but that can lead to log spam.
-                        drop(subscriber.send_async(notification.clone()).await);
+                    for (subscriber, table) in subscribers {
+                        if table.as_ref().is_none_or(|t| t == &notification.table) {
+                            // Because there is no way to unsubscribe right now
+                            // this can fail very frequently. We used to log the
+                            // errors here, but that can lead to log spam.
+                            drop(subscriber.send_async(notification.clone()).await);
+                        }
                     }
                 }));
             }
@@ -2908,7 +2951,11 @@ impl Worker {
             }
             Operation::Subscribe(mut subscription) => {
                 debug!("Stash: Subscription request");
-                self.subscribers.push(subscription.queue.clone());
+
+                let sub_queue = subscription.queue.clone();
+                let sub_table = subscription.table.clone();
+                self.subscribers.push((sub_queue, sub_table));
+
                 // Although this operation is infallible, a response still needs to be sent,
                 // as the caller might be waiting on the oneshot channel in order to
                 // continue.

@@ -2440,7 +2440,7 @@ async fn watch_messages_in_label() {
         .unwrap();
         tx.execute(
             "UPDATE labels SET color='OxFFFFFF' WHERE local_id=?",
-            params![30, local_label_id1],
+            params![local_label_id1],
         )
         .await
         .unwrap();
