@@ -92,12 +92,12 @@ impl Draft {
         self.draft.read().to_list.clone()
     }
 
-    /// Get the To recipients of the draft.
+    /// Get the Cc recipients of the draft.
     pub fn cc_recipients(&self) -> Vec<String> {
         self.draft.read().cc_list.clone()
     }
 
-    /// Get the To recipients of the draft.
+    /// Get the Bcc recipients of the draft.
     pub fn bcc_recipients(&self) -> Vec<String> {
         self.draft.read().bcc_list.clone()
     }
@@ -110,6 +110,31 @@ impl Draft {
     /// Get the draft's body.
     pub fn body(&self) -> String {
         self.draft.read().body.clone()
+    }
+
+    /// Set the To `recipients` of the draft.
+    pub fn set_to_recipients(&self, recipients: Vec<String>) {
+        self.draft.write().to_list = recipients;
+    }
+
+    /// Set the Cc `recipients` of the draft.
+    pub fn set_cc_recipients(&self, recipients: Vec<String>) {
+        self.draft.write().cc_list = recipients;
+    }
+
+    /// Set the Bcc `recipients` of the draft.
+    pub fn set_bcc_recipients(&self, recipients: Vec<String>) {
+        self.draft.write().bcc_list = recipients;
+    }
+
+    /// Set the draft's `subject`.
+    pub fn set_subject(&self, subject: String) {
+        self.draft.write().subject = subject;
+    }
+
+    /// Set the draft's `body`.
+    pub fn set_body(&self, body: String) {
+        self.draft.write().body = body;
     }
 
     /// Get the draft's attachments

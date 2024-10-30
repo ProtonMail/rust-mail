@@ -4,7 +4,6 @@ use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::info;
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::{Draft, ReplyMode};
@@ -123,7 +122,6 @@ impl Composer {
         self.draft.mime_type = MimeType::TextPlain;
         self.draft.subject = self.subject_input_state.value().to_owned();
         self.draft.body = self.text_area.lines().join("\n");
-        info!("\n{}", self.draft.body);
         self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value());
         self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value());
         self.draft.to_list = recipients_value_to_list(self.to_input_state.value());
