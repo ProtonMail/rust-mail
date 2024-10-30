@@ -14,6 +14,8 @@ use proton_event_loop::EventLoopError;
 pub enum UserActionError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     InvalidAction(Reason),
+    /// This error is related with the session (i.e. like a session expired)
+    SessionExpired,
     /// This error come from the Backend (i.e. like a 404 error)
     ServerError(UserApiServiceError),
     /// This error come form network (i.e. like can't connect to backend)
@@ -77,7 +79,7 @@ impl From<AppError> for UserActionError {
             AppError::ActionStillQueued(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissing(_string) => Self::Unexpected(Unexpected::Database),
             AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Unknown),
-            AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Network,
+            AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::ConversationDoesNotHaveLabel(_, _) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
@@ -119,24 +121,26 @@ impl From<MailContextError> for UserActionError {
             MailContextError::CacheError(cache_error) => Self::from(cache_error),
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
-            MailContextError::Draft(error) => Self::from(error),
+            MailContextError::Draft(draft_error) => Self::from(draft_error),
         }
     }
 }
 
 impl From<DraftError> for UserActionError {
-    fn from(value: DraftError) -> Self {
-        match value {
-            DraftError::UserHasNoAddresses => Self::InvalidAction(Reason::InvalidParameter),
-            DraftError::AddressNotFound(_) => Self::Network,
-            DraftError::MessageNotADraft(_) => Self::InvalidAction(Reason::InvalidParameter),
-            DraftError::CreateMetadataNotFound(_) => Self::Unexpected(Unexpected::Database),
-            DraftError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
-            DraftError::AttachmentDoesNotHaveKeyPackets(_) => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            DraftError::ReplyOrForwardToDraft(_) => Self::InvalidAction(Reason::InvalidParameter),
-        }
+    fn from(_value: DraftError) -> Self {
+        Self::Unexpected(Unexpected::Draft)
+    }
+}
+
+impl From<EventLoopError> for UserActionError {
+    fn from(_value: EventLoopError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
+    }
+}
+
+impl From<SubscriberError> for UserActionError {
+    fn from(_value: SubscriberError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
     }
 }
 
@@ -149,32 +153,6 @@ impl From<ContactError> for UserActionError {
             ContactError::Validation(_vcard_validation_error) => {
                 Self::Unexpected(Unexpected::Unknown) // TODO: This will be changed in the future work on contacts
             }
-        }
-    }
-}
-
-impl From<EventLoopError> for UserActionError {
-    fn from(error: EventLoopError) -> Self {
-        match error {
-            EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
-                Self::from(anyhow)
-            }
-            EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
-            EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
-            EventLoopError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
-        }
-    }
-}
-
-impl From<SubscriberError> for UserActionError {
-    fn from(error: SubscriberError) -> Self {
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(anyhow) => Self::from(anyhow),
-            SubscriberError::Send | SubscriberError::Receive => {
-                Self::Unexpected(Unexpected::Internal)
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
         }
     }
 }

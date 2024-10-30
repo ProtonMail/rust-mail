@@ -23,6 +23,8 @@ pub enum UnexpectedError {
     Os,
     /// Error related to the event queue
     Queue,
+    /// Error related to the composing draft
+    Draft,
     /// Error with no identified operation
     Unknown,
 }
@@ -40,6 +42,7 @@ impl From<RealUnexpected> for UnexpectedError {
             RealUnexpected::Network => Self::Network,
             RealUnexpected::Os => Self::Os,
             RealUnexpected::Queue => Self::Queue,
+            RealUnexpected::Draft => Self::Draft,
             RealUnexpected::Unknown => Self::Unknown,
         }
     }

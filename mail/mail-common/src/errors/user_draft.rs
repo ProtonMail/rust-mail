@@ -3,14 +3,14 @@ use crate::draft::Error as DraftError;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{AppError, MailContextError, MailboxError, SidebarError};
+use proton_action_queue::action::Action;
+use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_api_core::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 
-/// Represent an error coming from the session
-#[derive(Debug)]
-pub enum UserSessionError {
+pub enum UserDraftError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     Reason(Reason),
     /// This error is related with the session (i.e. like a session expired)
@@ -29,19 +29,19 @@ pub enum Reason {
     UnknownLabel,
 }
 
-impl<E: Into<Unexpected>> From<E> for UserSessionError {
+impl<E: Into<Unexpected>> From<E> for UserDraftError {
     fn from(error: E) -> Self {
         Self::Unexpected(error.into())
     }
 }
 
-impl From<Reason> for UserSessionError {
+impl From<Reason> for UserDraftError {
     fn from(reason: Reason) -> Self {
         Self::Reason(reason)
     }
 }
 
-impl From<ApiServiceError> for UserSessionError {
+impl From<ApiServiceError> for UserDraftError {
     fn from(error: ApiServiceError) -> Self {
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
@@ -50,7 +50,7 @@ impl From<ApiServiceError> for UserSessionError {
     }
 }
 
-impl From<MailContextError> for UserSessionError {
+impl From<MailContextError> for UserDraftError {
     fn from(error: MailContextError) -> Self {
         match error {
             MailContextError::Crypto
@@ -75,7 +75,7 @@ impl From<MailContextError> for UserSessionError {
     }
 }
 
-impl From<DraftError> for UserSessionError {
+impl From<DraftError> for UserDraftError {
     fn from(error: DraftError) -> Self {
         match error {
             DraftError::UserHasNoAddresses => Self::Unexpected(Unexpected::Database),
@@ -95,20 +95,19 @@ impl From<DraftError> for UserSessionError {
     }
 }
 
-impl From<EventLoopError> for UserSessionError {
-    fn from(error: EventLoopError) -> Self {
-        match error {
-            EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
-                Self::from(anyhow)
-            }
-            EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
-            EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
-            EventLoopError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
-        }
+impl From<EventLoopError> for UserDraftError {
+    fn from(_error: EventLoopError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
     }
 }
 
-impl From<ActionError> for UserSessionError {
+impl From<SubscriberError> for UserDraftError {
+    fn from(_error: SubscriberError) -> Self {
+        Self::Unexpected(Unexpected::Queue)
+    }
+}
+
+impl From<ActionError> for UserDraftError {
     fn from(error: ActionError) -> Self {
         match error {
             ActionError::Http(api_service_error) => Self::from(api_service_error),
@@ -120,11 +119,27 @@ impl From<ActionError> for UserSessionError {
     }
 }
 
-impl From<AppError> for UserSessionError {
+impl<T> From<InternalActionError<T>> for UserDraftError
+where
+    T: Action,
+    T::Error: Into<Self>,
+{
+    fn from(error: InternalActionError<T>) -> Self {
+        match error {
+            #[allow(clippy::useless_conversion)] // It is not useless clippy
+            InternalActionError::Action(error) => Self::from(error.into()),
+            InternalActionError::Queue(error) => Self::from(error),
+        }
+    }
+}
+
+impl From<AppError> for UserDraftError {
     fn from(error: AppError) -> Self {
         match error {
             AppError::API(api_service_error) => Self::from(api_service_error),
-            AppError::LabelDoesNotHaveRemoteId(_local_label_id) => Self::Network,
+            AppError::LabelDoesNotHaveRemoteId(_local_label_id) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::InvalidMimeType(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
@@ -174,7 +189,7 @@ impl From<AppError> for UserSessionError {
     }
 }
 
-impl From<ContactError> for UserSessionError {
+impl From<ContactError> for UserDraftError {
     fn from(error: ContactError) -> Self {
         match error {
             ContactError::CardNotFound(_string) => Self::Unexpected(Unexpected::Unknown),
@@ -185,20 +200,7 @@ impl From<ContactError> for UserSessionError {
     }
 }
 
-impl From<SubscriberError> for UserSessionError {
-    fn from(error: SubscriberError) -> Self {
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(anyhow) => Self::from(anyhow),
-            SubscriberError::Send | SubscriberError::Receive => {
-                Self::Unexpected(Unexpected::Internal)
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
-        }
-    }
-}
-
-impl From<MailboxError> for UserSessionError {
+impl From<MailboxError> for UserDraftError {
     fn from(error: MailboxError) -> Self {
         match error {
             MailboxError::LabelNotFound(_local_label_id) => Self::Reason(Reason::UnknownLabel),
@@ -234,7 +236,7 @@ impl From<MailboxError> for UserSessionError {
     }
 }
 
-impl From<SidebarError> for UserSessionError {
+impl From<SidebarError> for UserDraftError {
     fn from(error: SidebarError) -> Self {
         match error {
             SidebarError::MailContext(mail_context_error) => Self::from(mail_context_error),

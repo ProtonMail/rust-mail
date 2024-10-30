@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
 use crate::core::datatypes::Id;
-use crate::errors::user_actions::UserActionError;
+use crate::errors::user_draft::UserDraftError;
 use crate::mail::datatypes::MessageAddress;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
-use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
+use proton_mail_common::errors::user_draft::UserDraftError as RealUserDraftError;
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -39,7 +39,7 @@ impl Draft {
     pub async fn new(
         session: &MailUserSession,
         create_mode: DraftCreateMode,
-    ) -> Result<Arc<Draft>, UserActionError> {
+    ) -> Result<Arc<Draft>, UserDraftError> {
         let ctx = session.ctx();
         uniffi_async(async move {
             let queue_output = match create_mode {
@@ -54,9 +54,9 @@ impl Draft {
                     RealDraft::action_create_reply(ctx.queue(), ReplyMode::Forward, id.into()).await
                 }
             }
-            .map_err(RealUserActionError::from)?;
+            .map_err(RealUserDraftError::from)?;
 
-            Result::<_, RealUserActionError>::Ok(Arc::new(Self {
+            Result::<_, RealUserDraftError>::Ok(Arc::new(Self {
                 draft: queue_output.local,
             }))
         })
@@ -73,10 +73,10 @@ impl Draft {
     pub async fn open(
         session: &MailUserSession,
         message_id: Id,
-    ) -> Result<Arc<Draft>, UserActionError> {
+    ) -> Result<Arc<Draft>, UserDraftError> {
         let ctx = session.ctx();
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(Arc::new(Self {
+            Result::<_, RealUserDraftError>::Ok(Arc::new(Self {
                 draft: RealDraft::open(&ctx, message_id.into()).await?,
             }))
         })

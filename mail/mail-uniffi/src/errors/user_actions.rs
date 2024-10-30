@@ -10,6 +10,7 @@ export_void_result!(VoidUserActionResult, UserActionError);
 #[derive(Debug, uniffi::Enum)]
 pub enum UserActionError {
     InvalidAction(ActionReason),
+    SessionExpired,
     ServerError(UserApiServiceError),
     Network,
     Unexpected(UnexpectedError),
@@ -21,6 +22,7 @@ impl From<RealUserActionError> for UserActionError {
             RealUserActionError::InvalidAction(reason) => {
                 Self::InvalidAction(ActionReason::from(reason))
             }
+            RealUserActionError::SessionExpired => Self::SessionExpired,
             RealUserActionError::ServerError(user_api_service_error) => {
                 Self::ServerError(UserApiServiceError::from(user_api_service_error))
             }

@@ -4,12 +4,12 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::errors::user_actions::UserActionError;
+use crate::errors::user_session::UserSessionError;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
+use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
 use proton_mail_common::models::{
     Conversation as RealConversation, ConversationDataSource, Message as RealMessage,
     MessageDataSource, PaginatorCompat as RealPaginator,
@@ -54,9 +54,9 @@ impl ConversationPaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Conversation>, UserActionError> {
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealUserSessionError>::Ok(
                 self.real_paginator
                     .next_page()
                     .await?
@@ -83,9 +83,9 @@ impl ConversationPaginator {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn reload(self: Arc<Self>) -> Result<Vec<Conversation>, UserActionError> {
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealUserSessionError>::Ok(
                 self.real_paginator
                     .reload()
                     .await?
@@ -147,9 +147,9 @@ impl MessagePaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Message>, UserActionError> {
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealUserSessionError>::Ok(
                 self.real_paginator
                     .next_page()
                     .await?
@@ -175,9 +175,9 @@ impl MessagePaginator {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn reload(self: Arc<Self>) -> Result<Vec<Message>, UserActionError> {
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealUserSessionError>::Ok(
                 self.real_paginator
                     .reload()
                     .await?

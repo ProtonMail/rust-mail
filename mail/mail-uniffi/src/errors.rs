@@ -1,7 +1,9 @@
 pub(crate) mod api_service_error;
 pub(crate) mod login_flow;
 pub(crate) mod unexpected;
+pub(crate) mod update_event;
 pub(crate) mod user_actions;
+pub(crate) mod user_draft;
 pub(crate) mod user_session;
 
 #[macro_export]

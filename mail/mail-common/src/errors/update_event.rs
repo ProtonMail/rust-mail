@@ -1,6 +1,6 @@
+use super::api_service_error::UserApiServiceError;
 use crate::actions::ActionError;
 use crate::draft::Error as DraftError;
-use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{AppError, MailContextError, MailboxError, SidebarError};
 use proton_api_core::service::ApiServiceError;
@@ -8,9 +8,8 @@ use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 
-/// Represent an error coming from the session
 #[derive(Debug)]
-pub enum UserSessionError {
+pub enum UpdateEventError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     Reason(Reason),
     /// This error is related with the session (i.e. like a session expired)
@@ -23,25 +22,25 @@ pub enum UserSessionError {
     Unexpected(Unexpected),
 }
 
+impl<E: Into<Unexpected>> From<E> for UpdateEventError {
+    fn from(error: E) -> Self {
+        Self::Unexpected(error.into())
+    }
+}
+
 /// Reason for invalid Action
 #[derive(Debug)]
 pub enum Reason {
     UnknownLabel,
 }
 
-impl<E: Into<Unexpected>> From<E> for UserSessionError {
-    fn from(error: E) -> Self {
-        Self::Unexpected(error.into())
-    }
-}
-
-impl From<Reason> for UserSessionError {
+impl From<Reason> for UpdateEventError {
     fn from(reason: Reason) -> Self {
         Self::Reason(reason)
     }
 }
 
-impl From<ApiServiceError> for UserSessionError {
+impl From<ApiServiceError> for UpdateEventError {
     fn from(error: ApiServiceError) -> Self {
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
@@ -50,52 +49,7 @@ impl From<ApiServiceError> for UserSessionError {
     }
 }
 
-impl From<MailContextError> for UserSessionError {
-    fn from(error: MailContextError) -> Self {
-        match error {
-            MailContextError::Crypto
-            | MailContextError::KeyChainHasNoKey
-            | MailContextError::Login(_) => Self::Unexpected(Unexpected::Crypto),
-            MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
-            MailContextError::IO(io_error) => Self::from(io_error),
-            MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),
-            MailContextError::EventLoop(event_loop_error) => Self::from(event_loop_error),
-            MailContextError::ActionQueue(queue_error) => Self::from(queue_error),
-            MailContextError::Action(action_error) => Self::from(action_error),
-            MailContextError::QueuedAction(queued_error) => Self::from(queued_error),
-            MailContextError::PGPKeyAccess(key_handling_error) => Self::from(key_handling_error),
-            MailContextError::App(app_error) => Self::from(app_error),
-            MailContextError::Stash(stash_error) => Self::from(stash_error),
-            MailContextError::Api(api_service_error) => Self::from(api_service_error),
-            MailContextError::CacheError(cache_error) => Self::from(cache_error),
-            MailContextError::Other(anyhow) => Self::from(anyhow),
-            MailContextError::ContactError(contact_error) => Self::from(contact_error),
-            MailContextError::Draft(draft_error) => Self::from(draft_error),
-        }
-    }
-}
-
-impl From<DraftError> for UserSessionError {
-    fn from(error: DraftError) -> Self {
-        match error {
-            DraftError::UserHasNoAddresses => Self::Unexpected(Unexpected::Database),
-            DraftError::AddressNotFound(_remote_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::MessageNotADraft(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-            DraftError::CreateMetadataNotFound(_local_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::MessageBodyMissing(_local_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::AttachmentDoesNotHaveKeyPackets(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-            DraftError::ReplyOrForwardToDraft(_local_id) => {
-                Self::Unexpected(Unexpected::InvalidArgument)
-            }
-        }
-    }
-}
-
-impl From<EventLoopError> for UserSessionError {
+impl From<EventLoopError> for UpdateEventError {
     fn from(error: EventLoopError) -> Self {
         match error {
             EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
@@ -108,7 +62,48 @@ impl From<EventLoopError> for UserSessionError {
     }
 }
 
-impl From<ActionError> for UserSessionError {
+impl From<SubscriberError> for UpdateEventError {
+    fn from(error: SubscriberError) -> Self {
+        match error {
+            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
+            SubscriberError::Other(anyhow) => Self::from(anyhow),
+            SubscriberError::Send | SubscriberError::Receive => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            SubscriberError::StashError(stash_error) => Self::from(stash_error),
+        }
+    }
+}
+
+impl From<MailContextError> for UpdateEventError {
+    fn from(error: MailContextError) -> Self {
+        match error {
+            MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
+                Self::Unexpected(Unexpected::Crypto)
+            }
+            MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
+            MailContextError::IO(io_error) => Self::from(io_error),
+            MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),
+            MailContextError::EventLoop(event_loop_error) => Self::from(event_loop_error),
+            MailContextError::QueuedAction(queued_error) => Self::from(queued_error),
+            MailContextError::PGPKeyAccess(key_handling_error) => Self::from(key_handling_error),
+            MailContextError::App(app_error) => Self::from(app_error),
+            MailContextError::Stash(stash_error) => Self::from(stash_error),
+            MailContextError::Api(api_service_error) => Self::from(api_service_error),
+            MailContextError::CacheError(cache_error) => Self::from(cache_error),
+            MailContextError::ContactError(contact_error) => Self::from(contact_error),
+            _ => Self::Unexpected(Unexpected::Unknown),
+        }
+    }
+}
+
+impl From<DraftError> for UpdateEventError {
+    fn from(_error: DraftError) -> Self {
+        Self::Unexpected(Unexpected::Draft)
+    }
+}
+
+impl From<ActionError> for UpdateEventError {
     fn from(error: ActionError) -> Self {
         match error {
             ActionError::Http(api_service_error) => Self::from(api_service_error),
@@ -120,11 +115,13 @@ impl From<ActionError> for UserSessionError {
     }
 }
 
-impl From<AppError> for UserSessionError {
+impl From<AppError> for UpdateEventError {
     fn from(error: AppError) -> Self {
         match error {
             AppError::API(api_service_error) => Self::from(api_service_error),
-            AppError::LabelDoesNotHaveRemoteId(_local_label_id) => Self::Network,
+            AppError::LabelDoesNotHaveRemoteId(_local_label_id) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::InvalidMimeType(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
@@ -174,7 +171,7 @@ impl From<AppError> for UserSessionError {
     }
 }
 
-impl From<ContactError> for UserSessionError {
+impl From<ContactError> for UpdateEventError {
     fn from(error: ContactError) -> Self {
         match error {
             ContactError::CardNotFound(_string) => Self::Unexpected(Unexpected::Unknown),
@@ -185,20 +182,7 @@ impl From<ContactError> for UserSessionError {
     }
 }
 
-impl From<SubscriberError> for UserSessionError {
-    fn from(error: SubscriberError) -> Self {
-        match error {
-            SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(anyhow) => Self::from(anyhow),
-            SubscriberError::Send | SubscriberError::Receive => {
-                Self::Unexpected(Unexpected::Internal)
-            }
-            SubscriberError::StashError(stash_error) => Self::from(stash_error),
-        }
-    }
-}
-
-impl From<MailboxError> for UserSessionError {
+impl From<MailboxError> for UpdateEventError {
     fn from(error: MailboxError) -> Self {
         match error {
             MailboxError::LabelNotFound(_local_label_id) => Self::Reason(Reason::UnknownLabel),
@@ -234,7 +218,7 @@ impl From<MailboxError> for UserSessionError {
     }
 }
 
-impl From<SidebarError> for UserSessionError {
+impl From<SidebarError> for UpdateEventError {
     fn from(error: SidebarError) -> Self {
         match error {
             SidebarError::MailContext(mail_context_error) => Self::from(mail_context_error),

@@ -10,6 +10,7 @@ export_void_result!(VoidUserSessionResult, UserSessionError);
 #[derive(Debug, uniffi::Enum)]
 pub enum UserSessionError {
     Reason(SessionReason),
+    SessionExpired,
     ServerError(UserApiServiceError),
     Network,
     Unexpected(UnexpectedError),
@@ -19,6 +20,7 @@ impl From<RealUserSessionError> for UserSessionError {
     fn from(error: RealUserSessionError) -> Self {
         match error {
             RealUserSessionError::Reason(reason) => Self::Reason(SessionReason::from(reason)),
+            RealUserSessionError::SessionExpired => Self::SessionExpired,
             RealUserSessionError::ServerError(user_api_service_error) => {
                 Self::ServerError(UserApiServiceError::from(user_api_service_error))
             }
