@@ -124,11 +124,11 @@ impl StateHandler for ConversationsState {
         }
 
         match key.code {
-            KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up => {
                 self.table_state.prev();
                 Command::None
             }
-            KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 Command::None
             }
@@ -156,6 +156,14 @@ impl StateHandler for ConversationsState {
                 .map(|id| {
                     Command::message(Message::OpenLabelItemPopup(Item::Conversation(id)).into())
                 })
+                .unwrap_or_default(),
+            KeyCode::Char('f') => self
+                .selected_conversation()
+                .map(|id| Command::message(ConversationMessage::StarConversation(id).into()))
+                .unwrap_or_default(),
+            KeyCode::Char('F') => self
+                .selected_conversation()
+                .map(|id| Command::message(ConversationMessage::UnstarConversation(id).into()))
                 .unwrap_or_default(),
             KeyCode::Char('L') => self
                 .selected_conversation()
@@ -206,6 +214,8 @@ impl StateHandler for ConversationsState {
                         self.conversations_refreshed(conversations);
                         Command::None
                     }
+                    ConversationMessage::StarConversation(id) => star_conversation(mbox, id),
+                    ConversationMessage::UnstarConversation(id) => unstar_conversation(mbox, id),
                     _ => Command::None,
                 }
             }
@@ -347,6 +357,34 @@ fn move_conversation(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+
+fn star_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match Conversation::action_star(ctx.session(), ctx.queue(), vec![conversation_id]).await {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to label conversation: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+
+fn unstar_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match Conversation::action_unstar(ctx.session(), ctx.queue(), vec![conversation_id]).await {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to label conversation: {e}");
                 tracing::error!("{e}");
                 Command::message(e.into())
             }

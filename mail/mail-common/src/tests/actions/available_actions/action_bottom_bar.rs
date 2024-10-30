@@ -13,8 +13,8 @@ struct TestCase<T> {
     items: Vec<T>,
     is_custom: bool,
     toolbar_actions: Vec<String>,
-    expected_visible: Vec<BottomBarActions>,
-    expected_hidden: Vec<BottomBarActions>,
+    expected_visible: Vec<TestActions>,
+    expected_hidden: Vec<TestActions>,
 }
 
 impl<T> Default for TestCase<T> {
@@ -30,6 +30,49 @@ impl<T> Default for TestCase<T> {
     }
 }
 
+#[derive(Debug)]
+enum TestActions {
+    LabelAs,
+    MarkRead,
+    MarkUnread,
+    More,
+    MoveTo,
+    MoveToSystemFolder(MovableSystemFolder),
+    NotSpam,
+    PermanentDelete,
+    Star,
+    Unstar,
+}
+
+impl PartialEq<BottomBarActions> for TestActions {
+    fn eq(&self, other: &BottomBarActions) -> bool {
+        match self {
+            Self::LabelAs => matches!(other, BottomBarActions::LabelAs),
+            Self::MarkRead => matches!(other, BottomBarActions::MarkRead),
+            Self::MarkUnread => matches!(other, BottomBarActions::MarkUnread),
+            Self::More => matches!(other, BottomBarActions::More),
+            Self::MoveTo => matches!(other, BottomBarActions::MoveTo),
+            Self::MoveToSystemFolder(label) => {
+                if let BottomBarActions::MoveToSystemFolder(other) = other {
+                    *label == other.name
+                } else {
+                    false
+                }
+            }
+            Self::NotSpam => matches!(other, BottomBarActions::NotSpam),
+            Self::PermanentDelete => matches!(other, BottomBarActions::PermanentDelete),
+            Self::Star => matches!(other, BottomBarActions::Star),
+            Self::Unstar => matches!(other, BottomBarActions::Unstar),
+        }
+    }
+}
+
+impl PartialEq<TestActions> for BottomBarActions {
+    fn eq(&self, other: &TestActions) -> bool {
+        other == self
+    }
+}
+
 mod message {
     use super::*;
     use crate::datatypes::MovableSystemFolder;
@@ -37,15 +80,15 @@ mod message {
 
     static DEFAULT_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -61,16 +104,16 @@ mod message {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkRead,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -86,16 +129,16 @@ mod message {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -111,17 +154,17 @@ mod message {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkRead,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MarkUnread,
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -138,14 +181,14 @@ mod message {
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Unstar, BottomBarActions::More],
+        expected_visible: vec![TestActions::Unstar, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MarkUnread,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -153,14 +196,14 @@ mod message {
         items: vec![Message::default(), Message::default()],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Star, BottomBarActions::More],
+        expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MarkUnread,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -174,15 +217,15 @@ mod message {
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Star, BottomBarActions::More],
+        expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::Unstar,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MarkUnread,
+            TestActions::Unstar,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -195,29 +238,29 @@ mod message {
             Message::default(),
         ],
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::Unstar,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::Unstar,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
     static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         is_custom: true,
-        expected_visible: vec![BottomBarActions::More],
+        expected_visible: vec![TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -230,15 +273,13 @@ mod message {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::More,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::LabelAs,
+            TestActions::MoveTo,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::More,
         ],
-        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(
-            MovableSystemFolder::Trash,
-        )],
+        expected_hidden: vec![TestActions::MoveToSystemFolder(MovableSystemFolder::Trash)],
         ..Default::default()
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
@@ -253,12 +294,12 @@ mod message {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::LabelAs,
+            TestActions::MoveTo,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![],
         ..Default::default()
@@ -266,45 +307,45 @@ mod message {
     static ARCHIVE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
     static TRASH_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         current_local: LabelId::trash(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::PermanentDelete,
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::PermanentDelete,
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });
     static SPAM_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         current_local: LabelId::spam(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::PermanentDelete,
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::PermanentDelete,
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::NotSpam,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::NotSpam,
         ],
         ..Default::default()
     });
@@ -387,15 +428,15 @@ mod conversation {
 
     static DEFAULT_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -413,16 +454,16 @@ mod conversation {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkRead,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -440,16 +481,16 @@ mod conversation {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -467,17 +508,17 @@ mod conversation {
             },
         ],
         expected_visible: vec![
-            BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkRead,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::Star,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MarkUnread,
+            TestActions::Star,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -494,13 +535,13 @@ mod conversation {
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Unstar, BottomBarActions::More],
+        expected_visible: vec![TestActions::Unstar, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -508,13 +549,13 @@ mod conversation {
         items: vec![Conversation::default(), Conversation::default()],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Star, BottomBarActions::More],
+        expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -528,14 +569,14 @@ mod conversation {
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
-        expected_visible: vec![BottomBarActions::Star, BottomBarActions::More],
+        expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::Unstar,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::Unstar,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -548,29 +589,29 @@ mod conversation {
             Conversation::default(),
         ],
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::Star,
-            BottomBarActions::Unstar,
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::Star,
+            TestActions::Unstar,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
     static EMPTY_CUSTOM_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         is_custom: true,
-        expected_visible: vec![BottomBarActions::More],
+        expected_visible: vec![TestActions::More],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -583,15 +624,13 @@ mod conversation {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::More,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::LabelAs,
+            TestActions::MoveTo,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::More,
         ],
-        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(
-            MovableSystemFolder::Trash,
-        )],
+        expected_hidden: vec![TestActions::MoveToSystemFolder(MovableSystemFolder::Trash)],
         ..Default::default()
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
@@ -606,12 +645,12 @@ mod conversation {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::LabelAs,
+            TestActions::MoveTo,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![],
         ..Default::default()
@@ -619,45 +658,45 @@ mod conversation {
     static ARCHIVE_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
     static TRASH_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         current_local: LabelId::trash(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::PermanentDelete,
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::PermanentDelete,
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });
     static SPAM_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         current_local: LabelId::spam(),
         expected_visible: vec![
-            BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
-            BottomBarActions::PermanentDelete,
-            BottomBarActions::More,
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::PermanentDelete,
+            TestActions::More,
         ],
         expected_hidden: vec![
-            BottomBarActions::MoveTo,
-            BottomBarActions::LabelAs,
-            BottomBarActions::NotSpam,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::NotSpam,
         ],
         ..Default::default()
     });

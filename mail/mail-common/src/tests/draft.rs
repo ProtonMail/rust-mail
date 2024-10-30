@@ -1,142 +1,72 @@
 pub use super::*;
+use crate::datatypes::attachment;
+use crate::datatypes::{MessageAddress, MessageAddresses};
 use proton_core_common::datatypes::{AddressStatus, AddressType};
+use std::str::FromStr;
 
 #[test]
 fn new_draft_message_creation() {
     let address = address_with_signature("");
-    let display_order = 512_u64;
-    let body_len = 4098_usize;
+    let mail_settings = MailSettings::default();
+    let draft = Draft::new_empty_draft(MetadataId(0), &address, &mail_settings);
 
-    let message = create_new_message(&address, display_order, body_len);
-    assert_eq!(message.display_order, display_order);
-    assert_eq!(message.size, body_len as u64);
-    assert_eq!(message.subject, DEFAULT_SUBJECT);
-    assert_eq!(message.local_address_id, address.local_id.unwrap());
-    assert_eq!(message.remote_address_id, address.remote_id.unwrap());
-    assert_eq!(message.sender.address, address.email);
-    assert_eq!(message.sender.name, address.display_name);
-    assert!(message.to_list.value.is_empty());
-    assert!(message.cc_list.value.is_empty());
-    assert!(message.bcc_list.value.is_empty());
+    assert_eq!(draft.subject, DEFAULT_SUBJECT);
+    assert_eq!(draft.address_id, address.remote_id.unwrap());
+    assert_eq!(draft.sender, address.email);
+    assert!(draft.to_list.is_empty());
+    assert!(draft.cc_list.is_empty());
+    assert!(draft.bcc_list.is_empty());
 }
 
 #[test]
 fn reply_draft_message_creation() {
-    //TODO: Check attachments (ET-1362)
-    let address = address_with_signature("");
-    let mut source_message = existing_message();
-
-    let display_order = 512_u64;
-    let body_len = 4098_usize;
-    let draft = create_new_draft_with_reply_mode(
-        &mut source_message,
-        ReplyMode::Sender,
-        &address,
-        display_order,
-        body_len,
-    );
-
-    assert_eq!(
-        draft.local_conversation_id,
-        source_message.local_conversation_id
-    );
-    assert_eq!(
-        draft.remote_conversation_id,
-        source_message.remote_conversation_id
-    );
+    let (draft, source_message) = create_reply(ReplyMode::Sender);
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert_eq!(draft.sender.address, address.email);
-    assert_eq!(draft.sender.name, address.display_name);
-    assert_eq!(draft.to_list.value, vec![source_message.sender]);
-    assert!(draft.cc_list.value.is_empty());
-    assert!(draft.bcc_list.value.is_empty());
-    assert!(source_message.is_replied);
-    assert!(!(source_message.flags & MessageFlags::REPLIED).is_empty());
-    assert_eq!(draft.display_order, display_order);
-    assert_eq!(draft.size, body_len as u64);
+    assert_eq!(draft.to_list, vec![source_message.sender.address]);
+    assert!(draft.cc_list.is_empty());
+    assert!(draft.bcc_list.is_empty());
+    assert_eq!(draft.attachments, vec![inline_attachment()])
 }
 
 #[test]
 fn reply_all_draft_message_creation() {
-    //TODO: Check attachments (ET-1362)
-    let address = address_with_signature("");
-    let mut source_message = existing_message();
-
-    let display_order = 512_u64;
-    let body_len = 4098_usize;
-    let draft = create_new_draft_with_reply_mode(
-        &mut source_message,
-        ReplyMode::All,
-        &address,
-        display_order,
-        body_len,
-    );
-
-    assert_eq!(
-        draft.local_conversation_id,
-        source_message.local_conversation_id
-    );
-    assert_eq!(
-        draft.remote_conversation_id,
-        source_message.remote_conversation_id
-    );
+    let (draft, source_message) = create_reply(ReplyMode::All);
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert_eq!(draft.sender.address, address.email);
-    assert_eq!(draft.sender.name, address.display_name);
-    assert_eq!(draft.to_list.value, vec![source_message.sender]);
-    assert_eq!(draft.cc_list.value, source_message.cc_list.value);
-    assert!(draft.bcc_list.value.is_empty());
-    assert!(source_message.is_replied_all);
-    assert!(!(source_message.flags & MessageFlags::REPLIED_ALL).is_empty());
-    assert_eq!(draft.display_order, display_order);
-    assert_eq!(draft.size, body_len as u64);
+    assert_eq!(draft.to_list, vec![source_message.sender.address]);
+    assert_eq!(
+        draft.cc_list,
+        source_message
+            .cc_list
+            .value
+            .into_iter()
+            .map(|v| v.address)
+            .collect::<Vec<_>>()
+    );
+    assert!(draft.bcc_list.is_empty());
+    assert_eq!(draft.attachments, vec![inline_attachment()])
 }
 
 #[test]
 fn forward_draft_message_creation() {
-    //TODO: Check attachments (ET-1362)
-    let address = address_with_signature("");
-    let mut source_message = existing_message();
-
-    let display_order = 512_u64;
-    let body_len = 4098_usize;
-    let draft = create_new_draft_with_reply_mode(
-        &mut source_message,
-        ReplyMode::Forward,
-        &address,
-        display_order,
-        body_len,
-    );
-
-    assert_eq!(
-        draft.local_conversation_id,
-        source_message.local_conversation_id
-    );
-    assert_eq!(
-        draft.remote_conversation_id,
-        source_message.remote_conversation_id
-    );
+    let (draft, source_message) = create_reply(ReplyMode::Forward);
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject)
     );
-    assert_eq!(draft.sender.address, address.email);
-    assert_eq!(draft.sender.name, address.display_name);
-    assert!(draft.to_list.value.is_empty());
-    assert!(draft.cc_list.value.is_empty());
-    assert!(draft.bcc_list.value.is_empty());
-    assert!(source_message.is_forwarded);
-    assert!(!(source_message.flags & MessageFlags::FORWARDED).is_empty());
-    assert_eq!(draft.display_order, display_order);
-    assert_eq!(draft.size, body_len as u64);
+    assert!(draft.to_list.is_empty());
+    assert!(draft.cc_list.is_empty());
+    assert!(draft.bcc_list.is_empty());
+    assert_eq!(
+        draft.attachments,
+        vec![inline_attachment(), normal_attachment()]
+    )
 }
-
 #[test]
 fn message_signature_empty_without_address_or_mail_setting_signature() {
     let address = address_with_signature("");
@@ -177,6 +107,27 @@ fn message_signature_with_all_signatures() {
     insta::assert_snapshot!(signature);
 }
 
+fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
+    let address = address_with_signature("");
+    let source_message = existing_message();
+    let source_body_metadata = existing_message_body_metadata();
+    let source_body = "Hello World".to_owned();
+    let mail_settings = MailSettings::default();
+
+    (
+        Draft::new_draft_reply(
+            MetadataId(0),
+            reply_mode,
+            &address,
+            &mail_settings,
+            &source_message,
+            source_body_metadata,
+            source_body,
+            true,
+        ),
+        source_message,
+    )
+}
 fn address_with_signature(signature: impl Into<String>) -> Address {
     Address {
         local_id: Some(local_address_id()),
@@ -214,7 +165,7 @@ fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
 
 fn existing_message() -> Message {
     Message {
-        local_id: None,
+        local_id: Some(local_msg_id()),
         remote_id: None,
         local_conversation_id: Some(local_conversation_id()),
         remote_conversation_id: Some(remote_conversation_id()),
@@ -265,6 +216,23 @@ fn existing_message() -> Message {
     }
 }
 
+fn existing_message_body_metadata() -> MessageBodyMetadata {
+    MessageBodyMetadata {
+        local_message_id: Some(local_msg_id()),
+        remote_message_id: None,
+        header: "".to_string(),
+        mime_type: Default::default(),
+        parsed_headers: Default::default(),
+        attachments: vec![inline_attachment(), normal_attachment()],
+        row_id: None,
+        stash: None,
+    }
+}
+
+fn local_msg_id() -> LocalId {
+    424.into()
+}
+
 fn local_conversation_id() -> LocalId {
     11111111.into()
 }
@@ -282,3 +250,68 @@ fn remote_address_id() -> RemoteId {
 }
 const ADDRESS_SIGNATURE: &str = "My Address Signature";
 const MAIL_SETTINGS_SIGNATURE: &str = "Mail settings signature";
+
+fn inline_attachment_id() -> LocalId {
+    1245555.into()
+}
+
+fn normal_attachment_id() -> LocalId {
+    44623482634.into()
+}
+
+fn inline_attachment() -> Attachment {
+    Attachment {
+        local_id: Some(inline_attachment_id()),
+        remote_id: None,
+        local_address_id: None,
+        remote_address_id: None,
+        local_conversation_id: None,
+        remote_conversation_id: None,
+        local_message_id: None,
+        disposition: Disposition::Inline,
+        enc_signature: None,
+        mime_type: attachment::MimeType::from_str("image/jpeg").unwrap(),
+        filename: "image.jpeg".to_owned(),
+        signature: None,
+        size: 123,
+        cached: false,
+        content_id: None,
+        transfer_encoding: None,
+        image_width: None,
+        image_height: None,
+        row_id: None,
+        remote_message_id: None,
+        is_auto_forwardee: false,
+        sender: None,
+        stash: None,
+        key_packets: None,
+    }
+}
+fn normal_attachment() -> Attachment {
+    Attachment {
+        local_id: Some(normal_attachment_id()),
+        remote_id: None,
+        local_address_id: None,
+        remote_address_id: None,
+        local_conversation_id: None,
+        remote_conversation_id: None,
+        local_message_id: None,
+        disposition: Disposition::Attachment,
+        enc_signature: None,
+        mime_type: attachment::MimeType::from_str("application/pdf").unwrap(),
+        filename: "doc.pdf".to_owned(),
+        signature: None,
+        size: 1024,
+        cached: false,
+        content_id: None,
+        transfer_encoding: None,
+        image_width: None,
+        image_height: None,
+        row_id: None,
+        remote_message_id: None,
+        is_auto_forwardee: false,
+        sender: None,
+        stash: None,
+        key_packets: None,
+    }
+}

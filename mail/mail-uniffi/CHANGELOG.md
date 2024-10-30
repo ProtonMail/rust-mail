@@ -102,6 +102,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
   - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
+## [0.19.0] - 2024-10-28
+
+### Added
+
+  - Added `Mailbox::all_mail()` constructor.
+  - Added `Draft::save()`
+  - Added `Draft::set_subject()`
+  - Added `Draft::set_body()`
+  - Added `Draft::set_to_recipients()`
+  - Added `Draft::set_cc_recipients()`
+  - Added `Draft::set_bcc_recipients()`
+
+### Changed
+
+  - Refactored the `available_actions_for_messages()` and
+    `available_actions_for_conversations()` functions.
+  - `all_available_bottom_bar_actions_for_message()` and
+    `all_available_bottom_bar_actions_for_conversations()` now contains
+    `local_id` for `Labels`.
+  - Remove damping on account and session watchers
+  - Drafts only create data on the first call to `Draft::save()`
+
+
+### Fixed
+  - Live query updates should be sent only to the table they apply to
+
+
+## [0.18.0] - 2024-10-28
+
+### Added
+
+  - Added `get_embedded_attachment()`
+
+### Fixed
+
+  - Reduce error log spam.
+
+
+## [0.17.0] - 2024-10-28
+
+### Added
+
+  - `Draft::attachments()`
+  - `Draft::mime_type()`
+
+### Fixed
+
+  - Fixed user settings update in event loop.
+
 
 ## [0.16.0] - 2024-10-24
 

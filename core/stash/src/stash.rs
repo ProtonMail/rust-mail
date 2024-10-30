@@ -407,8 +407,11 @@ use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
+#[cfg(feature = "stats_log")]
 use tokio::time::interval;
-use tracing::{debug, error, info, warn};
+#[cfg(feature = "stats_log")]
+use tracing::info;
+use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
 
@@ -1450,11 +1453,45 @@ impl Stash {
     /// * [`Notification`]
     ///
     pub async fn subscribe(&self) -> Result<QueueReceiver<Notification>, StashError> {
+        self.subscribe_internal(None).await
+    }
+
+    /// Subscribes to notifications of changes to a specific table.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::subscribe()`].
+    pub async fn subscribe_to(
+        &self,
+        table: &str,
+    ) -> Result<QueueReceiver<Notification>, StashError> {
+        self.subscribe_internal(Some(table.to_owned())).await
+    }
+
+    /// Internal helper method to handle database change subscriptions.
+    ///
+    /// # Parameters
+    ///
+    /// * `table` - Optional table name to subscribe to. If None, subscribes to all tables.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    /// * [`StashError::OneShotError`]
+    /// * [`StashError::QueueError`]
+    /// * [`StashError::SubscriptionError`]
+    ///
+    async fn subscribe_internal(
+        &self,
+        table: Option<String>,
+    ) -> Result<QueueReceiver<Notification>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let (sender, receiver) = flume::unbounded::<Notification>();
         let operation = Operation::Subscribe(Subscription {
             channel: Some(that_end),
             queue: sender,
+            table,
         });
         self.queue
             .send_async(operation)
@@ -1680,6 +1717,9 @@ struct Subscription {
     /// received them from the database, it will then send them to all
     /// subscribers, with this being a subscriber-specific queue.
     queue: QueueSender<Notification>,
+
+    /// The table to subscribe to. If [`None`], all tables are subscribed to.
+    table: Option<String>,
 }
 
 impl OperationLogic for Subscription {
@@ -1883,6 +1923,7 @@ impl Drop for Tether {
             stats.max_tether_lifetime = (time, Arc::downgrade(&self.handle).as_ptr() as usize);
         }
         drop(stats);
+        #[cfg(feature = "stats_log")]
         debug!(
             "Tether ({:p}): Drop (lived for {}µs)",
             Arc::as_ptr(&self.handle),
@@ -2111,6 +2152,7 @@ impl TetheredWorker {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
                                 drop(stats);
+                                #[cfg(feature = "stats_log")]
                                 debug!(
                                     "Tether ({:p}): Transaction comitted (id: {}, lived for {}µs)",
                                     conn_handle.as_ptr(),
@@ -2170,6 +2212,7 @@ impl TetheredWorker {
                         stats.max_query_runtime = (time, instruction.id);
                     }
                     drop(stats);
+                    #[cfg(feature = "stats_log")]
                     debug!(
                         "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
                         instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2217,6 +2260,7 @@ impl TetheredWorker {
                         stats.max_query_runtime = (time, query.id);
                     }
                     drop(stats);
+                    #[cfg(feature = "stats_log")]
                     debug!(
                         "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
                         query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2262,6 +2306,7 @@ impl TetheredWorker {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
                                 drop(stats);
+                                #[cfg(feature = "stats_log")]
                                 debug!(
                                     "Tether ({:p}): Transaction rolled back (id: {}, lived for {}µs)",
                                     conn_handle.as_ptr(),
@@ -2618,7 +2663,7 @@ struct Worker {
 
     /// The list of subscribers to the stash. This is used to send notifications
     /// whenever changes are made to the database.
-    subscribers: Vec<QueueSender<Notification>>,
+    subscribers: Vec<(QueueSender<Notification>, Option<String>)>,
 
     /// The [`Stash] instance that the worker belongs to.
     stash: Stash,
@@ -2724,6 +2769,7 @@ impl Worker {
                     // thread while we loop through them. This way, we can offload the sending
                     // as an async task, plus the subscriber list is a safe snapshot from this
                     // point in time.
+                    //TODO(ET-1400) - Proper unsubscribe support
                     let subscribers = self.subscribers.clone();
                     let debug_string = format!(
                         "Stash: Publishing {} from Tether {:p}",
@@ -2733,10 +2779,10 @@ impl Worker {
                     drop(self.runtime.spawn(async move {
                         debug!("{}", debug_string);
                         for notification in notifications {
-                            for subscriber in &subscribers {
-                                if subscriber.send_async(notification.clone()).await.is_err() {
-                                    // In theory this should never happen, but we also can't do anything with it
-                                    error!("Queue error: Failed to send a Notification to a subscriber");
+                            #[allow(clippy::pattern_type_mismatch)]
+                            for (subscriber, table) in &subscribers {
+                                if table.as_ref().is_none_or(|t| t == &notification.table) {
+                                    drop(subscriber.send_async(notification.clone()).await);
                                 }
                             }
                         }
@@ -2781,6 +2827,7 @@ impl Worker {
                                         stats.max_query_runtime = (time, instruction.id);
                                     }
                                     drop(stats);
+                                    #[cfg(feature = "stats_log")]
                                     debug!(
                                         "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
                                         instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2818,12 +2865,20 @@ impl Worker {
                 // thread while we loop through them. This way, we can offload the sending
                 // as an async task, plus the subscriber list is a safe snapshot from this
                 // point in time.
+
+                // Remove any subscribers that have perished.
+                // TODO(ET-1400): Proper unsubscribe API.
+                #[allow(clippy::pattern_type_mismatch)]
+                self.subscribers.retain(|(s, _)| !s.is_disconnected());
+
                 let subscribers = self.subscribers.clone();
                 drop(self.runtime.spawn(async move {
-                    for subscriber in subscribers {
-                        if subscriber.send_async(notification.clone()).await.is_err() {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Queue error: Failed to send a Notification to a subscriber");
+                    for (subscriber, table) in subscribers {
+                        if table.as_ref().is_none_or(|t| t == &notification.table) {
+                            // Because there is no way to unsubscribe right now
+                            // this can fail very frequently. We used to log the
+                            // errors here, but that can lead to log spam.
+                            drop(subscriber.send_async(notification.clone()).await);
                         }
                     }
                 }));
@@ -2864,6 +2919,7 @@ impl Worker {
                                         stats.max_query_runtime = (time, query.id);
                                     }
                                     drop(stats);
+                                    #[cfg(feature = "stats_log")]
                                     debug!(
                                         "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
                                         query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
@@ -2895,7 +2951,11 @@ impl Worker {
             }
             Operation::Subscribe(mut subscription) => {
                 debug!("Stash: Subscription request");
-                self.subscribers.push(subscription.queue.clone());
+
+                let sub_queue = subscription.queue.clone();
+                let sub_table = subscription.table.clone();
+                self.subscribers.push((sub_queue, sub_table));
+
                 // Although this operation is infallible, a response still needs to be sent,
                 // as the caller might be waiting on the oneshot channel in order to
                 // continue.
@@ -2989,6 +3049,7 @@ impl Worker {
                 tethers: HashMap::new(),
             };
 
+            #[cfg(feature = "stats_log")]
             let _handle = worker.runtime.spawn(async move {
                 let mut last_stats = None;
                 let mut stats_interval = interval(Duration::from_secs(1));
@@ -3563,9 +3624,10 @@ trait OperationLogic {
     /// * `result` - The result to send back to the caller.
     /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
-    fn send_back(&mut self, result: Result<Self::Output, StashError>, stash: &Stash) {
+    fn send_back(&mut self, result: Result<Self::Output, StashError>, _stash: &Stash) {
+        #[cfg(feature = "stats_log")]
         if result.is_err() {
-            error!("Stats at time of error: {:?}", stash.stats());
+            error!("Stats at time of error: {:?}", _stash.stats());
         }
         if let Some(channel) = self.channel().take() {
             // If sending down the oneshot channel fails, send() returns the message to

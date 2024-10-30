@@ -39,8 +39,8 @@ mod draft;
 mod tests;
 
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
-    MessageAvailableActions, MoveAction, ReplyAction,
+    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction, MessageAction,
+    MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
 };
 use crate::datatypes::{
     attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
@@ -549,6 +549,37 @@ impl Attachment {
             )
         "},
             params![local_message_id],
+            interface,
+            None,
+        )
+        .await
+    }
+
+    /// Get all attachments with the given IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_ids` - List of local attachment ids.
+    /// * `interface` - The database interface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
+    pub async fn find_by_ids<A>(
+        attachment_ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let params: Vec<Box<dyn ToSql + Send>> = attachment_ids
+            .into_iter()
+            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
+            .collect();
+        Attachment::find(
+            format!("WHERE local_id IN ({})", vec!["?"; params.len()].join(","),),
+            params,
             interface,
             None,
         )
@@ -2757,7 +2788,6 @@ impl Conversation {
         let mut starred = true;
         let mut deleted = true;
         let mut unread = false;
-        let mut reply_all = false;
 
         for conversation in conversations.iter() {
             if !conversation.is_starred() {
@@ -2768,9 +2798,6 @@ impl Conversation {
             }
             if conversation.num_unread > 0 {
                 unread = true;
-            }
-            if conversation.recipients.value.len() > 1 {
-                reply_all = true;
             }
             let is_conversation_in_view = conversation
                 .labels
@@ -2809,28 +2836,14 @@ impl Conversation {
         let all_system_excluding_view = all_system
             .iter()
             .filter(|label| label.local_id != view.local_id);
-        let move_actions = conversations
-            .iter()
-            .flat_map(|conversation| {
-                MoveAction::vec(all_system_excluding_view.clone(), |label| {
-                    conversation
-                        .labels
-                        .iter()
-                        .map(|conv_label| conv_label.local_label_id)
-                        .contains(&label.local_id)
-                })
-            })
-            .collect_vec();
-        let reply_actions = if reply_all {
-            ReplyAction::all()
-        } else {
-            ReplyAction::single_address()
-        };
+        let move_actions = MoveAction::vec(all_system_excluding_view);
+        let move_actions = MoveAction::system(move_actions);
+        let move_actions = MoveItemAction::from_actions(move_actions);
 
         Ok(ConversationAvailableActions::builder()
-            .move_actions(MoveAction::system(move_actions))
-            .reply_actions(reply_actions)
+            .move_actions(move_actions)
             .conversation_actions(conversation_actions)
+            .general_actions(GeneralActions::all_but_phishing())
             .build())
     }
 
@@ -2940,23 +2953,11 @@ impl Conversation {
             }
         })?;
 
-        let all_move_to_actions = conversations
-            .iter()
-            .flat_map(|conversation| {
-                MoveAction::vec(
-                    all_system_excluding_view
-                        .clone()
-                        .chain(all_custom_folders.iter()),
-                    |label| {
-                        conversation
-                            .labels
-                            .iter()
-                            .map(|conv_label| conv_label.local_label_id)
-                            .contains(&label.local_id)
-                    },
-                )
-            })
-            .collect_vec();
+        let all_move_to_actions = MoveAction::vec(
+            all_system_excluding_view
+                .clone()
+                .chain(all_custom_folders.iter()),
+        );
 
         MoveAction::finalize(all_move_to_actions, interface).await
     }
@@ -5748,15 +5749,17 @@ impl Message {
         let all_system_excluding_view = all_system
             .iter()
             .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_excluding_view, |_is_label_selected| false);
+        let move_actions = MoveAction::vec(all_system_excluding_view);
         let reply_actions = if reply_all {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
         };
+        let move_actions = MoveAction::system(move_actions);
+        let move_actions = MoveItemAction::from_actions(move_actions);
 
         Ok(MessageAvailableActions::builder()
-            .move_actions(MoveAction::system(move_actions))
+            .move_actions(move_actions)
             .reply_actions(reply_actions)
             .message_actions(message_actions)
             .build())
@@ -5840,33 +5843,11 @@ impl Message {
             .iter()
             .filter(|label| label.local_id != view.local_id);
         let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
-        let messages = Message::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
-        let all_move_to_actions = messages
-            .iter()
-            .flat_map(|message| {
-                MoveAction::vec(
-                    all_system_excluding_view
-                        .clone()
-                        .chain(all_custom_folders.iter()),
-                    |label| {
-                        message
-                            .label_ids
-                            .iter()
-                            .map(Some)
-                            .contains(&label.remote_id.as_ref())
-                    },
-                )
-            })
-            .collect_vec();
+        let all_move_to_actions = MoveAction::vec(
+            all_system_excluding_view
+                .clone()
+                .chain(all_custom_folders.iter()),
+        );
 
         MoveAction::finalize(all_move_to_actions, interface).await
     }

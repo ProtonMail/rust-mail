@@ -83,6 +83,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(settings) = event.get_core_event_user_settings_mut() {
                     debug!("Handling user setting event");
+                    settings.remote_id = Some(user_id.clone());
                     settings.set_stash(&stash);
                     settings.save().await.map_err(|e| {
                         error!("Failed to update user settings:{e}");

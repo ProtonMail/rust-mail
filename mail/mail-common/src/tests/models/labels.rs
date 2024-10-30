@@ -8,6 +8,7 @@ use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
 use proton_mail_test_utils::db::new_test_connection;
+use proton_mail_test_utils::utils::random_string;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, Tether};
@@ -21,6 +22,26 @@ async fn test_remote_label_add() {
         Label::from(label).save_using(&tx).await.unwrap();
     }
     compare_remote_labels_with_local(&stash, labels).await;
+}
+
+#[tokio::test]
+async fn test_remote_label_add_1_char_long_name() {
+    let stash = new_test_connection().await;
+    let tx = stash.connection();
+    let label = test_label(random_string(1).as_str());
+
+    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    compare_remote_label_with_local(&stash, label).await;
+}
+
+#[tokio::test]
+async fn test_remote_label_add_100_char_long_name() {
+    let stash = new_test_connection().await;
+    let tx = stash.connection();
+    let label = test_label(random_string(100).as_str());
+
+    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    compare_remote_label_with_local(&stash, label).await;
 }
 
 #[tokio::test]
@@ -192,6 +213,88 @@ async fn create_local_label() {
             initialized_msg: false,
             label_type: LabelType::Folder,
             name: "Label".to_owned(),
+            notify: false,
+            path: None,
+            sticky: false,
+            total_conv: 0,
+            total_msg: 0,
+            unread_conv: 0,
+            unread_msg: 0,
+            row_id: None,
+            stash: Some(stash.clone()),
+        };
+        new_label
+            .save_using(&tx)
+            .await
+            .expect("failed to create label");
+        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
+            .await
+            .expect("failed to load label")
+            .expect("should have a value");
+        assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
+    }
+}
+
+#[tokio::test]
+async fn create_local_label_1_char_long_name() {
+    let stash = new_test_connection().await;
+    let tx = stash.connection();
+    for t in [LabelType::Label, LabelType::Folder] {
+        let label_name = random_string(1);
+        let mut new_label = Label {
+            local_id: None,
+            remote_id: Some(format!("Label-{:?}", t).into()),
+            local_parent_id: None,
+            remote_parent_id: None,
+            color: LabelColor::purple(),
+            display: false,
+            display_order: 0,
+            expanded: false,
+            initialized_conv: false,
+            initialized_msg: false,
+            label_type: LabelType::Folder,
+            name: label_name.to_owned(),
+            notify: false,
+            path: None,
+            sticky: false,
+            total_conv: 0,
+            total_msg: 0,
+            unread_conv: 0,
+            unread_msg: 0,
+            row_id: None,
+            stash: Some(stash.clone()),
+        };
+        new_label
+            .save_using(&tx)
+            .await
+            .expect("failed to create label");
+        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
+            .await
+            .expect("failed to load label")
+            .expect("should have a value");
+        assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
+    }
+}
+
+#[tokio::test]
+async fn create_local_label_100_char_long_name() {
+    let stash = new_test_connection().await;
+    let tx = stash.connection();
+    for t in [LabelType::Label, LabelType::Folder] {
+        let label_name = random_string(100);
+        let mut new_label = Label {
+            local_id: None,
+            remote_id: Some(format!("Label-{:?}", t).into()),
+            local_parent_id: None,
+            remote_parent_id: None,
+            color: LabelColor::purple(),
+            display: false,
+            display_order: 0,
+            expanded: false,
+            initialized_conv: false,
+            initialized_msg: false,
+            label_type: LabelType::Folder,
+            name: label_name.to_owned(),
             notify: false,
             path: None,
             sticky: false,
@@ -472,8 +575,13 @@ async fn test_watch_label() {
 }
 
 async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiLabel>) {
-    let local_labels = Label::all(stash, None).await.expect("failed to get labels");
+    for remote_label in remote_labels {
+        compare_remote_label_with_local(stash, remote_label).await;
+    }
+}
 
+async fn compare_remote_label_with_local(stash: &Stash, remote_label: ApiLabel) {
+    let local_labels = Label::all(stash, None).await.expect("failed to get labels");
     let find_label = |id: &LabelId| -> &Label {
         local_labels
             .iter()
@@ -482,10 +590,8 @@ async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiL
     };
 
     // Check if parent ids are correct.
-    for remote_label in remote_labels {
-        let local = find_label(&LabelId::from(remote_label.id.clone()));
-        compare_local_to_remote(stash, local, &remote_label).await;
-    }
+    let local = find_label(&LabelId::from(remote_label.id.clone()));
+    compare_local_to_remote(stash, local, &remote_label).await;
 }
 
 fn test_labels() -> Vec<ApiLabel> {
@@ -543,6 +649,22 @@ fn test_labels() -> Vec<ApiLabel> {
             order: 3,
         },
     ]
+}
+
+fn test_label(name: &str) -> ApiLabel {
+    ApiLabel {
+        id: ApiRemoteId::from("label_id"),
+        parent_id: None,
+        name: name.to_owned(),
+        path: None,
+        color: "#ffffff".to_owned(),
+        label_type: ApiLabelType::Label,
+        notify: false,
+        display: true,
+        sticky: false,
+        expanded: true,
+        order: 0,
+    }
 }
 
 async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel) {

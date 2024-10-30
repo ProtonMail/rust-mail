@@ -8,6 +8,7 @@ use proton_mail_common::datatypes::{
     ConversationCount, MessageAddress, MessageAddresses, MessageCount,
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
+use rand::{distributions::Uniform, Rng};
 use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};
@@ -364,4 +365,23 @@ pub fn test_address() -> Address {
         row_id: None,
         stash: None,
     }
+}
+
+/// Generates a random string of the specified length, including alphanumeric and special characters.
+///
+/// # Parameters
+/// - `length`: The length of the string to generate.
+#[must_use]
+pub fn random_string(length: usize) -> String {
+    let charset: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                           abcdefghijklmnopqrstuvwxyz\
+                           0123456789!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
+
+    let mut rng = rand::thread_rng();
+    (0..length)
+        .map(|_| {
+            let idx = rng.sample(Uniform::new(0, charset.len()));
+            charset[idx] as char
+        })
+        .collect()
 }

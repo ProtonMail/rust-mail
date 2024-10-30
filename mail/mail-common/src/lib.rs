@@ -92,6 +92,8 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalId),
+    #[error("Message body missing for local_id {0}")]
+    MessageBodyMissing(LocalId),
     #[error("Unknown Message with remote id {0}")]
     UnknownMessage(RemoteId),
     #[error("No conversation found in the current page which has a remote id")]

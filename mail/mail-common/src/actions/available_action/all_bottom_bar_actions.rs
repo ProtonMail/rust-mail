@@ -2,7 +2,8 @@
 #[path = "../../tests/actions/available_actions/action_bottom_bar.rs"]
 mod tests;
 
-use crate::datatypes::{MobileActions, MovableSystemFolder, SystemLabelId};
+use crate::actions::MovableSystemFolderAction;
+use crate::datatypes::{MobileActions, SystemLabelId};
 use proton_core_common::datatypes::LabelId;
 use tracing::warn;
 
@@ -23,7 +24,7 @@ pub enum BottomBarActions {
     MarkUnread,
     More,
     MoveTo,
-    MoveToSystemFolder(MovableSystemFolder),
+    MoveToSystemFolder(MovableSystemFolderAction),
     NotSpam,
     PermanentDelete,
     Star,
@@ -32,20 +33,25 @@ pub enum BottomBarActions {
 
 impl BottomBarActions {
     /// Convert a MobileAction item into a BottomBarActions
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_mobile_actions(
         mobile_actions: &MobileActions,
         any_unread: bool,
         all_starred: bool,
         current_label: &LabelId,
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
     ) -> Option<Self> {
         match mobile_actions {
-            MobileActions::Archive => Some(Self::toggle_archive(current_label)),
+            MobileActions::Archive => Some(Self::toggle_archive(current_label, inbox, archive)),
             MobileActions::Label => Some(Self::LabelAs),
             MobileActions::Move => Some(Self::MoveTo),
-            MobileActions::Spam => Some(Self::toggle_spam(current_label)),
+            MobileActions::Spam => Some(Self::toggle_spam(current_label, inbox, spam)),
             MobileActions::ToggleRead => Some(Self::toggle_read(any_unread)),
             MobileActions::ToggleStar => Some(Self::toggle_star(all_starred)),
-            MobileActions::Trash => Some(Self::toggle_trash(current_label)),
+            MobileActions::Trash => Some(Self::toggle_trash(current_label, trash)),
             _ => {
                 warn!("Invalid mobile action type: {mobile_actions:?}");
                 None
@@ -61,21 +67,29 @@ impl BottomBarActions {
         }
     }
 
-    pub(crate) fn toggle_archive(current_label: &LabelId) -> Self {
+    pub(crate) fn toggle_archive(
+        current_label: &LabelId,
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+    ) -> Self {
         if current_label == &LabelId::archive() {
-            Self::MoveToSystemFolder(MovableSystemFolder::Inbox)
+            Self::MoveToSystemFolder(inbox.clone())
         } else {
-            Self::MoveToSystemFolder(MovableSystemFolder::Archive)
+            Self::MoveToSystemFolder(archive.clone())
         }
     }
 
-    pub(crate) fn toggle_spam(current_label: &LabelId) -> Self {
+    pub(crate) fn toggle_spam(
+        current_label: &LabelId,
+        inbox: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
+    ) -> Self {
         if current_label == &LabelId::spam() {
             Self::NotSpam
         } else if current_label == &LabelId::trash() {
-            Self::MoveToSystemFolder(MovableSystemFolder::Inbox)
+            Self::MoveToSystemFolder(inbox.clone())
         } else {
-            Self::MoveToSystemFolder(MovableSystemFolder::Spam)
+            Self::MoveToSystemFolder(spam.clone())
         }
     }
 
@@ -87,15 +101,16 @@ impl BottomBarActions {
         }
     }
 
-    pub(crate) fn toggle_trash(current_label: &LabelId) -> Self {
+    pub(crate) fn toggle_trash(current_label: &LabelId, trash: &MovableSystemFolderAction) -> Self {
         if [LabelId::trash(), LabelId::spam()].contains(current_label) {
             Self::PermanentDelete
         } else {
-            Self::MoveToSystemFolder(MovableSystemFolder::Trash)
+            Self::MoveToSystemFolder(trash.clone())
         }
     }
 
     /// Get actions not displayed in bottom_bar when selecting messages or actions
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn hidden_bottom_bar_actions(
         current_label: LabelId,
         any_unread: bool,
@@ -103,6 +118,10 @@ impl BottomBarActions {
         any_unstarred: bool,
         any_starred: bool,
         visible_actions: &[BottomBarActions],
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
     ) -> Vec<BottomBarActions> {
         let mut result = Vec::new();
 
@@ -130,13 +149,9 @@ impl BottomBarActions {
         }
         // Move to Inbox
         if [LabelId::trash(), LabelId::archive()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Inbox,
-            ))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(inbox.clone()))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Inbox,
-            ));
+            result.push(BottomBarActions::MoveToSystemFolder(inbox.clone()));
         }
         if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
         {
@@ -144,33 +159,21 @@ impl BottomBarActions {
         }
         // Archive
         if current_label != LabelId::archive()
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Archive,
-            ))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(archive.clone()))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Archive,
-            ));
+            result.push(BottomBarActions::MoveToSystemFolder(archive.clone()));
         }
         // Move to Spam
         if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Spam,
-            ))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(spam.clone()))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Spam,
-            ));
+            result.push(BottomBarActions::MoveToSystemFolder(spam.clone()));
         }
         // Move to Trash
         if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Trash,
-            ))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(trash.clone()))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(
-                MovableSystemFolder::Trash,
-            ));
+            result.push(BottomBarActions::MoveToSystemFolder(trash.clone()));
         }
         result
     }

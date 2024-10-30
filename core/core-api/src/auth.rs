@@ -257,8 +257,6 @@ pub trait Store: Send + Sync {
 
     /// Remove the auth data from the store.
     ///
-    /// Returns the previous value, if any.
-    ///
     /// # Errors
     ///
     /// Returns error if the operation failed.
