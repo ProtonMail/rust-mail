@@ -253,6 +253,7 @@ impl MailSession {
         uniffi_async(async move {
             let mut accounts = Vec::new();
 
+            // TODO(ET-1431): Compute this on the core side.
             for account in ctx.get_accounts().await? {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
@@ -280,6 +281,7 @@ impl MailSession {
 
             let (initial, rx) = ctx.watch_accounts().await?;
 
+            // TODO(ET-1431): Compute this on the core side.
             for account in initial {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
@@ -302,6 +304,7 @@ impl MailSession {
         uniffi_async(async move {
             let mut sessions = Vec::new();
 
+            // TODO(ET-1431): Compute this on the core side.
             for session in ctx.get_sessions().await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
@@ -329,6 +332,7 @@ impl MailSession {
 
             let (initial, rx) = ctx.watch_sessions().await?;
 
+            // TODO(ET-1431): Compute this on the core side.
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
@@ -356,6 +360,7 @@ impl MailSession {
 
             let mut sessions = Vec::new();
 
+            // TODO(ET-1431): Compute this on the core side.
             for session in ctx.get_account_sessions(account.remote_id.clone()).await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
@@ -384,6 +389,7 @@ impl MailSession {
 
             let (initial, rx) = ctx.watch_account_sessions(account.user_id().into()).await?;
 
+            // TODO(ET-1431): Compute this on the core side.
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
@@ -411,6 +417,7 @@ impl MailSession {
                 return Ok(None);
             };
 
+            // TODO(ET-1431): Compute this on the core side.
             let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? else {
                 return Ok(None);
             };
@@ -436,6 +443,7 @@ impl MailSession {
                 return Ok(None);
             };
 
+            // TODO(ET-1431): Compute this on the core side.
             let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? else {
                 return Ok(None);
             };
