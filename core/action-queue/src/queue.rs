@@ -388,9 +388,14 @@ impl Queue {
             .resolve_execution_context::<T>()
             .map_err(|e| ActionError::Queue(e.into()))?;
 
-        let (local_output, id) = self
-            .execute_action_local(context.as_ref(), &handler, &mut action, metadata)
-            .await?;
+        let (local_output, id) = Self::execute_action_local(
+            &self.stash,
+            context.as_ref(),
+            &handler,
+            &mut action,
+            metadata,
+        )
+        .await?;
         debug!("Action queued with id={id}");
 
         Ok(QueuedActionOutput {
@@ -450,15 +455,26 @@ impl Queue {
             .map_err(|e| ActionError::Queue(e.into()))?;
 
         // 1) Apply local action and store in the queue
-        let (local_output, id) = self
-            .execute_action_local(context.as_ref(), &handler, &mut action, metadata)
-            .await?;
+        let (local_output, id) = Self::execute_action_local(
+            &self.stash,
+            context.as_ref(),
+            &handler,
+            &mut action,
+            metadata,
+        )
+        .await?;
         debug!("Action queued with id={id}");
 
         // 2) Execute remote counter part
-        let remote_output = self
-            .execute_action_remote(id, context.as_ref(), &handler, &mut action, session)
-            .await?;
+        let remote_output = Self::execute_action_remote(
+            &self.stash,
+            id,
+            context.as_ref(),
+            &handler,
+            &mut action,
+            session,
+        )
+        .await?;
 
         Ok(ActionOutput {
             local: local_output,
@@ -668,13 +684,13 @@ impl Queue {
 
     /// Shared snippet to execute actions locally.
     async fn execute_action_local<T: Action>(
-        &self,
+        stash: &Stash,
         context: &T::Context,
         handler: &T::Handler,
         action: &mut T,
         metadata: Metadata,
     ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
-        let tx = self.stash.transaction().await?;
+        let tx = stash.transaction().await?;
 
         let local_output = handler
             .apply_local(context, action, &tx)
@@ -700,33 +716,31 @@ impl Queue {
 
     /// Shared snippet to execute actions remotely.
     async fn execute_action_remote<T: Action>(
-        &self,
+        stash: &Stash,
         id: Id,
         context: &T::Context,
         handler: &T::Handler,
         action: &mut T,
         session: &Session,
     ) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
-        let tether = self.stash.connection();
+        let tether = stash.connection();
         // Note: While we do our bets to check whether this action is still around at the time we
         // are executing this (e.g: concurrent cancel) it is not guaranteed that we will actually
         // be able to observe this reflected in the database at the time of the query.
-        self.check_cancelled(&tether, id).await?;
+        Self::check_cancelled(&tether, id).await?;
 
         //1) Attempt to execute on remote
         debug!("Applying action on remote");
 
         // let post_remote: Result< = post_remote(handler, action, session).await;
-        let result = handler
-            .apply_remote(context, action, session, &self.stash)
-            .await;
+        let result = handler.apply_remote(context, action, session, stash).await;
 
         match result {
             Ok(result) => {
                 // Note: While we do our bets to check whether this action is still around at the time we
                 // are executing this (e.g: concurrent cancel) it is not guaranteed that we will actually
                 // be able to observe this reflected in the database at the time of the query.
-                self.check_cancelled(&tether, id).await?;
+                Self::check_cancelled(&tether, id).await?;
 
                 tether.transaction().await?;
                 StoredAction::delete(&tether, id).await?;
@@ -763,7 +777,7 @@ impl Queue {
     }
 
     /// Check if this action was cancelled/removed.
-    async fn check_cancelled(&self, tether: &Tether, id: Id) -> Result<()> {
+    async fn check_cancelled(tether: &Tether, id: Id) -> Result<()> {
         // Perform a sanity check before apply local state to make sure that a concurrent
         // request to cancel this action is identified.
         let contains = StoredAction::contains(tether, id).await.map_err(|e| {
@@ -833,24 +847,24 @@ impl Queue {
 }
 
 /// Wrapper trait around the actual action type.
-pub(crate) trait QueuedAction {
-    fn execute<'a, 'q: 'a, 's: 'q>(
+pub(crate) trait QueuedAction: Send {
+    fn execute<'a, 's: 'a>(
         &'a mut self,
-        queue: &'q Queue,
+        queue: &Queue,
         session: &'s Session,
         metadata: QueuedMetadata,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
-    fn cancel<'a, 'q: 'a>(
+    fn cancel<'a>(
         &'a mut self,
-        queue: &'q Queue,
+        queue: &Queue,
         tx: &'a Tether,
         metadata: QueuedMetadata,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
 /// Type erasure trait for the action implementation.
-pub(crate) struct TypeErasedAction<T: Action> {
+pub(crate) struct TypeErasedAction<T: Action + Send> {
     /// Id of the action.
     pub action_id: Id,
     /// Handler of the action.
@@ -860,37 +874,40 @@ pub(crate) struct TypeErasedAction<T: Action> {
 }
 
 impl<T: Action> QueuedAction for TypeErasedAction<T> {
-    fn execute<'a, 'q: 'a, 's: 'q>(
+    fn execute<'a, 's: 'a>(
         &'a mut self,
-        queue: &'q Queue,
+        queue: &Queue,
         session: &'s Session,
         metadata: QueuedMetadata,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
+        let result = queue.resolve_execution_context::<T>();
+        let stash = queue.stash.clone();
         Box::pin(async move {
-            let context = queue.resolve_execution_context::<T>()?;
+            let context = result?;
             // Can't return result here as there is no one to consume it.
-            let _ = queue
-                .execute_action_remote(
-                    self.action_id,
-                    context.as_ref(),
-                    &self.handler,
-                    &mut self.action,
-                    session,
-                )
-                .await
-                .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
+            let _ = Queue::execute_action_remote(
+                &stash,
+                self.action_id,
+                context.as_ref(),
+                &self.handler,
+                &mut self.action,
+                session,
+            )
+            .await
+            .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
             Ok(())
         })
     }
 
-    fn cancel<'a, 'q: 'a>(
+    fn cancel<'a>(
         &'a mut self,
-        queue: &'q Queue,
+        queue: &Queue,
         tx: &'a Tether,
         metadata: QueuedMetadata,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
+        let result = queue.resolve_execution_context::<T>();
         Box::pin(async move {
-            let context = queue.resolve_execution_context::<T>()?;
+            let context = result?;
             // Can't return result here as there is no one to consume it.
             cancel_action_impl(
                 tx,
