@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.19.1] - 2024-10-28
+
+### Fixed
+
+  - Draft create/save mime type in API request.
+
 ## [0.19.0] - 2024-10-28
 
 ### Added
@@ -30,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remove damping on account and session watchers
   - Drafts only create data on the first call to `Draft::save()`
 
-
 ### Fixed
+
   - Live query updates should be sent only to the table they apply to
 
 
