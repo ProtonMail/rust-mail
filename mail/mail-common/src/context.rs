@@ -264,19 +264,7 @@ impl MailContext {
         Ok(self.core_context.watch_accounts().await?)
     }
 
-    /// Get a single account by its remote (user) ID.
-    ///
-    /// This is a convenience method that enables retrieving a single account without requiring
-    /// the full set of accounts to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
-    pub async fn get_account(&self, user_id: RemoteId) -> MailContextResult<Option<CoreAccount>> {
-        Ok(self.core_context.get_account(user_id).await?)
-    }
-
-    /// Get all API sessions associated with a given account.
+    /// Get all available API sessions.
     ///
     /// A session represents an authenticated session with the Proton API for a given account,
     /// including the authentication tokens granted by the API, the state of the session,
@@ -285,11 +273,11 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
-    pub async fn get_sessions(&self, user_id: RemoteId) -> MailContextResult<Vec<CoreSession>> {
-        Ok(self.core_context.get_sessions(user_id).await?)
+    pub async fn get_sessions(&self) -> MailContextResult<Vec<CoreSession>> {
+        Ok(self.core_context.get_sessions().await?)
     }
 
-    /// Watch an account's API sessions for changes.
+    /// Watch the API sessions for changes.
     ///
     /// # Returns
     ///
@@ -302,24 +290,48 @@ impl MailContext {
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(
         &self,
-        user_id: RemoteId,
     ) -> MailContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
-        Ok(self.core_context.watch_sessions(user_id).await?)
+        Ok(self.core_context.watch_sessions().await?)
     }
 
-    /// Get a single API session by its associated account and session ID.
+    /// Get all API sessions associated with a given account.
     ///
-    /// This is a convenience method that enables retrieving a single session without requiring
-    /// the full set of sessions to be loaded first.
+    /// See [`Context::get_sessions`] for more information on API sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_account_sessions(
+        &self,
+        user_id: RemoteId,
+    ) -> MailContextResult<Vec<CoreSession>> {
+        Ok(self.core_context.get_account_sessions(user_id).await?)
+    }
+
+    /// Watch an account's API sessions for changes.
+    ///
+    /// See [`Context::watch_sessions`] for more information on watching API sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_account_sessions(
+        &self,
+        user_id: RemoteId,
+    ) -> MailContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
+        Ok(self.core_context.watch_account_sessions(user_id).await?)
+    }
+
+    /// Get a single account by its remote (user) ID.
+    ///
+    /// This is a convenience method that enables retrieving a single account without requiring
+    /// the full set of accounts to be loaded first.
     ///
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(
-        &self,
-        session_id: RemoteId,
-    ) -> MailContextResult<Option<CoreSession>> {
-        Ok(self.core_context.get_session(session_id).await?)
+    pub async fn get_account(&self, user_id: RemoteId) -> MailContextResult<Option<CoreAccount>> {
+        Ok(self.core_context.get_account(user_id).await?)
     }
 
     /// Get the login state of an account.
@@ -332,6 +344,21 @@ impl MailContext {
         user_id: RemoteId,
     ) -> MailContextResult<Option<CoreAccountState>> {
         Ok(self.core_context.get_account_state(user_id).await?)
+    }
+
+    /// Get a single API session by its associated session ID.
+    ///
+    /// This is a convenience method that enables retrieving a single session without requiring
+    /// the full set of sessions to be loaded first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session(
+        &self,
+        session_id: RemoteId,
+    ) -> MailContextResult<Option<CoreSession>> {
+        Ok(self.core_context.get_session(session_id).await?)
     }
 
     /// Get the login state of a session.

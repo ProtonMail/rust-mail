@@ -267,19 +267,7 @@ impl Context {
         Ok((res, rx))
     }
 
-    /// Get a single account by its remote (user) ID.
-    ///
-    /// This is a convenience method that enables retrieving a single account without requiring
-    /// the full set of accounts to be loaded first.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
-    pub async fn get_account(&self, user_id: RemoteId) -> CoreContextResult<Option<CoreAccount>> {
-        Ok(CoreAccount::find_by_id(user_id, &self.stash).await?)
-    }
-
-    /// Get all API sessions associated with a given account.
+    /// Get all available API sessions.
     ///
     /// A session represents an authenticated session with the Proton API for a given account,
     /// including the authentication tokens granted by the API, the state of the session,
@@ -288,11 +276,11 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
-    pub async fn get_sessions(&self, user_id: RemoteId) -> CoreContextResult<Vec<CoreSession>> {
-        Ok(CoreSession::find_by_user_id(user_id, &self.stash, None).await?)
+    pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
+        Ok(CoreSession::all(&self.stash, None).await?)
     }
 
-    /// Watch an account's API sessions for changes.
+    /// Watch the API sessions for changes.
     ///
     /// # Returns
     ///
@@ -305,6 +293,37 @@ impl Context {
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(
         &self,
+    ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
+        let (tx, rx) = flume::unbounded();
+
+        let res = CoreSession::all(&self.stash, Some(tx)).await?;
+
+        Ok((res, rx))
+    }
+
+    /// Get all API sessions associated with a given account.
+    ///
+    /// See [`Context::get_sessions`] for more information on API sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_account_sessions(
+        &self,
+        user_id: RemoteId,
+    ) -> CoreContextResult<Vec<CoreSession>> {
+        Ok(CoreSession::find_by_user_id(user_id, &self.stash, None).await?)
+    }
+
+    /// Watch an account's API sessions for changes.
+    ///
+    /// See [`Context::watch_sessions`] for more information on watching API sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_account_sessions(
+        &self,
         user_id: RemoteId,
     ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
         let (tx, rx) = flume::unbounded();
@@ -314,19 +333,16 @@ impl Context {
         Ok((res, rx))
     }
 
-    /// Get a single API session by its associated account and session ID.
+    /// Get a single account by its remote (user) ID.
     ///
-    /// This is a convenience method that enables retrieving a single session without requiring
-    /// the full set of sessions to be loaded first.
+    /// This is a convenience method that enables retrieving a single account without requiring
+    /// the full set of accounts to be loaded first.
     ///
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(
-        &self,
-        session_id: RemoteId,
-    ) -> CoreContextResult<Option<CoreSession>> {
-        Ok(CoreSession::find_by_id(session_id, &self.stash).await?)
+    pub async fn get_account(&self, user_id: RemoteId) -> CoreContextResult<Option<CoreAccount>> {
+        Ok(CoreAccount::find_by_id(user_id, &self.stash).await?)
     }
 
     /// Get the login state of an account.
@@ -347,6 +363,21 @@ impl Context {
             .await?;
 
         Ok(Some(state))
+    }
+
+    /// Get a single API session by its associated session ID.
+    ///
+    /// This is a convenience method that enables retrieving a single session without requiring
+    /// the full set of sessions to be loaded first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session(
+        &self,
+        session_id: RemoteId,
+    ) -> CoreContextResult<Option<CoreSession>> {
+        Ok(CoreSession::find_by_id(session_id, &self.stash).await?)
     }
 
     /// Get the login state of a session.
@@ -527,7 +558,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
-        for session in &self.get_sessions(user_id).await? {
+        for session in &self.get_account_sessions(user_id).await? {
             let Ok(api) = self
                 .new_api_session(Some(session))
                 .inspect_err(|err| error!("failed to create API session: {err}"))
