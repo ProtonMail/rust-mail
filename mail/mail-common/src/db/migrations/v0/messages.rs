@@ -171,8 +171,19 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 FOREIGN KEY (local_conversation_id)
                 REFERENCES conversations (local_id)
                 ON DELETE SET NULL
+
+            CONSTRAINT create_draft_metadata_parent_id
+                FOREIGN KEY (local_parent_id)
+                REFERENCES messages (local_id)
+                ON DELETE SET NULL
         )"
         },
+        vec![],
+    )
+    .await?;
+
+    tx.execute(
+        r#"CREATE UNIQUE INDEX index_draft_metadatqa_mid ON draft_metadata (local_message_id)"#,
         vec![],
     )
     .await?;
