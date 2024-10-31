@@ -3,8 +3,8 @@
 use crate::app::Command;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{ConversationMessage, Item, Message};
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::mailbox::paginator::Paginator;
+use crate::app_model::mailbox::{ConversationMessage, Item, Message, ITEM_LIMIT};
 use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
@@ -12,7 +12,9 @@ use anyhow::anyhow;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::models::{Conversation, Label, MailSettings};
+use proton_mail_common::models::{
+    Conversation, ConversationDataSource, Label, MailSettings, PaginatorFilter,
+};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
@@ -24,7 +26,7 @@ use throbber_widgets_tui::ThrobberState;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    _query: WatchHandle,
+    paginator: Paginator<Conversation, ConversationDataSource>,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
@@ -48,28 +50,47 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         label_id: LocalId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
-        let (conversations, receiver) =
-            ContextualConversation::watch_in_label(label_id, ctx.user_stash()).await?;
-        let ctx = ctx;
-        let (watcher, command) = WatchHandle::new_dampened(receiver, move || {
-            let ctx = Arc::clone(&ctx);
-            async move {
-                Some(
-                    match ContextualConversation::in_label(label_id, ctx.user_stash()).await {
-                        Ok(c) => ConversationMessage::Refreshed(c).into(),
-                        Err(e) => {
-                            let e = anyhow!("Conversation list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    },
+        let (paginator, command) = Paginator::new(
+            |sender| {
+                async move {
+                    Ok(Conversation::paginate_in_label(
+                        &ctx,
+                        label_id,
+                        ITEM_LIMIT.try_into().unwrap(),
+                        PaginatorFilter::default(),
+                        true,
+                        Some(sender),
+                    )
+                    .await?)
+                }
+                .boxed()
+            },
+            move |result| match result {
+                Ok(conversation) => ConversationMessage::Refreshed(
+                    conversation
+                        .into_iter()
+                        .filter_map(|c| ContextualConversation::new(c, label_id))
+                        .collect(),
                 )
-            }
-            .boxed()
-        });
+                .into(),
+                Err(e) => {
+                    let e = anyhow!("Conversation Reload Query error: {e}");
+                    tracing::error!("{e}");
+                    e.into()
+                }
+            },
+        )
+        .await?;
+
+        let conversations = paginator
+            .next_page()
+            .await?
+            .into_iter()
+            .filter_map(|v| ContextualConversation::new(v, label_id))
+            .collect();
         Ok((
             Self {
-                _query: watcher,
+                paginator,
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
                 conversations,
@@ -130,6 +151,21 @@ impl StateHandler for ConversationsState {
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
+                if self.table_state.selected().unwrap_or_default()
+                    == self.conversations.len().saturating_sub(1)
+                {
+                    let label_id = mbox.label_id();
+                    return self.paginator.next_page_command(move |v| {
+                        Command::message(
+                            ConversationMessage::NextPage(
+                                v.into_iter()
+                                    .filter_map(|v| ContextualConversation::new(v, label_id))
+                                    .collect(),
+                            )
+                            .into(),
+                        )
+                    });
+                }
                 Command::None
             }
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
@@ -216,6 +252,10 @@ impl StateHandler for ConversationsState {
                     }
                     ConversationMessage::StarConversation(id) => star_conversation(mbox, id),
                     ConversationMessage::UnstarConversation(id) => unstar_conversation(mbox, id),
+                    ConversationMessage::NextPage(conversations) => {
+                        self.conversations.extend(conversations);
+                        Command::None
+                    }
                     _ => Command::None,
                 }
             }

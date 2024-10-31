@@ -2,6 +2,7 @@ mod composer;
 mod conversations;
 mod messages;
 mod model;
+mod paginator;
 mod popups;
 
 use crate::app_model::mailbox::composer::Composer;
@@ -49,6 +50,7 @@ pub enum ConversationMessage {
     OpenConversationSuccess(Box<MessagesState>),
     OpenConversationFailed(anyhow::Error),
     Refreshed(Vec<ContextualConversation>),
+    NextPage(Vec<ContextualConversation>),
     CloseConversation,
 }
 
@@ -64,6 +66,7 @@ pub enum MessageMessage {
     OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
     CloseMessageBody,
     Refreshed(Vec<MailMessage>),
+    NextPage(Vec<MailMessage>),
     DeleteMessage(LocalId),
     MoveMessage(LocalId, LocalId),
     LabelMessage(LocalId, LocalId),

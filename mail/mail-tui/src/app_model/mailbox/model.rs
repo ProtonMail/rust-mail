@@ -3,7 +3,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{Item, Message};
 use crate::app_model::watcher::WatchHandle;
 use crate::app_model::{AppState, AppStateHandler};
 use crate::messages::Messages;
@@ -126,12 +126,6 @@ impl Model {
                         return Command::message(Messages::DisplayError(None, e));
                     }
                 };
-                if let Err(e) = mbox.sync(ITEM_LIMIT).await {
-                    let e = anyhow!("Failed to sync mailbox: {e}");
-                    error!("{e}");
-                    return Command::message(Messages::DisplayError(None, e));
-                };
-
                 if mbox.view_mode() == ViewMode::Conversations {
                     ConversationsState::build(mbox, label)
                 } else {
