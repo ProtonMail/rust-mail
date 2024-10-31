@@ -1027,7 +1027,7 @@ where
         let receiver = interface.stash().subscribe_to(T::table_name()).await?;
         let stash = interface.stash().clone();
 
-        // Spawn a thread to listen for notifications
+        // Spawn a task to listen for notifications
         drop(spawn_async(async move {
             let changed_query = formatdoc!(
                 "
