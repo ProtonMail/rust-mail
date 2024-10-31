@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - Methods to get and watch all sessions, not just those of a particular account
+  - `Draft::create` - Same as `Draft::new()` but actually shows up in Kotlin bindings.
 
 ## [0.19.1] - 2024-10-28
 

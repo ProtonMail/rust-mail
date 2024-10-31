@@ -3,7 +3,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{Item, Message};
 use crate::app_model::watcher::WatchHandle;
 use crate::app_model::{AppState, AppStateHandler};
 use crate::messages::Messages;
@@ -126,12 +126,6 @@ impl Model {
                         return Command::message(Messages::DisplayError(None, e));
                     }
                 };
-                if let Err(e) = mbox.sync(ITEM_LIMIT).await {
-                    let e = anyhow!("Failed to sync mailbox: {e}");
-                    error!("{e}");
-                    return Command::message(Messages::DisplayError(None, e));
-                };
-
                 if mbox.view_mode() == ViewMode::Conversations {
                     ConversationsState::build(mbox, label)
                 } else {
@@ -497,27 +491,35 @@ impl From<Model> for AppState {
 }
 
 fn background_worker(context: Arc<MailUserContext>, reader: Receiver<()>) -> Command<Messages> {
-    //TODO: Hack to work around action queue execution.
     Command::background_task(|sender| {
-        std::thread::spawn(|| {
-            let runtime = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            runtime.block_on(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(15));
-                loop {
-                    tokio::select! {
-                    _ = reader.recv_async() => {
-                        return;
+        async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(15));
+            loop {
+                tokio::select! {
+                _ = reader.recv_async() => {
+                    return;
+                }
+                _ = interval.tick() => {
+                    if let Err(e) = context.execute_pending_actions().await {
+                        let e = anyhow!("Failed to flush actions: {e}");
+                        error!("{e}");
+                        if sender
+                            .send(Command::message(Messages::DisplayError(
+                                Some("Action Queue".to_owned()),
+                                e,
+                            )))
+                            .is_err()
+                        {
+                            error!("Failed to send message from worker");
+                        }
                     }
-                    _ = interval.tick() => {
-                        if let Err(e) = context.execute_pending_actions().await {
-                            let e = anyhow!("Failed to flush actions: {e}");
+
+                        if let Err(e) = context.poll_event_loop().await {
+                            let e = anyhow!("Failed to poll events: {e}");
                             error!("{e}");
                             if sender
                                 .send(Command::message(Messages::DisplayError(
-                                    Some("Action Queue".to_owned()),
+                                    Some("Event Loop".to_owned()),
                                     e,
                                 )))
                                 .is_err()
@@ -525,25 +527,10 @@ fn background_worker(context: Arc<MailUserContext>, reader: Receiver<()>) -> Com
                                 error!("Failed to send message from worker");
                             }
                         }
-
-                            if let Err(e) = context.poll_event_loop().await {
-                                let e = anyhow!("Failed to poll events: {e}");
-                                error!("{e}");
-                                if sender
-                                    .send(Command::message(Messages::DisplayError(
-                                        Some("Event Loop".to_owned()),
-                                        e,
-                                    )))
-                                    .is_err()
-                                {
-                                    error!("Failed to send message from worker");
-                                }
-                            }
-                        }
                     }
                 }
-            });
-        });
-        std::future::ready(()).boxed()
+            }
+        }
+        .boxed()
     })
 }

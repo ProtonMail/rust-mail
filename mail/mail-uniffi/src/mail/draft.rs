@@ -65,6 +65,21 @@ impl Draft {
         .await
     }
 
+    /// Create a new draft with the given `create_mode`.
+    ///
+    /// # Errors
+    ///
+    /// Return error if action failed.
+    #[uniffi::constructor]
+    pub async fn create(
+        session: &MailUserSession,
+        create_mode: DraftCreateMode,
+    ) -> Result<Self, MailSessionError> {
+        // For some reason the kotlin bindings do not generate the default
+        // async constructor, so we add this alternative named function.
+        Self::new(session, create_mode).await
+    }
+
     #[uniffi::constructor]
     /// Open an existing draft with `message_id`.
     ///
