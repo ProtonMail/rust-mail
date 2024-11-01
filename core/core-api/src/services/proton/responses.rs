@@ -164,6 +164,33 @@ pub struct GetUsersResponse {
     pub user: User,
 }
 
+/// The response containing information about deletion of the contacts
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteContactsResponse {
+    /// List of responses.
+    pub responses: Vec<DeleteContactResponse>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteContactResponse {
+    /// Remote ID of the contact.
+    pub id: RemoteId,
+    /// Response data.
+    pub response: DeleteContactResponseData,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteContactResponseData {
+    /// Success code - 10000 other simbolize failure.
+    pub code: usize,
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]

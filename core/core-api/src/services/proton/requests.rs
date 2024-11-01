@@ -225,3 +225,11 @@ pub struct GetImagesLogoOptions {
     /// The size of the logo to be returned.
     pub size: Option<u32>,
 }
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, SmartDefault)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteContacts {
+    #[serde(rename = "IDs")]
+    /// The list of contact IDs to delete.
+    pub ids: Vec<RemoteId>,
+}

@@ -79,9 +79,10 @@ use crate::{
 use bytes::Bytes;
 use parking_lot::RwLock;
 use proton_crypto_account::keys::APIPublicAddressKeys;
+use requests::DeleteContacts;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method, Url};
-use responses::GetAddressResponse;
+use responses::{DeleteContactsResponse, GetAddressResponse};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::{Error as JsonError, Value as JsonValue};
@@ -640,6 +641,20 @@ impl Proton {
     ///
     pub async fn get_users(&self) -> Result<GetUsersResponse, ApiServiceError> {
         self.get::<_, Json<_>>(&format!("{}/users", Self::BASE_PATH), NO_PARAMS, None)
+            .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn delete_contacts(
+        &self,
+        ids: Vec<RemoteId>,
+    ) -> Result<DeleteContactsResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(&format!("{}/contacts/delete", Self::BASE_PATH), ids, None)
             .await
     }
 
