@@ -7,6 +7,28 @@ use crate::export_void_result;
 
 export_void_result!(VoidUpdateEventResult, UpdateEventError);
 
+// TODO: Idea
+// struct ProtonError {
+//     kind: ErrorKind,
+//     details: ErrorDetails
+// }
+
+// pub enum ErrorKind {
+//     UpdateEventError,
+//     UserDraftError,
+//     UserLoginFlowError,
+
+// }
+
+// #[derive(Debug, uniffi::Enum)]
+// pub enum Details {
+//     Reason(UpdateEventReason),
+//     SessionExpired,
+//     ServerError(UserApiServiceError),
+//     Network,
+//     Unexpected(UnexpectedError),
+// }
+
 #[derive(Debug, uniffi::Enum)]
 pub enum UpdateEventError {
     Reason(UpdateEventReason),
