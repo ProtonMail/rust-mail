@@ -20,7 +20,7 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
@@ -405,7 +405,10 @@ pub async fn paginate_search(
     uniffi_async(async move {
         let real_paginator = RealMessage::paginate_in_label(
             &context,
-            RealLocalId::from(RealLabelId::all_mail().parse::<u64>().unwrap()),
+            RealLabelId::all_mail()
+                .counterpart::<RealLabel, _>(session.user_stash())
+                .await?
+                .expect("All mail system label not found"),
             50,
             RealPaginatorFilter::default(),
             RealPaginatorSearchOptions::from(options),
