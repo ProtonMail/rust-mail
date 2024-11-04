@@ -13,7 +13,7 @@ use crate::LiveQueryCallback;
 /// Period of delay for dampening, in milliseconds. Each set of updates will be
 /// held back for up until this amount of time before the callback is triggered
 /// to notify the client.
-const DAMPENING_PERIOD: u64 = 200;
+pub const DAMPENING_PERIOD: u64 = 200;
 
 /// Obtains dampening function.
 ///

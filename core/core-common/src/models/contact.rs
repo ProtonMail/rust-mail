@@ -459,6 +459,48 @@ impl Contact {
             .collect())
     }
 
+    pub async fn watch_contact_list<A>(
+        interface: &A,
+    ) -> Result<(Vec<GroupedContacts>, flume::Receiver<()>), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (contact_sender, contact_receiver) = flume::unbounded();
+        let (contact_email_sender, contact_email_receiver) = flume::unbounded();
+        let (cb_sender, cb_receiver) = flume::unbounded();
+
+        let (contacts, _, _) = futures::try_join!(
+            Self::contact_list(interface),
+            Contact::find("WHERE deleted = 0", vec![], interface, Some(contact_sender)),
+            ContactEmail::find("", vec![], interface, Some(contact_email_sender))
+        )?;
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    contact_result = contact_receiver.recv_async() => {
+                        if contact_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                    contact_email_result = contact_email_receiver.recv_async() => {
+                        if contact_email_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok((contacts, cb_receiver))
+    }
+
     // pub async fn vcard<Provider: PGPProviderSync>(
     //     &mut self,
     //     pgp_provider: &Provider,
