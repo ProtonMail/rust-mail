@@ -135,7 +135,7 @@ pub trait ModelExtension: Model {
     }
 
     /// Finds a records by its IDs.
-    /// Only #[IdField] is supported as it uses `find` method.
+    /// Only `#[IdField]` is supported as it uses `find` method.
     ///
     /// # Parameters
     ///

@@ -654,8 +654,9 @@ impl Proton {
         &self,
         ids: Vec<RemoteId>,
     ) -> Result<DeleteContactsResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(&format!("{}/contacts/delete", Self::BASE_PATH), ids, None)
-            .await
+        let body = DeleteContacts { ids };
+
+        self.put::<_, Json<_>>("contacts/delete", body, None).await
     }
 
     /// TODO: Document this method.

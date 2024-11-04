@@ -41,6 +41,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 
+use super::response_data::ApiErrorInfo;
+
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
@@ -180,15 +182,7 @@ pub struct DeleteContactResponse {
     /// Remote ID of the contact.
     pub id: RemoteId,
     /// Response data.
-    pub response: DeleteContactResponseData,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct DeleteContactResponseData {
-    /// Success code - 10000 other simbolize failure.
-    pub code: usize,
+    pub response: ApiErrorInfo,
 }
 
 /// TODO: Document this struct.

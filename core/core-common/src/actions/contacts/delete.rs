@@ -1,10 +1,10 @@
-use crate::datatypes::{LocalId, RemoteId};
+use crate::datatypes::{Id, LocalId, RemoteId};
 use crate::models::{Contact, ModelExtension};
-use crate::{Context, CoreContextError};
+use crate::CoreContextError;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Stash, Tether};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
@@ -13,6 +13,7 @@ pub struct Delete {
 }
 
 impl Delete {
+    #[must_use]
     pub fn new(local_ids: Vec<LocalId>) -> Self {
         Self {
             local_ids,
@@ -31,7 +32,7 @@ impl Action for Delete {
     type LocalOutput = ();
     type Error = CoreContextError;
 
-    type Context = Context;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -39,11 +40,11 @@ pub struct Handler;
 
 impl proton_action_queue::action::Handler for Handler {
     type Action = Delete;
-    type Context = Context;
+    type Context = ();
 
     async fn apply_local(
         &self,
-        _: &Self::Context,
+        (): &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -63,7 +64,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn revert_local(
         &self,
-        _: &Self::Context,
+        (): &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -78,26 +79,30 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        (): &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let failed = Contact::delete_from_remote(&action.remote_ids, session.api()).await?;
+        let mut failed_local_ids = Vec::with_capacity(failed.len());
 
-        if !failed.is_empty() {
-            let tx = stash.transaction().await?;
+        if failed.is_empty() {
+            Ok(())
+        } else {
             for remote_id in failed {
-                let Some(mut contact) = Contact::find_by_id(remote_id.clone(), &tx).await? else {
-                    tracing::warn!("Failed to find contact with remote id: {:?}", remote_id);
+                let Some(local_id) = remote_id.counterpart::<Contact, _>(stash).await? else {
                     continue;
                 };
 
-                contact.mark_undelete(stash).await?;
+                failed_local_ids.push(local_id);
             }
-            tx.commit().await?;
-        }
 
-        Ok(())
+            action.local_ids = failed_local_ids;
+
+            Err(CoreContextError::Other(anyhow::anyhow!(
+                "Failed to delete contacts from remote"
+            )))
+        }
     }
 }

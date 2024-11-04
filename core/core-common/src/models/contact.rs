@@ -4,7 +4,7 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension};
 use crate::{CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
-use proton_api_core::service::ApiService;
+use proton_api_core::services::proton::common::API_SUCCESS_CODE;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
@@ -12,7 +12,6 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
-use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -455,33 +454,9 @@ impl Contact {
         Ok(response
             .responses
             .iter()
-            .filter(|r| r.response.code != 10_000) // TODO check the code
+            .filter(|r| r.response.code != API_SUCCESS_CODE)
             .map(|r| r.id.clone().into())
             .collect())
-    }
-
-    /// Deletes contacts by their local IDs.
-    /// Contacts needs to be marked as deleted before they are deleted from the
-    /// database. This function is expected to be execued by the event loop only.
-    ///
-    pub async fn delete<A>(local_ids: &[LocalId], interface: &A) -> Result<usize, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let query = format!(
-            "DELETE FROM {} WHERE local_id IN ({}) AND deleted = 0",
-            Self::table_name(),
-            vec!["?"; local_ids.len()].join(",")
-        );
-        let params = local_ids
-            .iter()
-            .map(|param| {
-                let boxed: Box<dyn ToSql + Send> = Box::new(*param);
-                boxed
-            })
-            .collect::<Vec<_>>();
-
-        interface.execute(query, params).await
     }
 
     // pub async fn vcard<Provider: PGPProviderSync>(
