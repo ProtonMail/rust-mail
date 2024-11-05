@@ -2,6 +2,7 @@ use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
     AttachmentMetadata, Disposition, MessageAddress, MessageAddresses, MimeType, SystemLabelId,
 };
+use crate::decrypted_message::StorableMessageBody;
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{
     Attachment, Conversation, DraftMetadata, Label, Message, MessageBodyMetadata, MetadataId,
@@ -17,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
-use std::io::Read;
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -337,7 +337,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         // Load body.
         let key = CacheMessageKey::from_message(&message, &tether);
-        let Some(mut message_body_reader) = ctx.messages_cache().get_item(&key)? else {
+        let Some(message_body_reader) = ctx.messages_cache().get_item(&key)? else {
             return Err(AppError::MessageBodyMissing(message_id).into());
         };
 
@@ -356,12 +356,7 @@ impl proton_action_queue::action::Handler for Handler {
             None
         };
 
-        let mut message_body = String::with_capacity(usize::try_from(message.size).unwrap_or(0));
-        message_body_reader
-            .read_to_string(&mut message_body)
-            .inspect_err(|e| {
-                error!("Failed to read message_body: {e}");
-            })?;
+        let stored = StorableMessageBody::from_reader(message_body_reader)?;
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -372,7 +367,7 @@ impl proton_action_queue::action::Handler for Handler {
                 action.reply_mode.map_or(DraftAction::Reply, Into::into),
                 &message,
                 &message_body_metadata,
-                &message_body,
+                &stored.body,
                 remote_parent_id,
             )
             .await
@@ -386,7 +381,7 @@ impl proton_action_queue::action::Handler for Handler {
                 action.address_id.clone(),
                 &message,
                 &message_body_metadata,
-                &message_body,
+                &stored.body,
             )
             .await
             .inspect_err(|e| {
@@ -606,7 +601,11 @@ where
 {
     let key = CacheMessageKey::from_message(message, interface);
 
-    cache.add_item(key, body.as_bytes()).map_err(|e| {
+    let storable = StorableMessageBody {
+        body: body.to_owned(),
+        ..Default::default()
+    };
+    cache.add_item(key, &storable.serialize()?).map_err(|e| {
         error!("Failed to store draft body in cache: {e}");
         AppError::Cache(e)
     })?;

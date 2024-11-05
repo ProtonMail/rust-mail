@@ -51,6 +51,7 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabel, SystemLabelId,
     ViewLayout, ViewMode,
 };
+use crate::decrypted_message::StorableMessageBody;
 use crate::find_in_query;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
@@ -97,6 +98,7 @@ use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSy
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
 pub use rollback_item::RollbackItem;
+use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
@@ -108,7 +110,6 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::future::Future;
-use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,7 +167,7 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 /// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
 ///
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[TableName("attachments")]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -267,11 +268,13 @@ pub struct Attachment {
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
+    #[serde(skip)]
     pub row_id: Option<u64>,
 
     /// The database instance that the record is associated with. This is
     /// present for convenience.
     #[StashField]
+    #[serde(skip)]
     pub stash: Option<Stash>,
 }
 
@@ -5932,19 +5935,12 @@ impl Message {
             )
             .await?;
 
-        let mut file = File::open(file_path)?;
-        let mut body = String::new();
-        file.read_to_string(&mut body)?;
-        let metadata = self.get_message_body_metadata(interface).await?;
-        let metadata = metadata.ok_or(AppError::MessageBodyMetadataMissing(
-            self.local_id.expect("Should be set"),
-        ))?;
-        Ok(DecryptedMessageBody {
-            body,
-            metadata,
-            pgp_attachments: None,
-            pgp_subject: None,
-        })
+        let file = File::open(file_path)?;
+        let message = StorableMessageBody::from_reader(file)?;
+        let metadata = self.get_message_body_metadata(interface).await?.ok_or(
+            AppError::MessageBodyMetadataMissing(self.local_id.expect("Should be set")),
+        )?;
+        Ok(DecryptedMessageBody::from_storable(message, metadata))
     }
 
     /// Fetch, decrypt and store message body in cache.
@@ -5964,17 +5960,13 @@ impl Message {
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
 
-        // FIXME: We're not caching the fully encrypted messages
-        // https://jira.protontech.ch/projects/ET/issues/ET-1071
-        if decrypted_message_body.pgp_attachments.is_some() {
-            return Err(CacheError::Callback(anyhow!(
-                "Multipart message not handled"
-            )));
-        }
         key.set_cached()
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Couldn't set message as cached: {e}")))?;
-        Ok(decrypted_message_body.body.into_bytes())
+
+        StorableMessageBody::from(decrypted_message_body)
+            .serialize()
+            .map_err(|e| CacheError::Callback(anyhow!("Can't serialize as Cbor: {e}")))
     }
 
     /// Finds all messages that have expired and deletes them.

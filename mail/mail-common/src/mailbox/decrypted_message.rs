@@ -4,10 +4,12 @@
 
 use crate::datatypes::MimeType;
 use crate::models::{MailSettings, MessageBodyMetadata};
-use crate::{MailUserContext, MailboxError};
+use crate::{AppError, MailUserContext, MailboxError};
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::io::Read;
 
 /// Enable or disable remote content (images).
 /// The default behaviour is Default.
@@ -122,6 +124,60 @@ impl DecryptedMessageBody {
             tags_stripped,
             utm_stripped,
         })
+    }
+
+    /// Create `DecryptedMessageBody` from a `StorableMessageBody` and a `MessageBodyMetadata`.
+    pub(crate) fn from_storable(
+        stored: StorableMessageBody,
+        metadata: MessageBodyMetadata,
+    ) -> Self {
+        Self {
+            body: stored.body,
+            metadata,
+            pgp_attachments: stored.pgp_attachments,
+            pgp_subject: stored.pgp_subject,
+        }
+    }
+}
+
+/// Consists of the message's body and decrypted content.
+///
+/// Used to store PGP attachments in cache along the message body.
+///
+#[derive(Default, Deserialize, Serialize)]
+pub struct StorableMessageBody {
+    /// The decrypted message contents.
+    pub body: String,
+
+    /// Attachments that come from a multipart message.
+    pub pgp_attachments: Option<Vec<ProcessedAttachment>>,
+
+    /// The subject that comes from a multipart message.
+    // TODO: Figure this out
+    pub pgp_subject: Option<String>,
+}
+
+impl StorableMessageBody {
+    /// Serialize into a Vec<u8> with MessagePack format
+    ///
+    pub(crate) fn serialize(&self) -> Result<Vec<u8>, AppError> {
+        Ok(rmp_serde::encode::to_vec(self)?)
+    }
+
+    /// Load a MessagePack encoded `DecryptedMessageBody` from a reader.
+    ///
+    pub fn from_reader(reader: impl Read) -> Result<Self, AppError> {
+        Ok(rmp_serde::decode::from_read(reader)?)
+    }
+}
+
+impl From<DecryptedMessageBody> for StorableMessageBody {
+    fn from(value: DecryptedMessageBody) -> Self {
+        Self {
+            body: value.body,
+            pgp_attachments: value.pgp_attachments,
+            pgp_subject: value.pgp_subject,
+        }
     }
 }
 
