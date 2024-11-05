@@ -17,7 +17,7 @@ use std::iter::once;
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub enum MoveAction {
-    /// Move to a sysem folder (e.g. Inbox, Sent, Archive, Trash).
+    /// Move to a system folder (e.g. Inbox, Sent, Archive, Trash).
     SystemFolder(MovableSystemFolderAction),
 
     /// Move to a custom folder.

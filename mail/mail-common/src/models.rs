@@ -2926,30 +2926,30 @@ impl Conversation {
         let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
         let ids = local_ids.iter().map(ToString::to_string).join(",");
 
-        let (ctx, crx) = flume::unbounded();
-        let (cltx, clrx) = flume::unbounded();
+        let (cnv_tx, cnv_rx) = flume::unbounded();
+        let (cnv_label_tx, cnv_label_rx) = flume::unbounded();
 
         let conversations = Conversation::find(
-            format!("WHERE local_id IN ({ids})"),
-            vec![],
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
             interface,
-            Some(ctx),
+            Some(cnv_tx),
         )
         .await?;
 
         let _ = ConversationLabel::find(
-            format!("WHERE local_conversation_id IN ({ids})"),
-            vec![],
+            "WHERE local_conversation_id IN (?)",
+            params![ids.clone()],
             interface,
-            Some(cltx),
+            Some(cnv_label_tx),
         )
         .await?;
 
         tokio::spawn(async move {
             loop {
                 if tokio::select! {
-                    x = clrx.recv_async() => x.map(|_| ()),
-                    x = crx.recv_async() => x.map(|_| ()),
+                    x = cnv_label_rx.recv_async() => x.map(|_| ()),
+                    x = cnv_rx.recv_async() => x.map(|_| ()),
                 }
                 .is_err()
                 {
@@ -4728,6 +4728,38 @@ impl From<ApiMailSettings> for MailSettings {
     }
 }
 
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("message_labels")]
+pub struct MessageLabel {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_message_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_label_id: LocalId,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    /// The database instance that the record is associated with. This is
+    /// present for convenience.
+    #[StashField]
+    pub stash: Option<Stash>,
+}
+
+impl MessageLabel {}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -5914,7 +5946,7 @@ impl Message {
     pub async fn watch_available_label_as_actions<A>(
         message_ids: Vec<LocalId>,
         interface: &A,
-        sender: flume::Sender<()>,
+        cb_sender: flume::Sender<()>,
     ) -> Result<Vec<LabelAsAction>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -5926,20 +5958,38 @@ impl Message {
         let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
         let ids = message_ids.iter().map(ToString::to_string).join(",");
 
-        let (ctx, crx) = flume::unbounded();
+        let (msg_tx, msg_rx) = flume::unbounded();
+        let (msg_label_tx, msg_label_rx) = flume::unbounded();
 
-        let messages =
-            Message::find("WHERE local_id IN (?)", params![ids], interface, Some(ctx)).await?;
-        // FIXME:(Orion) ¡¡Right now MessageLabels does not exist so we can't setup a watcher for it!!
+        let messages = Message::find(
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(msg_tx),
+        )
+        .await?;
+
+        let _ = MessageLabel::find(
+            "WHERE local_message_id IN (?)",
+            params![ids],
+            interface,
+            Some(msg_label_tx),
+        )
+        .await?;
 
         tokio::spawn(async move {
             loop {
-                if crx.recv_async().await.is_err() {
+                if tokio::select! {
+                    x = msg_rx.recv_async() => x.map(|_| ()),
+                    x = msg_label_rx.recv_async() => x.map(|_| ()),
+                }
+                .is_err()
+                {
                     error!("Bug in the watcher system: The watcher receiver was dropped");
                     return;
                 };
 
-                if (sender.send_async(()).await).is_err() {
+                if cb_sender.send_async(()).await.is_err() {
                     debug!("watch_available_label_as_actions stopped watching.");
                     return;
                 }
