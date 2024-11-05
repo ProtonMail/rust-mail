@@ -20,22 +20,23 @@ pub struct ContactCard {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalId>,
 
+    /// Local contact ID to which this card belongs.
     #[DbField]
     pub local_contact_id: Option<LocalId>,
 
-    /// TODO: Document this field.
+    /// Remote contact ID to which this card belongs.
     #[DbField]
     pub remote_contact_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Status of the card.
     #[DbField]
     pub card_type: ContactCardType,
 
-    /// TODO: Document this field.
+    /// The card data, encoded as a string.
     #[DbField]
     pub data: String,
 
-    /// TODO: Document this field.
+    /// The card signature, encoded as a string.
     #[DbField]
     pub signature: Option<String>,
 

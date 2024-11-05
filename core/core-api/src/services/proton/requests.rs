@@ -228,7 +228,7 @@ pub struct GetImagesLogoOptions {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
-pub struct DeleteContacts {
+pub struct PutDeleteContacts {
     #[serde(rename = "IDs")]
     /// The list of contact IDs to delete.
     pub ids: Vec<RemoteId>,

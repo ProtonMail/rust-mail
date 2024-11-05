@@ -3,15 +3,16 @@ use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::decrypted_message::StorableMessageBody;
 use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::message_body::{
-    message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
-    TEST_MESSAGE_BODY_DECRYPTED, TEST_USER_ID,
+    message_body_test_message_mime, message_body_test_message_simple, message_body_test_params,
+    message_body_test_user_secret, TEST_MESSAGE_BODY_DECRYPTED, TEST_MESSAGE_BODY_MIME_DECRYPTED,
+    TEST_MESSAGE_BODY_MIME_SIGNATURE, TEST_USER_ID,
 };
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
-use std::io::read_to_string;
 
 #[tokio::test]
 async fn mailbox_message_body_simple() {
@@ -78,7 +79,7 @@ async fn mailbox_message_body_simple() {
     let item = cache
         .get_item(&key)
         .unwrap()
-        .map(|f| read_to_string(f).unwrap());
+        .map(|f| StorableMessageBody::from_reader(f).unwrap().body);
     assert_eq!(item, Some(TEST_MESSAGE_BODY_DECRYPTED.to_owned()));
 
     let pgp_provider = new_pgp_provider();
@@ -94,4 +95,82 @@ async fn mailbox_message_body_simple() {
         .await
         .unwrap();
     assert_eq!(cache.len(), 1);
+}
+
+#[tokio::test]
+async fn mailbox_message_body_mime() {
+    // Setup:
+    //   * Create a message encrypted with MIME format
+    //     + Contains 2 attachments
+    //     + OpenPGP public key
+
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        RemoteId::from(TEST_USER_ID),
+    )
+    .await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let message = message_body_test_message_mime();
+
+    let params = message_body_test_params();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox.sync(10).await.unwrap();
+
+    let saved_message = Message::load(1.into(), user_ctx.user_stash())
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
+
+    let cache = user_ctx.messages_cache();
+    assert!(cache.is_empty());
+
+    let pgp_provider = new_pgp_provider();
+    let _local_id = saved_message.local_id.unwrap();
+    let address_id = saved_message.remote_address_id.clone();
+    let address_keys = user_ctx
+        .unlocked_address_keys(&pgp_provider, &address_id)
+        .await
+        .unwrap();
+    let api = user_ctx.session().api();
+
+    // Action:
+    //   * Get message body and PGP attachments
+    let decrypted_message = saved_message
+        .fetch_message_body(
+            cache,
+            address_keys.clone(),
+            pgp_provider,
+            api,
+            user_ctx.user_stash(),
+        )
+        .await
+        .unwrap();
+
+    // Validation:
+    assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
+    let pgp_attachments = decrypted_message.pgp_attachments.unwrap();
+    assert_eq!(pgp_attachments.len(), 3);
+    assert_eq!(pgp_attachments[0].name, "attachment1.txt");
+    assert_eq!(pgp_attachments[0].mime_type, "text/plain");
+    assert_eq!(pgp_attachments[0].data, b"attachment1");
+    assert_eq!(pgp_attachments[1].name, "attachment2.txt");
+    assert_eq!(pgp_attachments[1].mime_type, "text/plain");
+    assert_eq!(pgp_attachments[1].data, b"attachment2");
+    assert_eq!(pgp_attachments[2].name, "OpenPGP_0x46F0FA708D336220.asc");
+    assert_eq!(pgp_attachments[2].mime_type, "application/pgp-keys");
+    assert_eq!(
+        pgp_attachments[2].data,
+        TEST_MESSAGE_BODY_MIME_SIGNATURE.as_bytes()
+    );
 }

@@ -15,8 +15,8 @@ log = "0.4.20"
 parking_lot = { workspace = true }
 proton-api-core = { workspace = true }
 proton-sqlite3 = { workspace = true }
-rmp = "0.8"
-rmp-serde = "1.1"
+rmp = { workspace = true }
+rmp-serde = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }

@@ -1,13 +1,13 @@
 use crate::test_context::TestContext;
 use proton_api_core::services::proton::common::RemoteId;
-use proton_api_core::services::proton::requests::DeleteContacts;
+use proton_api_core::services::proton::requests::PutDeleteContacts;
 use proton_api_core::services::proton::response_data::{
     ApiErrorInfo, ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail,
     ContactFull as ApiContactFull,
 };
 use proton_api_core::services::proton::responses::{
-    DeleteContactResponse, DeleteContactsResponse, GetContactResponse, GetContactsEmailsResponse,
-    GetContactsResponse,
+    GetContactResponse, GetContactsEmailsResponse, GetContactsResponse, PutDeleteContactResponse,
+    PutDeleteContactsResponse,
 };
 use wiremock::{
     matchers::{body_json, method, path},
@@ -79,14 +79,14 @@ impl TestContext {
     pub async fn mock_delete_contacts(&self, contact_ids: Vec<RemoteId>) {
         Mock::given(method("PUT"))
             .and(path("/api/contacts/delete"))
-            .and(body_json(DeleteContacts {
+            .and(body_json(PutDeleteContacts {
                 ids: contact_ids.clone(),
             }))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(DeleteContactsResponse {
+                ResponseTemplate::new(200).set_body_json(PutDeleteContactsResponse {
                     responses: contact_ids
                         .into_iter()
-                        .map(|id| DeleteContactResponse {
+                        .map(|id| PutDeleteContactResponse {
                             id,
                             response: ApiErrorInfo {
                                 code: 1000,

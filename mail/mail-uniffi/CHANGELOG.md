@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Exposed `delete_contact` functionality.
   - Exposed `watch_contact_list` with new `ContactsLiveQueryCallback` interface.
+  - PGP attachments in message cache.
 
 ## [0.20.0] - 2024-10-31
 

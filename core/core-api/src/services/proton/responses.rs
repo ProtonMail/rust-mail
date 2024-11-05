@@ -170,15 +170,15 @@ pub struct GetUsersResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct DeleteContactsResponse {
+pub struct PutDeleteContactsResponse {
     /// List of responses.
-    pub responses: Vec<DeleteContactResponse>,
+    pub responses: Vec<PutDeleteContactResponse>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct DeleteContactResponse {
+pub struct PutDeleteContactResponse {
     /// Remote ID of the contact.
     pub id: RemoteId,
     /// Response data.
