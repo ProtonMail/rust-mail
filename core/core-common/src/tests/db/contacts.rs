@@ -109,6 +109,7 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
         modify_time: 1_503_815_366,
         contact_emails: create_test_contact_emails(stash),
         label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+        deleted: false,
         cards: vec![
             ContactCard {
                 local_id: None,
@@ -187,6 +188,7 @@ fn create_test_partial_contacts() -> Vec<Contact> {
         contact_emails: vec![],
         label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
         cards: vec![],
+        deleted: false,
         row_id: None,
         stash: None,
     }]

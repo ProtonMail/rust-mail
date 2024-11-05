@@ -14,6 +14,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 size INTEGER NOT NULL,
                 create_time INTEGER NOT NULL,
                 modify_time INTEGER NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0,
                 label_ids TEXT NOT NULL
             )
         ",

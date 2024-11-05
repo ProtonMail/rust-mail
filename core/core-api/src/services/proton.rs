@@ -79,9 +79,10 @@ use crate::{
 use bytes::Bytes;
 use parking_lot::RwLock;
 use proton_crypto_account::keys::APIPublicAddressKeys;
+use requests::PutDeleteContacts;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method, Url};
-use responses::GetAddressResponse;
+use responses::{GetAddressResponse, PutDeleteContactsResponse};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::{Error as JsonError, Value as JsonValue};
@@ -641,6 +642,21 @@ impl Proton {
     pub async fn get_users(&self) -> Result<GetUsersResponse, ApiServiceError> {
         self.get::<_, Json<_>>(&format!("{}/users", Self::BASE_PATH), NO_PARAMS, None)
             .await
+    }
+
+    /// Method requests to delete contacts which remotes ids were provided.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn put_delete_contacts(
+        &self,
+        ids: Vec<RemoteId>,
+    ) -> Result<PutDeleteContactsResponse, ApiServiceError> {
+        let body = PutDeleteContacts { ids };
+
+        self.put::<_, Json<_>>("contacts/delete", body, None).await
     }
 
     /// TODO: Document this method.

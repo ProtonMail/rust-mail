@@ -69,6 +69,15 @@ impl From<JoinError> for CoreContextError {
     }
 }
 
+impl proton_action_queue::action::Error for CoreContextError {
+    fn request_error(&self) -> Option<&ApiServiceError> {
+        match self {
+            Self::Api(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ContactError {
     #[error("ContactCard not found for email: {0}")]
