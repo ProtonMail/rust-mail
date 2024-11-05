@@ -36,33 +36,34 @@ pub struct Contact {
     #[DbField]
     pub remote_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Cards associated with the contact. They are in standard vCard format,
+    /// although each field is kept separatly within new vCard.
     pub cards: Vec<ContactCard>,
 
-    /// TODO: Document this field.
+    /// Emails associated with the contact.
     pub contact_emails: Vec<ContactEmail>,
 
-    /// TODO: Document this field.
+    /// Creation time of the contact.
     #[DbField]
     pub create_time: u64,
 
-    /// TODO: Document this field.
+    /// Labels associated with the contact. They are used to group contacts.
     #[DbField]
     pub label_ids: Labels,
 
-    /// TODO: Document this field.
+    /// Last modification time of the contact.
     #[DbField]
     pub modify_time: u64,
 
-    /// TODO: Document this field.
+    /// Name of the contact.
     #[DbField]
     pub name: String,
 
-    /// TODO: Document this field.
+    /// Size of the contact.
     #[DbField]
     pub size: u64,
 
-    /// TODO: Document this field.
+    /// Unique identifier of the contact.
     #[DbField]
     pub uid: RemoteId,
 
@@ -228,7 +229,7 @@ impl Contact {
     ///
     /// # Errors
     ///
-    /// TODO: Document the errors.
+    /// Errors when the API request fails or when the database query fails.
     ///
     #[allow(clippy::too_many_lines)]
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
@@ -343,7 +344,7 @@ impl Contact {
     ///
     /// # Errors
     ///
-    /// TODO: Document the errors.
+    /// Errors when the API request fails or when the database query fails.
     ///
     pub async fn sync_with_card<A>(
         local_id: LocalId,
@@ -448,7 +449,7 @@ impl Contact {
         api: &Proton,
     ) -> CoreContextResult<Vec<RemoteId>> {
         let response = api
-            .delete_contacts(remote_ids.iter().cloned().map_into().collect())
+            .put_delete_contacts(remote_ids.iter().cloned().map_into().collect())
             .await?;
 
         Ok(response

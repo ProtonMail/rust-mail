@@ -7,59 +7,68 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 
-/// TODO: Document this struct.
+/// Represents a contact's email.
+///
+/// Contact emails are used to store email addresses associated with a contact.
+///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_emails")]
 pub struct ContactEmail {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalId>,
+
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
-
     #[DbField]
     pub remote_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Remote contact ID to which this email belongs.
     #[DbField]
     pub remote_contact_id: Option<RemoteId>,
 
+    /// Local contact ID to which this email belongs.
     #[DbField]
     pub local_contact_id: Option<LocalId>,
 
-    /// TODO: Document this field.
+    /// Canonical email address.
     #[DbField]
     pub canonical_email: String,
 
-    /// TODO: Document this field.
+    /// Contact type, free text label of the contact.
     #[DbField]
     pub contact_type: ContactTypes,
 
-    /// TODO: Document this field.
+    /// Contact sending preferences: 0 - custom, 1 - default.
     #[DbField]
     pub defaults: ContactSendingPreferences,
 
-    /// TODO: Document this field.
+    /// Display order of the email (based on creation time).
     #[DbField]
     pub display_order: u32,
 
-    /// TODO: Document this field.
+    /// Email address.
     #[DbField]
     pub email: String,
 
-    /// TODO: Document this field.
+    /// Indicates if the email is a Proton email.
     #[DbField]
     pub is_proton: bool,
 
-    /// TODO: Document this field.
+    /// Label IDs associated with the email. Label IDs are used to group emails.
     #[DbField]
     pub label_ids: Labels,
 
-    /// TODO: Document this field.
+    /// Last used time of the email.
     #[DbField]
     pub last_used_time: u64,
 
-    /// TODO: Document this field.
+    /// Name of the email.
     #[DbField]
     pub name: String,
 
