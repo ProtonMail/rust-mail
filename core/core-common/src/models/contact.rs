@@ -3,11 +3,11 @@ use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
 use crate::{CoreContextError, CoreContextResult};
 use itertools::Itertools;
+<<<<<<< HEAD
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::services::proton::common::API_SUCCESS_CODE;
+>>>>>>> chore-move-contacts-models
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
-use proton_api_core::services::proton::response_data::{
-    ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session;

@@ -1,6 +1,7 @@
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
 use crate::datatypes::{Disposition, MessageAddress, MimeType, PmSignature};
+use crate::decrypted_message::StorableMessageBody;
 use crate::models::{
     Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
@@ -342,9 +343,11 @@ impl Draft {
             return Err(Error::MessageBodyMissing(message_id).into());
         };
 
-        let source_body = io::read_to_string(source_body_reader).inspect_err(|e| {
-            error!("Failed to read body into string: {e}");
-        })?;
+        let source_body = StorableMessageBody::from_reader(source_body_reader)
+            .inspect_err(|e| {
+                error!("Failed to read body into string: {e}");
+            })?
+            .body;
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
 

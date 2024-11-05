@@ -158,6 +158,8 @@ impl From<AppError> for UserLoginFlowError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::Cache(cache_error) => Self::from(cache_error),
+            AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
+            AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
             AppError::Other(_string) => Self::Unexpected(Unexpected::Unknown),

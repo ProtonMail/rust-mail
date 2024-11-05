@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - Exposed `delete_contact` functionality.
+  - PGP attachments in message cache.
 
 ## [0.20.0] - 2024-10-31
 
