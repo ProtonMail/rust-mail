@@ -8,7 +8,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::time::interval;
+use tokio::{task, time::interval};
 
 use crate::{
     core::datatypes::{GroupedContacts, Id},
@@ -126,6 +126,7 @@ pub fn damp_contacts_callback(
 
     tokio::spawn(async move {
         let mut interval = interval(Duration::from_millis(DAMPENING_PERIOD));
+        let callback = Arc::new(callback);
 
         loop {
             interval.tick().await;
@@ -141,7 +142,14 @@ pub fn damp_contacts_callback(
                     return;
                 }
 
-                callback.on_update(contact_list.unwrap());
+                let callback_clone = callback.clone();
+
+                if task::spawn_blocking(move || callback_clone.on_update(contact_list.unwrap()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
             }
         }
     });

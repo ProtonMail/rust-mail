@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::time::interval;
+use tokio::{task, time::interval};
 
 use crate::LiveQueryCallback;
 
@@ -31,6 +31,7 @@ pub fn damp_with_duration(
 
     tokio::spawn(async move {
         let mut interval = interval(duration);
+        let callback = Arc::new(callback);
 
         loop {
             interval.tick().await;
@@ -40,7 +41,14 @@ pub fn damp_with_duration(
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
-                callback.on_update();
+                let callback_clone = callback.clone();
+
+                if task::spawn_blocking(move || callback_clone.on_update())
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
             }
         }
     });
