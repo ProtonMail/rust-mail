@@ -38,7 +38,7 @@ enum TestActions {
     More,
     MoveTo,
     MoveToSystemFolder(MovableSystemFolder),
-    NotSpam,
+    NotSpam(MovableSystemFolder),
     PermanentDelete,
     Star,
     Unstar,
@@ -59,7 +59,13 @@ impl PartialEq<BottomBarActions> for TestActions {
                     false
                 }
             }
-            Self::NotSpam => matches!(other, BottomBarActions::NotSpam),
+            Self::NotSpam(label) => {
+                if let BottomBarActions::NotSpam(other) = other {
+                    *label == other.name
+                } else {
+                    false
+                }
+            }
             Self::PermanentDelete => matches!(other, BottomBarActions::PermanentDelete),
             Self::Star => matches!(other, BottomBarActions::Star),
             Self::Unstar => matches!(other, BottomBarActions::Unstar),
@@ -345,7 +351,7 @@ mod message {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
-            TestActions::NotSpam,
+            TestActions::NotSpam(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });
@@ -696,7 +702,7 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
-            TestActions::NotSpam,
+            TestActions::NotSpam(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });

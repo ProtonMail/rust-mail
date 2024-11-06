@@ -42,7 +42,7 @@ pub enum BottomBarActions {
     More,
     MoveTo,
     MoveToSystemFolder(MovableSystemFolderAction),
-    NotSpam,
+    NotSpam(MovableSystemFolderAction),
     PermanentDelete,
     Star,
     Unstar,
@@ -59,7 +59,7 @@ impl From<RealBottomBarActions> for BottomBarActions {
             RealBottomBarActions::MoveToSystemFolder(label) => {
                 Self::MoveToSystemFolder(label.into())
             }
-            RealBottomBarActions::NotSpam => Self::NotSpam,
+            RealBottomBarActions::NotSpam(label) => Self::NotSpam(label.into()),
             RealBottomBarActions::PermanentDelete => Self::PermanentDelete,
             RealBottomBarActions::Star => Self::Star,
             RealBottomBarActions::Unstar => Self::Unstar,

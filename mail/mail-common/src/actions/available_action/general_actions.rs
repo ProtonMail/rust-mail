@@ -25,15 +25,4 @@ impl GeneralActions {
             GeneralActions::ReportPhishing,
         ]
     }
-
-    pub fn all_but_phishing() -> Vec<Self> {
-        vec![
-            GeneralActions::ViewMessageInLightMode,
-            GeneralActions::ViewMessageInDarkMode,
-            GeneralActions::SaveAsPdf,
-            GeneralActions::Print,
-            GeneralActions::ViewHeaders,
-            GeneralActions::ViewHtml,
-        ]
-    }
 }

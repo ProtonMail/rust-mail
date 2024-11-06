@@ -344,25 +344,52 @@ mod available_actions {
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(deleted: false, num_unread: 1, remote_id: rid!("conversation1")),
+            conversation: conversation!(num_unread: 1, remote_id: rid!("conversation1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
-        expected: Err(AppError::ConversationDoesNotHaveLabel(
-            1.into(),
-            "Inbox".to_string(),
-        )),
+        expected: Ok(ConversationAvailableActions::builder()
+            .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Archive,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Spam,
+                }
+                .into(),
+                MoveItemAction::MoveTo,
+            ])
+            .conversation_actions(vec![
+                ConversationAction::MarkRead,
+                ConversationAction::Unstar,
+                ConversationAction::LabelAs,
+            ])
+            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .build()),
     });
 
     static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(deleted: false, num_unread: 1, remote_id: rid!("conversation_1")),
+            conversation: conversation!(num_unread: 1, remote_id: rid!("conversation_1")),
             labels: vec![STARRED.clone(), INBOX.clone()],
         }],
         expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
                     local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                 }
                 .into(),
@@ -371,35 +398,28 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::Unstar,
                 ConversationAction::MarkRead,
-                ConversationAction::Pin,
+                ConversationAction::Unstar,
                 ConversationAction::LabelAs,
-                ConversationAction::Delete,
             ])
-            .general_actions(GeneralActions::all_but_phishing())
+            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
             .build()),
     });
 
     static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: FOLDER.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test2".into())),
+            conversation: conversation!(num_unread: 0, remote_id: Some("test2".into())),
             labels: vec![FOLDER.clone()],
         }],
         expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: MovableSystemFolder::Inbox,
+                    name: MovableSystemFolder::Trash,
                 }
                 .into(),
                 MovableSystemFolderAction {
@@ -412,20 +432,14 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::Star,
                 ConversationAction::MarkUnread,
-                ConversationAction::Pin,
+                ConversationAction::Star,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(GeneralActions::all_but_phishing())
+            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
             .build()),
     });
 
@@ -437,31 +451,24 @@ mod available_actions {
         }],
         expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Inbox,
-                }
-                .into(),
+                MoveItemAction::PermanentDelete,
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
+                MoveItemAction::NotSpam(MovableSystemFolderAction {
+                    local_id: 1.into(),
+                    name: MovableSystemFolder::Inbox,
+                }),
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::Star,
                 ConversationAction::MarkUnread,
-                ConversationAction::Pin,
+                ConversationAction::Star,
                 ConversationAction::LabelAs,
-                ConversationAction::Delete,
             ])
-            .general_actions(GeneralActions::all_but_phishing())
+            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
             .build()),
     });
 
@@ -469,16 +476,21 @@ mod available_actions {
         view: INBOX.clone(),
         conversations: vec![
             ConversationWithLabels {
-                conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test4_1".into())),
+                conversation: conversation!(num_unread: 0, remote_id: Some("test4_1".into())),
                 labels: vec![STARRED.clone(), INBOX.clone()],
             },
             ConversationWithLabels {
-                conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test4_2".into())),
+                conversation: conversation!(num_unread: 1, remote_id: Some("test4_2".into())),
                 labels: vec![INBOX.clone()],
             },
         ],
         expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
@@ -489,28 +501,23 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .conversation_actions(vec![
-                ConversationAction::Star,
                 ConversationAction::MarkRead,
-                ConversationAction::Pin,
+                ConversationAction::MarkUnread,
+                ConversationAction::Unstar,
+                ConversationAction::Star,
                 ConversationAction::LabelAs,
-                ConversationAction::Delete,
             ])
-            .general_actions(GeneralActions::all_but_phishing())
+            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
             .build()),
     });
 
     #[test_case(&TEST0; "TEST0: empty")]
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
     #[test_case(&TEST2; "TEST2: Unread, starred in Inbox viewed from Inbox")]
-    #[test_case(&TEST3; "TEST3: Read, not starred, deleted and in custom folder viewed from Folder")]
+    #[test_case(&TEST3; "TEST3: Read, not starred, in custom folder viewed from Folder")]
     #[test_case(&TEST4; "TEST4: Default, viewed from Spam")]
     #[test_case(&TEST5; "TEST5: Two conversations, one from TEST1 and other from TEST2")]
     #[tokio::test]

@@ -2749,7 +2749,8 @@ impl Conversation {
         Ok(())
     }
 
-    /// Get the available actions for conversations excluding move to current view
+    /// Get the available actions for conversations depending on current view and stats of the given
+    /// conversations.
     ///
     /// # Parameters
     ///
@@ -2767,86 +2768,41 @@ impl Conversation {
     ///
     pub async fn available_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        conversation_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<ConversationAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if conversation_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let conversations = Conversation::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
+        let conversations = Conversation::find_by_ids(conversation_ids, interface).await?;
 
-        let mut starred = true;
-        let mut deleted = true;
-        let mut unread = false;
-
-        for conversation in conversations.iter() {
-            if !conversation.is_starred() {
-                starred = false;
-            }
-            if !conversation.deleted {
-                deleted = false;
-            }
-            if conversation.num_unread > 0 {
-                unread = true;
-            }
-            let is_conversation_in_view = conversation
-                .labels
-                .iter()
-                .any(|label| label.local_label_id == view.local_id);
-
-            if !is_conversation_in_view {
-                return Err(AppError::ConversationDoesNotHaveLabel(
-                    conversation.local_id.unwrap(),
-                    view.name.clone(),
-                ));
-            }
+        let mut conversation_actions = Vec::new();
+        if conversations.iter().any(|c| c.num_unread > 0) {
+            conversation_actions.push(ConversationAction::MarkRead);
         }
-
-        let mut conversation_actions = vec![
-            if starred {
-                ConversationAction::Unstar
-            } else {
-                ConversationAction::Star
-            },
-            if unread {
-                ConversationAction::MarkRead
-            } else {
-                ConversationAction::MarkUnread
-            },
-            // Statics
-            ConversationAction::Pin,
-            ConversationAction::LabelAs,
-        ];
-
-        if !deleted {
-            conversation_actions.push(ConversationAction::Delete);
+        if conversations.iter().any(|c| c.num_unread == 0) {
+            conversation_actions.push(ConversationAction::MarkUnread);
         }
+        if conversations.iter().any(|c| c.is_starred()) {
+            conversation_actions.push(ConversationAction::Unstar);
+        }
+        if conversations.iter().any(|c| !c.is_starred()) {
+            conversation_actions.push(ConversationAction::Star);
+        }
+        conversation_actions.push(ConversationAction::LabelAs);
 
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_excluding_view = all_system
-            .iter()
-            .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_excluding_view);
-        let move_actions = MoveAction::system(move_actions);
-        let move_actions = MoveItemAction::from_actions(move_actions);
+        let move_actions = MoveItemAction::from_view(view, interface).await?;
+
+        let general_actions = vec![GeneralActions::SaveAsPdf, GeneralActions::Print];
 
         Ok(ConversationAvailableActions::builder()
-            .move_actions(move_actions)
             .conversation_actions(conversation_actions)
-            .general_actions(GeneralActions::all_but_phishing())
+            .move_actions(move_actions)
+            .general_actions(general_actions)
             .build())
     }
 
@@ -5687,84 +5643,45 @@ impl Message {
     ///
     pub async fn available_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<MessageAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 
-        let messages = Message::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
+        let messages = Message::find_by_ids(message_ids, interface).await?;
 
-        let mut starred = true;
-        let mut deleted = true;
-        let mut unread = false;
-        let mut reply_all = false;
-
-        for message in messages.iter() {
-            if !message.is_starred() {
-                starred = false;
-            }
-            if !message.deleted {
-                deleted = false;
-            }
-            if message.unread {
-                unread = true;
-            }
-            if message.reply_tos.value.len() > 1 {
-                reply_all = true;
-            }
-        }
-
-        let mut message_actions = vec![
-            if starred {
-                MessageAction::Unstar
-            } else {
-                MessageAction::Star
-            },
-            if unread {
-                MessageAction::MarkRead
-            } else {
-                MessageAction::MarkUnread
-            },
-            // Statics
-            MessageAction::Pin,
-            MessageAction::LabelAs,
-        ];
-
-        if !deleted {
-            message_actions.push(MessageAction::Delete);
-        }
-
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_excluding_view = all_system
-            .iter()
-            .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_excluding_view);
-        let reply_actions = if reply_all {
+        let reply_actions = if messages.iter().any(|m| m.reply_tos.value.len() > 1) {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
         };
-        let move_actions = MoveAction::system(move_actions);
-        let move_actions = MoveItemAction::from_actions(move_actions);
+
+        let mut message_actions = Vec::new();
+        if messages.iter().any(|m| m.unread) {
+            message_actions.push(MessageAction::MarkRead);
+        }
+        if messages.iter().any(|m| !m.unread) {
+            message_actions.push(MessageAction::MarkUnread);
+        }
+        if messages.iter().any(|m| m.is_starred()) {
+            message_actions.push(MessageAction::Unstar);
+        }
+        if messages.iter().any(|m| !m.is_starred()) {
+            message_actions.push(MessageAction::Star);
+        }
+        message_actions.push(MessageAction::LabelAs);
+
+        let move_actions = MoveItemAction::from_view(view, interface).await?;
 
         Ok(MessageAvailableActions::builder()
-            .move_actions(move_actions)
             .reply_actions(reply_actions)
             .message_actions(message_actions)
+            .move_actions(move_actions)
             .build())
     }
 
