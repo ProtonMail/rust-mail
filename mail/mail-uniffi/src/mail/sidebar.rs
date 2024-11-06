@@ -189,7 +189,7 @@ impl Sidebar {
             let stop_flag_clone = Arc::clone(&stop_flag);
 
             spawn_async(async move {
-                let callback = damp(callback);
+                let callback = damp(callback).await;
                 while let Ok(change) = receiver.recv_async().await {
                     if stop_flag_clone.load(Ordering::SeqCst) {
                         debug!("Stop flag set, stopping watch");

@@ -180,7 +180,7 @@ pub async fn watch_available_label_as_actions_for_conversations(
 ) -> MailboxResult<WatchedLabelAs> {
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
-        let handle = watch_channel(rx, callback);
+        let handle = watch_channel(rx, callback).await;
 
         let actions = RealConversation::watch_available_label_as_actions(
             ids.into_iter().map_into().collect(),
@@ -520,7 +520,7 @@ pub async fn paginate_conversations_for_label(
         .await?;
         Ok(ConversationPaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
             label_id,
         })
     })
@@ -705,7 +705,7 @@ pub async fn watch_conversation(
         )
         .await?;
 
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
 
         Ok(Some(WatchedConversation {
             conversation: conversation_messages.conversation,
@@ -756,7 +756,7 @@ pub async fn watch_conversations_for_label(
             session.user_stash(),
         )
         .await?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
         Ok(WatchedConversations {
             conversations: conversations.into_iter().map(Into::into).collect(),
             handle: watcher,

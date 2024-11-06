@@ -240,7 +240,7 @@ pub async fn watch_message(
     let watcher = WatchHandle::default();
     let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let callback = damp(callback);
+        let callback = damp(callback).await;
         let message = if let Some((message, receiver)) =
             RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
         {
@@ -370,7 +370,7 @@ pub async fn paginate_messages_for_label(
         .await?;
         Ok(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
         })
     })
     .await
@@ -418,7 +418,7 @@ pub async fn paginate_search(
         .await?;
         Ok(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
         })
     })
     .await
@@ -545,7 +545,7 @@ pub async fn watch_available_label_as_actions_for_messages(
 ) -> MailboxResult<WatchedLabelAs> {
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
-        let handle = watch_channel(rx, callback);
+        let handle = watch_channel(rx, callback).await;
 
         let actions = RealMessage::watch_available_label_as_actions(
             ids.into_iter().map_into().collect(),
@@ -686,7 +686,7 @@ pub async fn watch_messages_for_label(
     uniffi_async(async move {
         let (messages, receiver) =
             RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
         Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
             handle: watcher,

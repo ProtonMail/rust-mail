@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Exposed `watch_contact_list` with new `ContactsLiveQueryCallback` interface.
   - PGP attachments in message cache.
 
+### Fix
+  - Wrap blocking code of callback in `spawn_blocking`
+  - Distribute dapmpening times in range.
+  - Add await time before executing callback to relax whole update system
+
 ### Changed
 
   - `available_actions_for_conversations` and `available_actions_for_messages`

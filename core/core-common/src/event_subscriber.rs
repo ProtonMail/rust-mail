@@ -72,11 +72,16 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
             })?;
         {
+            let tx = stash.transaction().await.map_err(|e| {
+                error!("Failed to start transaction: {e}");
+                SubscriberError::Other(anyhow!("Failed to start transaction: {e}"))
+            })?;
+
             for event in events.iter_mut() {
                 if let Some(user) = event.get_core_event_user_mut() {
                     debug!("Handling user event");
                     user.set_stash(&stash);
-                    user.save().await.map_err(|e| {
+                    user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update user: {e}");
                         e
                     })?;
@@ -85,7 +90,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user setting event");
                     settings.remote_id = Some(user_id.clone());
                     settings.set_stash(&stash);
-                    settings.save().await.map_err(|e| {
+                    settings.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update user settings:{e}");
                         e
                     })?;
@@ -95,7 +100,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.used_space = used_space;
                     user.set_stash(&stash);
-                    user.save().await.map_err(|e| {
+                    user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
@@ -105,7 +110,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
                     user.set_stash(&stash);
-                    user.save().await.map_err(|e| {
+                    user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
@@ -113,7 +118,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 if let Some(addresses) = event.get_core_event_addresses_mut() {
                     debug!("Handling address event");
                     for address in addresses {
-                        address.save().await.map_err(|e| {
+                        address.save_using(&tx).await.map_err(|e| {
                             error!("Failed to update user addresses: {e}");
                             e
                         })?;
@@ -121,13 +126,16 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(contacts) = event.get_core_event_contacts_mut() {
                     debug!("Handling contact events");
-                    handle_contact_event(&stash.connection(), contacts).await?;
+                    handle_contact_event(&tx, contacts).await?;
                 }
                 if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
                     debug!("Handling contact email events");
-                    handle_contact_email_event(&stash.connection(), contact_emails).await?;
+                    handle_contact_email_event(&tx, contact_emails).await?;
                 }
             }
+
+            tx.commit().await?;
+
             Ok(())
         }
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
