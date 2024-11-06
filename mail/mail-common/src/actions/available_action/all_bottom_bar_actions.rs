@@ -25,7 +25,7 @@ pub enum BottomBarActions {
     More,
     MoveTo,
     MoveToSystemFolder(MovableSystemFolderAction),
-    NotSpam,
+    NotSpam(MovableSystemFolderAction),
     PermanentDelete,
     Star,
     Unstar,
@@ -85,7 +85,7 @@ impl BottomBarActions {
         spam: &MovableSystemFolderAction,
     ) -> Self {
         if current_label == &LabelId::spam() {
-            Self::NotSpam
+            Self::NotSpam(inbox.clone())
         } else if current_label == &LabelId::trash() {
             Self::MoveToSystemFolder(inbox.clone())
         } else {
@@ -153,9 +153,10 @@ impl BottomBarActions {
         {
             result.push(BottomBarActions::MoveToSystemFolder(inbox.clone()));
         }
-        if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
+        if current_label == LabelId::spam()
+            && !visible_actions.contains(&BottomBarActions::NotSpam(inbox.clone()))
         {
-            result.push(BottomBarActions::NotSpam);
+            result.push(BottomBarActions::NotSpam(inbox.clone()));
         }
         // Archive
         if current_label != LabelId::archive()

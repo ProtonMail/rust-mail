@@ -490,7 +490,7 @@ impl Conversation {
     ///
     /// When database request fail.
     ///
-    async fn find_by_ids<A>(
+    pub(crate) async fn find_by_ids<A>(
         conversation_ids: impl IntoIterator<Item = LocalId>,
         interface: &A,
     ) -> Result<Vec<Self>, StashError>
