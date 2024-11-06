@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Wrap blocking code of callback in `spawn_blocking`
   - Distribute dapmpening times in range.
   - Add await time before executing callback to relax whole update system
+  - Paginator never marks first page as `recently_synced`
+  - Paginator allows for all incoming updates to trigger callback
 
 ### Changed
 
