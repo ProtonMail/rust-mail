@@ -290,7 +290,7 @@ where
     let stop_flag_clone = Arc::clone(&stop_flag);
 
     spawn_async(async move {
-        let callback = damp(callback);
+        let callback = damp(callback).await;
         while let Ok(change) = receiver.recv_async().await {
             if stop_flag_clone.load(Ordering::SeqCst) {
                 debug!("Stop flag set, stopping watch");
@@ -375,13 +375,13 @@ where
 /// The callback is "dampened" to avoid excessive invocations to the callback.
 ///
 #[must_use]
-pub fn watch_channel<T: Send + 'static>(
+pub async fn watch_channel<T: Send + 'static>(
     channel: flume::Receiver<T>,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
     let watcher = WatchHandle::new();
 
-    watch_channel_inner(watcher.clone(), channel, damp(callback));
+    watch_channel_inner(watcher.clone(), channel, damp(callback).await);
 
     Arc::new(watcher)
 }

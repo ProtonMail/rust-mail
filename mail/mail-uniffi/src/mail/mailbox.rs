@@ -222,7 +222,7 @@ impl Mailbox {
                 return Err(MailboxError::LabelNotFound(Id::from(label_id)));
             };
 
-            let watcher = watch_channel(receiver, callback);
+            let watcher = watch_channel(receiver, callback).await;
             Ok(watcher)
         })
         .await
