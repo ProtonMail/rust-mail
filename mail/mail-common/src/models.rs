@@ -2855,6 +2855,87 @@ impl Conversation {
         Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
+    /// Watches `label as` actions for conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    /// * `sender`    - The sender for the channel to receive updates on.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    pub async fn watch_available_label_as_actions<A>(
+        local_ids: Vec<LocalId>,
+        interface: &A,
+        sender: flume::Sender<()>,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let ids = local_ids.iter().map(ToString::to_string).join(",");
+
+        let (cnv_tx, cnv_rx) = flume::unbounded();
+        let (cnv_label_tx, cnv_label_rx) = flume::unbounded();
+
+        let conversations = Conversation::find(
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(cnv_tx),
+        )
+        .await?;
+
+        let _ = ConversationLabel::find(
+            "WHERE local_conversation_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(cnv_label_tx),
+        )
+        .await?;
+
+        tokio::spawn(async move {
+            loop {
+                if tokio::select! {
+                    x = cnv_label_rx.recv_async() => x.map(|_| ()),
+                    x = cnv_rx.recv_async() => x.map(|_| ()),
+                }
+                .is_err()
+                {
+                    error!("Bug in the watcher system: The watcher receiver was dropped");
+                    return;
+                };
+
+                if sender.send_async(()).await.is_err() {
+                    debug!("watch_available_label_as_actions stopped watching.");
+                    return;
+                }
+            }
+        });
+
+        let all_label_as_actions = conversations
+            .iter()
+            .flat_map(|conversation| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    conversation
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
+    }
+
     /// Get the available move actions for conversations
     ///
     /// # Parameters
@@ -4603,6 +4684,38 @@ impl From<ApiMailSettings> for MailSettings {
     }
 }
 
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("message_labels")]
+pub struct MessageLabel {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_message_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_label_id: LocalId,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    /// The database instance that the record is associated with. This is
+    /// present for convenience.
+    #[StashField]
+    pub stash: Option<Stash>,
+}
+
+impl MessageLabel {}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -5697,13 +5810,13 @@ impl Message {
     /// Returns error if the database request fail.
     ///
     pub async fn available_label_as_actions<A>(
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<Vec<LabelAsAction>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 
@@ -5711,13 +5824,95 @@ impl Message {
         let messages = Message::find(
             format!(
                 "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
+                message_ids.iter().map(ToString::to_string).join(",")
             ),
             vec![],
             interface,
             None,
         )
         .await?;
+
+        let all_label_as_actions = messages
+            .iter()
+            .flat_map(|message| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    message
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
+    }
+
+    /// Watches available `label as` actions for messages
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    /// * `sender`    - The sender for the channel to receive updates on.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    pub async fn watch_available_label_as_actions<A>(
+        message_ids: Vec<LocalId>,
+        interface: &A,
+        cb_sender: flume::Sender<()>,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if message_ids.is_empty() {
+            return Err(AppError::EmptyListOfMessages);
+        }
+
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let ids = message_ids.iter().map(ToString::to_string).join(",");
+
+        let (msg_tx, msg_rx) = flume::unbounded();
+        let (msg_label_tx, msg_label_rx) = flume::unbounded();
+
+        let messages = Message::find(
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(msg_tx),
+        )
+        .await?;
+
+        let _ = MessageLabel::find(
+            "WHERE local_message_id IN (?)",
+            params![ids],
+            interface,
+            Some(msg_label_tx),
+        )
+        .await?;
+
+        tokio::spawn(async move {
+            loop {
+                if tokio::select! {
+                    x = msg_rx.recv_async() => x.map(|_| ()),
+                    x = msg_label_rx.recv_async() => x.map(|_| ()),
+                }
+                .is_err()
+                {
+                    error!("Bug in the watcher system: The watcher receiver was dropped");
+                    return;
+                };
+
+                if cb_sender.send_async(()).await.is_err() {
+                    debug!("watch_available_label_as_actions stopped watching.");
+                    return;
+                }
+            }
+        });
+
         let all_label_as_actions = messages
             .iter()
             .flat_map(|message| {
@@ -5748,13 +5943,13 @@ impl Message {
     ///
     pub async fn available_move_to_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<Vec<MoveAction>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 

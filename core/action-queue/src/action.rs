@@ -535,8 +535,7 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
     }
 }
 
-/// A Factory pattern implementation for [`Action`]s which are stored on the
-/// [`Queue`](crate::queue::Queue).
+/// A Factory pattern implementation for [`Action`]s which are stored on the [`Queue`](crate::queue::Queue).
 ///
 /// When action are stored on the queue, their state is serialized into the database. In order to
 /// be able to decode an execute those actions they need to be registered with a factory instance.

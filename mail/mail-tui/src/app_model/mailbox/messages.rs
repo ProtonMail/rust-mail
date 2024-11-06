@@ -444,12 +444,6 @@ pub struct DecryptedMessage {
     label_list: String,
 }
 
-/// # Safety
-///
-/// The `NodeRef` type is not send by default, but the data is not shared outside of the crate
-/// so it is safe.
-unsafe impl Send for DecryptedMessage {}
-
 enum DecryptedMessageStatus {
     None,
     Loading(ThrobberState),
