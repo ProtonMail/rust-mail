@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.21.1] - 2024-11-07
+
+### Fix
+
+  - reenable contact events
+
 ## [0.21.0] - 2024-11-06
 
 ### Added
@@ -17,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - PGP attachments in message cache.
 
 ### Fix
+
   - Wrap blocking code of callback in `spawn_blocking`
   - Distribute dapmpening times in range.
   - Add await time before executing callback to relax whole update system
