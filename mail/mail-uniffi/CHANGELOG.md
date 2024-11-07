@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `move_message` to remove `source_id` argument.
+
 ## [0.21.1] - 2024-11-07
 
 ### Fix

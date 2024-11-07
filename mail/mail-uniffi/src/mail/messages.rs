@@ -1000,8 +1000,7 @@ pub async fn label_messages_as(
 ///
 /// # Parameters
 ///
-/// * `session`        - The session to use for the request.
-/// * `source_id`      - The local ID of the source label.
+/// * `mailbox`        - Mailbox containing the messages.
 /// * `destination_id` - The local ID of the destination label.
 /// * `message_ids`    - The local IDs of the messages to move.
 ///
@@ -1011,12 +1010,12 @@ pub async fn label_messages_as(
 ///
 #[uniffi::export]
 pub async fn move_messages(
-    session: Arc<MailUserSession>,
-    source_id: Id,
+    mailbox: Arc<Mailbox>,
     destination_id: Id,
     message_ids: Vec<Id>,
 ) -> Result<(), MailSessionError> {
-    let user_context = session.ctx();
+    let user_context = mailbox.mbox().user_context();
+    let source_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_move(
             user_context.session(),
