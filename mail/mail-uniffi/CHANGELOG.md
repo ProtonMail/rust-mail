@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.21.2] - 2024-11-07
+
+### Fix
+
+  - Change the `put_delete_contacts` response `Id` to `ID`
+
+
 ### Changed
 
   - `move_message` to remove `source_id` argument.

@@ -180,6 +180,7 @@ pub struct PutDeleteContactsResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PutDeleteContactResponse {
     /// Remote ID of the contact.
+    #[serde(rename = "ID")]
     pub id: RemoteId,
     /// Response data.
     pub response: ApiErrorInfo,
