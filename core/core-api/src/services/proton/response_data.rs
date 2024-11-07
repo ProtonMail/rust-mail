@@ -376,6 +376,25 @@ pub struct AddressSignedKeyList {
     pub signature: Option<String>,
 }
 
+/// Data for an event related to an [`AddressEvent`] record.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub address: Option<Address>,
+}
+
+impl GetEventResponse for AddressEvent {}
+
 /// Additional information about an API service error.
 ///
 /// If a response is received with an HTTP status code that indicates a protocol
