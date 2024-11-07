@@ -77,11 +77,16 @@ mod available_actions {
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         messages: vec![MessageWithLabels {
-            message: message!(deleted: false, unread: true, remote_id: rid!("test1")),
+            message: message!(unread: true, remote_id: rid!("test1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
@@ -92,19 +97,12 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .message_actions(vec![
-                MessageAction::Unstar,
                 MessageAction::MarkRead,
-                MessageAction::Pin,
+                MessageAction::Unstar,
                 MessageAction::LabelAs,
-                MessageAction::Delete,
             ])
             .build()),
     });
@@ -112,14 +110,14 @@ mod available_actions {
     static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: FOLDER.clone(),
         messages: vec![MessageWithLabels {
-            message: message!(deleted: true, unread: false, remote_id: Some("test2".into())),
+            message: message!(unread: false, remote_id: Some("test2".into())),
             labels: vec![FOLDER.clone()],
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: MovableSystemFolder::Inbox,
+                    name: MovableSystemFolder::Trash,
                 }
                 .into(),
                 MovableSystemFolderAction {
@@ -132,17 +130,11 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .message_actions(vec![
-                MessageAction::Star,
                 MessageAction::MarkUnread,
-                MessageAction::Pin,
+                MessageAction::Star,
                 MessageAction::LabelAs,
             ])
             .build()),
@@ -156,29 +148,22 @@ mod available_actions {
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Inbox,
-                }
-                .into(),
+                MoveItemAction::PermanentDelete,
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
+                MoveItemAction::NotSpam(MovableSystemFolderAction {
+                    local_id: 1.into(),
+                    name: MovableSystemFolder::Inbox,
+                }),
                 MoveItemAction::MoveTo,
             ])
             .message_actions(vec![
-                MessageAction::Star,
                 MessageAction::MarkUnread,
-                MessageAction::Pin,
+                MessageAction::Star,
                 MessageAction::LabelAs,
-                MessageAction::Delete,
             ])
             .build()),
     });
@@ -187,16 +172,21 @@ mod available_actions {
         view: INBOX.clone(),
         messages: vec![
             MessageWithLabels {
-                message: message!(deleted: true, unread: false, remote_id: Some("test4_1".into())),
+                message: message!( unread: false, remote_id: Some("test4_1".into())),
                 labels: vec![STARRED.clone()],
             },
             MessageWithLabels {
-                message: message!(deleted: false, unread: true, remote_id: Some("test4_2".into())),
+                message: message!( unread: true, remote_id: Some("test4_2".into())),
                 labels: vec![],
             },
         ],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
                 MovableSystemFolderAction {
                     local_id: 0.into(),
                     name: MovableSystemFolder::Archive,
@@ -207,26 +197,21 @@ mod available_actions {
                     name: MovableSystemFolder::Spam,
                 }
                 .into(),
-                MovableSystemFolderAction {
-                    local_id: 0.into(),
-                    name: MovableSystemFolder::Trash,
-                }
-                .into(),
                 MoveItemAction::MoveTo,
             ])
             .message_actions(vec![
-                MessageAction::Star,
                 MessageAction::MarkRead,
-                MessageAction::Pin,
+                MessageAction::MarkUnread,
+                MessageAction::Unstar,
+                MessageAction::Star,
                 MessageAction::LabelAs,
-                MessageAction::Delete,
             ])
             .build()),
     });
 
     #[test_case(&TEST0; "TEST0: empty")]
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
-    #[test_case(&TEST2; "TEST2: Read, not starred, deleted and in custom folder viewed from Folder")]
+    #[test_case(&TEST2; "TEST2: Read, not starred and in custom folder viewed from Folder")]
     #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
     #[test_case(&TEST4; "TEST4: Two conversations, one from TEST1 and other from TEST2")]
     #[tokio::test]

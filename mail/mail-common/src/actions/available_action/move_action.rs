@@ -11,13 +11,12 @@ use crate::{
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
-use std::iter::once;
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub enum MoveAction {
-    /// Move to a sysem folder (e.g. Inbox, Sent, Archive, Trash).
+    /// Move to a system folder (e.g. Inbox, Sent, Archive, Trash).
     SystemFolder(MovableSystemFolderAction),
 
     /// Move to a custom folder.
@@ -308,15 +307,36 @@ impl Hierarchy for CustomFolderAction {
 pub enum MoveItemAction {
     MoveToSystemFolder(MovableSystemFolderAction),
     MoveTo,
+    NotSpam(MovableSystemFolderAction),
+    PermanentDelete,
 }
 
 impl MoveItemAction {
-    pub(crate) fn from_actions(actions: Vec<MovableSystemFolderAction>) -> Vec<Self> {
-        actions
-            .into_iter()
-            .map(MoveItemAction::from)
-            .chain(once(Self::MoveTo))
-            .collect()
+    pub(crate) async fn from_view<A>(view: Label, interface: &A) -> Result<Vec<Self>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut result = Vec::new();
+        if view.remote_id != Some(LabelId::trash()) && view.remote_id != Some(LabelId::spam()) {
+            result.push(MovableSystemFolderAction::trash(interface).await?.into());
+        } else {
+            result.push(Self::PermanentDelete);
+        }
+        if view.remote_id != Some(LabelId::archive()) {
+            result.push(MovableSystemFolderAction::archive(interface).await?.into());
+        }
+        if view.remote_id == Some(LabelId::archive()) || view.remote_id == Some(LabelId::trash()) {
+            result.push(MovableSystemFolderAction::inbox(interface).await?.into());
+        }
+        if view.remote_id != Some(LabelId::spam()) {
+            result.push(MovableSystemFolderAction::spam(interface).await?.into());
+        } else {
+            result.push(Self::NotSpam(
+                MovableSystemFolderAction::inbox(interface).await?,
+            ));
+        }
+        result.push(Self::MoveTo);
+        Ok(result)
     }
 }
 

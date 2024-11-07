@@ -51,6 +51,7 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabel, SystemLabelId,
     ViewLayout, ViewMode,
 };
+use crate::decrypted_message::StorableMessageBody;
 use crate::find_in_query;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
@@ -97,6 +98,7 @@ use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSy
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
 pub use rollback_item::RollbackItem;
+use serde::{Deserialize, Serialize};
 use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
@@ -108,7 +110,6 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::future::Future;
-use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -166,7 +167,7 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 /// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
 ///
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[TableName("attachments")]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -267,11 +268,13 @@ pub struct Attachment {
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
+    #[serde(skip)]
     pub row_id: Option<u64>,
 
     /// The database instance that the record is associated with. This is
     /// present for convenience.
     #[StashField]
+    #[serde(skip)]
     pub stash: Option<Stash>,
 }
 
@@ -2746,7 +2749,8 @@ impl Conversation {
         Ok(())
     }
 
-    /// Get the available actions for conversations excluding move to current view
+    /// Get the available actions for conversations depending on current view and stats of the given
+    /// conversations.
     ///
     /// # Parameters
     ///
@@ -2764,86 +2768,41 @@ impl Conversation {
     ///
     pub async fn available_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        conversation_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<ConversationAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if conversation_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let conversations = Conversation::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
+        let conversations = Conversation::find_by_ids(conversation_ids, interface).await?;
 
-        let mut starred = true;
-        let mut deleted = true;
-        let mut unread = false;
-
-        for conversation in conversations.iter() {
-            if !conversation.is_starred() {
-                starred = false;
-            }
-            if !conversation.deleted {
-                deleted = false;
-            }
-            if conversation.num_unread > 0 {
-                unread = true;
-            }
-            let is_conversation_in_view = conversation
-                .labels
-                .iter()
-                .any(|label| label.local_label_id == view.local_id);
-
-            if !is_conversation_in_view {
-                return Err(AppError::ConversationDoesNotHaveLabel(
-                    conversation.local_id.unwrap(),
-                    view.name.clone(),
-                ));
-            }
+        let mut conversation_actions = Vec::new();
+        if conversations.iter().any(|c| c.num_unread > 0) {
+            conversation_actions.push(ConversationAction::MarkRead);
         }
-
-        let mut conversation_actions = vec![
-            if starred {
-                ConversationAction::Unstar
-            } else {
-                ConversationAction::Star
-            },
-            if unread {
-                ConversationAction::MarkRead
-            } else {
-                ConversationAction::MarkUnread
-            },
-            // Statics
-            ConversationAction::Pin,
-            ConversationAction::LabelAs,
-        ];
-
-        if !deleted {
-            conversation_actions.push(ConversationAction::Delete);
+        if conversations.iter().any(|c| c.num_unread == 0) {
+            conversation_actions.push(ConversationAction::MarkUnread);
         }
+        if conversations.iter().any(|c| c.is_starred()) {
+            conversation_actions.push(ConversationAction::Unstar);
+        }
+        if conversations.iter().any(|c| !c.is_starred()) {
+            conversation_actions.push(ConversationAction::Star);
+        }
+        conversation_actions.push(ConversationAction::LabelAs);
 
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_excluding_view = all_system
-            .iter()
-            .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_excluding_view);
-        let move_actions = MoveAction::system(move_actions);
-        let move_actions = MoveItemAction::from_actions(move_actions);
+        let move_actions = MoveItemAction::from_view(view, interface).await?;
+
+        let general_actions = vec![GeneralActions::SaveAsPdf, GeneralActions::Print];
 
         Ok(ConversationAvailableActions::builder()
-            .move_actions(move_actions)
             .conversation_actions(conversation_actions)
-            .general_actions(GeneralActions::all_but_phishing())
+            .move_actions(move_actions)
+            .general_actions(general_actions)
             .build())
     }
 
@@ -2880,6 +2839,87 @@ impl Conversation {
             None,
         )
         .await?;
+        let all_label_as_actions = conversations
+            .iter()
+            .flat_map(|conversation| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    conversation
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
+    }
+
+    /// Watches `label as` actions for conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    /// * `sender`    - The sender for the channel to receive updates on.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    pub async fn watch_available_label_as_actions<A>(
+        local_ids: Vec<LocalId>,
+        interface: &A,
+        sender: flume::Sender<()>,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let ids = local_ids.iter().map(ToString::to_string).join(",");
+
+        let (cnv_tx, cnv_rx) = flume::unbounded();
+        let (cnv_label_tx, cnv_label_rx) = flume::unbounded();
+
+        let conversations = Conversation::find(
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(cnv_tx),
+        )
+        .await?;
+
+        let _ = ConversationLabel::find(
+            "WHERE local_conversation_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(cnv_label_tx),
+        )
+        .await?;
+
+        tokio::spawn(async move {
+            loop {
+                if tokio::select! {
+                    x = cnv_label_rx.recv_async() => x.map(|_| ()),
+                    x = cnv_rx.recv_async() => x.map(|_| ()),
+                }
+                .is_err()
+                {
+                    error!("Bug in the watcher system: The watcher receiver was dropped");
+                    return;
+                };
+
+                if sender.send_async(()).await.is_err() {
+                    debug!("watch_available_label_as_actions stopped watching.");
+                    return;
+                }
+            }
+        });
+
         let all_label_as_actions = conversations
             .iter()
             .flat_map(|conversation| {
@@ -4644,6 +4684,38 @@ impl From<ApiMailSettings> for MailSettings {
     }
 }
 
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("message_labels")]
+pub struct MessageLabel {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_message_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_label_id: LocalId,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    /// The database instance that the record is associated with. This is
+    /// present for convenience.
+    #[StashField]
+    pub stash: Option<Stash>,
+}
+
+impl MessageLabel {}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -5684,84 +5756,45 @@ impl Message {
     ///
     pub async fn available_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<MessageAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 
-        let messages = Message::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
+        let messages = Message::find_by_ids(message_ids, interface).await?;
 
-        let mut starred = true;
-        let mut deleted = true;
-        let mut unread = false;
-        let mut reply_all = false;
-
-        for message in messages.iter() {
-            if !message.is_starred() {
-                starred = false;
-            }
-            if !message.deleted {
-                deleted = false;
-            }
-            if message.unread {
-                unread = true;
-            }
-            if message.reply_tos.value.len() > 1 {
-                reply_all = true;
-            }
-        }
-
-        let mut message_actions = vec![
-            if starred {
-                MessageAction::Unstar
-            } else {
-                MessageAction::Star
-            },
-            if unread {
-                MessageAction::MarkRead
-            } else {
-                MessageAction::MarkUnread
-            },
-            // Statics
-            MessageAction::Pin,
-            MessageAction::LabelAs,
-        ];
-
-        if !deleted {
-            message_actions.push(MessageAction::Delete);
-        }
-
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_excluding_view = all_system
-            .iter()
-            .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_excluding_view);
-        let reply_actions = if reply_all {
+        let reply_actions = if messages.iter().any(|m| m.reply_tos.value.len() > 1) {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
         };
-        let move_actions = MoveAction::system(move_actions);
-        let move_actions = MoveItemAction::from_actions(move_actions);
+
+        let mut message_actions = Vec::new();
+        if messages.iter().any(|m| m.unread) {
+            message_actions.push(MessageAction::MarkRead);
+        }
+        if messages.iter().any(|m| !m.unread) {
+            message_actions.push(MessageAction::MarkUnread);
+        }
+        if messages.iter().any(|m| m.is_starred()) {
+            message_actions.push(MessageAction::Unstar);
+        }
+        if messages.iter().any(|m| !m.is_starred()) {
+            message_actions.push(MessageAction::Star);
+        }
+        message_actions.push(MessageAction::LabelAs);
+
+        let move_actions = MoveItemAction::from_view(view, interface).await?;
 
         Ok(MessageAvailableActions::builder()
-            .move_actions(move_actions)
             .reply_actions(reply_actions)
             .message_actions(message_actions)
+            .move_actions(move_actions)
             .build())
     }
 
@@ -5777,13 +5810,13 @@ impl Message {
     /// Returns error if the database request fail.
     ///
     pub async fn available_label_as_actions<A>(
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<Vec<LabelAsAction>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 
@@ -5791,13 +5824,95 @@ impl Message {
         let messages = Message::find(
             format!(
                 "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
+                message_ids.iter().map(ToString::to_string).join(",")
             ),
             vec![],
             interface,
             None,
         )
         .await?;
+
+        let all_label_as_actions = messages
+            .iter()
+            .flat_map(|message| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    message
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
+    }
+
+    /// Watches available `label as` actions for messages
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    /// * `sender`    - The sender for the channel to receive updates on.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    pub async fn watch_available_label_as_actions<A>(
+        message_ids: Vec<LocalId>,
+        interface: &A,
+        cb_sender: flume::Sender<()>,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if message_ids.is_empty() {
+            return Err(AppError::EmptyListOfMessages);
+        }
+
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let ids = message_ids.iter().map(ToString::to_string).join(",");
+
+        let (msg_tx, msg_rx) = flume::unbounded();
+        let (msg_label_tx, msg_label_rx) = flume::unbounded();
+
+        let messages = Message::find(
+            "WHERE local_id IN (?)",
+            params![ids.clone()],
+            interface,
+            Some(msg_tx),
+        )
+        .await?;
+
+        let _ = MessageLabel::find(
+            "WHERE local_message_id IN (?)",
+            params![ids],
+            interface,
+            Some(msg_label_tx),
+        )
+        .await?;
+
+        tokio::spawn(async move {
+            loop {
+                if tokio::select! {
+                    x = msg_rx.recv_async() => x.map(|_| ()),
+                    x = msg_label_rx.recv_async() => x.map(|_| ()),
+                }
+                .is_err()
+                {
+                    error!("Bug in the watcher system: The watcher receiver was dropped");
+                    return;
+                };
+
+                if cb_sender.send_async(()).await.is_err() {
+                    debug!("watch_available_label_as_actions stopped watching.");
+                    return;
+                }
+            }
+        });
+
         let all_label_as_actions = messages
             .iter()
             .flat_map(|message| {
@@ -5828,13 +5943,13 @@ impl Message {
     ///
     pub async fn available_move_to_actions<A>(
         view: Label,
-        local_ids: Vec<LocalId>,
+        message_ids: Vec<LocalId>,
         interface: &A,
     ) -> Result<Vec<MoveAction>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        if local_ids.is_empty() {
+        if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
 
@@ -5932,19 +6047,12 @@ impl Message {
             )
             .await?;
 
-        let mut file = File::open(file_path)?;
-        let mut body = String::new();
-        file.read_to_string(&mut body)?;
-        let metadata = self.get_message_body_metadata(interface).await?;
-        let metadata = metadata.ok_or(AppError::MessageBodyMetadataMissing(
-            self.local_id.expect("Should be set"),
-        ))?;
-        Ok(DecryptedMessageBody {
-            body,
-            metadata,
-            pgp_attachments: None,
-            pgp_subject: None,
-        })
+        let file = File::open(file_path)?;
+        let message = StorableMessageBody::from_reader(file)?;
+        let metadata = self.get_message_body_metadata(interface).await?.ok_or(
+            AppError::MessageBodyMetadataMissing(self.local_id.expect("Should be set")),
+        )?;
+        Ok(DecryptedMessageBody::from_storable(message, metadata))
     }
 
     /// Fetch, decrypt and store message body in cache.
@@ -5964,17 +6072,13 @@ impl Message {
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
 
-        // FIXME: We're not caching the fully encrypted messages
-        // https://jira.protontech.ch/projects/ET/issues/ET-1071
-        if decrypted_message_body.pgp_attachments.is_some() {
-            return Err(CacheError::Callback(anyhow!(
-                "Multipart message not handled"
-            )));
-        }
         key.set_cached()
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Couldn't set message as cached: {e}")))?;
-        Ok(decrypted_message_body.body.into_bytes())
+
+        StorableMessageBody::from(decrypted_message_body)
+            .serialize()
+            .map_err(|e| CacheError::Callback(anyhow!("Can't serialize as Cbor: {e}")))
     }
 
     /// Finds all messages that have expired and deletes them.

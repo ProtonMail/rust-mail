@@ -63,18 +63,18 @@
 //! ### Handling specific changes
 //!
 //!   - **Insertion**
-//!   
+//!
 //!       - If the new record belongs before the cursor, the cursor is moved
 //!         forward.
 //!       - The results count is incremented.
-//!   
+//!
 //!   - **Update**
-//!   
+//!
 //!       - No effect on the cursor or paginator, but the client will be
 //!         notified.
-//!   
+//!
 //!   - **Deletion**
-//!   
+//!
 //!       - If the deleted record was before the cursor, the cursor is moved
 //!         backward.
 //!       - The results count is decremented.
@@ -431,10 +431,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 .await?;
         }
 
-        // Track recently inserted.
-        for record in &initial_records {
-            shared.recently_synced.insert(record.row_id().unwrap());
-        }
         shared.row_count = total.max(initial_records.len()) as u32;
         shared.cursor_row_id = initial_records.first().map(|v| v.row_id().unwrap());
 
@@ -484,14 +480,15 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                                     // the element.
                                     shared.recently_synced.remove(&notification.row);
                                 }
-                                Action::SQLITE_INSERT | Action::SQLITE_UPDATE => {
+                                Action::SQLITE_INSERT => {
                                     // If a record is inserted and matches a recently synced id
                                     // we can ignore this notification.
-                                    // We also apply the same for update as its possible to have
-                                    // tables which perform create or update.
                                     if shared.recently_synced.remove(&notification.row) {
                                         continue;
                                     }
+                                }
+                                Action::SQLITE_UPDATE => {
+                                    // Always handle update
                                 }
                                 _ => {
                                     warn!("Unknown action");

@@ -13,6 +13,7 @@ use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
@@ -151,7 +152,7 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
 /// [`register_execution_context()`](`queue::Queue::register_execution_context()`)
 /// for more details.
 ///
-pub trait Action: Serialize + DeserializeOwned + 'static {
+pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Unique type identifier.
     const TYPE: Type;
 
@@ -177,7 +178,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
     ///
     /// Note this is only available if the action was executed on the remote via
     /// [`crate::queue::Queue::apply_action`].
-    type RemoteOutput;
+    type RemoteOutput: Send;
 
     /// Output returned by executing this action on the local state.
     type LocalOutput;
@@ -213,7 +214,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
 ///
 /// To define the data on which an action operates see the [`Action`] trait.
 #[allow(async_fn_in_trait)]
-pub trait Handler: Default + 'static {
+pub trait Handler: Default + 'static + Send + Sync {
     /// Action on which this handler operates.
     type Action: Action;
 
@@ -245,12 +246,12 @@ pub trait Handler: Default + 'static {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    async fn revert_local(
+    fn revert_local(
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
-    ) -> Result<(), <Self::Action as Action>::Error>;
+    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
 
     /// Apply the `action` on the server with the given `session`.
     ///
@@ -266,13 +267,15 @@ pub trait Handler: Default + 'static {
     /// # Errors
     ///
     /// Returns error if the network request failed.
-    async fn apply_remote(
+    fn apply_remote(
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>;
+    ) -> impl Future<
+        Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
+    > + Send;
 }
 
 /// Identifier for an action that has been queued.
@@ -532,8 +535,7 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
     }
 }
 
-/// A Factory pattern implementation for [`Action`]s which are stored on the
-/// [`Queue`](crate::queue::Queue).
+/// A Factory pattern implementation for [`Action`]s which are stored on the [`Queue`](crate::queue::Queue).
 ///
 /// When action are stored on the queue, their state is serialized into the database. In order to
 /// be able to decode an execute those actions they need to be registered with a factory instance.

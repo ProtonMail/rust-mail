@@ -142,7 +142,7 @@ impl Mailbox {
                 return Err(Reason::UnknownLabel.into());
             };
 
-            let watcher = watch_channel(receiver, callback);
+            let watcher = watch_channel(receiver, callback).await;
             Result::<_, RealUserSessionError>::Ok(watcher)
         })
         .await

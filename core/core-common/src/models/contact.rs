@@ -1,0 +1,580 @@
+use crate::actions::contacts::Delete as ContactsDelete;
+use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
+use crate::models::{ContactCard, ContactEmail, ModelExtension};
+use crate::{CoreContextError, CoreContextResult};
+use itertools::Itertools;
+use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
+use proton_api_core::services::proton::common::API_SUCCESS_CODE;
+use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
+use proton_api_core::services::proton::response_data::{
+    ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
+};
+use proton_api_core::services::proton::Proton;
+use proton_api_core::session::Session;
+use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::params;
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use tracing::{debug, error};
+
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("contacts")]
+#[ModelActions(on_save)]
+pub struct Contact {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
+    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
+    /// globally-consistent unique identifier for the record within the set of
+    /// all records of this type, and is important for synchronisation.
+    #[DbField]
+    pub remote_id: Option<RemoteId>,
+
+    /// Cards associated with the contact. They are in standard vCard format,
+    /// although each field is kept separatly within new vCard.
+    pub cards: Vec<ContactCard>,
+
+    /// Emails associated with the contact.
+    pub contact_emails: Vec<ContactEmail>,
+
+    /// Creation time of the contact.
+    #[DbField]
+    pub create_time: u64,
+
+    /// Labels associated with the contact. They are used to group contacts.
+    #[DbField]
+    pub label_ids: Labels,
+
+    /// Last modification time of the contact.
+    #[DbField]
+    pub modify_time: u64,
+
+    /// Name of the contact.
+    #[DbField]
+    pub name: String,
+
+    /// Size of the contact.
+    #[DbField]
+    pub size: u64,
+
+    /// Unique identifier of the contact.
+    #[DbField]
+    pub uid: RemoteId,
+
+    /// Reflects whether the record has been deleted. This is used to ensure that
+    /// delete happens in a two-step process, where the record is marked as
+    /// deleted, then deleted from remote, then finally deleted from the local
+    /// by event loop update.
+    #[DbField]
+    pub deleted: bool,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    /// The database instance that the record is associated with. This is
+    /// present for convenience.
+    #[StashField]
+    pub stash: Option<Stash>,
+}
+
+impl Contact {
+    /// Save a contact to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save a contact to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+                self.row_id = existing.row_id;
+                self.local_id = existing.local_id;
+            }
+        } else if let Some(local_id) = self.local_id {
+            if let Some(existing) = Self::find_by_id(local_id, interface).await? {
+                self.row_id = existing.row_id;
+                self.remote_id = existing.remote_id;
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
+    /// Returns the associated cards for a contact.
+    ///
+    /// This function retrieves the cards for a contact from the database,
+    /// stores them in the contact struct, and then returns them.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StashError`] if the cards cannot be retrieved.
+    ///
+    pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
+        let Some(stash) = self.stash() else {
+            return Err(StashError::NoStashAvailable);
+        };
+        self.cards = ContactCard::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            stash,
+            None,
+        )
+        .await?;
+        Ok(&self.cards)
+    }
+
+    /// Returns the associated emails for a contact.
+    ///
+    /// This function retrieves the emails for a contact from the database,
+    /// stores them in the contact struct, and then returns them.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`StashError`] if the emails cannot be retrieved.
+    ///
+    pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
+        let Some(stash) = self.stash() else {
+            return Err(StashError::NoStashAvailable);
+        };
+        self.contact_emails = ContactEmail::find(
+            "WHERE remote_contact_id = ? ORDER BY display_order ASC",
+            params![self.remote_id.clone()],
+            stash,
+            None,
+        )
+        .await?;
+        Ok(&self.contact_emails)
+    }
+
+    /// Extends [`Model::save()`] to set the contact id for children.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        for card in &mut self.cards {
+            card.local_contact_id = self.local_id;
+            card.remote_contact_id.clone_from(&self.remote_id);
+        }
+        for email in &mut self.contact_emails {
+            email.local_contact_id = self.local_id;
+            email.remote_contact_id.clone_from(&self.remote_id);
+        }
+        interface
+            .execute(
+                "DELETE FROM contact_cards WHERE local_contact_id = ?",
+                params![self.local_id],
+            )
+            .await?;
+        for card in &mut self.cards {
+            card.local_id = None;
+            card.row_id = None;
+            card.set_stash(interface.stash());
+            card.save_using(interface).await.map_err(|e| {
+                error!("Failed to update contact cards: {e}");
+                e
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Updates all user contacts including their emails without their cards.
+    ///
+    /// The update includes a reset of the database.
+    ///
+    /// # Parameters
+    ///
+    /// * `api`   - The API instance to use to download the addresses.
+    /// * `stash` - The database instance to store the addresses.
+    ///
+    /// # Errors
+    ///
+    /// Errors when the API request fails or when the database query fails.
+    ///
+    #[allow(clippy::too_many_lines)]
+    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+        macro_rules! request_pages {
+            ($api: expr, $type: tt, $field: tt, $api_rq:tt, $options_type: tt) => {{
+                let mut retval = vec![];
+                let mut page_index = 0;
+                debug!("Syncing partial {}", stringify!($field));
+                loop {
+                    let response = $api
+                        .$api_rq($options_type {
+                            page: page_index,
+                            page_size: SYNC_CONTACT_PAGE_SIZE,
+                            ..Default::default()
+                        })
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                "Failed to sync {} for page {page_index}: {err}",
+                                stringify!($field)
+                            );
+
+                            err
+                        })?;
+
+                    let is_last_request = response.$field.len() < SYNC_CONTACT_PAGE_SIZE;
+
+                    debug!(
+                        "Synced page {} of partial {}, {} {} fetched",
+                        page_index,
+                        stringify!($field),
+                        response.$field.len(),
+                        stringify!($field),
+                    );
+
+                    retval.extend(response.$field.into_iter().map($type::from).collect_vec());
+
+                    if is_last_request {
+                        break;
+                    }
+
+                    page_index += 1;
+                }
+
+                CoreContextResult::<Vec<$type>>::Ok(retval)
+            }};
+        }
+
+        let api_clone = api.clone();
+        let contacts_handle = tokio::spawn(async move {
+            request_pages!(
+                api_clone,
+                Contact,
+                contacts,
+                get_contacts,
+                GetContactsOptions
+            )
+        });
+
+        let api_clone = api.clone();
+        let contact_emails_handle = tokio::spawn(async move {
+            request_pages!(
+                api_clone,
+                ContactEmail,
+                contact_emails,
+                get_contacts_emails,
+                GetContactsEmailsOptions
+            )
+        });
+
+        #[allow(clippy::items_after_statements)]
+        fn map_err<T, E1, E2>(res: Result<Result<T, E1>, E2>) -> CoreContextResult<T>
+        where
+            E1: Into<CoreContextError>,
+            E2: Into<CoreContextError>,
+        {
+            res.map_err(Into::into).and_then(|r| r.map_err(Into::into))
+        }
+
+        let (contacts, contact_emails) = tokio::join!(contacts_handle, contact_emails_handle);
+        let (contacts, contact_emails) = (map_err(contacts)?, map_err(contact_emails)?);
+
+        let tx = stash.transaction().await?;
+        // Reset the database state by deleting all contacts.
+        tx.execute("DELETE FROM contacts", vec![]).await?;
+        tx.execute("DELETE FROM contact_emails", vec![]).await?;
+        tx.execute("DELETE FROM contact_cards", vec![]).await?;
+        tx.execute("DELETE FROM contact_email_labels", vec![])
+            .await?;
+
+        for mut contact in contacts {
+            contact.save_using(&tx).await?;
+        }
+
+        for mut contact_email in contact_emails {
+            contact_email.save_using(&tx).await?;
+        }
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Updates the full contact with the given ID including its emails and
+    /// cards.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`    - The ID of the [`Contact`] to sync.
+    /// * `api`   - The API instance to use to download the addresses.
+    /// * `stash` - The database instance to store the addresses.
+    ///
+    /// # Errors
+    ///
+    /// Errors when the API request fails or when the database query fails.
+    ///
+    pub async fn sync_with_card<A>(
+        local_id: LocalId,
+        api: &Proton,
+        interface: &A,
+    ) -> CoreContextResult<()>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        debug!("Syncing full contact for contact id {local_id}");
+        let remote_id = local_id
+            .counterpart::<Contact, _>(interface)
+            .await?
+            .ok_or_else(|| CoreContextError::MissingRemoteId(local_id))?;
+
+        let mut contact_with_card = Contact::from(
+            api.get_contact(remote_id.clone().into())
+                .await
+                .map_err(|err| {
+                    error!("Failed to fetch full contact with id {local_id}: {err}");
+                    err
+                })?
+                .contact,
+        );
+
+        contact_with_card
+            .save_using(interface)
+            .await
+            .map_err(|err| {
+                error!("Failed to sync full contact to db: {err}");
+                err
+            })?;
+
+        for email in &mut contact_with_card.contact_emails {
+            email.save_using(interface).await.map_err(|e| {
+                error!("Failed to update contact emails: {e}");
+                e
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Returns a list of contacts grouped by the first letter of their name.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///
+    /// # Errors
+    ///
+    /// when querying the database fails.
+    ///
+    pub async fn contact_list<A>(interface: &A) -> Result<Vec<GroupedContacts>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut contacts = Contact::find("WHERE deleted = 0", vec![], interface, None).await?;
+
+        for contact in &mut contacts {
+            contact.emails().await?;
+        }
+
+        Ok(GroupedContacts::from_contacts(contacts))
+    }
+
+    pub async fn action_delete(
+        session: &Session,
+        queue: &Queue,
+        contact_ids: Vec<LocalId>,
+    ) -> Result<ActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
+        let action = ContactsDelete::new(contact_ids);
+        queue.apply_action(session, action).await
+    }
+
+    /// Marks a contact as deleted.
+    /// Deletion is two-step process: first, the record is marked as deleted in
+    /// the database, then it is deleted from the remote server, and finally
+    /// It is deleted from the local database by the event loop update.
+    ///
+    pub async fn mark_delete<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.deleted = true;
+        self.save_using(interface).await
+    }
+
+    /// Marks a contact as undeleted.
+    /// This method serves as the reverse of [`Contact::mark_delete()`].
+    /// which can revert the deletion of a contact in case of something unpredictable happend.
+    ///
+    pub async fn mark_undelete<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.deleted = false;
+        self.save_using(interface).await
+    }
+
+    pub async fn delete_from_remote(
+        remote_ids: &[RemoteId],
+        api: &Proton,
+    ) -> CoreContextResult<Vec<RemoteId>> {
+        let response = api
+            .put_delete_contacts(remote_ids.iter().cloned().map_into().collect())
+            .await?;
+
+        Ok(response
+            .responses
+            .iter()
+            .filter(|r| r.response.code != API_SUCCESS_CODE)
+            .map(|r| r.id.clone().into())
+            .collect())
+    }
+
+    pub async fn watch_contact_list<A>(
+        interface: &A,
+    ) -> Result<(Vec<GroupedContacts>, flume::Receiver<()>), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (contact_sender, contact_receiver) = flume::unbounded();
+        let (contact_email_sender, contact_email_receiver) = flume::unbounded();
+        let (cb_sender, cb_receiver) = flume::unbounded();
+
+        let (contacts, _, _) = futures::try_join!(
+            Self::contact_list(interface),
+            Contact::find("WHERE deleted = 0", vec![], interface, Some(contact_sender)),
+            ContactEmail::find("", vec![], interface, Some(contact_email_sender))
+        )?;
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    contact_result = contact_receiver.recv_async() => {
+                        if contact_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                    contact_email_result = contact_email_receiver.recv_async() => {
+                        if contact_email_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok((contacts, cb_receiver))
+    }
+
+    // pub async fn vcard<Provider: PGPProviderSync>(
+    //     &mut self,
+    //     pgp_provider: &Provider,
+    //     unlocked_user_keys: &UnlockedUserKeys<Provider>,
+    // ) -> CoreContextResult<VCard> {
+    //     self.cards().await?;
+
+    //     VCard::new(pgp_provider, unlocked_user_keys, self)
+    // }
+}
+
+impl From<ApiContactBasic> for Contact {
+    fn from(value: ApiContactBasic) -> Self {
+        Self {
+            local_id: None,
+            remote_id: Some(value.id.into()),
+            cards: vec![],
+            contact_emails: vec![],
+            create_time: value.create_time,
+            label_ids: Labels::new(value.label_ids.into_iter().map(LabelId::from).collect()),
+            modify_time: value.modify_time,
+            name: value.name,
+            size: value.size,
+            uid: value.uid.into(),
+            deleted: false,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for Contact {
+    #[allow(clippy::default_trait_access)]
+    fn default() -> Self {
+        Self {
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            cards: Default::default(),
+            contact_emails: Default::default(),
+            create_time: Default::default(),
+            label_ids: Default::default(),
+            modify_time: Default::default(),
+            name: Default::default(),
+            size: Default::default(),
+            uid: RemoteId::from(String::default()),
+            deleted: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
+        }
+    }
+}
+
+impl From<ApiContactFull> for Contact {
+    fn from(value: ApiContactFull) -> Self {
+        Self {
+            local_id: None,
+            remote_id: Some(value.id.into()),
+            cards: value.cards.into_iter().map(ContactCard::from).collect(),
+            contact_emails: value
+                .contact_emails
+                .into_iter()
+                .map(ContactEmail::from)
+                .collect(),
+            create_time: value.create_time,
+            label_ids: Labels::new(value.label_ids.into_iter().map(LabelId::from).collect()),
+            modify_time: value.modify_time,
+            name: value.name,
+            size: value.size,
+            uid: value.uid.into(),
+            deleted: false,
+            row_id: None,
+            stash: None,
+        }
+    }
+}

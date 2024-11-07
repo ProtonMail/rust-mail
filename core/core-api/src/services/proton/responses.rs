@@ -41,6 +41,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 
+use super::response_data::ApiErrorInfo;
+
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
@@ -162,6 +164,25 @@ pub struct GetSettingsResponse {
 pub struct GetUsersResponse {
     /// TODO: Document this field.
     pub user: User,
+}
+
+/// The response containing information about deletion of the contacts
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutDeleteContactsResponse {
+    /// List of responses.
+    pub responses: Vec<PutDeleteContactResponse>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutDeleteContactResponse {
+    /// Remote ID of the contact.
+    pub id: RemoteId,
+    /// Response data.
+    pub response: ApiErrorInfo,
 }
 
 /// TODO: Document this struct.

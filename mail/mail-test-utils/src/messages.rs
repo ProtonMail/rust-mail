@@ -296,6 +296,7 @@ pub struct TestDraftParams {
     pub bcc_list: Vec<DraftRecipient>,
     pub external_id: Option<String>,
     pub draft_flags: u32,
+    #[serde(rename = "MIMEType")]
     pub mime_type: MimeType,
 }
 

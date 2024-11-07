@@ -20,7 +20,7 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
@@ -249,7 +249,7 @@ pub async fn watch_message(
     let watcher = WatchHandle::default();
     let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let callback = damp(callback);
+        let callback = damp(callback).await;
         let message = if let Some((message, receiver)) =
             RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
         {
@@ -382,7 +382,7 @@ pub async fn paginate_messages_for_label(
         .await?;
         Result::<_, RealUserActionError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
         }))
     })
     .await
@@ -418,7 +418,10 @@ pub async fn paginate_search(
     uniffi_async(async move {
         let real_paginator = RealMessage::paginate_in_label(
             &context,
-            RealLocalId::from(RealLabelId::all_mail().parse::<u64>().unwrap()),
+            RealLabelId::all_mail()
+                .counterpart::<RealLabel, _>(session.user_stash())
+                .await?
+                .expect("All mail system label not found"),
             50,
             RealPaginatorFilter::default(),
             RealPaginatorSearchOptions::from(options),
@@ -428,7 +431,7 @@ pub async fn paginate_search(
         .await?;
         Result::<_, RealUserActionError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
         }))
     })
     .await
@@ -538,6 +541,50 @@ pub async fn available_label_as_actions_for_messages(
     })
     .await
     .map_err(Into::into)
+}
+
+/// Watches label_as actions for messages.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `ids`      - The local IDs of the messages to calcualte available actions for.
+/// * `callback` - The callback to use for updates.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn watch_available_label_as_actions_for_messages(
+    mailbox: Arc<Mailbox>,
+    ids: Vec<Id>,
+    callback: Box<dyn LiveQueryCallback>,
+) -> MailboxResult<WatchedLabelAs> {
+    uniffi_async(async move {
+        let (tx, rx) = flume::unbounded();
+        let handle = watch_channel(rx, callback).await;
+
+        let actions = RealMessage::watch_available_label_as_actions(
+            ids.into_iter().map_into().collect(),
+            mailbox.stash(),
+            tx,
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(WatchedLabelAs { actions, handle })
+    })
+    .await
+}
+
+#[derive(Clone, uniffi::Record)]
+pub struct WatchedLabelAs {
+    pub actions: Vec<LabelAsAction>,
+    pub handle: Arc<WatchHandle>,
 }
 
 /// Returns available move_to actions for messages.
@@ -664,7 +711,7 @@ pub async fn watch_messages_for_label(
     uniffi_async(async move {
         let (messages, receiver) =
             RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
         Result::<_, RealUserActionError>::Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
             handle: watcher,

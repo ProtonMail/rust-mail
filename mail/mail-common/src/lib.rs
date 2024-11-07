@@ -44,6 +44,7 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
 #[macro_export]
 macro_rules! find_in_query {
     ($query:expr, $params:expr) => {{
+        use stash::exports::ToSql;
         let params = $params
             .into_iter()
             .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
@@ -104,10 +105,15 @@ pub enum AppError {
     RemoteIdNotFound(String, LocalId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
+
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
+    #[error("Can't deserialize from MessagePack: {0}")]
+    RmpDeserialization(#[from] rmp_serde::decode::Error),
+    #[error("Can't serialize into MessagePack: {0}")]
+    RmpSerialization(#[from] rmp_serde::encode::Error),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Stash error: {0}")]

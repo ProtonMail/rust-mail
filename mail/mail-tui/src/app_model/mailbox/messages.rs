@@ -3,7 +3,8 @@
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
+use crate::app_model::mailbox::paginator::Paginator;
+use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage, ITEM_LIMIT};
 use crate::app_model::watcher::WatchHandle;
 use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
@@ -18,7 +19,10 @@ use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::{ContextualConversation, MimeType};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::models::{Label, MailSettings, Message as MailMessage};
+use proton_mail_common::models::{
+    Label, MailSettings, Message as MailMessage, MessageDataSource, PaginatorFilter,
+    PaginatorSearchOptions,
+};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -31,10 +35,16 @@ use throbber_widgets_tui::ThrobberState;
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
 pub struct MessagesState {
-    _query: WatchHandle,
     messages: Vec<MailMessage>,
     table_state: ScrollableTableState,
     open_message: DecryptedMessageStatus,
+    mode: Mode,
+}
+
+#[allow(dead_code)] // Watcher handle is needed to keep state
+enum Mode {
+    Label(Paginator<MailMessage, MessageDataSource>),
+    Conversation(WatchHandle),
 }
 
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
@@ -57,33 +67,43 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         label_id: LocalId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
-        let (messages, receiver) = MailMessage::watch_in_label(label_id, ctx.user_stash()).await?;
+        let (paginator, command) = Paginator::new(
+            |sender| {
+                async move {
+                    Ok(MailMessage::paginate_in_label(
+                        &ctx,
+                        label_id,
+                        ITEM_LIMIT.try_into().unwrap(),
+                        PaginatorFilter::default(),
+                        PaginatorSearchOptions::default(),
+                        true,
+                        Some(sender),
+                    )
+                    .await?)
+                }
+                .boxed()
+            },
+            |result| match result {
+                Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                Err(e) => {
+                    let e = anyhow!("Message Reload Query error: {e}");
+                    tracing::error!("{e}");
+                    e.into()
+                }
+            },
+        )
+        .await?;
 
-        let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
-            let ctx_cloned = Arc::clone(&ctx);
-            async move {
-                Some(
-                    match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
-                        Ok(messages) => MessageMessage::Refreshed(messages).into(),
-                        Err(e) => {
-                            let e = anyhow!("Message list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    },
-                )
-            }
-            .boxed()
-        });
+        let messages = paginator.next_page().await?;
 
         Ok((
             Self {
-                _query: watcher,
                 messages,
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
+                mode: Mode::Label(paginator),
             },
-            background_command,
+            command,
         ))
     }
 
@@ -159,10 +179,10 @@ impl MessagesState {
 
         Ok((
             Self {
-                _query: watcher,
                 messages: conv_and_messages.messages,
                 table_state: ScrollableTableState::new(Some(index)),
                 open_message: DecryptedMessageStatus::None,
+                mode: Mode::Conversation(watcher),
             },
             background_command,
         ))
@@ -263,6 +283,15 @@ impl StateHandler for MessagesState {
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
+                if let Mode::Label(paginator) = &self.mode {
+                    if self.table_state.selected().unwrap_or_default()
+                        == self.messages.len().saturating_sub(1)
+                    {
+                        return paginator.next_page_command(|v| {
+                            Command::message(MessageMessage::NextPage(v).into())
+                        });
+                    }
+                }
                 Command::None
             }
             KeyCode::Char('e') => {
@@ -384,6 +413,7 @@ impl StateHandler for MessagesState {
             MessageMessage::UnstarMessage(id) => {
                 return unstar_message(mbox, id);
             }
+            MessageMessage::NextPage(messages) => self.messages.extend(messages),
         }
         Command::None
     }
@@ -413,12 +443,6 @@ pub struct DecryptedMessage {
     bcc_list: String,
     label_list: String,
 }
-
-/// # Safety
-///
-/// The `NodeRef` type is not send by default, but the data is not shared outside of the crate
-/// so it is safe.
-unsafe impl Send for DecryptedMessage {}
 
 enum DecryptedMessageStatus {
     None,

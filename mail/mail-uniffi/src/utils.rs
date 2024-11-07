@@ -1,19 +1,47 @@
 use std::{
+    iter::{Cycle, StepBy},
+    ops::RangeInclusive,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, LazyLock,
     },
     time::Duration,
 };
 
-use tokio::time::interval;
+use tokio::{sync::Mutex, task, time::interval};
 
 use crate::LiveQueryCallback;
 
 /// Period of delay for dampening, in milliseconds. Each set of updates will be
 /// held back for up until this amount of time before the callback is triggered
 /// to notify the client.
-const DAMPENING_PERIOD: u64 = 200;
+pub const MIN_DAMPENING_PERIOD: u64 = 100;
+pub const MAX_DAMPENING_PERIOD: u64 = 200;
+
+struct Dampening {
+    iter: Cycle<StepBy<RangeInclusive<u64>>>,
+}
+
+impl Iterator for Dampening {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+impl Dampening {
+    fn new() -> Self {
+        let iter = (MIN_DAMPENING_PERIOD..=MAX_DAMPENING_PERIOD)
+            .step_by(10)
+            .cycle();
+
+        Self { iter }
+    }
+}
+
+static DAMPENING_PERIOD: LazyLock<Mutex<Dampening>> =
+    LazyLock::new(|| Mutex::new(Dampening::new()));
 
 /// Obtains dampening function.
 ///
@@ -31,6 +59,7 @@ pub fn damp_with_duration(
 
     tokio::spawn(async move {
         let mut interval = interval(duration);
+        let callback = Arc::new(callback);
 
         loop {
             interval.tick().await;
@@ -40,7 +69,15 @@ pub fn damp_with_duration(
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
-                callback.on_update();
+                let callback_clone = callback.clone();
+                interval.tick().await;
+
+                if task::spawn_blocking(move || callback_clone.on_update())
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
             }
         }
     });
@@ -56,6 +93,7 @@ pub fn damp_with_duration(
 /// It returns the function to use to actually notify the client, which you can
 /// call as often as you want.
 ///
-pub fn damp(callback: Box<dyn LiveQueryCallback>) -> impl Fn() + Clone {
-    damp_with_duration(callback, Duration::from_millis(DAMPENING_PERIOD))
+pub async fn damp(callback: Box<dyn LiveQueryCallback>) -> impl Fn() + Clone {
+    let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
+    damp_with_duration(callback, Duration::from_millis(dampening_period))
 }

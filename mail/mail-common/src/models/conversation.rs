@@ -14,7 +14,6 @@ use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
-use stash::exports::ToSql;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
@@ -490,7 +489,7 @@ impl Conversation {
     ///
     /// When database request fail.
     ///
-    async fn find_by_ids<A>(
+    pub(crate) async fn find_by_ids<A>(
         conversation_ids: impl IntoIterator<Item = LocalId>,
         interface: &A,
     ) -> Result<Vec<Self>, StashError>

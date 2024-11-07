@@ -150,12 +150,18 @@ impl Composer {
         let to_list = draft.to_list.clone().join(", ");
         let cc_list = draft.cc_list.clone().join(", ");
         let bcc_list = draft.bcc_list.clone().join(", ");
-        let config = html2text::config::plain();
-        let cursor = Cursor::new(&draft.body);
-        let text = config
-            .string_from_read(cursor, 80)
-            .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
-        let text_area = TextArea::new(text.split('\n').map(str::to_owned).collect());
+        let text_area = if draft.mime_type == MimeType::TextHtml {
+            let config = html2text::config::plain();
+            let cursor = Cursor::new(&draft.body);
+            let text = config
+                .string_from_read(cursor, 80)
+                .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
+            TextArea::new(text.split('\n').map(str::to_owned).collect())
+        } else if draft.mime_type == MimeType::TextPlain {
+            TextArea::new(draft.body.split('\n').map(str::to_owned).collect())
+        } else {
+            TextArea::new(vec!["Unknown mime type".to_owned()])
+        };
         let subject = draft.subject.clone();
         let attachment_infos = draft
             .attachments

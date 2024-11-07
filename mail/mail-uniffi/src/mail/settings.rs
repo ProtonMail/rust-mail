@@ -44,7 +44,7 @@ pub async fn watch_mail_settings(
             .unwrap_or_default()
             .into();
 
-        let watcher = watch_channel(rx, callback);
+        let watcher = watch_channel(rx, callback).await;
 
         Result::<_, RealUserSessionError>::Ok(SettingsWatcher {
             watch_handle: watcher,

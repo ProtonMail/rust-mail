@@ -29,6 +29,8 @@ use proton_mail_common::models::{Conversation as RealConversation, Label as Real
 use stash::orm::Model;
 use std::sync::Arc;
 
+use super::messages::WatchedLabelAs;
+
 /// Label the given conversations with the given label id.
 ///
 /// # Parameters
@@ -163,6 +165,44 @@ pub async fn available_label_as_actions_for_conversations(
     })
     .await
     .map_err(Into::into)
+}
+
+/// Watches label_as actions for conversations.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `ids`      - The local IDs of the conversations to calcualte available actions for.
+/// * `callback` - The callback to use for updates.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn watch_available_label_as_actions_for_conversations(
+    mailbox: Arc<Mailbox>,
+    ids: Vec<Id>,
+    callback: Box<dyn LiveQueryCallback>,
+) -> MailboxResult<WatchedLabelAs> {
+    uniffi_async(async move {
+        let (tx, rx) = flume::unbounded();
+        let handle = watch_channel(rx, callback).await;
+
+        let actions = RealConversation::watch_available_label_as_actions(
+            ids.into_iter().map_into().collect(),
+            mailbox.stash(),
+            tx,
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(WatchedLabelAs { actions, handle })
+    })
+    .await
 }
 
 // Returns available move_to actions for conversations.
@@ -510,7 +550,7 @@ pub async fn paginate_conversations_for_label(
         .await?;
         Result::<_, RealUserActionError>::Ok(Arc::new(ConversationPaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback),
+            handle: watch_channel(msg_receiver, callback).await,
             label_id,
         }))
     })
@@ -705,7 +745,7 @@ pub async fn watch_conversation(
         )
         .await?;
 
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
 
         Result::<_, RealUserActionError>::Ok(Some(WatchedConversation {
             conversation: conversation_messages.conversation,
@@ -757,7 +797,7 @@ pub async fn watch_conversations_for_label(
             session.user_stash(),
         )
         .await?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(receiver, callback).await;
         Result::<_, RealUserActionError>::Ok(WatchedConversations {
             conversations: conversations.into_iter().map(Into::into).collect(),
             handle: watcher,

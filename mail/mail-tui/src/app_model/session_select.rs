@@ -119,7 +119,7 @@ impl AppStateHandler for Model {
 
                 let ctx = Arc::clone(ctx);
                 Command::task(async move {
-                    match ctx.get_sessions(account.remote_id.clone()).await {
+                    match ctx.get_account_sessions(account.remote_id.clone()).await {
                         Ok(sessions) => {
                             if sessions.is_empty() {
                                 Command::message(Messages::SwitchAppState(

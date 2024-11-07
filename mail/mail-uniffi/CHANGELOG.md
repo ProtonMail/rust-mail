@@ -103,6 +103,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
   - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
+## [0.21.1] - 2024-11-07
+
+### Fix
+
+  - reenable contact events
+
+## [0.21.0] - 2024-11-06
+
+### Added
+
+  - Exposed `delete_contact` functionality.
+  - Exposed `watch_contact_list` with new `ContactsLiveQueryCallback` interface.
+  - PGP attachments in message cache.
+
+### Fix
+
+  - Wrap blocking code of callback in `spawn_blocking`
+  - Distribute dapmpening times in range.
+  - Add await time before executing callback to relax whole update system
+  - Paginator never marks first page as `recently_synced`
+  - Paginator allows for all incoming updates to trigger callback
+
+### Changed
+
+  - `available_actions_for_conversations` and `available_actions_for_messages`
+    now depends on the current view.
+
+## [0.20.0] - 2024-10-31
+
+### Added
+
+  - Methods to get and watch all sessions, not just those of a particular account
+  - `Draft::create` - Same as `Draft::new()` but actually shows up in Kotlin bindings.
+
+
+## [0.19.1] - 2024-10-28
+
+### Fixed
+
+  - Draft create/save mime type in API request.
+
 ## [0.19.0] - 2024-10-28
 
 ### Added
@@ -125,8 +166,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Remove damping on account and session watchers
   - Drafts only create data on the first call to `Draft::save()`
 
-
 ### Fixed
+
   - Live query updates should be sent only to the table they apply to
 
 

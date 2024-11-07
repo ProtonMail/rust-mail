@@ -79,6 +79,8 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
 pub enum MoveItemAction {
     MoveToSystemFolder(MovableSystemFolderAction),
     MoveTo,
+    NotSpam(MovableSystemFolderAction),
+    PermanentDelete,
 }
 
 impl From<RealMoveItemAction> for MoveItemAction {
@@ -88,6 +90,8 @@ impl From<RealMoveItemAction> for MoveItemAction {
                 Self::MoveToSystemFolder(action.into())
             }
             RealMoveItemAction::MoveTo => Self::MoveTo,
+            RealMoveItemAction::NotSpam(action) => Self::NotSpam(action.into()),
+            RealMoveItemAction::PermanentDelete => Self::PermanentDelete,
         }
     }
 }

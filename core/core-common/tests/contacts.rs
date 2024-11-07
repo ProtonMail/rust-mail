@@ -428,6 +428,7 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             name: "contact_name".to_owned(),
             size: 1443,
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
+            deleted: false,
             row_id: None,
             stash: stash.clone(),
         },
@@ -444,6 +445,7 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             name: "contact_name2".to_owned(),
             size: 1445,
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
+            deleted: false,
             row_id: None,
             stash: stash.clone(),
         },
@@ -638,6 +640,7 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
         modify_time: partial_contact.modify_time,
         contact_emails: emails,
         label_ids: partial_contact.label_ids,
+        deleted: false,
         cards: vec![
             ContactCard {
                 local_id: None,

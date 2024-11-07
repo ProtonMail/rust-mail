@@ -112,6 +112,7 @@ pub struct DraftParams {
     pub body: EncryptedDraft,
 
     /// Body mime type
+    #[serde(rename = "MIMEType")]
     pub mime_type: MimeType,
 }
 

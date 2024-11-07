@@ -1,12 +1,16 @@
 use crate::test_context::TestContext;
+use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::requests::PutDeleteContacts;
 use proton_api_core::services::proton::response_data::{
-    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
+    ApiErrorInfo, ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail,
+    ContactFull as ApiContactFull,
 };
 use proton_api_core::services::proton::responses::{
-    GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
+    GetContactResponse, GetContactsEmailsResponse, GetContactsResponse, PutDeleteContactResponse,
+    PutDeleteContactsResponse,
 };
 use wiremock::{
-    matchers::{method, path},
+    matchers::{body_json, method, path},
     Mock, ResponseTemplate,
 };
 
@@ -62,6 +66,37 @@ impl TestContext {
             .and(path(format!("/api/contacts/{}", &contact.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(GetContactResponse { contact }))
             //.expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock for deleting contacts from the API.
+    ///
+    /// # Parameters
+    ///
+    /// * `contact_ids` - The contacts that should be delted.
+    ///
+    pub async fn mock_delete_contacts(&self, contact_ids: Vec<RemoteId>) {
+        Mock::given(method("PUT"))
+            .and(path("/api/contacts/delete"))
+            .and(body_json(PutDeleteContacts {
+                ids: contact_ids.clone(),
+            }))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(PutDeleteContactsResponse {
+                    responses: contact_ids
+                        .into_iter()
+                        .map(|id| PutDeleteContactResponse {
+                            id,
+                            response: ApiErrorInfo {
+                                code: 1000,
+                                ..Default::default()
+                            },
+                        })
+                        .collect(),
+                }),
+            )
+            .expect(1)
             .mount(self.mock_server())
             .await;
     }

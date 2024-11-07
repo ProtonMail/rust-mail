@@ -39,7 +39,6 @@ export_typed_result!(NewDraftResult, Arc<Draft>, UserDraftError);
 ///
 /// Return error if action failed.
 ///
-
 #[uniffi::export]
 pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) -> NewDraftResult {
     let ctx = session.ctx();
@@ -73,7 +72,6 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 ///
 /// Returns error if the query failed or the message is not a draft.
 ///
-
 #[uniffi::export]
 pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
     let ctx = session.ctx();
