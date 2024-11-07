@@ -22,7 +22,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "Barbara Lox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BL".to_string(),
+                            text: "B".to_string(),
                             color: "#A839A4".to_string(),
                         },
                         emails: vec![],
@@ -43,7 +43,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "Barbara Fox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BF".to_string(),
+                            text: "B".to_string(),
                             color: "#1ED19C".to_string(),
                         },
                         emails: vec![],
@@ -54,7 +54,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "Barbara Lox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BL".to_string(),
+                            text: "B".to_string(),
                             color: "#A839A4".to_string(),
                         },
                         emails: vec![],
@@ -75,7 +75,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "🦊 Barbara Fox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BF".to_string(),
+                            text: "B".to_string(),
                             color: "#3C8B8C".to_string(),
                         },
                         emails: vec![],
@@ -86,7 +86,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "🐂 Barbara Lox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BL".to_string(),
+                            text: "B".to_string(),
                             color: "#415DF0".to_string(),
                         },
                         emails: vec![],
@@ -101,6 +101,22 @@ mod contact_list {
         contact!(local_id: lid!(123), name: "❤️‍🔥 Barbara Fox".to_string())
     ], vec![
         GroupedContacts {
+            grouped_by: "#".to_string(),
+            item: vec![
+                ContactItemType::Contact(
+                    ContactItem {
+                        local_id:  123.into(),
+                        name: "🙀".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "?".to_string(),
+                            color: "#3CBB3A".to_string(),
+                        },
+                        emails: vec![],
+                    },
+                ),
+            ],
+        },
+        GroupedContacts {
             grouped_by: "B".to_string(),
             item: vec![
                 ContactItemType::Contact(
@@ -108,7 +124,7 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "❤️‍🔥 Barbara Fox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BF".to_string(),
+                            text: "B".to_string(),
                             color: "#0047AB".to_string(),
                         },
                         emails: vec![],
@@ -119,24 +135,8 @@ mod contact_list {
                         local_id: 123.into(),
                         name: "🙀 Barbara Lox".to_string(),
                         avatar_information: AvatarInformation {
-                            text: "BL".to_string(),
+                            text: "B".to_string(),
                             color: "#4989FF".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        },
-        GroupedContacts {
-            grouped_by: "🙀".to_string(),
-            item: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id:  123.into(),
-                        name: "🙀".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "🙀".to_string(),
-                            color: "#52006A".to_string(),
                         },
                         emails: vec![],
                     },
@@ -162,7 +162,7 @@ mod contact_list {
                     local_id: 1.into(),
                     name: "Barbara Fox".to_string(),
                     avatar_information: AvatarInformation {
-                        text: "BF".to_string(),
+                        text: "B".to_string(),
                         color: "#1ED19C".to_string(),
                     },
                     emails: vec![

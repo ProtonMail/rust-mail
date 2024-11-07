@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+  - Avatar display text was changed (back) to use only one letter
+  - Improved grouping mechanism by using Avatar's display text
+
+
 ## [0.21.2] - 2024-11-07
 
 ### Fix
