@@ -1,5 +1,5 @@
 use super::MailUserSession;
-use crate::errors::user_actions::UserActionError;
+use crate::errors::user_actions::{UserActionError, VoidUserActionResult};
 use crate::{
     core::datatypes::{GroupedContacts, Id},
     uniffi_async, WatchHandle,
@@ -39,10 +39,7 @@ pub async fn contact_list(
 
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
-pub async fn delete_contact(
-    contact_id: Id,
-    session: Arc<MailUserSession>,
-) -> Result<(), MailSessionError> {
+pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidUserActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealContact::action_delete(
@@ -53,9 +50,10 @@ pub async fn delete_contact(
         .await
         .map_err(MailContextError::from)?;
 
-        Ok(())
+        Result::<_, RealUserActionError>::Ok(())
     })
     .await
+    .into()
 }
 
 /// A callback interface for live queries.
@@ -142,17 +140,21 @@ pub fn damp_contacts_callback(
                 interval.tick().await;
                 let contact_list = contact_list(session.clone()).await;
 
-                if contact_list.is_err() {
-                    return;
-                }
+                match contact_list {
+                    Ok(contact_list) => {
+                        let callback_clone = callback.clone();
 
-                let callback_clone = callback.clone();
-
-                if task::spawn_blocking(move || callback_clone.on_update(contact_list.unwrap()))
-                    .await
-                    .is_err()
-                {
-                    return;
+                        if task::spawn_blocking(move || callback_clone.on_update(contact_list))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Failed to get contact list: {:?}", e);
+                        return;
+                    }
                 }
             }
         }

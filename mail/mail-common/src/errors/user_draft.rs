@@ -187,6 +187,8 @@ impl From<AppError> for UserDraftError {
             }
             AppError::UserNotFound => Self::Unexpected(Unexpected::Unknown),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
+            AppError::RmpDeserialization(error) => todo!(),
+            AppError::RmpSerialization(error) => todo!(),
         }
     }
 }

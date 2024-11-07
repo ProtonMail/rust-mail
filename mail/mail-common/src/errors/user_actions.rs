@@ -98,6 +98,8 @@ impl From<AppError> for UserActionError {
             }
             AppError::UserNotFound => Self::InvalidAction(Reason::InvalidParameter),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
+            AppError::RmpDeserialization(error) => todo!(),
+            AppError::RmpSerialization(error) => todo!(),
         }
     }
 }
