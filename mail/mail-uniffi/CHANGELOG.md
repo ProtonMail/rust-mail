@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Change the `put_delete_contacts` response `Id` to `ID`
 
+
+### Changed
+
+  - `move_message` to remove `source_id` argument.
+
 ## [0.21.1] - 2024-11-07
 
 ### Fix
