@@ -2,7 +2,6 @@ use super::avatar::AvatarInformation;
 use crate::{
     datatypes::LocalId,
     models::{Contact, ContactEmail},
-    utils::{first_grapheme_upppercase, first_word},
 };
 use itertools::Itertools;
 use std::collections::BTreeMap;
@@ -33,9 +32,12 @@ impl GroupedContacts {
                 one_words.cmp(&other_words)
             })
             .for_each(|contact| {
-                let first_word = first_word(&contact.name);
-                let name = first_word.as_ref().unwrap_or(&contact.name);
-                let key = first_grapheme_upppercase(name).unwrap_or(DEFAULT_GROUP.to_string());
+                let key = contact.avatar_information.text.clone();
+                let key = if key.is_empty() || key.as_str() == "?" {
+                    DEFAULT_GROUP.to_string()
+                } else {
+                    key
+                };
 
                 btmap.entry(key).or_default().push(contact.into());
             });
@@ -87,8 +89,16 @@ impl From<Contact> for ContactItem {
     fn from(value: Contact) -> Self {
         Self {
             local_id: value.local_id.unwrap(),
+            avatar_information: AvatarInformation::from(&value.name)
+                .or_else(
+                    value
+                        .contact_emails
+                        .first()
+                        .map(|email| email.email.as_str())
+                        .unwrap_or_default(),
+                )
+                .or_else_unchecked("?"),
             emails: value.contact_emails.into_iter().map(Into::into).collect(),
-            avatar_information: AvatarInformation::from(&value.name),
             name: value.name,
         }
     }

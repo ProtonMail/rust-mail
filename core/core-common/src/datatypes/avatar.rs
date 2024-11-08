@@ -8,8 +8,7 @@ use unicode_segmentation::UnicodeSegmentation;
 /// This is the main data structure that is used to represent the avatar information.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct AvatarInformation {
-    /// The field represent the first two grapheme (if available) of the name of the contact
-    /// those could be viewed as initials of the contact.
+    /// The field represent the first grapheme of the name of the contact
     pub text: String,
 
     /// The field represent the color of the avatar.
@@ -40,6 +39,29 @@ impl AvatarInformation {
             self
         }
     }
+
+    /// Returns a new `AvatarInformation` with the given value if the text is empty.
+    /// Provided value is taken as is, not trimmed nor manipulated in any way, use with causation.
+    /// Ideal input for this function would be a string that is one grapheme long.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - The value to use if the text is empty.
+    ///
+    pub(crate) fn or_else_unchecked<S: AsRef<str>>(self, value: S) -> Self {
+        if self.is_empty() {
+            let name = value.as_ref();
+            let text = name.to_string();
+            let color = proton_color(name);
+
+            Self {
+                text,
+                color: color.to_string(),
+            }
+        } else {
+            self
+        }
+    }
 }
 
 impl<S> From<S> for AvatarInformation
@@ -48,10 +70,9 @@ where
 {
     fn from(value: S) -> Self {
         let name = value.as_ref();
-        let is_email = name.contains('@');
         let text = name
             .unicode_words()
-            .take(if is_email { 1 } else { 2 })
+            .take(1)
             .filter_map(first_grapheme_upppercase)
             .collect();
         let color = proton_color(name);
@@ -60,9 +81,5 @@ where
             text,
             color: color.to_string(),
         }
-        .or_else(Self {
-            text: first_grapheme_upppercase(name).unwrap_or_default(),
-            color: color.to_string(),
-        })
     }
 }
