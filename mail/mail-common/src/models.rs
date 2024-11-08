@@ -2667,14 +2667,14 @@ impl Conversation {
             .counterpart::<Label, _>(interface)
             .await?
             .expect("AllMail should be set");
-        for local_conversation_id in conversation_ids {
-            interface
-                .query_value::<_, LocalId>(
-                    "DELETE FROM conversation_labels WHERE local_conversation_id = ? AND local_label_id != ?",
-                    params![local_conversation_id, all_mail_id],
-                )
-                .await?;
-        }
+
+        let (query, mut parameters) = find_in_query!(
+            "DELETE FROM conversation_labels WHERE local_conversation_id in ({}) AND local_label_id != ?", 
+            conversation_ids
+        );
+        parameters.push(Box::new(all_mail_id) as Box<dyn ToSql + Send>);
+
+        interface.execute(query, parameters).await?;
         Ok(())
     }
 
