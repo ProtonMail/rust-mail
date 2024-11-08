@@ -555,7 +555,7 @@ impl MailSession {
     pub fn get_sessions_blocking(
         &self,
         account: Arc<StoredAccount>,
-    ) -> MailSessionGetSessionsResult {
+    ) -> MailSessionGetAccountSessionsResult {
         async_runtime().block_on(self.get_account_sessions(account))
     }
 

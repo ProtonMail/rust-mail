@@ -78,11 +78,11 @@ pub struct WatchedContactList {
     handle: Arc<WatchHandle>,
 }
 
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn watch_contact_list(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> Result<WatchedContactList, MailboxError> {
+) -> Result<WatchedContactList, UserActionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
@@ -105,12 +105,13 @@ pub async fn watch_contact_list(
             }
         }));
 
-        Ok(WatchedContactList {
+        Result::<_, RealUserActionError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
             handle: Arc::new(watcher),
         })
     })
     .await
+    .map_err(Into::into)
 }
 
 /// Obtains dampening function.
@@ -142,7 +143,7 @@ pub fn damp_contacts_callback(
                 let contact_list = contact_list(session.clone()).await;
 
                 match contact_list {
-                    Ok(contact_list) => {
+                    ContactListResult::Ok(contact_list) => {
                         let callback_clone = callback.clone();
 
                         if task::spawn_blocking(move || callback_clone.on_update(contact_list))
@@ -152,8 +153,8 @@ pub fn damp_contacts_callback(
                             return;
                         }
                     }
-                    Err(e) => {
-                        log::error!("Failed to get contact list: {:?}", e);
+                    ContactListResult::Error(e) => {
+                        tracing::error!("Failed to get contact list: {:?}", e);
                         return;
                     }
                 }

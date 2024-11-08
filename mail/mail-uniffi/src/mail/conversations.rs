@@ -180,12 +180,12 @@ pub async fn available_label_as_actions_for_conversations(
 ///
 /// Returns an error if the database query fails.
 ///
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn watch_available_label_as_actions_for_conversations(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
     callback: Box<dyn LiveQueryCallback>,
-) -> MailboxResult<WatchedLabelAs> {
+) -> Result<WatchedLabelAs, UserActionError> {
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
@@ -200,9 +200,10 @@ pub async fn watch_available_label_as_actions_for_conversations(
         .map_into()
         .collect_vec();
 
-        Ok(WatchedLabelAs { actions, handle })
+        Result::<_, RealUserActionError>::Ok(WatchedLabelAs { actions, handle })
     })
     .await
+    .map_err(Into::into)
 }
 
 // Returns available move_to actions for conversations.
