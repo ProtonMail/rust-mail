@@ -1,3 +1,4 @@
+use super::MessageBodyMetadata;
 use crate::actions::messages::delete::Delete;
 use crate::actions::messages::label::Label as ActionLabel;
 use crate::actions::messages::label_as::LabelAs;
@@ -16,13 +17,11 @@ use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, 
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_sqlite3::rusqlite::ToSql;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
 use tracing::{error, warn};
-
-use super::MessageBodyMetadata;
 
 impl Message {
     /// Label multiple messages.
@@ -258,14 +257,14 @@ impl Message {
             .counterpart::<Label, _>(interface)
             .await?
             .expect("AllMail should be set");
-        for local_message_id in message_ids {
-            interface
-                .execute(
-                    "DELETE FROM message_labels WHERE local_message_id = ? AND local_label_id != ?",
-                    params![local_message_id, all_mail_id],
-                )
-                .await?;
-        }
+
+        let (query, mut parameters) = find_in_query!(
+            "DELETE FROM message_labels WHERE local_message_id in ({}) AND local_label_id != ?",
+            message_ids
+        );
+        parameters.push(Box::new(all_mail_id) as Box<dyn ToSql + Send>);
+
+        interface.execute(query, parameters).await?;
         Ok(())
     }
 
