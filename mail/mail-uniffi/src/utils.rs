@@ -15,10 +15,10 @@ use crate::LiveQueryCallback;
 /// Period of delay for dampening, in milliseconds. Each set of updates will be
 /// held back for up until this amount of time before the callback is triggered
 /// to notify the client.
-pub const MIN_DAMPENING_PERIOD: u64 = 100;
-pub const MAX_DAMPENING_PERIOD: u64 = 200;
+pub const MIN_DAMPENING_PERIOD: u64 = 10;
+pub const MAX_DAMPENING_PERIOD: u64 = 50;
 
-struct Dampening {
+pub struct Dampening {
     iter: Cycle<StepBy<RangeInclusive<u64>>>,
 }
 
@@ -40,7 +40,7 @@ impl Dampening {
     }
 }
 
-static DAMPENING_PERIOD: LazyLock<Mutex<Dampening>> =
+pub static DAMPENING_PERIOD: LazyLock<Mutex<Dampening>> =
     LazyLock::new(|| Mutex::new(Dampening::new()));
 
 /// Obtains dampening function.
