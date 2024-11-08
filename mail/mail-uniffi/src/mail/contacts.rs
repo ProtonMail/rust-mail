@@ -125,8 +125,8 @@ pub fn damp_contacts_callback(
     let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
-        let dupmening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
-        let mut interval = interval(Duration::from_millis(dupmening_period));
+        let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
+        let mut interval = interval(Duration::from_millis(dampening_period));
         let callback = Arc::new(callback);
 
         loop {
