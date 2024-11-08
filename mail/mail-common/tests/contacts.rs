@@ -1,7 +1,6 @@
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactSendingPreferences,
 };
-use proton_api_mail::session;
 use proton_core_common::datatypes::{
     AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts, RemoteId,
 };
@@ -58,7 +57,7 @@ async fn contact_list() {
                 local_id: 1.into(),
                 name: "Mr Banksy".to_string(),
                 avatar_information: AvatarInformation {
-                    text: "MB".to_string(),
+                    text: "M".to_string(),
                     color: "#1ED19C".to_string()
                 },
                 emails: vec![ContactEmailItem {

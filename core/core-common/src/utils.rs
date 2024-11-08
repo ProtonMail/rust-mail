@@ -12,12 +12,6 @@ pub fn first_grapheme_upppercase<S: AsRef<str>>(s: S) -> Option<String> {
     Some(s.as_ref().trim().graphemes(true).next()?.to_uppercase())
 }
 
-/// Returns the first word of the string.
-///
-pub fn first_word<S: AsRef<str>>(s: S) -> Option<String> {
-    s.as_ref().unicode_words().next().map(ToString::to_string)
-}
-
 /// List of Proton colors defined by designers.
 static PROTON_COLORS: [&str; 15] = [
     "#0F735A", "#059A6F", "#1ED19C", "#3CBB3A", "#3C8B8C", "#6638B7", "#9553F9", "#9C89FF",
