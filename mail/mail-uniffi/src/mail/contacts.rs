@@ -1,4 +1,4 @@
-use crate::{spawn_async, utils::MIN_DAMPENING_PERIOD, UniffiRecord};
+use crate::{spawn_async, utils::DAMPENING_PERIOD, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
 use proton_mail_common::MailContextError;
 use std::{
@@ -125,7 +125,8 @@ pub fn damp_contacts_callback(
     let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_millis(MIN_DAMPENING_PERIOD));
+        let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
+        let mut interval = interval(Duration::from_millis(dampening_period));
         let callback = Arc::new(callback);
 
         loop {
