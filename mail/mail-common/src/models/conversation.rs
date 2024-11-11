@@ -17,7 +17,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
-use tracing::warn;
+use tracing::{error, warn};
 
 impl Conversation {
     /// Label multiple conversations.
@@ -321,36 +321,31 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let api = session.api();
+        /// Gets a hashmap of the remote label id and the local ids.
+        async fn group_ids_by_label(
+            label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+            interface: &(impl Into<AgnosticInterface> + Interface),
+        ) -> Result<HashMap<RemoteId, HashSet<LocalId>>, AppError> {
+            let mut map = HashMap::new();
+            for (conv_id, local_label_ids) in label_ids {
+                let remote_label_ids = LocalId::counterparts::<Label, _>(
+                    Vec::from_iter(local_label_ids.iter().cloned()),
+                    interface,
+                )
+                .await?;
+                for remote_label_id in remote_label_ids {
+                    map.entry(remote_label_id)
+                        .or_insert_with(HashSet::new)
+                        .insert(*conv_id);
+                }
+            }
+            Ok(map)
+        }
 
-        let mut added_by_label = HashMap::new();
-        for (conversation_id, label_ids) in added_label_ids {
-            let label_ids = LocalId::counterparts::<Label, _>(
-                Vec::from_iter(label_ids.iter().cloned()),
-                interface,
-            )
-            .await?;
-            for label_id in label_ids {
-                added_by_label
-                    .entry(label_id)
-                    .or_insert_with(HashSet::new)
-                    .insert(*conversation_id);
-            }
-        }
-        let mut removed_by_label = HashMap::new();
-        for (conversation_id, label_ids) in removed_label_ids {
-            let label_ids = LocalId::counterparts::<Label, _>(
-                Vec::from_iter(label_ids.iter().cloned()),
-                interface,
-            )
-            .await?;
-            for label_id in label_ids {
-                removed_by_label
-                    .entry(label_id)
-                    .or_insert_with(HashSet::new)
-                    .insert(*conversation_id);
-            }
-        }
+        let added_by_label = group_ids_by_label(added_label_ids, interface).await?;
+        let removed_by_label = group_ids_by_label(removed_label_ids, interface).await?;
+
+        let api = session.api();
 
         let mut failed_ids = vec![];
         for (label_id, conversation_ids) in added_by_label {
@@ -361,14 +356,21 @@ impl Conversation {
             .await?;
             let response = api
                 .put_conversations_label(
-                    conversation_ids.into_iter().map_into().collect(),
+                    conversation_ids.iter().cloned().map_into().collect(),
                     label_id.clone().into(),
                     None,
                 )
-                .await?
-                .responses;
-            failed_ids.append(&mut filter_responses(response));
+                .await;
+
+            match response {
+                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
+                Err(e) => {
+                    error!("{e:?}");
+                    failed_ids.extend(conversation_ids);
+                }
+            };
         }
+
         for (label_id, conversation_ids) in removed_by_label {
             let conversation_ids = LocalId::counterparts::<Conversation, _>(
                 Vec::from_iter(conversation_ids),
@@ -377,12 +379,17 @@ impl Conversation {
             .await?;
             let response = api
                 .put_conversations_unlabel(
-                    conversation_ids.into_iter().map_into().collect(),
+                    conversation_ids.iter().cloned().map_into().collect(),
                     label_id.clone().into(),
                 )
-                .await?
-                .responses;
-            failed_ids.append(&mut filter_responses(response));
+                .await;
+            match response {
+                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
+                Err(e) => {
+                    error!("{e:?}");
+                    failed_ids.extend(conversation_ids);
+                }
+            };
         }
 
         Ok(failed_ids)
