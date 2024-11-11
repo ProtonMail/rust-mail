@@ -3,7 +3,6 @@ pub(crate) mod login_flow;
 mod proton_mail_error;
 pub(crate) mod unexpected;
 pub(crate) mod update_event;
-pub(crate) mod user_draft;
 pub(crate) mod user_session;
 
 pub use self::proton_mail_error::*;

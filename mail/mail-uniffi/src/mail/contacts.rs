@@ -6,7 +6,7 @@ use crate::{
 };
 use crate::{spawn_async, utils::DAMPENING_PERIOD, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
-use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::MailContextError;
 use std::{
     sync::{

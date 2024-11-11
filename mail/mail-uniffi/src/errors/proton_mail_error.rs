@@ -1,5 +1,4 @@
 use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::Reason as RealReason;
 
 use crate::errors::api_service_error::UserApiServiceError;
@@ -10,18 +9,29 @@ use super::login_flow::HumanChallenge;
 
 export_void_result!(VoidProtonMailResult, ProtonMailError);
 
+/// Represent all the errors that can be returned by the ProtonMail SDK.
 #[derive(Debug, uniffi::Record)]
 pub struct ProtonMailError {
     pub kind: MailErrorKind,
     pub details: MailErrorDetails,
 }
 
+/// Possible Mail Localizable Errors
 #[derive(Copy, Clone, Debug, uniffi::Enum)]
 pub enum MailErrorKind {
+    /// User Localizable Error for Invoked Actions
     UserActionError,
+
+    /// User Localizable Error for Session operations
     UserSessionError,
+
+    /// User Localizable Error for Draft new message
     UserDraftError,
+
+    /// User Localizable Error for Login flow
     LoginFlowError,
+
+    /// Localizable Error for Live Event Updates
     UpdateEventError,
 }
 
@@ -36,10 +46,15 @@ impl MailErrorKind {
 
 #[derive(Debug, uniffi::Enum)]
 pub enum MailErrorDetails {
+    /// This error detail is related with the arguments (i.e. like a Message id who does not exist)
     Reason(Reason),
+    /// This error detail is used when the session is expired.
     SessionExpired,
+    /// This error detail come from the Backend (i.e. like a 404 error)
     ServerError(UserApiServiceError),
+    /// This error detail come form network (i.e. like can't connect to backend)
     Network,
+    /// Something unexpected happened
     Unexpected(UnexpectedError),
 }
 

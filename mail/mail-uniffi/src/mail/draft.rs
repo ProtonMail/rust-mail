@@ -1,12 +1,12 @@
 use crate::core::datatypes::Id;
-use crate::errors::user_draft::{UserDraftError, VoidUserDraftResult};
+use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use parking_lot::RwLock;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
-use proton_mail_common::errors::user_draft::UserDraftError as RealUserDraftError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::MailUserContext;
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ pub struct Draft {
     ctx: Arc<MailUserContext>,
 }
 
-export_typed_result!(NewDraftResult, Arc<Draft>, UserDraftError);
+export_typed_result!(NewDraftResult, Arc<Draft>, ProtonMailError);
 
 /// Create a new draft with the given `create_mode`.
 ///
@@ -55,14 +55,15 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
                 RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
             }
         }
-        .map_err(RealUserDraftError::from)?;
+        .map_err(RealMailErrorDetails::from)?;
 
-        Result::<_, RealUserDraftError>::Ok(Arc::new(Draft {
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(Draft {
             draft: RwLock::new(draft),
             ctx,
         }))
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -76,12 +77,13 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        Result::<_, RealUserDraftError>::Ok(Arc::new(Draft {
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(Draft {
             draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
             ctx,
         }))
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -168,7 +170,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(&self) -> VoidUserDraftResult {
+    pub async fn save(&self) -> VoidProtonMailResult {
         let action = {
             let draft = self.draft.read();
             draft.to_save_action()
@@ -178,10 +180,11 @@ impl Draft {
             ctx.queue()
                 .queue_action(action)
                 .await
-                .map_err(RealUserDraftError::from)?;
-            Result::<_, RealUserDraftError>::Ok(())
+                .map_err(RealMailErrorDetails::from)?;
+            Result::<_, RealMailErrorDetails>::Ok(())
         })
         .await
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
         .into()
     }
 }
