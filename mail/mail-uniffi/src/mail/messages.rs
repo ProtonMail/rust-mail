@@ -13,7 +13,7 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::errors::user_actions::{UserActionError, VoidUserActionResult};
+use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -25,7 +25,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::errors::user_actions::{Reason, UserActionError as RealUserActionError};
+use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
@@ -93,10 +93,10 @@ impl DecryptedMessage {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, UserActionError> {
+    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonMailError> {
         let cloned = Arc::clone(&self);
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 cloned
                     .body
                     .transformed(
@@ -109,7 +109,7 @@ impl DecryptedMessage {
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 
     #[must_use]
@@ -200,15 +200,15 @@ pub struct MultipartData {
 pub async fn message(
     session: Arc<MailUserSession>,
     id: Id,
-) -> Result<Option<Message>, UserActionError> {
+) -> Result<Option<Message>, ProtonMailError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Result::<_, RealUserActionError>::Ok(
+        Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::load(id.into(), &stash).await?.map(Into::into),
         )
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Data for watched message.
@@ -244,7 +244,7 @@ pub async fn watch_message(
     session: Arc<MailUserSession>,
     message_id: Id,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Option<WatchedMessage>, UserActionError> {
+) -> Result<Option<WatchedMessage>, ProtonMailError> {
     let stash = session.user_stash().clone();
     let watcher = WatchHandle::default();
     let watcher_cloned = watcher.clone();
@@ -270,13 +270,13 @@ pub async fn watch_message(
         } else {
             None
         };
-        Result::<_, RealUserActionError>::Ok(message.map(|m| WatchedMessage {
+        Result::<_, RealMailErrorDetails>::Ok(message.map(|m| WatchedMessage {
             message: m.into(),
             handle: Arc::new(watcher),
         }))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Get messages for the given conversation.
@@ -295,10 +295,10 @@ pub async fn watch_message(
 pub async fn messages_for_conversation(
     session: Arc<MailUserSession>,
     conversation_id: Id,
-) -> Result<Vec<Message>, UserActionError> {
+) -> Result<Vec<Message>, ProtonMailError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Result::<_, RealUserActionError>::Ok(
+        Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::in_conversation(RealLocalId::from(conversation_id), &stash, None)
                 .await?
                 .into_iter()
@@ -307,7 +307,7 @@ pub async fn messages_for_conversation(
         )
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Get messages for the given label.
@@ -326,10 +326,10 @@ pub async fn messages_for_conversation(
 pub async fn messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
-) -> Result<Vec<Message>, UserActionError> {
+) -> Result<Vec<Message>, ProtonMailError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Result::<_, RealUserActionError>::Ok(
+        Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::in_label(RealLocalId::from(label_id), &stash, None)
                 .await?
                 .into_iter()
@@ -338,7 +338,7 @@ pub async fn messages_for_label(
         )
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Paginate messages for the given label.
@@ -366,7 +366,7 @@ pub async fn paginate_messages_for_label(
     label_id: Id,
     filter: PaginatorFilter,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<MessagePaginator>, UserActionError> {
+) -> Result<Arc<MessagePaginator>, ProtonMailError> {
     let context = session.ctx();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
@@ -380,13 +380,13 @@ pub async fn paginate_messages_for_label(
             Some(msg_sender),
         )
         .await?;
-        Result::<_, RealUserActionError>::Ok(Arc::new(MessagePaginator {
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(MessagePaginator {
             real_paginator,
             handle: watch_channel(msg_receiver, callback).await,
         }))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Paginate messages returned from a search.
@@ -412,7 +412,7 @@ pub async fn paginate_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<MessagePaginator>, UserActionError> {
+) -> Result<Arc<MessagePaginator>, ProtonMailError> {
     let context = session.ctx();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
@@ -429,13 +429,13 @@ pub async fn paginate_search(
             Some(msg_sender),
         )
         .await?;
-        Result::<_, RealUserActionError>::Ok(Arc::new(MessagePaginator {
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(MessagePaginator {
             real_paginator,
             handle: watch_channel(msg_receiver, callback).await,
         }))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Filter or search messages which match the specified options.
@@ -455,10 +455,10 @@ pub async fn paginate_search(
 pub async fn search_for_messages(
     session: Arc<MailUserSession>,
     options: MessageSearchOptions,
-) -> Result<Vec<Message>, UserActionError> {
+) -> Result<Vec<Message>, ProtonMailError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Result::<_, RealUserActionError>::Ok(
+        Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::search(
                 options.into_api_options(&stash).await?,
                 session.ctx().session().api(),
@@ -471,7 +471,7 @@ pub async fn search_for_messages(
         )
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Returns available actions for messages.
@@ -491,12 +491,12 @@ pub async fn search_for_messages(
 pub async fn available_actions_for_messages(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
-) -> Result<MessageAvailableActions, UserActionError> {
+) -> Result<MessageAvailableActions, ProtonMailError> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealUserActionError::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
         let actions = RealMessage::available_actions(
             view,
             ids.into_iter().map_into().collect(),
@@ -504,10 +504,10 @@ pub async fn available_actions_for_messages(
         )
         .await?;
 
-        Result::<_, RealUserActionError>::Ok(MessageAvailableActions::from(actions))
+        Result::<_, RealMailErrorDetails>::Ok(MessageAvailableActions::from(actions))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Returns available label_as actions for messages.
@@ -526,7 +526,7 @@ pub async fn available_actions_for_messages(
 pub async fn available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
-) -> Result<Vec<LabelAsAction>, UserActionError> {
+) -> Result<Vec<LabelAsAction>, ProtonMailError> {
     uniffi_async(async move {
         let actions = RealMessage::available_label_as_actions(
             ids.into_iter().map_into().collect(),
@@ -537,10 +537,10 @@ pub async fn available_label_as_actions_for_messages(
         .map_into()
         .collect_vec();
 
-        Result::<_, RealUserActionError>::Ok(actions)
+        Result::<_, RealMailErrorDetails>::Ok(actions)
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Watches label_as actions for messages.
@@ -561,7 +561,7 @@ pub async fn watch_available_label_as_actions_for_messages(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedLabelAs, UserActionError> {
+) -> Result<WatchedLabelAs, ProtonMailError> {
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
@@ -576,10 +576,10 @@ pub async fn watch_available_label_as_actions_for_messages(
         .map_into()
         .collect_vec();
 
-        Result::<_, RealUserActionError>::Ok(WatchedLabelAs { actions, handle })
+        Result::<_, RealMailErrorDetails>::Ok(WatchedLabelAs { actions, handle })
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 #[derive(Clone, uniffi::Record)]
@@ -604,12 +604,12 @@ pub struct WatchedLabelAs {
 pub async fn available_move_to_actions_for_messages(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
-) -> Result<Vec<MoveAction>, UserActionError> {
+) -> Result<Vec<MoveAction>, ProtonMailError> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealUserActionError::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
         let actions = RealMessage::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
@@ -620,10 +620,10 @@ pub async fn available_move_to_actions_for_messages(
         .map_into()
         .collect_vec();
 
-        Result::<_, RealUserActionError>::Ok(actions)
+        Result::<_, RealMailErrorDetails>::Ok(actions)
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Returns available actions for messages bottom bar.
@@ -641,7 +641,7 @@ pub async fn available_move_to_actions_for_messages(
 pub async fn all_available_bottom_bar_actions_for_messages(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
-) -> Result<AllBottomBarMessageActions, UserActionError> {
+) -> Result<AllBottomBarMessageActions, ProtonMailError> {
     uniffi_async(async move {
         let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
             mailbox.label_id().into(),
@@ -650,10 +650,10 @@ pub async fn all_available_bottom_bar_actions_for_messages(
         )
         .await?
         .into();
-        Result::<_, RealUserActionError>::Ok(actions)
+        Result::<_, RealMailErrorDetails>::Ok(actions)
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Return the decrypted body of the specified message.
@@ -665,14 +665,14 @@ pub async fn all_available_bottom_bar_actions_for_messages(
 pub async fn get_message_body(
     mbox: &Mailbox,
     id: Id,
-) -> Result<Arc<DecryptedMessage>, UserActionError> {
+) -> Result<Arc<DecryptedMessage>, ProtonMailError> {
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
         let body = models::Message::message_body(&ctx, id.into()).await?;
-        Result::<_, RealUserActionError>::Ok(Arc::new(DecryptedMessage { ctx, body }))
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Data for watched messages.
@@ -707,19 +707,19 @@ pub async fn watch_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedMessages, UserActionError> {
+) -> Result<WatchedMessages, ProtonMailError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
         let (messages, receiver) =
             RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
         let watcher = watch_channel(receiver, callback).await;
-        Result::<_, RealUserActionError>::Ok(WatchedMessages {
+        Result::<_, RealMailErrorDetails>::Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
             handle: watcher,
         })
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Label the given messages with the given label id.
@@ -739,7 +739,7 @@ pub async fn apply_label_to_messages(
     session: Arc<MailUserSession>,
     label_id: Id,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_apply_label(
@@ -750,9 +750,10 @@ pub async fn apply_label_to_messages(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -771,7 +772,7 @@ pub async fn apply_label_to_messages(
 pub async fn star_messages(
     session: Arc<MailUserSession>,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_star(
@@ -781,9 +782,10 @@ pub async fn star_messages(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -802,7 +804,7 @@ pub async fn star_messages(
 pub async fn unstar_messages(
     session: Arc<MailUserSession>,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_unstar(
@@ -812,9 +814,10 @@ pub async fn unstar_messages(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -835,7 +838,7 @@ pub async fn remove_label_from_messages(
     session: Arc<MailUserSession>,
     label_id: Id,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_remove_label(
@@ -846,9 +849,10 @@ pub async fn remove_label_from_messages(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -867,7 +871,7 @@ pub async fn remove_label_from_messages(
 pub async fn mark_messages_read(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
@@ -879,9 +883,10 @@ pub async fn mark_messages_read(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -900,7 +905,7 @@ pub async fn mark_messages_read(
 pub async fn mark_messages_unread(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
@@ -912,9 +917,10 @@ pub async fn mark_messages_unread(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -930,7 +936,7 @@ pub async fn mark_messages_unread(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi::export]
-pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> VoidUserActionResult {
+pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> VoidProtonMailResult {
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
@@ -942,9 +948,10 @@ pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> Voi
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }
 
@@ -962,14 +969,14 @@ pub async fn get_embedded_attachment(
     mailbox: Arc<Mailbox>,
     id: Id,
     cid: String,
-) -> Result<Option<EmbeddedAttachmentInfo>, UserActionError> {
+) -> Result<Option<EmbeddedAttachmentInfo>, ProtonMailError> {
     uniffi_async(async move {
         let Some(att) =
             models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?
         else {
             return Ok(None);
         };
-        Result::<_, RealUserActionError>::Ok(Some(EmbeddedAttachmentInfo {
+        Result::<_, RealMailErrorDetails>::Ok(Some(EmbeddedAttachmentInfo {
             data: att.data,
             mime: att.mime,
             height: att.height,
@@ -977,7 +984,7 @@ pub async fn get_embedded_attachment(
         }))
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
@@ -1014,11 +1021,11 @@ pub async fn label_messages_as(
     selected_label_ids: Vec<Id>,
     partially_selected_label_ids: Vec<Id>,
     must_archive: bool,
-) -> Result<bool, UserActionError> {
+) -> Result<bool, ProtonMailError> {
     let user_context = mailbox.mbox().user_context();
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
-        Result::<_, RealUserActionError>::Ok(
+        Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::action_label_as(
                 user_context.session(),
                 user_context.queue(),
@@ -1035,7 +1042,7 @@ pub async fn label_messages_as(
         )
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
 
 /// Move given messages from a label into another.
@@ -1055,7 +1062,7 @@ pub async fn move_messages(
     mailbox: Arc<Mailbox>,
     destination_id: Id,
     message_ids: Vec<Id>,
-) -> VoidUserActionResult {
+) -> VoidProtonMailResult {
     let user_context = mailbox.mbox().user_context();
     let source_id = mailbox.label_id();
     uniffi_async(async move {
@@ -1068,8 +1075,9 @@ pub async fn move_messages(
         )
         .await
         .map(|_| ())
-        .map_err(RealUserActionError::from)
+        .map_err(RealMailErrorDetails::from)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
     .into()
 }

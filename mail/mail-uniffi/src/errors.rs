@@ -1,10 +1,12 @@
 pub(crate) mod api_service_error;
 pub(crate) mod login_flow;
+mod proton_mail_error;
 pub(crate) mod unexpected;
 pub(crate) mod update_event;
-pub(crate) mod user_actions;
 pub(crate) mod user_draft;
 pub(crate) mod user_session;
+
+pub use self::proton_mail_error::*;
 
 #[macro_export]
 macro_rules! export_void_result {

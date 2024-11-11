@@ -1,9 +1,9 @@
 use crate::core::datatypes::Id;
-use crate::errors::user_actions::UserActionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::Mailbox;
 use crate::uniffi_async;
-use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 
 /// Returned by [`Mailbox::get_attachment`].
 #[derive(Debug, Clone, uniffi::Record)]
@@ -50,15 +50,15 @@ impl Mailbox {
     pub async fn get_attachment(
         &self,
         local_attachment_id: Id,
-    ) -> Result<DecryptedAttachment, UserActionError> {
+    ) -> Result<DecryptedAttachment, ProtonMailError> {
         let mbox = self.mbox.clone();
         uniffi_async(async move {
             mbox.get_attachment(local_attachment_id.into())
                 .await
                 .map(Into::into)
-                .map_err(RealUserActionError::from)
+                .map_err(RealMailErrorDetails::from)
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 }

@@ -5,7 +5,7 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::errors::user_actions::{UserActionError, VoidUserActionResult};
+use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
@@ -15,7 +15,7 @@ use crate::utils::damp;
 use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
-use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::models::Label as RealLabel;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
@@ -47,12 +47,13 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: Id) -> VoidUserActionResult {
+    pub async fn collapse_folder(&self, local_id: Id) -> VoidProtonMailResult {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(sidebar.collapse_folder(local_id.into()).await?)
+            Result::<_, RealMailErrorDetails>::Ok(sidebar.collapse_folder(local_id.into()).await?)
         })
         .await
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
         .into()
     }
 
@@ -61,12 +62,13 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: Id) -> VoidUserActionResult {
+    pub async fn expand_folder(&self, local_id: Id) -> VoidProtonMailResult {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            Result::<_, RealUserActionError>::Ok(sidebar.expand_folder(local_id.into()).await?)
+            Result::<_, RealMailErrorDetails>::Ok(sidebar.expand_folder(local_id.into()).await?)
         })
         .await
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
         .into()
     }
 }
@@ -81,16 +83,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> Result<Vec<SidebarSystemLabel>, UserActionError> {
+    pub async fn system_labels(&self) -> Result<Vec<SidebarSystemLabel>, ProtonMailError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.system_labels().await?;
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarSystemLabel::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -98,16 +100,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserActionError> {
+    pub async fn custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, ProtonMailError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_folders().await?;
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarCustomFolder::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 
     /// Get the list of all the Custom Folders.
@@ -115,16 +117,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn all_custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserActionError> {
+    pub async fn all_custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, ProtonMailError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.all_custom_folders().await?;
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarCustomFolder::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -132,16 +134,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserActionError> {
+    pub async fn custom_labels(&self) -> Result<Vec<SidebarCustomLabel>, ProtonMailError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_labels().await?;
-            Result::<_, RealUserActionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarCustomLabel::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 
     /// Watch labels of a given type.
@@ -163,7 +165,7 @@ impl Sidebar {
         &self,
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
-    ) -> Result<Arc<WatchHandle>, UserActionError> {
+    ) -> Result<Arc<WatchHandle>, ProtonMailError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
@@ -222,7 +224,7 @@ impl Sidebar {
                     };
                 }
             });
-            Result::<_, RealUserActionError>::Ok(Arc::new(WatchHandle { stop_flag }))
-        }).await.map_err(Into::into)
+            Result::<_, RealMailErrorDetails>::Ok(Arc::new(WatchHandle { stop_flag }))
+        }).await.map_err(|details| MailErrorKind::UserActionError.with(details))
     }
 }
