@@ -157,7 +157,7 @@ impl From<AppError> for MailErrorDetails {
             AppError::UserNotFound => Self::Reason(Reason::InvalidParameter),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::RmpDeserialization(_error) => todo!(),
-            AppError::RmpSerialization(error) => todo!(),
+            AppError::RmpSerialization(_error) => todo!(),
         }
     }
 }

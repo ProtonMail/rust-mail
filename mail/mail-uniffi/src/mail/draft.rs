@@ -63,7 +63,7 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
         }))
     })
     .await
-    .map_err(|details| MailErrorKind::UserActionError.with(details))
+    .map_err(|details| MailErrorKind::UserDraftError.with(details))
     .into()
 }
 
@@ -83,7 +83,7 @@ pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftRe
         }))
     })
     .await
-    .map_err(|details| MailErrorKind::UserActionError.with(details))
+    .map_err(|details| MailErrorKind::UserDraftError.with(details))
     .into()
 }
 
@@ -184,7 +184,7 @@ impl Draft {
             Result::<_, RealMailErrorDetails>::Ok(())
         })
         .await
-        .map_err(|details| MailErrorKind::UserActionError.with(details))
+        .map_err(|details| MailErrorKind::UserDraftError.with(details))
         .into()
     }
 }
