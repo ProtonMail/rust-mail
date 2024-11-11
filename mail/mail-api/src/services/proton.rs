@@ -13,45 +13,25 @@
 //! For full documentation on the core API implementation, see [`Proton`](proton_api_core::services::proton::Proton).
 //!
 
+use bytes::Bytes;
+use proton_api_core::service::{ApiServiceError, ApiServiceResult};
+use proton_api_core::services::proton::common::RemoteId;
+
+use crate::services::proton::prelude::*;
+
 pub mod common;
+pub mod prelude;
 pub mod request_data;
 pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-use crate::services::proton::common::LabelType;
-use crate::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets, DraftParams};
-use crate::services::proton::requests::{
-    GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PatchLabelRequest,
-    PostCreateDraftRequest, PostLabelsRequest, PostMessagesRelabelRequest,
-    PutConversationsDeleteRequest, PutConversationsLabelRequest, PutConversationsReadRequest,
-    PutConversationsUnlabelRequest, PutConversationsUnreadRequest, PutLabelRequest,
-    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
-    PutMessagesUnlabelRequest, PutMessagesUnreadRequest, PutUpdateDraftRequest,
-};
-use crate::services::proton::responses::{
-    GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,
-    GetConversationsResponse, GetLabelsResponse, GetMessageResponse, GetMessagesCountResponse,
-    GetMessagesResponse, GetSettingsResponse, PatchLabelResponse, PostCreateDraftResponse,
-    PostLabelsResponse, PostMessagesRelabelResponse, PutConversationsDeleteResponse,
-    PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
-    PutConversationsUnreadResponse, PutLabelResponse, PutMessagesDeleteResponse,
-    PutMessagesLabelResponse, PutMessagesReadResponse, PutMessagesUnlabelResponse,
-    PutMessagesUnreadResponse, PutUpdateDraftResponse,
-};
-use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
-use bytes::Bytes;
-use proton_api_core::service::{ApiService, ApiServiceError, Json, NO_PARAMS};
-use proton_api_core::services::proton::common::RemoteId;
-use proton_api_core::services::proton::Proton;
-use request_data::Package;
-use requests::{GetLabelsByIdsOptions, PostSendRequest};
-use responses::PostSendMessageResponse;
+mod proton_impl;
 
-pub trait ProtonMail: ApiService {
-    const BASE_PATH_CORE: &'static str = "core/v4";
-    const BASE_PATH_MAIL: &'static str = "mail/v4";
+/// The Proton Mail API base path (v4).
+pub const MAIL_V4: &str = "/mail/v4";
 
+pub trait ProtonMail {
     /// TODO: Document this method.
     ///
     /// # Parameters
@@ -62,14 +42,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn delete_label(&self, label_id: RemoteId) -> Result<(), ApiServiceError> {
-        self.delete::<_, ()>(
-            &format!("{}/labels/{label_id}", Self::BASE_PATH_CORE),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn delete_label(&self, label_id: RemoteId) -> ApiServiceResult<()>;
 
     /// GETs a single attachment.
     ///
@@ -88,14 +61,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_attachment(&self, attachment_id: RemoteId) -> Result<Bytes, ApiServiceError> {
-        self.get::<_, Bytes>(
-            &format!("{}/attachments/{attachment_id}", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn get_attachment(&self, attachment_id: RemoteId) -> ApiServiceResult<Bytes>;
 
     /// GETs metadata for an attachment.
     ///
@@ -115,17 +81,7 @@ pub trait ProtonMail: ApiService {
     async fn get_attachment_metadata(
         &self,
         attachment_id: RemoteId,
-    ) -> Result<GetAttachmentMetadataResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!(
-                "{}/attachments/{attachment_id}/metadata",
-                Self::BASE_PATH_MAIL
-            ),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<GetAttachmentMetadataResponse>;
 
     /// TODO: Document this method.
     ///
@@ -140,14 +96,7 @@ pub trait ProtonMail: ApiService {
     async fn get_conversation(
         &self,
         conversation_id: RemoteId,
-    ) -> Result<GetConversationResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/conversations/{conversation_id}", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<GetConversationResponse>;
 
     /// TODO: Document this method.
     ///
@@ -161,17 +110,8 @@ pub trait ProtonMail: ApiService {
     ///
     async fn get_conversations(
         &self,
-        mut options: GetConversationsOptions,
-    ) -> Result<GetConversationsResponse, ApiServiceError> {
-        options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
-        options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
-        self.get::<_, Json<_>>(
-            &format!("{}/conversations", Self::BASE_PATH_MAIL),
-            Some(options),
-            None,
-        )
-        .await
-    }
+        options: GetConversationsOptions,
+    ) -> ApiServiceResult<GetConversationsResponse>;
 
     /// TODO: Document this method.
     ///
@@ -179,16 +119,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_conversations_count(
-        &self,
-    ) -> Result<GetConversationsCountResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/conversations/count", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn get_conversations_count(&self) -> ApiServiceResult<GetConversationsCountResponse>;
 
     /// TODO: Document this method.
     ///
@@ -200,17 +131,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_labels(
-        &self,
-        label_type: LabelType,
-    ) -> Result<GetLabelsResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/labels", Self::BASE_PATH_CORE),
-            Some(GetLabelsOptions { label_type }),
-            None,
-        )
-        .await
-    }
+    async fn get_labels(&self, label_type: LabelType) -> ApiServiceResult<GetLabelsResponse>;
 
     /// Method to get labels by their IDs.
     /// Makes a POST request to the `/labels/by-ids` endpoint.
@@ -230,14 +151,7 @@ pub trait ProtonMail: ApiService {
     async fn get_labels_by_ids(
         &self,
         label_ids: Vec<RemoteId>,
-    ) -> Result<GetLabelsResponse, ApiServiceError> {
-        self.post::<_, Json<_>>(
-            &format!("{}/labels/by-ids", Self::BASE_PATH_CORE),
-            Some(GetLabelsByIdsOptions { label_ids }),
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<GetLabelsResponse>;
 
     /// TODO: Document this method.
     ///
@@ -249,17 +163,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_message(
-        &self,
-        message_id: RemoteId,
-    ) -> Result<GetMessageResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn get_message(&self, message_id: RemoteId) -> ApiServiceResult<GetMessageResponse>;
 
     /// TODO: Document this method.
     ///
@@ -273,23 +177,8 @@ pub trait ProtonMail: ApiService {
     ///
     async fn get_messages(
         &self,
-        mut options: GetMessagesOptions,
-    ) -> Result<GetMessagesResponse, ApiServiceError> {
-        options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
-        options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
-
-        // There can potentially be a large number of query parameters in this request.
-        // The length of the URL could eventually exceed the limit imposed by our API.
-        // To avoid this, we can send as POST, with the query parameters sent in the message body.
-        // In this case, add this as a header: `X-HTTP-Method-Override`: `GET`
-        // Mobile needs this to be `get` so they can run their tests through the proxy.
-        self.get::<_, Json<_>>(
-            &format!("{}/messages", Self::BASE_PATH_MAIL),
-            Some(options),
-            None,
-        )
-        .await
-    }
+        options: GetMessagesOptions,
+    ) -> ApiServiceResult<GetMessagesResponse>;
 
     /// TODO: Document this method.
     ///
@@ -297,14 +186,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_messages_count(&self) -> Result<GetMessagesCountResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/messages/count", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn get_messages_count(&self) -> ApiServiceResult<GetMessagesCountResponse>;
 
     /// TODO: Document this method.
     ///
@@ -312,14 +194,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_settings(&self) -> Result<GetSettingsResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(
-            &format!("{}/settings", Self::BASE_PATH_MAIL),
-            NO_PARAMS,
-            None,
-        )
-        .await
-    }
+    async fn get_mail_settings(&self) -> ApiServiceResult<GetMailSettingsResponse>;
 
     /// TODO: Document this method.
     ///
@@ -331,13 +206,7 @@ pub trait ProtonMail: ApiService {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn post_labels(
-        &self,
-        body: PostLabelsRequest,
-    ) -> Result<PostLabelsResponse, ApiServiceError> {
-        self.post::<_, Json<_>>(&format!("{}/labels", Self::BASE_PATH_CORE), body, None)
-            .await
-    }
+    async fn post_labels(&self, body: PostLabelsRequest) -> ApiServiceResult<PostLabelsResponse>;
 
     /// TODO: Document this method.
     ///
@@ -354,17 +223,7 @@ pub trait ProtonMail: ApiService {
         &self,
         conversation_ids: Vec<RemoteId>,
         label_id: RemoteId,
-    ) -> Result<PutConversationsDeleteResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/conversations/delete", Self::BASE_PATH_MAIL),
-            PutConversationsDeleteRequest {
-                ids: conversation_ids,
-                label_id,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutConversationsDeleteResponse>;
 
     /// TODO: Document this method.
     ///
@@ -383,19 +242,7 @@ pub trait ProtonMail: ApiService {
         conversation_ids: Vec<RemoteId>,
         label_id: RemoteId,
         spam_action: Option<bool>,
-    ) -> Result<PutConversationsLabelResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/conversations/label", Self::BASE_PATH_MAIL),
-            PutConversationsLabelRequest {
-                action: 1,
-                ids: conversation_ids,
-                label_id,
-                spam_action,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutConversationsLabelResponse>;
 
     /// TODO: Document this method.
     ///
@@ -410,16 +257,7 @@ pub trait ProtonMail: ApiService {
     async fn put_conversations_read(
         &self,
         conversation_ids: Vec<RemoteId>,
-    ) -> Result<PutConversationsReadResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/conversations/read", Self::BASE_PATH_MAIL),
-            PutConversationsReadRequest {
-                ids: conversation_ids,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutConversationsReadResponse>;
 
     /// TODO: Document this method.
     ///
@@ -436,17 +274,7 @@ pub trait ProtonMail: ApiService {
         &self,
         conversation_ids: Vec<RemoteId>,
         label_id: RemoteId,
-    ) -> Result<PutConversationsUnlabelResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/conversations/unlabel", Self::BASE_PATH_MAIL),
-            PutConversationsUnlabelRequest {
-                ids: conversation_ids,
-                label_id,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutConversationsUnlabelResponse>;
 
     /// TODO: Document this method.
     ///
@@ -461,16 +289,7 @@ pub trait ProtonMail: ApiService {
     async fn put_conversations_unread(
         &self,
         conversation_ids: Vec<RemoteId>,
-    ) -> Result<PutConversationsUnreadResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/conversations/unread", Self::BASE_PATH_MAIL),
-            PutConversationsUnreadRequest {
-                ids: conversation_ids,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
     /// TODO: Document this method.
     ///
@@ -487,14 +306,7 @@ pub trait ProtonMail: ApiService {
         &self,
         label_id: RemoteId,
         body: PutLabelRequest,
-    ) -> Result<PutLabelResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/labels/{label_id}", Self::BASE_PATH_CORE),
-            body,
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutLabelResponse>;
 
     /// TODO: Document this method.
     ///
@@ -511,17 +323,7 @@ pub trait ProtonMail: ApiService {
         &self,
         message_ids: Vec<RemoteId>,
         label_id: Option<RemoteId>,
-    ) -> Result<PutMessagesDeleteResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/delete", Self::BASE_PATH_MAIL),
-            PutMessagesDeleteRequest {
-                ids: message_ids,
-                label_id,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
     /// Put a label on some messages.
     ///
@@ -540,19 +342,7 @@ pub trait ProtonMail: ApiService {
         message_ids: Vec<RemoteId>,
         label_id: RemoteId,
         spam_action: Option<bool>,
-    ) -> Result<PutMessagesLabelResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/label", Self::BASE_PATH_MAIL),
-            PutMessagesLabelRequest {
-                action: 1,
-                ids: message_ids,
-                label_id,
-                spam_action,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutMessagesLabelResponse>;
 
     /// TODO: Document this method.
     ///
@@ -567,14 +357,7 @@ pub trait ProtonMail: ApiService {
     async fn put_messages_read(
         &self,
         message_ids: Vec<RemoteId>,
-    ) -> Result<PutMessagesReadResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/read", Self::BASE_PATH_MAIL),
-            PutMessagesReadRequest { ids: message_ids },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutMessagesReadResponse>;
 
     /// Remove a label from some messages.
     ///
@@ -591,17 +374,7 @@ pub trait ProtonMail: ApiService {
         &self,
         message_ids: Vec<RemoteId>,
         label_id: RemoteId,
-    ) -> Result<PutMessagesUnlabelResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/unlabel", Self::BASE_PATH_MAIL),
-            PutMessagesUnlabelRequest {
-                ids: message_ids,
-                label_id,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutMessagesUnlabelResponse>;
 
     /// TODO: Document this method.
     ///
@@ -616,14 +389,7 @@ pub trait ProtonMail: ApiService {
     async fn put_messages_unread(
         &self,
         message_ids: Vec<RemoteId>,
-    ) -> Result<PutMessagesUnreadResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/unread", Self::BASE_PATH_MAIL),
-            PutMessagesUnreadRequest { ids: message_ids },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PutMessagesUnreadResponse>;
 
     /// Relabel a message.
     ///
@@ -644,14 +410,7 @@ pub trait ProtonMail: ApiService {
         &self,
         message_id: RemoteId,
         label_ids: Vec<RemoteId>,
-    ) -> Result<PostMessagesRelabelResponse, ApiServiceError> {
-        self.post::<_, Json<_>>(
-            &format!("{}/messages/{}/relabel", Self::BASE_PATH_MAIL, message_id),
-            PostMessagesRelabelRequest { label_ids },
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PostMessagesRelabelResponse>;
 
     /// This method is used to patch an existing label.
     /// The `label_id` is used to identify the label to patch.
@@ -674,14 +433,7 @@ pub trait ProtonMail: ApiService {
         &self,
         label_id: RemoteId,
         body: PatchLabelRequest,
-    ) -> Result<PatchLabelResponse, ApiServiceError> {
-        self.patch::<_, Json<_>>(
-            &format!("{}/labels/{label_id}", Self::BASE_PATH_CORE),
-            body,
-            None,
-        )
-        .await
-    }
+    ) -> ApiServiceResult<PatchLabelResponse>;
 
     /// This method creates a new draft message on the server.
     ///
@@ -701,16 +453,7 @@ pub trait ProtonMail: ApiService {
         action: DraftAction,
         attachments: DraftAttachmentKeyPackets,
         parent_id: Option<RemoteId>,
-    ) -> Result<PostCreateDraftResponse, ApiServiceError> {
-        let body = PostCreateDraftRequest {
-            message,
-            action,
-            attachment_key_packets: attachments,
-            parent_id,
-        };
-        self.post::<_, Json<_>>(&format!("{}/messages", Self::BASE_PATH_MAIL), body, None)
-            .await
-    }
+    ) -> ApiServiceResult<PostCreateDraftResponse>;
 
     /// This method will update a draft message on the server.
     ///
@@ -729,17 +472,7 @@ pub trait ProtonMail: ApiService {
         message_id: RemoteId,
         message: DraftParams,
         attachments: DraftAttachmentKeyPackets,
-    ) -> Result<PutUpdateDraftResponse, ApiServiceError> {
-        self.put::<_, Json<_>>(
-            &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
-            PutUpdateDraftRequest {
-                message,
-                attachment_key_packets: attachments,
-            },
-            None,
-        )
-        .await
-    }
+    ) -> Result<PutUpdateDraftResponse, ApiServiceError>;
 
     /// Sends an e-mail send request to the server.
     ///
@@ -757,22 +490,5 @@ pub trait ProtonMail: ApiService {
         message_id: RemoteId,
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
-    ) -> Result<PostSendMessageResponse, ApiServiceError> {
-        let send_request = PostSendRequest {
-            expiration_time: None,
-            expires_in: None,
-            auto_save_contacts,
-            delay_seconds: None,
-            delivery_time: None,
-            packages,
-        };
-        self.post::<_, Json<_>>(
-            &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
-            send_request,
-            None,
-        )
-        .await
-    }
+    ) -> Result<PostSendMessageResponse, ApiServiceError>;
 }
-
-impl ProtonMail for Proton {}

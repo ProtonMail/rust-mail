@@ -1,6 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
+use proton_api_core::services::proton::prelude::GetEventOptions;
+use proton_api_core::services::proton::ProtonCore;
 // avoid namespace conflicts
 use crate::Event;
 use proton_api_core::service::ApiServiceError;
@@ -36,7 +38,7 @@ impl<T: Event + From<<T as Event>::Response>> Provider<T> for ProtonProvider {
         Ok(self
             .session
             .api()
-            .get_event::<T::Response>(event_id.clone(), false, false)
+            .get_event::<T::Response>(event_id.clone(), GetEventOptions::default())
             .await?
             .into())
     }

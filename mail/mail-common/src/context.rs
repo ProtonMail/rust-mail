@@ -5,7 +5,7 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::{Config, Proton};
+use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -228,7 +228,7 @@ impl MailContext {
     /// the user database.
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
-        login_flow: &Flow,
+        login_flow: &mut Flow,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
@@ -442,11 +442,6 @@ impl MailContext {
     /// Get the core context.
     pub fn core_context(&self) -> &Arc<Context> {
         &self.core_context
-    }
-
-    /// Get the API service.
-    pub fn api(&self) -> &Proton {
-        self.core_context.api()
     }
 
     /// Get the connection to the session database.

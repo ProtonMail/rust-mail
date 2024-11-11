@@ -121,7 +121,7 @@ pub struct GetMessagesCountResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct GetSettingsResponse {
+pub struct GetMailSettingsResponse {
     /// TODO: Document this field.
     pub mail_settings: MailSettings,
 }

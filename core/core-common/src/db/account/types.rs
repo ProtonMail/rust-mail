@@ -7,9 +7,8 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use proton_api_core::auth::{AuthSession, SecretString, UserKeySecret};
+use proton_api_core::auth::{Auth, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
@@ -21,7 +20,7 @@ use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::datatypes::{AuthScope, AuthState, PasswordMode, RemoteId, TfaStatus, Timestamp};
+use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus, Timestamp};
 use crate::db::ChangeSender;
 use crate::models::ModelExtension;
 
@@ -187,11 +186,7 @@ pub struct CoreSession {
 
     /// The scope(s) the session has access to.
     #[DbField]
-    pub auth_scope: AuthScope,
-
-    /// The state of the session's auth.
-    #[DbField]
-    pub auth_state: AuthState,
+    pub auth_scopes: AuthScopes,
 
     /// Secret used for unlocking the account's PGP key (once derived).
     #[DbField]
@@ -220,14 +215,33 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn new(auth: AuthSession, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+    pub fn new(auth: Auth, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        let Some(user_id) = auth.user_id() else {
+            todo!("expected user_id in auth")
+        };
+
+        let Some(uid) = auth.uid() else {
+            todo!("expected uid in auth")
+        };
+
+        let Some(acc_tok) = auth.acc_tok() else {
+            todo!("expected acc_tok in auth")
+        };
+
+        let Some(ref_tok) = auth.ref_tok() else {
+            todo!("expected ref_tok in auth")
+        };
+
+        let Some(scopes) = auth.scopes() else {
+            todo!("expected scopes in auth")
+        };
+
         Ok(Self {
-            remote_id: RemoteId::from(auth.uid),
-            account_id: RemoteId::from(auth.user_id),
-            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
-            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
-            auth_scope: AuthScope::new(auth.auth_scope),
-            auth_state: AuthState::from(auth.auth_state),
+            remote_id: RemoteId::from(uid),
+            account_id: RemoteId::from(user_id),
+            access_token: EncryptedAccessToken::new(acc_tok, key)?,
+            refresh_token: EncryptedRefreshToken::new(ref_tok, key)?,
+            auth_scopes: AuthScopes::new(scopes),
 
             // --- Optional fields ---
             key_secret: None,
@@ -240,16 +254,27 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn with_auth(
-        self,
-        auth: &AuthSession,
-        key: &SessionEncryptionKey,
-    ) -> Result<Self, aes_gcm::Error> {
+    pub fn with_auth(self, auth: Auth, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        if let Some(uid) = auth.uid() {
+            assert_eq!(self.remote_id, RemoteId::from(uid));
+        };
+
+        let Some(acc_tok) = auth.acc_tok() else {
+            todo!("expected acc_tok in auth")
+        };
+
+        let Some(ref_tok) = auth.ref_tok() else {
+            todo!("expected ref_tok in auth")
+        };
+
+        let Some(scopes) = auth.scopes() else {
+            todo!("expected scopes in auth")
+        };
+
         Ok(Self {
-            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
-            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
-            auth_scope: AuthScope::new(&auth.auth_scope),
-            auth_state: AuthState::from(auth.auth_state),
+            access_token: EncryptedAccessToken::new(acc_tok, key)?,
+            refresh_token: EncryptedRefreshToken::new(ref_tok, key)?,
+            auth_scopes: AuthScopes::new(scopes),
 
             // --- preserve ---
             ..self
@@ -279,6 +304,7 @@ impl CoreSession {
 pub enum DecryptionError {
     #[error("Decryption failed")]
     Decryption,
+
     #[error("String Conversion: {0}")]
     String(#[from] FromUtf8Error),
 }
@@ -297,8 +323,8 @@ impl EncryptedAccessToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
-        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.as_bytes()).map(Self)
     }
 }
 impl Deref for EncryptedAccessToken {
@@ -335,8 +361,8 @@ impl EncryptedRefreshToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
-        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.as_bytes()).map(Self)
     }
 }
 

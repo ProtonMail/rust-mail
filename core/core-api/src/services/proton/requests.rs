@@ -20,7 +20,7 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::{Fido2Auth, LightOrDarkMode, RemoteId};
+use crate::services::proton::common::{LightOrDarkMode, RemoteId};
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
@@ -91,6 +91,16 @@ pub struct GetEventOptions {
     pub message_counts: bool,
 }
 
+impl GetEventOptions {
+    /// Return an instance of `GetEventOptions` with all counts set to `true`.
+    pub fn all() -> Self {
+        Self {
+            conversation_counts: true,
+            message_counts: true,
+        }
+    }
+}
+
 /// Parameters for getting all keys.
 #[serde_as]
 #[derive(Clone, Debug, Default, Serialize)]
@@ -103,97 +113,6 @@ pub struct GetKeysAllOptions {
     #[serde_as(as = "Option<BoolFromInt>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_only: Option<bool>,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthRequest {
-    /// TODO: Document this field.
-    pub client_ephemeral: String,
-
-    /// TODO: Document this field.
-    pub client_proof: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "SRPSession")]
-    pub srp_session: String,
-
-    /// TODO: Document this field.
-    pub username: String,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthInfoRequest {
-    /// TODO: Document this field.
-    pub username: String,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthRefreshRequest {
-    /// TODO: Document this field.
-    pub grant_type: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "RedirectURI")]
-    pub redirect_uri: String,
-
-    /// TODO: Document this field.
-    pub refresh_token: String,
-
-    /// TODO: Document this field.
-    pub response_type: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "UID")]
-    pub uid: RemoteId,
-}
-
-/// Fork session request.
-///
-/// This request is used to fork a user's session, providing a new session for
-/// the same user.
-///
-/// The general documentation for this can currently be found here:
-///
-///   - [Feature documentation](https://confluence.protontech.ch/display/CP/How+to+generate+a+session+fork+selector+for+testing+the+lite+account+application)
-///
-/// The required POST request is described as being:
-///
-///   - `POST /api/auth/sessions/forks`
-///   - `{ ChildClientID: "web-account-lite", Independent: 0 }`
-///
-/// The relevant API documentation is here:
-///
-///   - [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/auth/#tag/Authentication-Sessions/operation/post_auth-%7B_version%7D-sessions-forks)
-///
-/// The fields in the JSON body are not currently documented.
-///
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthSessionsForksRequest {
-    /// The child client ID, which is always `"web-account-lite"` at present. It
-    /// seems like this is an identifier for the caller, but this is not clear.
-    #[serde(rename = "ChildClientID")]
-    pub child_client_id: String,
-
-    /// It's not currently known what this does, and it's always set to `0`.
-    pub independent: u8,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthTfaRequest {
-    /// TODO: Document this field.
-    pub two_factor_code: String,
-
-    /// TODO: Document this field.
-    pub fido2: Fido2Auth,
 }
 
 /// Parameters for getting images logo.

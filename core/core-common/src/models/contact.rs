@@ -9,7 +9,7 @@ use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetC
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
-use proton_api_core::services::proton::Proton;
+use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;

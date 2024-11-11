@@ -1,0 +1,60 @@
+use crate::login::state::{HasAuthId, HasUserId, SubmitTfa};
+use crate::login::{state::State, LoginError};
+use crate::services::proton::common::RemoteId;
+use crate::services::proton::Proton;
+use crate::store::DynStore;
+use tracing::info;
+
+/// Represents the login flow state where the user must provide their two-factor authentication code
+/// (resumed from a previous login attempt).
+pub struct WantTfaResume {
+    client: Proton,
+    store: DynStore,
+    user_id: RemoteId,
+    auth_id: RemoteId,
+}
+
+impl WantTfaResume {
+    pub fn new(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
+        info!(%user_id, %auth_id, "Login flow wants to resume from 2FA");
+
+        Self {
+            client,
+            store,
+            user_id,
+            auth_id,
+        }
+    }
+}
+
+impl HasUserId for WantTfaResume {
+    fn user_id(&self) -> &RemoteId {
+        &self.user_id
+    }
+}
+
+impl HasAuthId for WantTfaResume {
+    fn auth_id(&self) -> &RemoteId {
+        &self.auth_id
+    }
+}
+
+impl SubmitTfa for WantTfaResume {
+    async fn submit_totp(self, code: String) -> Result<State, LoginError> {
+        let client = match self.client.auth().from_totp(code).await {
+            Ok(client) => client,
+            Err(_) => return Err(todo!()),
+        };
+
+        Ok(State::want_mbp(
+            client,
+            self.store,
+            self.user_id,
+            self.auth_id,
+        ))
+    }
+
+    async fn submit_fido(self, _: String) -> Result<State, LoginError> {
+        todo!()
+    }
+}

@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::common::RemoteId;
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::services::proton::ProtonMail;
@@ -37,10 +37,7 @@ async fn main() {
     .unwrap();
 
     let mut login_flow = Flow::new(session.clone());
-    login_flow
-        .login(user_email, user_password, None)
-        .await
-        .unwrap();
+    login_flow.login(user_email, user_password).await.unwrap();
 
     if login_flow.is_awaiting_2fa() {
         let mut line_reader = std::io::BufReader::new(stdin());
@@ -73,7 +70,7 @@ async fn main() {
         };
     }
 
-    let (user_id, session_id) = login_flow.reset_and_take_ids();
+    let (user_id, session_id) = (login_flow.user_id(), login_flow.session_id());
     println!("User ID is {}", user_id.unwrap());
     println!("Session ID is {}", session_id.unwrap());
 

@@ -47,7 +47,6 @@ use core::fmt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use proton_api_core::auth::AuthState as ApiAuthState;
 use proton_api_core::services::proton::common::{
     LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
 };
@@ -1783,10 +1782,10 @@ sql_using_serde!(TwoFa);
 ///
 /// TODO: Use a `HashSet`?
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AuthScope(Vec<String>);
+pub struct AuthScopes(Vec<String>);
 
-impl AuthScope {
-    /// Create a new [`AuthScope`] instance from a list of [`String`]s.
+impl AuthScopes {
+    /// Create a new [`AuthScopes`] instance from a list of [`String`]s.
     ///
     /// # Parameters
     ///
@@ -1799,73 +1798,20 @@ impl AuthScope {
         Self(scopes.into_iter().map_into().collect())
     }
 
-    /// Convert the [`AuthScope`] into the inner [`Vec`].
+    /// Returns true if the [`AuthScopes`] contains the specified scope.
+    #[must_use]
+    pub fn contains(&self, scope: &str) -> bool {
+        self.0.iter().any(|s| s == scope)
+    }
+
+    /// Convert the [`AuthScopes`] into the inner [`Vec`].
     #[must_use]
     pub fn into_inner(self) -> Vec<String> {
         self.0
     }
 }
 
-sql_using_serde!(AuthScope);
-
-/// A compat type for the [`proton_api_core::auth::AuthState`] enum,
-/// enabling it to be used within the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
-#[repr(u8)]
-pub enum AuthState {
-    TwoFA,
-    Ready,
-}
-
-impl AuthState {
-    /// Returns true if the auth needs 2FA to be completed.
-    #[must_use]
-    pub fn need_tfa(self) -> bool {
-        matches!(self, Self::TwoFA)
-    }
-}
-
-impl From<ApiAuthState> for AuthState {
-    fn from(value: ApiAuthState) -> Self {
-        match value {
-            ApiAuthState::TwoFA => Self::TwoFA,
-            ApiAuthState::Ready => Self::Ready,
-        }
-    }
-}
-
-impl From<AuthState> for ApiAuthState {
-    fn from(value: AuthState) -> Self {
-        match value {
-            AuthState::TwoFA => ApiAuthState::TwoFA,
-            AuthState::Ready => ApiAuthState::Ready,
-        }
-    }
-}
-
-impl ToSql for AuthState {
-    fn to_sql(&self) -> Result<ToSqlOutput, SqlError> {
-        Ok(u8::from(self.to_owned()).into())
-    }
-}
-
-impl FromSql for AuthState {
-    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
-        let ValueRef::Integer(value) = value else {
-            return Err(FromSqlError::InvalidType);
-        };
-
-        let Ok(value) = u8::try_from(value) else {
-            return Err(FromSqlError::InvalidType);
-        };
-
-        let Ok(value) = Self::try_from(value) else {
-            return Err(FromSqlError::InvalidType);
-        };
-
-        Ok(value)
-    }
-}
+sql_using_serde!(AuthScopes);
 
 /// A compat type for the [`ApiPasswordMode`] enum, enabling it to be used
 /// within the database.

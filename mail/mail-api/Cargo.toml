@@ -10,6 +10,7 @@ bitflags = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
 proton-api-core = { workspace = true }
 proton-crypto-inbox = { workspace = true }
+muon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
@@ -18,9 +19,11 @@ smart-default = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
+reqwest = { version = "0.12.2", features = ["stream"] }
+muon = { workspace = true, features = ["unsealed"] }
 pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
-reqwest = { version = "0.12.2", features = ["stream"] }
+proton-core-test-utils = { workspace = true }
 test-case = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
