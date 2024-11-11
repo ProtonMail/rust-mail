@@ -3,12 +3,14 @@
 use crate::services::proton::response_data::MailEvent;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::prelude::GetEventOptions;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::{CoreSession, Session};
 
 /// Authenticated Session from which one can access mail related functionality
 pub trait MailSession: CoreSession {
     async fn event(&self, id: RemoteId) -> Result<MailEvent, ApiServiceError> {
-        self.api().get_event::<MailEvent>(id, false, false).await
+        self.api().get_event(id, GetEventOptions::default()).await
     }
 }
 

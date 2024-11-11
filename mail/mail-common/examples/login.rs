@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
 use futures::TryFutureExt;
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::{MailContext, MailUserContext};
@@ -57,7 +57,7 @@ async fn new_mail_ctx(
 async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     let mut flow = ctx.new_login_flow().await?;
 
-    flow.login(read("username")?, read("password")?, None)
+    flow.login(read("username")?, read("password")?)
         .inspect_err(|err| error!("failed to login: {err}"))
         .await?;
 
@@ -68,13 +68,13 @@ async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     }
 
     if flow.is_awaiting_mailbox_password() {
-        flow.submit_mailbox_password(&read("2nd password")?)
+        flow.submit_mailbox_password(read("2nd password")?)
             .inspect_err(|err| error!("failed to submit mailbox password: {err}"))
             .await?;
     }
 
     let user_ctx = ctx
-        .user_context_from_login_flow(&flow)
+        .user_context_from_login_flow(&mut flow)
         .inspect_err(|err| error!("failed to create user context: {err}"))
         .await?;
 

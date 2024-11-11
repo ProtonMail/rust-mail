@@ -39,10 +39,11 @@ mod messages {
     use test_case::test_case;
     use wiremock::matchers::path_regex;
 
-    use proton_api_core::services::proton::Config;
+    use proton_api_core::session::{Config, EnvId};
     use proton_api_core::session::{CoreSession, Session};
     use proton_api_mail::services::proton::{requests::GetMessagesOptions, ProtonMail};
     use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
+    use proton_core_test_utils::test_context::MockApiEnv;
 
     type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = std::result::Result<T, E>;
 
@@ -94,11 +95,11 @@ mod messages {
     /// Create a new session which sends requests to the given mock server.
     async fn new_session(server: &MockServer) -> Result<Session> {
         let config = Config {
-            base_url: server.uri().parse()?,
+            env_id: EnvId::new_custom(MockApiEnv::new(server.uri())),
 
             ..Default::default()
         };
 
-        Session::new(config, None).await
+        Ok(Session::new(config, None).await?)
     }
 }

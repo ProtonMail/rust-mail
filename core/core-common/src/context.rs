@@ -14,9 +14,8 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::Config as ApiConfig;
-use proton_api_core::services::proton::Proton;
-use proton_api_core::session::{Session as ApiCoreSession, Session};
+use proton_api_core::session::Config as ApiConfig;
+use proton_api_core::session::Session as ApiSession;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
@@ -69,6 +68,12 @@ impl From<VcardValidationError> for CoreContextError {
 impl From<JoinError> for CoreContextError {
     fn from(e: JoinError) -> Self {
         CoreContextError::Other(anyhow!(e))
+    }
+}
+
+impl From<proton_api_core::session::SessionError> for CoreContextError {
+    fn from(_: proton_api_core::session::SessionError) -> Self {
+        todo!()
     }
 }
 
@@ -167,7 +172,7 @@ pub enum CoreSessionState {
 
 impl CoreSessionState {
     fn of(session: &CoreSession) -> Self {
-        if session.auth_state.need_tfa() {
+        if session.auth_scopes.contains("twofactor") {
             CoreSessionState::NeedTfa
         } else if session.key_secret.is_none() {
             CoreSessionState::NeedKey
@@ -194,11 +199,11 @@ pub struct Context {
     stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-    api: Proton,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
     active_user_contexts: Mutex<HashMap<RemoteId, Weak<UserContext>>>,
     cache_path: PathBuf,
     sender_image_cache_size: u64,
+    api_config: ApiConfig,
 }
 
 impl Context {
@@ -240,10 +245,6 @@ impl Context {
         let stash = Stash::get_instance(&account_db_path)?;
         migrate_account_db(&stash).await?;
 
-        let api = Proton::new(api_config, None, None)
-            .await
-            .map_err(ApiServiceError::from)?;
-
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             network_connected: AtomicBool::new(true),
@@ -252,10 +253,10 @@ impl Context {
             stash,
             user_db_initializers: initializers,
             network_callback,
-            api,
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             sender_image_cache_size,
+            api_config,
         }))
     }
 
@@ -541,7 +542,7 @@ impl Context {
     #[tracing::instrument(level=Level::DEBUG, skip(self, flow))]
     pub async fn user_context_from_login_flow(
         &self,
-        flow: &Flow,
+        flow: &mut Flow,
     ) -> CoreContextResult<Arc<UserContext>> {
         if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
@@ -549,7 +550,7 @@ impl Context {
 
         let user_id: RemoteId = flow.user_id()?.to_owned().into();
         let session_id: RemoteId = flow.session_id()?.to_owned().into();
-        let session = flow.session().to_owned();
+        let session = flow.take_session()?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -672,22 +673,15 @@ impl Context {
     async fn new_api_session(
         &self,
         session: Option<&CoreSession>,
-    ) -> CoreContextResult<ApiCoreSession> {
+    ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let stash = self.stash();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(stash, keychain, user_id, session_id);
-        let config = self.api.config().to_owned();
+        let config = self.api_config.clone();
 
-        Ok(ApiCoreSession::new(config, Some(Box::new(store)))
-            .map_err(ApiServiceError::from)
-            .await?)
-    }
-
-    /// Get the API service
-    pub fn api(&self) -> &Proton {
-        &self.api
+        Ok(ApiSession::new(config, Some(Box::new(store))).await?)
     }
 
     /// Get the stash in use
@@ -722,7 +716,7 @@ impl Context {
     async fn new_user_context(
         &self,
         user_id: RemoteId,
-        session: Session,
+        session: ApiSession,
         session_id: RemoteId,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;

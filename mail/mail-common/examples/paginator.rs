@@ -1,5 +1,5 @@
 use clap::Parser;
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelExtension;
@@ -80,9 +80,9 @@ async fn main() {
 
     let mut flow = ctx.new_login_flow().await.unwrap();
 
-    flow.login(username, password, None).await.unwrap();
+    flow.login(username, password).await.unwrap();
 
-    let user_ctx = ctx.user_context_from_login_flow(&flow).await.unwrap();
+    let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
     // Sync initial data
     let cb = InitCallback;

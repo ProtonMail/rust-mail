@@ -3,6 +3,8 @@ use crate::models::User;
 use crate::models::{Address, ModelExtension};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
+use proton_api_core::services::proton::requests::GetKeysAllOptions;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{
@@ -124,7 +126,10 @@ impl CryptoKeyManager {
         let api_keys = user_context
             .session()
             .api()
-            .get_keys_all(email.to_owned(), Some(internal_only))
+            .get_keys_all(GetKeysAllOptions {
+                email: email.to_owned(),
+                internal_only: Some(internal_only),
+            })
             .await?;
         api_keys
             .import(pgp_provider)

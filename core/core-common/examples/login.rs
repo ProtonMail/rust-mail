@@ -1,11 +1,10 @@
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_core_common::Context;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::Level;
-use url::Url;
 
 #[tokio::main]
 async fn main() {
@@ -25,7 +24,6 @@ async fn main() {
     key_chain.store(key).unwrap();
 
     let config = Config::default();
-    _ = Url::parse(&config.base_url).unwrap();
     let context = Context::new(
         session_db_dir,
         user_db_dir,
@@ -41,7 +39,10 @@ async fn main() {
 
     let mut flow = context.new_login_flow().await.unwrap();
 
-    flow.login(user_email, user_password, None).await.unwrap();
+    flow.login(user_email, user_password).await.unwrap();
 
-    context.user_context_from_login_flow(&flow).await.unwrap();
+    context
+        .user_context_from_login_flow(&mut flow)
+        .await
+        .unwrap();
 }

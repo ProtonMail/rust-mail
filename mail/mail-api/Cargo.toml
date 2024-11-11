@@ -8,6 +8,7 @@ categories = ["api-bindings"]
 [dependencies]
 bitflags = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
+muon = { workspace = true }
 proton-api-core = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 serde = { workspace = true }
@@ -18,8 +19,10 @@ smart-default = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
+muon = { workspace = true, features = ["unsealed"] }
 pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
+proton-core-test-utils = { workspace = true }
 reqwest = { version = "0.12.2", features = ["stream"] }
 test-case = { workspace = true }
 tokio = { workspace = true }

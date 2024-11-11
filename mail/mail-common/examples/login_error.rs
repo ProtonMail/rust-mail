@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 use clap::Parser;
 use proton_api_core::login::Flow;
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_api_core::session::Session;
 use proton_mail_common::errors::ProtonMailError;
 
@@ -20,7 +20,7 @@ async fn main() {
 
     let session = Session::new(Config::default(), None).await.unwrap();
     let mut login_flow = Flow::new(session);
-    let result = login_flow.login(username, password, None).await;
+    let result = login_flow.login(username, password).await;
 
     match result {
         Ok(_) => {

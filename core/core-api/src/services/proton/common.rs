@@ -10,7 +10,6 @@
 use core::fmt;
 use secrecy::{CloneableSecret, DebugSecret, Zeroize};
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
@@ -59,27 +58,6 @@ pub enum LightOrDarkMode {
 
 //  STRUCTS
 //==============================================================================
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct Fido2Auth {
-    /// TODO: Document this field.
-    pub authentication_data: String,
-
-    /// TODO: Document this field.
-    pub authentication_options: JsonValue,
-
-    /// TODO: Document this field.
-    pub client_data: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "CredentialID")]
-    pub credential_id: Vec<i32>,
-
-    /// TODO: Document this field.
-    pub signature: String,
-}
 
 /// Remote ID.
 ///

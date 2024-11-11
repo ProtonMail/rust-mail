@@ -3,6 +3,7 @@ use crate::datatypes::LightOrDarkMode;
 use crate::models::sender_image_cache::{ReceivedFormat, SenderImage, SenderImageMetadata};
 use crate::{CoreContextResult, UserContext};
 use anyhow::anyhow;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use stash::stash::{Bond, Stash};
 use std::path::PathBuf;

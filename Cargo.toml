@@ -16,6 +16,7 @@ chrono = { version = "0.4", features = ["default", "serde"] }
 color-backtrace = "0.6.1"
 colored = "2.1.0"
 ctor = "0.2.8"
+derive_more = "1.0"
 email_address = { version = "0.2.9", features = ["serde"] }
 flume = "0.11"
 futures = "0.3.30"
@@ -146,19 +147,9 @@ version = "0.7.4"
 registry = "proton"
 features = ["sql"]
 
-[workspace.dependencies.reqwest]
-version = "0.11"
-default-features = false
-features = [
-    "json",
-    "deflate",
-    "stream",
-    "cookies",
-    "multipart",
-    "rustls",
-    "rustls-tls",
-    "socks",
-]
+[workspace.dependencies.muon]
+version = "1.0"
+registry = "proton"
 
 [workspace.dependencies.proton-core-test-utils]
 version = "0.1"

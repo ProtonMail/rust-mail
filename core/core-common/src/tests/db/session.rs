@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{AuthScope, PasswordMode, RemoteId, TfaStatus};
+use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus};
 use crate::db::account::{
     CoreAccount, CoreSession, EncryptedAccessToken, EncryptedRefreshToken, SessionEncryptionKey,
 };
 use crate::models::ModelExtension;
-use proton_api_core::auth::{AuthSession, AuthState, UserKeySecret};
-use secrecy::SecretString;
+use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
+use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, Tether};
@@ -48,24 +48,22 @@ async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
 }
 
 /// Create a test auth session with dummy data.
-fn new_test_auth(account: &CoreAccount) -> AuthSession {
+fn new_test_auth(account: &CoreAccount) -> Auth {
     let uid = RemoteId::from("session_id");
     let user_id = account.remote_id.clone();
     let refresh_token = SecretString::from("token".to_owned());
     let access_token = SecretString::from("access".to_owned());
     let scopes = ["foo".to_owned(), "bar".to_owned()];
 
-    AuthSession {
-        uid: uid.into(),
-        name_or_addr: account.name_or_addr.clone(),
-        user_id: user_id.into(),
-        second_factor_mode: TfaStatus::None.into(),
-        password_mode: PasswordMode::One.into(),
-        access_token: access_token.into(),
-        refresh_token: refresh_token.into(),
-        auth_scope: scopes.into(),
-        auth_state: AuthState::Ready,
-    }
+    Auth::internal(
+        user_id.into_inner(),
+        uid.into_inner(),
+        Tokens::access(
+            access_token.expose_secret(),
+            refresh_token.expose_secret(),
+            scopes,
+        ),
+    )
 }
 
 #[test]
@@ -133,9 +131,9 @@ async fn test_session_update() {
         let original_session = session.clone();
 
         // Update the session's tokens and scopes.
-        session.access_token = EncryptedAccessToken::new(&"acc".to_owned().into(), &key).unwrap();
-        session.refresh_token = EncryptedRefreshToken::new(&"acc".to_owned().into(), &key).unwrap();
-        session.auth_scope = AuthScope::new(["baz", "qux"]);
+        session.access_token = EncryptedAccessToken::new("acc", &key).unwrap();
+        session.refresh_token = EncryptedRefreshToken::new("ref", &key).unwrap();
+        session.auth_scopes = AuthScopes::new(["baz", "qux"]);
         session.save(&tx).await.expect("failed to update");
 
         // Load the updated session from the database
@@ -151,7 +149,7 @@ async fn test_session_update() {
         // This data has changed
         assert_eq!(db_session.access_token, session.access_token);
         assert_eq!(db_session.refresh_token, session.refresh_token);
-        assert_eq!(db_session.auth_scope, session.auth_scope);
+        assert_eq!(db_session.auth_scopes, session.auth_scopes);
 
         // This data is unchanged
         assert_eq!(db_session.remote_id, original_session.remote_id);

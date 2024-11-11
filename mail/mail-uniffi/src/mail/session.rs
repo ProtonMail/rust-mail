@@ -8,7 +8,6 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
-use proton_api_core::services::proton::Proton;
 use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use proton_core_common::db::ChangeReceiver;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -601,12 +600,6 @@ impl MailSession {
     #[must_use]
     pub fn ctx(&self) -> &MailContext {
         &self.ctx
-    }
-
-    /// Get the API service.
-    #[must_use]
-    pub fn api(&self) -> &Proton {
-        self.ctx.api()
     }
 
     /// Get the session database connection.
