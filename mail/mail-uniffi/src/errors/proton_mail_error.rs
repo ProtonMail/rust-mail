@@ -81,7 +81,7 @@ impl From<Reason> for MailErrorDetails {
     }
 }
 
-/// Reason for invalid Action
+/// Specific Reason for error occurrence
 #[derive(Debug, uniffi::Enum)]
 pub enum Reason {
     InvalidParameter,

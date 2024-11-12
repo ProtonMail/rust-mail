@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       ```
   - `ProtonMailError` struct which is the new error interface returned by all failables. It contains
     - `MailErrorKind` which describe source of the error such as eg. `UserActionError`
-    - `MailErrorDetails` which categorize error into eg. `Network` errors or specific `Reason` of that error occurence.
+    - `MailErrorDetails` which categorize error into eg. `Network` errors or specific `Reason` of that error occurrence.
 
 ### Changed
 

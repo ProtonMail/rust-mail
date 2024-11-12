@@ -11,6 +11,10 @@ use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 
+/// Represent all the errors that can be returned by the ProtonMail SDK.
+///
+/// Currently this is not used in uniffi export as it has its own `ProtonMailError` struct.
+/// But for Rust implementations such as TUI this struct is valid.
 #[derive(Debug)]
 pub struct ProtonMailError {
     pub kind: MailErrorKind,
@@ -19,23 +23,34 @@ pub struct ProtonMailError {
 
 #[derive(Copy, Clone, Debug)]
 pub enum MailErrorKind {
+    /// User Localizable Error for Invoked Actions
     UserActionError,
+
+    /// User Localizable Error for Session operations
     UserSessionError,
+
+    /// User Localizable Error for Draft new message
     UserDraftError,
+
+    /// User Localizable Error for Login flow
     LoginFlowError,
+
+    /// Localizable Error for Live Event Updates
     UpdateEventError,
 }
 
 impl MailErrorKind {
-    pub fn with(self, details: MailErrorDetails) -> ProtonMailError {
+    pub fn with<D: Into<MailErrorDetails>>(self, details: D) -> ProtonMailError {
         ProtonMailError {
             kind: self,
-            details,
+            details: details.into(),
         }
     }
 }
 
-/// TODO: Document this
+/// Categories of errors that can be returned by the ProtonMail SDK.
+///
+/// It implements From trait for all the internal errors that can occur.
 #[derive(Debug)]
 pub enum MailErrorDetails {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
@@ -50,7 +65,7 @@ pub enum MailErrorDetails {
     Unexpected(Unexpected),
 }
 
-/// Reason for invalid Action
+/// Specific Reason for error occurrence
 #[derive(Debug)]
 pub enum Reason {
     InvalidParameter,
@@ -165,9 +180,10 @@ impl From<AppError> for MailErrorDetails {
 impl From<MailContextError> for MailErrorDetails {
     fn from(error: MailContextError) -> Self {
         match error {
-            MailContextError::Crypto
-            | MailContextError::KeyChainHasNoKey
-            | MailContextError::Login(_) => Self::Unexpected(Unexpected::Crypto),
+            MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
+                Self::Unexpected(Unexpected::Crypto)
+            }
+            MailContextError::Login(login_error) => Self::from(login_error),
             MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
             MailContextError::IO(io_error) => Self::from(io_error),
             MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),
@@ -304,16 +320,6 @@ impl From<MailboxError> for MailErrorDetails {
             MailboxError::MessageDecryption(message_error) => Self::from(message_error),
             MailboxError::Cache(cache_error) => Self::from(cache_error),
             MailboxError::IO(io_error) => Self::from(io_error),
-
-            // Not currently used
-            MailboxError::NoExclusiveLocationFound(_) => todo!(),
-            MailboxError::ConversationNotFound(_) => todo!(),
-            MailboxError::ConversationDoesNotHaveRemoteId(_) => todo!(),
-            MailboxError::MessageDoesNotHaveRemoteId(_) => todo!(),
-            MailboxError::MessageNotFound(_) => todo!(),
-            MailboxError::ConversationError(_) => todo!(),
-            MailboxError::ConversationHasNoMessages(_) => todo!(),
-            MailboxError::InvalidViewMode => todo!(),
         }
     }
 }
