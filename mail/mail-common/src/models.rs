@@ -6922,6 +6922,34 @@ impl Message {
     }
 }
 
+/// Gets a watcher for move_to actions. This works for both messages and conversations.
+pub async fn watch_available_move_to_actions<A>(
+    sender: flume::Sender<()>,
+    interface: &A,
+) -> Result<(), AppError>
+where
+    A: Into<AgnosticInterface> + Interface,
+{
+    let (tx, rx) = flume::unbounded();
+    _ = Label::find(
+        "WHERE label_type = ?",
+        params![LabelType::Folder],
+        interface,
+        Some(tx),
+    )
+    .await?;
+
+    tokio::spawn(async move {
+        while rx.recv_async().await.is_ok() {
+            if sender.send(()).is_err() {
+                return;
+            };
+        }
+    });
+
+    Ok(())
+}
+
 #[derive(Debug)]
 struct MessageLabelStats {
     pub unread_count: u64,
