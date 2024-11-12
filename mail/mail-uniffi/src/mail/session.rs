@@ -4,19 +4,17 @@ use crate::core::{
     StoredSessionState,
 };
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{
-    login_flow::UserLoginFlowError,
-    user_session::{UserSessionError, VoidUserSessionResult},
-};
+use crate::errors::user_session::{UserSessionError, VoidUserSessionResult};
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
 use proton_api_core::services::proton::Proton;
 use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use proton_core_common::db::ChangeReceiver;
-use proton_mail_common::errors::login_flow::UserLoginFlowError as RealUserLoginFlowError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::MailContext;
 use stash::stash::Stash;
 use std::path::PathBuf;
@@ -129,17 +127,17 @@ pub fn create_mail_session(
 #[proton_uniffi_macros::export_result]
 impl MailSession {
     /// Start new login flow.
-    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, UserLoginFlowError> {
+    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, ProtonMailError> {
         let ctx = self.ctx.clone();
-        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+        uniffi_async::<_, RealMailErrorDetails, _>(async move {
             let flow = ctx
                 .new_login_flow()
                 .await
-                .map_err(RealUserLoginFlowError::from)?;
+                .map_err(RealMailErrorDetails::from)?;
             Ok(LoginFlow::new(flow, ctx))
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::LoginFlowError.with(details))
     }
 
     /// Resume an existing login flow.
@@ -147,19 +145,19 @@ impl MailSession {
         &self,
         user_id: String,
         session_id: String,
-    ) -> Result<Arc<LoginFlow>, UserLoginFlowError> {
+    ) -> Result<Arc<LoginFlow>, ProtonMailError> {
         let ctx = self.ctx.clone();
 
-        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+        uniffi_async::<_, RealMailErrorDetails, _>(async move {
             let flow = ctx
                 .resume_login_flow(user_id.into(), session_id.into())
                 .await
-                .map_err(RealUserLoginFlowError::from)?;
+                .map_err(RealMailErrorDetails::from)?;
 
             Ok(LoginFlow::new(flow, ctx))
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::LoginFlowError.with(details))
     }
 
     /// Create an user context from a stored session.

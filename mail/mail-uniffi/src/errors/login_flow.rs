@@ -1,58 +1,6 @@
-use crate::errors::api_service_error::UserApiServiceError;
-use crate::errors::unexpected::UnexpectedError;
-use crate::export_void_result;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::HumanVerificationType as RealHumanVerificationType;
 use proton_api_core::services::proton::response_data::HumanVerificationChallenge as RealHumanVerificationChallenge;
-use proton_mail_common::errors::login_flow::Reason as RealReason;
-use proton_mail_common::errors::login_flow::UserLoginFlowError as RealLoginFlowError;
-
-export_void_result!(VoidUserLoginFlowResult, UserLoginFlowError);
-
-#[derive(Debug, uniffi::Enum)]
-pub enum UserLoginFlowError {
-    InvalidAction(LoginReason),
-    ServerError(UserApiServiceError),
-    Network,
-    Unexpected(UnexpectedError),
-}
-
-impl From<RealLoginFlowError> for UserLoginFlowError {
-    fn from(error: RealLoginFlowError) -> Self {
-        match error {
-            RealLoginFlowError::Reason(reason) => Self::InvalidAction(LoginReason::from(reason)),
-            RealLoginFlowError::ServerError(user_api_service_error) => {
-                Self::ServerError(UserApiServiceError::from(user_api_service_error))
-            }
-            RealLoginFlowError::Network => Self::Network,
-            RealLoginFlowError::Unexpected(unexpected) => {
-                Self::Unexpected(UnexpectedError::from(unexpected))
-            }
-        }
-    }
-}
-
-/// Reason for invalid Action
-#[derive(Debug, uniffi::Enum)]
-pub enum LoginReason {
-    HumanVerificationChallenge(HumanChallenge),
-    InvalidCredentials,
-    UnsupportedTfa,
-    CantUnlockUserKey,
-}
-
-impl From<RealReason> for LoginReason {
-    fn from(reason: RealReason) -> Self {
-        match reason {
-            RealReason::HumanVerificationChallenge(challenge) => {
-                Self::HumanVerificationChallenge(challenge.into())
-            }
-            RealReason::InvalidCredentials => Self::InvalidCredentials,
-            RealReason::UnsupportedTfa => Self::UnsupportedTfa,
-            RealReason::CantUnlockUserKey => Self::CantUnlockUserKey,
-        }
-    }
-}
 
 /// Information for the human verification challenge.
 #[derive(Debug, uniffi::Record)]
