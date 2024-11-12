@@ -29,10 +29,12 @@ use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
 };
+use proton_mail_test_utils::label;
 use proton_mail_test_utils::search::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
+use proton_mail_test_utils::utils::test_address;
 use proton_mail_test_utils::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
     prepare_db_state_core,
@@ -41,7 +43,17 @@ use serde_json::json;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Tether;
+use test_case::test_case;
 use velcro::hash_map;
+
+lazy_static! {
+    static ref STARRED: Label =
+        label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
+    static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
+    static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
+    static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
+    static ref LABEL: Label = label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black());
+}
 
 mod available_actions {
     use std::sync::LazyLock;
@@ -49,16 +61,8 @@ mod available_actions {
     use super::*;
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conversation, label, message, rid};
+    use proton_mail_test_utils::{conversation, message, rid};
     use test_case::test_case;
-
-    lazy_static! {
-        static ref STARRED: Label =
-            label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
-        static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
-        static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
-        static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
-    }
 
     struct TestCase {
         view: Label,
@@ -2282,6 +2286,121 @@ async fn unlabel_messages() {
 
 lazy_static! {
     pub(super) static ref MY_MESSAGE_ID: RemoteId = RemoteId::from("MyRemoteId");
+}
+
+#[test_case(vec![], None; "TEST1 - no label")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone()],
+    Some((false, "MyFavouritesFolder")); "TEST2 - mixed labels - custom")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone(), INBOX.clone()],
+    Some((true, "inbox")); "TEST3 - mixed labels - system")]
+#[test_case(
+    vec![LABEL.clone(), STARRED.clone()],
+    None; "TEST4 - no folder")]
+#[tokio::test]
+async fn exclusive_location_from_api_metadata(
+    mut labels: Vec<Label>,
+    expected: Option<(bool, &str)>,
+) {
+    // Setup
+    //   * Create a ApiMessageMetadata with label_ids
+
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    test_create_message_dependencies_core(&tx).await;
+
+    for label in &mut labels {
+        label.save_using(&tx).await.unwrap();
+    }
+
+    let label_ids = labels.iter().map(|l| l.remote_id.clone().unwrap().into());
+    let api_metadata = test_message_metadata(label_ids, vec![]);
+
+    // Action
+    let result = Message::from_api_metadata(api_metadata, &tx).await.unwrap();
+
+    // Validation
+    if let Some((is_system, expected)) = expected {
+        match result.exclusive_location.unwrap() {
+            ExclusiveLocation::System { name, .. } => {
+                assert!(is_system);
+                match name {
+                    SystemLabel::Inbox => assert_eq!("inbox", expected),
+                    _ => panic!("expected SystemLabel: {name}"),
+                }
+            }
+            ExclusiveLocation::Custom { name, .. } => {
+                assert!(!is_system);
+                assert_eq!(name, expected)
+            }
+        }
+    } else {
+        assert_eq!(result.exclusive_location, None);
+    }
+}
+
+#[test_case(vec![], None; "TEST1 - no label")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone()],
+    Some((false, "MyFavouritesFolder")); "TEST2 - mixed labels - custom")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone(), INBOX.clone()],
+    Some((true, "inbox")); "TEST3 - mixed labels - system")]
+#[test_case(
+    vec![LABEL.clone(), STARRED.clone()],
+    None; "TEST4 - no folder")]
+#[tokio::test]
+async fn message_exclusive_location_on_save(
+    mut labels: Vec<Label>,
+    expected: Option<(bool, &str)>,
+) {
+    // Setup:
+    //   * create a message with some labels
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+
+    let mut address = test_address();
+    address.save_using(&tx).await.unwrap();
+
+    let mut conversation = Conversation::default();
+    conversation.save_using(&tx).await.unwrap();
+
+    for label in &mut labels {
+        label.save_using(&tx).await.unwrap();
+    }
+
+    let mut message = Message {
+        local_conversation_id: conversation.local_id,
+        local_address_id: address.local_id.unwrap(),
+        label_ids: labels
+            .iter()
+            .map(|l| l.remote_id.clone().unwrap().into())
+            .collect_vec(),
+        ..Default::default()
+    };
+
+    // Action
+    message.save_using(&tx).await.unwrap();
+
+    // Validation
+    if let Some((is_system, expected)) = expected {
+        match message.exclusive_location.unwrap() {
+            ExclusiveLocation::System { name, .. } => {
+                assert!(is_system);
+                match name {
+                    SystemLabel::Inbox => assert_eq!("inbox", expected),
+                    _ => panic!("expected SystemLabel: {name}"),
+                }
+            }
+            ExclusiveLocation::Custom { name, .. } => {
+                assert!(!is_system);
+                assert_eq!(name, expected)
+            }
+        }
+    } else {
+        assert_eq!(message.exclusive_location, None);
+    }
 }
 
 async fn test_create_message_dependencies_core(tx_core: &Tether) {

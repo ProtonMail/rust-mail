@@ -1886,6 +1886,19 @@ impl Conversation {
             label.local_conversation_id = self.local_id;
             label.save_using(interface).await?
         }
+
+        // If exclusive location is not set, we try to calculate it now.
+        if self.exclusive_location.is_none() && !self.labels.is_empty() {
+            let label_ids = self
+                .labels
+                .iter()
+                .filter_map(|label| label.remote_label_id.clone())
+                .map_into()
+                .collect_vec();
+            self.exclusive_location =
+                ExclusiveLocation::from_label_ids(&label_ids, interface).await?;
+        }
+
         Ok(())
     }
 

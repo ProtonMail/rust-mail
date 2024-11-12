@@ -32,6 +32,7 @@ use proton_mail_test_utils::utils::{
 use stash::orm::Model;
 use stash::params;
 use stash::stash::AgnosticInterface;
+use test_case::test_case;
 
 mod first_unread_message {
     use super::*;
@@ -2915,4 +2916,69 @@ async fn test_contextual_conversation_messages() {
         .expect("failed to label");
 
     watch_result.recv_async().await.unwrap();
+}
+
+lazy_static! {
+    static ref STARRED: Label =
+        label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
+    static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
+    static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
+    static ref LABEL: Label = label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black());
+}
+
+#[test_case(vec![], None; "TEST1 - no label")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone()],
+    Some((false, "MyFavouritesFolder")); "TEST2 - mixed labels - custom")]
+#[test_case(
+    vec![LABEL.clone(), FOLDER.clone(), STARRED.clone(), INBOX.clone()],
+    Some((true, "inbox")); "TEST3 - mixed labels - system")]
+#[test_case(
+    vec![LABEL.clone(), STARRED.clone()],
+    None; "TEST4 - no folder")]
+#[tokio::test]
+async fn conversation_exclusive_location_on_save(
+    labels: Vec<Label>,
+    expected: Option<(bool, &str)>,
+) {
+    // Setup:
+    //   * create a conversation with some labels
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+
+    let mut conversation = Conversation {
+        ..Default::default()
+    };
+    conversation.save_using(&tx).await.unwrap();
+    let mut conversation_labels = Vec::with_capacity(labels.len());
+    for mut label in labels {
+        label.save_using(&tx).await.unwrap();
+        conversation_labels.push(ConversationLabel {
+            remote_label_id: label.remote_id,
+            ..Default::default()
+        });
+    }
+    conversation.labels = conversation_labels;
+
+    // Action
+    conversation.save_using(&tx).await.unwrap();
+
+    // Validation
+    if let Some((is_system, expected)) = expected {
+        match conversation.exclusive_location.unwrap() {
+            ExclusiveLocation::System { name, .. } => {
+                assert!(is_system);
+                match name {
+                    SystemLabel::Inbox => assert_eq!("inbox", expected),
+                    _ => panic!("expected SystemLabel: {name}"),
+                }
+            }
+            ExclusiveLocation::Custom { name, .. } => {
+                assert!(!is_system);
+                assert_eq!(name, expected)
+            }
+        }
+    } else {
+        assert_eq!(conversation.exclusive_location, None);
+    }
 }

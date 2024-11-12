@@ -71,19 +71,10 @@ impl SystemLabel {
     }
 
     pub fn is_exclusive_location(&self) -> bool {
-        matches!(
-            self,
-            Self::Inbox
-                | Self::Trash
-                | Self::Archive
-                | Self::Spam
-                | Self::Snoozed
-                | Self::Scheduled
-                | Self::Outbox
-        )
+        Self::exclusive_locations().contains(self)
     }
 
-    pub fn exclusive_locations() -> [Self; 7] {
+    pub fn exclusive_locations() -> [Self; 9] {
         [
             Self::Inbox,
             Self::Trash,
@@ -92,6 +83,8 @@ impl SystemLabel {
             Self::Snoozed,
             Self::Scheduled,
             Self::Outbox,
+            Self::Drafts,
+            Self::Sent,
         ]
     }
 

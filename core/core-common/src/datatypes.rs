@@ -196,6 +196,15 @@ pub enum AgnosticId {
     Remote(RemoteId),
 }
 
+impl AgnosticId {
+    pub(crate) fn id_field_name(&self) -> &'static str {
+        match self {
+            AgnosticId::Local(_) => "local_id",
+            AgnosticId::Remote(_) => "remote_id",
+        }
+    }
+}
+
 impl From<LocalId> for AgnosticId {
     fn from(id: LocalId) -> Self {
         Self::Local(id)
