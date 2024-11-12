@@ -1,19 +1,19 @@
 use super::MailUserSession;
-use crate::errors::user_session::VoidUserSessionResult;
+use crate::errors::VoidProtonMailResult;
 
 #[uniffi::export]
 impl MailUserSession {
     /// Execute exactly one pending action.
     #[must_use]
-    pub fn execute_pending_action(&self) -> VoidUserSessionResult {
+    pub fn execute_pending_action(&self) -> VoidProtonMailResult {
         drop(self.ctx.execute_pending_action());
-        VoidUserSessionResult::Ok
+        VoidProtonMailResult::Ok
     }
 
     /// Execute exactly all pending actions.
     #[must_use]
-    pub fn execute_pending_actions(&self) -> VoidUserSessionResult {
+    pub fn execute_pending_actions(&self) -> VoidProtonMailResult {
         drop(self.ctx.execute_pending_actions());
-        VoidUserSessionResult::Ok
+        VoidProtonMailResult::Ok
     }
 }

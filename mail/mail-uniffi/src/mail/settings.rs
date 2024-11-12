@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use crate::{
-    errors::user_session::UserSessionError, uniffi_async, watch_channel, LiveQueryCallback,
-    WatchHandle,
-};
-use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::models::MailSettings as RealSettings;
 use stash::orm::Model;
 use tokio::task::JoinError;
@@ -33,7 +31,7 @@ pub struct SettingsWatcher {
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<SettingsWatcher, UserSessionError> {
+) -> Result<SettingsWatcher, ProtonMailError> {
     let db = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
@@ -46,11 +44,11 @@ pub async fn watch_mail_settings(
 
         let watcher = watch_channel(rx, callback).await;
 
-        Result::<_, RealUserSessionError>::Ok(SettingsWatcher {
+        Result::<_, RealMailErrorDetails>::Ok(SettingsWatcher {
             watch_handle: watcher,
             settings,
         })
     })
     .await
-    .map_err(Into::into)
+    .map_err(|details| MailErrorKind::UserSessionError.with(details))
 }

@@ -1,4 +1,4 @@
-use crate::errors::user_session::UserSessionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::MailUserSession;
@@ -7,7 +7,7 @@ use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
 use proton_mail_common::datatypes::{LabelType as RealLabelType, SystemLabelId};
-use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::models::Label as RealLabel;
 
 #[proton_uniffi_macros::export_result]
@@ -17,19 +17,19 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserSessionError> {
+    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, ProtonMailError> {
         let stash = self.ctx().user_stash().clone();
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
             let _sys_folders = RealLabelId::movable_sys_folder_list();
             let labels = RealLabel::find_by_kind(RealLabelType::Folder, &stash).await?;
             let labels = RealCustomFolder::from_labels(labels.as_slice(), &stash).await?;
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarCustomFolder::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Return the list of labels of type Label that can be applied to conversations or
@@ -37,16 +37,16 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserSessionError> {
+    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, ProtonMailError> {
         let stash = self.ctx.user_stash().clone();
         uniffi_async(async move {
             let labels = RealLabel::find_by_kind(RealLabelType::Label, &stash).await?;
             let labels = RealCustomLabel::from_labels(labels.as_slice(), &stash).await?;
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 labels.into_iter().map(SidebarCustomLabel::from).collect(),
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 }

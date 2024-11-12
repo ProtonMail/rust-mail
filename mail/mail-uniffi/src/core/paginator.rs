@@ -4,12 +4,12 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::errors::user_session::UserSessionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::datatypes::{Conversation, Message};
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::models::{
     Conversation as RealConversation, ConversationDataSource, Message as RealMessage,
     MessageDataSource, PaginatorCompat as RealPaginator,
@@ -54,9 +54,9 @@ impl ConversationPaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Conversation>, ProtonMailError> {
         uniffi_async(async move {
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 self.real_paginator
                     .next_page()
                     .await?
@@ -67,7 +67,7 @@ impl ConversationPaginator {
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Reloads all data up to the cursor.
@@ -83,9 +83,9 @@ impl ConversationPaginator {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn reload(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Conversation>, ProtonMailError> {
         uniffi_async(async move {
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 self.real_paginator
                     .reload()
                     .await?
@@ -96,7 +96,7 @@ impl ConversationPaginator {
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Retrieves the total number of records in the result set.
@@ -147,9 +147,9 @@ impl MessagePaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Message>, ProtonMailError> {
         uniffi_async(async move {
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 self.real_paginator
                     .next_page()
                     .await?
@@ -159,7 +159,7 @@ impl MessagePaginator {
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Reloads all data up to the cursor.
@@ -175,9 +175,9 @@ impl MessagePaginator {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn reload(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Message>, ProtonMailError> {
         uniffi_async(async move {
-            Result::<_, RealUserSessionError>::Ok(
+            Result::<_, RealMailErrorDetails>::Ok(
                 self.real_paginator
                     .reload()
                     .await?
@@ -187,7 +187,7 @@ impl MessagePaginator {
             )
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Retrieves the total number of records in the result set.

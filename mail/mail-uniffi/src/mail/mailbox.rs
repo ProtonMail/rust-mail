@@ -1,14 +1,14 @@
 pub mod attachments;
 
 use crate::core::datatypes::Id;
-use crate::errors::user_session::UserSessionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::datatypes::ViewMode;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::errors::user_session::{Reason, UserSessionError as RealUserSessionError};
+use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
 use proton_mail_common::models::Label as RealLabel;
 use stash::stash::Stash;
 use std::sync::Arc;
@@ -24,12 +24,12 @@ pub struct Mailbox {
 /// Callback for operations that get scheduled in the background and return no result.
 #[uniffi::export(callback_interface)]
 pub trait MailboxBackgroundResult: Send + Sync {
-    fn on_background_result(&self, error: Option<UserSessionError>);
+    fn on_background_result(&self, error: Option<ProtonMailError>);
 }
 
 const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
-export_typed_result!(NewMailboxResult, Arc<Mailbox>, UserSessionError);
+export_typed_result!(NewMailboxResult, Arc<Mailbox>, ProtonMailError);
 
 /// Create a new mailbox for a given label id.
 #[uniffi::export]
@@ -40,9 +40,10 @@ pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResul
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
-        Result::<_, RealUserSessionError>::Ok(Arc::new(Mailbox { mbox }))
+        Result::<_, RealMailErrorDetails>::Ok(Arc::new(Mailbox { mbox }))
     })
     .await
+    .map_err(|details| MailErrorKind::UserSessionError.with(details))
     .into()
 }
 
@@ -68,6 +69,7 @@ pub async fn inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
         Mailbox::sync(mbox).await
     })
     .await
+    .map_err(|details| MailErrorKind::UserSessionError.with(details))
     .into()
 }
 
@@ -94,6 +96,7 @@ pub async fn all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
         Mailbox::sync(mbox).await
     })
     .await
+    .map_err(|details| MailErrorKind::UserSessionError.with(details))
     .into()
 }
 
@@ -116,13 +119,13 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn unread_count(&self) -> Result<u64, UserSessionError> {
+    pub async fn unread_count(&self) -> Result<u64, ProtonMailError> {
         let mbox = self.mbox.clone();
         uniffi_async(
-            async move { Result::<_, RealUserSessionError>::Ok(mbox.unread_count().await?) },
+            async move { Result::<_, RealMailErrorDetails>::Ok(mbox.unread_count().await?) },
         )
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 
     /// Subscribe for updates to the number of unread items in this mailbox.
@@ -134,7 +137,7 @@ impl Mailbox {
     pub async fn watch_unread_count(
         &self,
         callback: Box<dyn LiveQueryCallback>,
-    ) -> Result<Arc<WatchHandle>, UserSessionError> {
+    ) -> Result<Arc<WatchHandle>, ProtonMailError> {
         let label_id = self.mbox.label_id();
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
@@ -143,10 +146,10 @@ impl Mailbox {
             };
 
             let watcher = watch_channel(receiver, callback).await;
-            Result::<_, RealUserSessionError>::Ok(watcher)
+            Result::<_, RealMailErrorDetails>::Ok(watcher)
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 }
 
@@ -177,7 +180,7 @@ impl Mailbox {
         self.mbox.stash()
     }
 
-    async fn sync(mbox: proton_mail_common::Mailbox) -> Result<Arc<Self>, RealUserSessionError> {
+    async fn sync(mbox: proton_mail_common::Mailbox) -> Result<Arc<Self>, RealMailErrorDetails> {
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }

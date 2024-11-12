@@ -1,9 +1,9 @@
-use crate::errors::user_session::UserSessionError;
+use crate::errors::{MailErrorKind, ProtonMailError};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::LightOrDarkMode;
 use proton_mail_common::errors::unexpected::Unexpected;
-use proton_mail_common::errors::user_session::UserSessionError as RealUserSessionError;
+use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 
 #[proton_uniffi_macros::export_result]
 impl MailUserSession {
@@ -32,7 +32,7 @@ impl MailUserSession {
         size: Option<u32>,
         mode: Option<String>,
         format: Option<String>,
-    ) -> Result<Option<String>, UserSessionError> {
+    ) -> Result<Option<String>, ProtonMailError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
@@ -47,7 +47,7 @@ impl MailUserSession {
                 )
                 .await?
             {
-                Result::<_, RealUserSessionError>::Ok(Some(
+                Result::<_, RealMailErrorDetails>::Ok(Some(
                     path.to_str().ok_or(Unexpected::Unknown)?.to_owned(),
                 ))
             } else {
@@ -55,7 +55,7 @@ impl MailUserSession {
             }
         })
         .await
-        .map_err(Into::into)
+        .map_err(|details| MailErrorKind::UserSessionError.with(details))
     }
 }
 
