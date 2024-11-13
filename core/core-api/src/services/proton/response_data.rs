@@ -767,10 +767,6 @@ pub struct Salt {
 pub struct SettingsFlags {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
-    pub in_app_promos_hidden: bool,
-
-    /// TODO: Document this field.
-    #[serde_as(as = "BoolFromInt")]
     pub welcomed: bool,
 }
 

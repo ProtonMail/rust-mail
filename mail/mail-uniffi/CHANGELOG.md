@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `watch_available_move_to_actions`.
+  - Removed InAppPromosHidden field from API
+  - Added `watch_available_move_to_actions`.
 
 ## [0.21.3] - 2024-11-08
 
