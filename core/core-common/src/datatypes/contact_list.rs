@@ -14,7 +14,7 @@ pub struct GroupedContacts {
     pub grouped_by: String,
 
     // The field represent the list of contacts or groups for the given grapheme
-    pub item: Vec<ContactItemType>,
+    pub items: Vec<ContactItemType>,
 }
 
 impl GroupedContacts {
@@ -42,7 +42,7 @@ impl GroupedContacts {
 
         btmap
             .into_iter()
-            .map(|(grouped_by, item)| GroupedContacts { grouped_by, item })
+            .map(|(grouped_by, items)| GroupedContacts { grouped_by, items })
             .collect()
     }
 }
@@ -115,7 +115,7 @@ pub struct ContactGroupItem {
     pub avatar_color: String,
 
     /// The field represent the list of emails of the contact group
-    pub emails: Vec<ContactEmailItem>,
+    pub contacts: Vec<ContactItem>,
 }
 
 /// This is the main data structure that is used to represent the contact email.
@@ -126,6 +126,12 @@ pub struct ContactEmailItem {
 
     /// The field represent the email of the contact
     pub email: String,
+
+    /// The field represent if the email is a proton email
+    pub is_proton: bool,
+
+    /// The field represent the last used time of the email
+    pub last_used_time: u64,
 }
 
 impl From<ContactEmail> for ContactEmailItem {
@@ -133,6 +139,8 @@ impl From<ContactEmail> for ContactEmailItem {
         Self {
             local_id: value.local_id.unwrap(),
             email: value.email,
+            is_proton: value.is_proton,
+            last_used_time: value.last_used_time,
         }
     }
 }
