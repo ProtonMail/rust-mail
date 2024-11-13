@@ -1,5 +1,5 @@
 use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
-use proton_mail_common::errors::Reason as RealReason;
+use proton_mail_common::errors::MailErrorReason as RealReason;
 
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
@@ -47,7 +47,7 @@ impl MailErrorKind {
 #[derive(Debug, uniffi::Enum)]
 pub enum MailErrorDetails {
     /// This error detail is related with the arguments (i.e. like a Message id who does not exist)
-    Reason(Reason),
+    Reason(MailErrorReason),
     /// This error detail is used when the session is expired.
     SessionExpired,
     /// This error detail come from the Backend (i.e. like a 404 error)
@@ -62,7 +62,7 @@ impl<I: Into<RealMailErrorDetails>> From<I> for MailErrorDetails {
     fn from(error: I) -> Self {
         let error = error.into();
         match error {
-            RealMailErrorDetails::Reason(reason) => Self::Reason(Reason::from(reason)),
+            RealMailErrorDetails::Reason(reason) => Self::Reason(MailErrorReason::from(reason)),
             RealMailErrorDetails::SessionExpired => Self::SessionExpired,
             RealMailErrorDetails::ServerError(user_api_service_error) => {
                 Self::ServerError(UserApiServiceError::from(user_api_service_error))
@@ -75,15 +75,9 @@ impl<I: Into<RealMailErrorDetails>> From<I> for MailErrorDetails {
     }
 }
 
-impl From<Reason> for MailErrorDetails {
-    fn from(reason: Reason) -> Self {
-        Self::Reason(reason)
-    }
-}
-
 /// Specific Reason for error occurrence
 #[derive(Debug, uniffi::Enum)]
-pub enum Reason {
+pub enum MailErrorReason {
     InvalidParameter,
     UnknownLabel,
     UnknownMessage,
@@ -93,7 +87,13 @@ pub enum Reason {
     CantUnlockUserKey,
 }
 
-impl From<RealReason> for Reason {
+impl From<MailErrorReason> for MailErrorDetails {
+    fn from(reason: MailErrorReason) -> Self {
+        Self::Reason(reason)
+    }
+}
+
+impl From<RealReason> for MailErrorReason {
     fn from(value: RealReason) -> Self {
         match value {
             RealReason::InvalidParameter => Self::InvalidParameter,

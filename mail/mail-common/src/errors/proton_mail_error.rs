@@ -54,7 +54,7 @@ impl MailErrorKind {
 #[derive(Debug)]
 pub enum MailErrorDetails {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
-    Reason(Reason),
+    Reason(MailErrorReason),
     /// This error is related with the session (i.e. like a session expired)
     SessionExpired,
     /// This error come from the Backend (i.e. like a 404 error)
@@ -67,7 +67,7 @@ pub enum MailErrorDetails {
 
 /// Specific Reason for error occurrence
 #[derive(Debug)]
-pub enum Reason {
+pub enum MailErrorReason {
     InvalidParameter,
     UnknownLabel,
     UnknownMessage,
@@ -83,8 +83,8 @@ impl<E: Into<Unexpected>> From<E> for MailErrorDetails {
     }
 }
 
-impl From<Reason> for MailErrorDetails {
-    fn from(reason: Reason) -> Self {
+impl From<MailErrorReason> for MailErrorDetails {
+    fn from(reason: MailErrorReason) -> Self {
         Self::Reason(reason)
     }
 }
@@ -102,24 +102,26 @@ impl From<LoginError> for MailErrorDetails {
     fn from(error: LoginError) -> Self {
         match error {
             LoginError::HumanVerificationRequired(human_verification_challenge) => Self::Reason(
-                Reason::HumanVerificationChallenge(human_verification_challenge),
+                MailErrorReason::HumanVerificationChallenge(human_verification_challenge),
             ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
             LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
-            | LoginError::KeySecretDerivation(_) => Self::Reason(Reason::CantUnlockUserKey),
+            | LoginError::KeySecretDerivation(_) => {
+                Self::Reason(MailErrorReason::CantUnlockUserKey)
+            }
             LoginError::KeySecretSaltFetch(api_service_error) => match api_service_error {
                 // HTTP code 422
                 ApiServiceError::UnprocessableEntity(_string1, _string2) => {
                     // TODO(ET-1076): use api_code: 8002 -> InvalidCredentials ; 2005 -> EmptyInput ; other -> Self::from(api_service_error)
-                    Self::Reason(Reason::InvalidCredentials)
+                    Self::Reason(MailErrorReason::InvalidCredentials)
                 }
                 _ => Self::from(api_service_error),
             },
             LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
-                Self::Reason(Reason::InvalidCredentials)
+                Self::Reason(MailErrorReason::InvalidCredentials)
             }
-            LoginError::UnsupportedTfa => Self::Reason(Reason::UnsupportedTfa),
+            LoginError::UnsupportedTfa => Self::Reason(MailErrorReason::UnsupportedTfa),
             LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
             LoginError::AuthStore(store_error) => Self::from(store_error),
         }
@@ -134,7 +136,7 @@ impl From<AppError> for MailErrorDetails {
                 Self::Unexpected(Unexpected::Internal)
             }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::InvalidMimeType(_string) => Self::Reason(Reason::InvalidParameter),
+            AppError::InvalidMimeType(_string) => Self::Reason(MailErrorReason::InvalidParameter),
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
@@ -157,9 +159,9 @@ impl From<AppError> for MailErrorDetails {
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoRemoteId(_local_id) => Self::Network,
-            AppError::EmptyListOfConversations => Self::Reason(Reason::InvalidParameter),
-            AppError::EmptyListOfMessages => Self::Reason(Reason::InvalidParameter),
-            AppError::InvalidMobileActions(_) => Self::Reason(Reason::InvalidParameter),
+            AppError::EmptyListOfConversations => Self::Reason(MailErrorReason::InvalidParameter),
+            AppError::EmptyListOfMessages => Self::Reason(MailErrorReason::InvalidParameter),
+            AppError::InvalidMobileActions(_) => Self::Reason(MailErrorReason::InvalidParameter),
             AppError::MessageHasNoRemoteId(_local_id) => Self::Network,
             AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Database),
             AppError::UnknownMessage(_remote_id) => Self::Unexpected(Unexpected::Unknown),
@@ -169,7 +171,7 @@ impl From<AppError> for MailErrorDetails {
             AppError::NoMessageWithValidRemoteIdFoundInPage => {
                 Self::Unexpected(Unexpected::Database)
             }
-            AppError::UserNotFound => Self::Reason(Reason::InvalidParameter),
+            AppError::UserNotFound => Self::Reason(MailErrorReason::InvalidParameter),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
@@ -253,7 +255,7 @@ impl From<SubscriberError> for MailErrorDetails {
 impl From<ContactError> for MailErrorDetails {
     fn from(error: ContactError) -> Self {
         match error {
-            ContactError::CardNotFound(_string) => Self::Reason(Reason::InvalidParameter),
+            ContactError::CardNotFound(_string) => Self::Reason(MailErrorReason::InvalidParameter),
             ContactError::ContactCardRemoteIdNotPresent(_string)
             | ContactError::FullContactNotFound(_string) => Self::Unexpected(Unexpected::Database),
             ContactError::Validation(_vcard_validation_error) => {
@@ -295,7 +297,9 @@ impl From<MailboxError> for MailErrorDetails {
             // Mailbox::new:     can't load Label from database
             // Mailbox::refresh: can't load Label from database
             // Mailbox::sync:    can't load Label from database
-            MailboxError::LabelNotFound(_local_label_id) => Self::Reason(Reason::UnknownLabel),
+            MailboxError::LabelNotFound(_local_label_id) => {
+                Self::Reason(MailErrorReason::UnknownLabel)
+            }
             // Mailbox::refresh: remote_id is None
             // Mailbox::sync:    remote_id is None
             MailboxError::LabelDoesNotHaveRemoteId(_local_label_id) => Self::Network,

@@ -25,7 +25,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
+use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, MailErrorReason};
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
@@ -496,7 +496,7 @@ pub async fn available_actions_for_messages(
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(MailErrorReason::UnknownLabel))?;
         let actions = RealMessage::available_actions(
             view,
             ids.into_iter().map_into().collect(),
@@ -609,7 +609,7 @@ pub async fn available_move_to_actions_for_messages(
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(MailErrorReason::UnknownLabel))?;
         let actions = RealMessage::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),

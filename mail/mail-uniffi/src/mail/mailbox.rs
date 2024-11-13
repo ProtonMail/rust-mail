@@ -8,7 +8,7 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
+use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, MailErrorReason};
 use proton_mail_common::models::Label as RealLabel;
 use stash::stash::Stash;
 use std::sync::Arc;
@@ -142,7 +142,7 @@ impl Mailbox {
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
             let Some((_, receiver)) = RealLabel::watch(label_id, &stash).await? else {
-                return Err(Reason::UnknownLabel.into());
+                return Err(MailErrorReason::UnknownLabel.into());
             };
 
             let watcher = watch_channel(receiver, callback).await;

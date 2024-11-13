@@ -23,7 +23,7 @@ use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
-use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, Reason};
+use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, MailErrorReason};
 use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
@@ -122,7 +122,7 @@ pub async fn available_actions_for_conversations(
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(MailErrorReason::UnknownLabel))?;
         let actions = RealConversation::available_actions(
             view,
             ids.into_iter().map_into().collect(),
@@ -230,7 +230,7 @@ pub async fn available_move_to_actions_for_conversations(
         let view = mailbox.mbox().label_id();
         let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| RealMailErrorDetails::from(Reason::UnknownLabel))?;
+            .ok_or_else(|| RealMailErrorDetails::from(MailErrorReason::UnknownLabel))?;
         let actions = RealConversation::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
