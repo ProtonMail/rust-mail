@@ -1248,16 +1248,12 @@ impl From<RealReferral> for Referral {
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct SettingsFlags {
     /// TODO: Document this field.
-    pub in_app_promos_hidden: bool,
-
-    /// TODO: Document this field.
     pub welcomed: bool,
 }
 
 impl From<SettingsFlags> for RealSettingsFlags {
     fn from(flags: SettingsFlags) -> Self {
         Self {
-            in_app_promos_hidden: flags.in_app_promos_hidden,
             welcomed: flags.welcomed,
         }
     }
@@ -1266,7 +1262,6 @@ impl From<SettingsFlags> for RealSettingsFlags {
 impl From<RealSettingsFlags> for SettingsFlags {
     fn from(flags: RealSettingsFlags) -> Self {
         Self {
-            in_app_promos_hidden: flags.in_app_promos_hidden,
             welcomed: flags.welcomed,
         }
     }

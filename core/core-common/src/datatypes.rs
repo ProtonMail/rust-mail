@@ -1745,16 +1745,12 @@ impl Zeroize for RemoteId {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SettingsFlags {
     /// TODO: Document this field.
-    pub in_app_promos_hidden: bool,
-
-    /// TODO: Document this field.
     pub welcomed: bool,
 }
 
 impl From<ApiSettingsFlags> for SettingsFlags {
     fn from(value: ApiSettingsFlags) -> Self {
         Self {
-            in_app_promos_hidden: value.in_app_promos_hidden,
             welcomed: value.welcomed,
         }
     }

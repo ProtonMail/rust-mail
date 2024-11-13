@@ -331,10 +331,7 @@ impl MailTestContext {
                         time_format: ApiTimeFormat::Default,
                         welcome: false,
                         early_access: false,
-                        flags: ApiSettingsFlags {
-                            welcomed: false,
-                            in_app_promos_hidden: false,
-                        },
+                        flags: ApiSettingsFlags { welcomed: false },
                         referral: None,
                         device_recovery: false,
                         telemetry: false,

@@ -108,10 +108,7 @@ async fn test_core_store_and_load_user_settings() {
         time_format: TimeFormat::H12,
         welcome: Default::default(),
         early_access: Default::default(),
-        flags: SettingsFlags {
-            welcomed: true,
-            in_app_promos_hidden: Default::default(),
-        },
+        flags: SettingsFlags { welcomed: true },
         referral: None,
         device_recovery: Default::default(),
         telemetry: true,
