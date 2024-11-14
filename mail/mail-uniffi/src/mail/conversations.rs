@@ -884,16 +884,17 @@ pub async fn label_conversations_as(
 ///
 /// Returns an error if the database query fails.
 ///
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn watch_available_move_to_actions(
     mailbox: Arc<Mailbox>,
     callback: Box<dyn LiveQueryCallback>,
-) -> MailboxResult<Arc<WatchHandle>> {
+) -> Result<Arc<WatchHandle>, ProtonMailError> {
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
         real_watch_available_move_to_actions(tx, mailbox.stash()).await?;
-        Ok(handle)
+        Result::<_, RealMailErrorDetails>::Ok(handle)
     })
     .await
+    .map_err(|details| MailErrorKind::UserActionError.with(details))
 }
