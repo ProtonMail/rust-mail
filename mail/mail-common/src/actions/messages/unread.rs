@@ -49,6 +49,14 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        // API call return an error 2501(Message does not exist) for message already unread
+        let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+        action.0.target_ids = messages
+            .into_iter()
+            .filter(|m| !m.unread)
+            .filter_map(|m| m.local_id)
+            .collect();
+
         action.0.resolve_ids(tx).await?;
         Message::mark_unread(action.0.target_ids.iter().copied(), tx).await?;
         Ok(())

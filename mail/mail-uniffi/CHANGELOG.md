@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+  - `markMessageAsRead` now mark message as Read
+
 ## [0.21.4] - 2024-11-13
 
 ### Added
