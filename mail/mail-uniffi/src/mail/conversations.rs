@@ -24,7 +24,10 @@ use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
 use proton_mail_common::errors::{MailErrorDetails as RealMailErrorDetails, MailErrorReason};
-use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
+use proton_mail_common::models::{
+    watch_available_move_to_actions as real_watch_available_move_to_actions,
+    PaginatorFilter as RealPaginatorFilter,
+};
 use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
 use std::sync::Arc;
@@ -866,4 +869,31 @@ pub async fn label_conversations_as(
     })
     .await
     .map_err(|details| MailErrorKind::UserActionError.with(details))
+}
+
+// watches available move_to actions for conversations or messages.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `view`    - The local ID of the label which conversations are viewed in.
+/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn watch_available_move_to_actions(
+    mailbox: Arc<Mailbox>,
+    callback: Box<dyn LiveQueryCallback>,
+) -> MailboxResult<Arc<WatchHandle>> {
+    uniffi_async(async move {
+        let (tx, rx) = flume::unbounded();
+        let handle = watch_channel(rx, callback).await;
+        real_watch_available_move_to_actions(tx, mailbox.stash()).await?;
+        Ok(handle)
+    })
+    .await
 }

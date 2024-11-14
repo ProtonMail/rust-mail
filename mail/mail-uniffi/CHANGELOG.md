@@ -118,6 +118,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
 
+## [0.21.4] - 2024-11-13
+
+### Added
+
+  - Removed InAppPromosHidden field from API
+  - Added `watch_available_move_to_actions`.
+
 ## [0.21.3] - 2024-11-08
 
 ### Fix

@@ -90,7 +90,7 @@ impl AppModel {
             .ok_or(anyhow!("Failed to get cache dir"))?
             .join(APP_ID);
 
-        let config_dir = dirs::config_dir()
+        let data_dir = dirs::data_local_dir()
             .ok_or(anyhow!("Failed to get config dir"))?
             .join(APP_ID);
 
@@ -98,7 +98,7 @@ impl AppModel {
         let mail_cache_dir = cache_dir.join("mail");
 
         std::fs::create_dir_all(&cache_dir)?;
-        std::fs::create_dir_all(&config_dir)?;
+        std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&mail_cache_dir)?;
         std::fs::create_dir_all(&user_db_path)?;
 
@@ -110,7 +110,7 @@ impl AppModel {
         keychain.init()?;
         runtime.block_on(async move {
             let context = MailContext::new(
-                config_dir,
+                data_dir,
                 user_db_path,
                 mail_cache_dir,
                 100 * 1024 * 1024,
