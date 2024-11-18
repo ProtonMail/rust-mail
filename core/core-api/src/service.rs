@@ -19,7 +19,7 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use tracing::{error, trace};
+use tracing::error;
 
 /// Syntactic sugar for when there are no query parameters, clearer and more
 /// obvious than writing `None::<()>`.

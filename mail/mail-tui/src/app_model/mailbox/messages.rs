@@ -32,6 +32,8 @@ use ratatui::Frame;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
+use super::LabelAs;
+
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
 pub struct MessagesState {
@@ -355,10 +357,6 @@ impl StateHandler for MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
-            KeyCode::Char('L') => self
-                .selected_message_id()
-                .map(|id| Command::message(Message::OpenUnlabelItemPopup(Item::Message(id)).into()))
-                .unwrap_or_default(),
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
@@ -395,11 +393,8 @@ impl StateHandler for MessagesState {
             MessageMessage::MoveMessage(msg_id, id) => {
                 return move_message(mbox, msg_id, id);
             }
-            MessageMessage::LabelMessage(msg_id, id) => {
-                return label_message(mbox, msg_id, id);
-            }
-            MessageMessage::UnlabelMessage(msg_id, id) => {
-                return unlabel_message(mbox, msg_id, id);
+            MessageMessage::LabelMessage(label_as) => {
+                return label_message(mbox, *label_as);
             }
             MessageMessage::MarkMessageRead(id) => {
                 return mark_message_read(mbox, id);
@@ -670,10 +665,28 @@ fn unstar_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
         }
     })
 }
-fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+fn label_message(
+    mailbox: &Mailbox,
+    LabelAs {
+        source_label_id,
+        item_ids: conversation_ids,
+        selected_label_ids,
+        partially_selected_label_ids,
+        must_archive,
+    }: LabelAs,
+) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match MailMessage::action_apply_label(ctx.session(), ctx.queue(), label_id, vec![id]).await
+        match MailMessage::action_label_as(
+            ctx.session(),
+            ctx.queue(),
+            source_label_id,
+            conversation_ids,
+            selected_label_ids,
+            partially_selected_label_ids,
+            must_archive,
+        )
+        .await
         {
             Ok(_) => Command::None,
             Err(e) => {
@@ -685,20 +698,6 @@ fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<M
     })
 }
 
-fn unlabel_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    Command::task(async move {
-        match MailMessage::action_remove_label(ctx.session(), ctx.queue(), label_id, vec![id]).await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e}");
-                Command::message(e.into())
-            }
-        }
-    })
-}
 fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
