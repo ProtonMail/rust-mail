@@ -6,8 +6,10 @@ use crate::actions::messages::r#move::Move;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
-use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
-use crate::datatypes::{Disposition, ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
+use crate::actions::{
+    filter_responses, AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction,
+};
+use crate::datatypes::{Disposition, ExclusiveLocation, MobileActions, SystemLabelId};
 use crate::models::{Label, Message};
 use crate::{find_in_query, Mailbox};
 use crate::{AppError, MailboxError};
@@ -383,33 +385,6 @@ impl Message {
         Ok(())
     }
 
-    /// Compute which labels must be set
-    ///
-    /// # Parameters
-    /// * `current_labels`               - Labels currently set.
-    /// * `selected_labels_ids`          - Ids of the wanted label.
-    /// * `partially_selected_label_ids` - Ids of the label that should be kept as his.
-    ///
-    fn compute_expected_labels(
-        current_labels: &[Label],
-        selected_label_ids: &[LocalId],
-        partially_selected_label_ids: &[LocalId],
-    ) -> Vec<LocalId> {
-        let current_labels: HashSet<LocalId> = HashSet::from_iter(
-            current_labels
-                .iter()
-                .map(|l| l.local_id.expect("Should be set")),
-        );
-        let selected_label_ids = HashSet::from_iter(selected_label_ids.iter().cloned());
-        let partially_selected_label_ids =
-            HashSet::from_iter(partially_selected_label_ids.iter().cloned());
-        let labels_to_keep: HashSet<_> = current_labels
-            .intersection(&partially_selected_label_ids)
-            .cloned()
-            .collect();
-        labels_to_keep.union(&selected_label_ids).cloned().collect()
-    }
-
     /// Action to change labels of a group of messages and optionally archive them.
     ///
     /// # Parameters
@@ -452,43 +427,83 @@ impl Message {
         }
     }
 
-    pub async fn relabel_message<A>(
-        &self,
+    /// Remotely apply LabelAs action for conversations
+    pub(crate) async fn remote_relabel<A>(
         session: &Session,
-        selected_label_ids: &[LocalId],
-        partially_selected_label_ids: &[LocalId],
+        added_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+        removed_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
         interface: &A,
-    ) -> Result<(), AppError>
+    ) -> Result<Vec<RemoteId>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        /// Gets a hashmap of the remote label id and the local ids.
+        async fn group_ids_by_label(
+            label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+            interface: &(impl Into<AgnosticInterface> + Interface),
+        ) -> Result<HashMap<RemoteId, HashSet<LocalId>>, AppError> {
+            let mut map = HashMap::new();
+            for (conv_id, local_label_ids) in label_ids {
+                let remote_label_ids = LocalId::counterparts::<Label, _>(
+                    Vec::from_iter(local_label_ids.iter().cloned()),
+                    interface,
+                )
+                .await?;
+                for remote_label_id in remote_label_ids {
+                    map.entry(remote_label_id)
+                        .or_insert_with(HashSet::new)
+                        .insert(*conv_id);
+                }
+            }
+            Ok(map)
+        }
+
         let api = session.api();
 
-        let current_labels = self.all_message_labels(interface).await?;
-        let current_labels: Vec<_> = current_labels
-            .into_iter()
-            .filter(|l| l.label_type == LabelType::Label)
-            .collect();
+        let added_by_label = group_ids_by_label(added_label_ids, interface).await?;
+        let removed_by_label = group_ids_by_label(removed_label_ids, interface).await?;
 
-        let labels_to_set = Message::compute_expected_labels(
-            &current_labels,
-            selected_label_ids,
-            partially_selected_label_ids,
-        );
-        let labels_to_set = LocalId::counterparts::<Label, _>(labels_to_set, interface).await?;
-        let labels_to_set = labels_to_set.into_iter().map_into().collect();
+        let mut failed_ids = vec![];
+        for (label_id, message_ids) in added_by_label {
+            let message_ids =
+                LocalId::counterparts::<Message, _>(Vec::from_iter(message_ids.clone()), interface)
+                    .await?;
+            let response = api
+                .put_messages_label(
+                    message_ids.iter().cloned().map_into().collect(),
+                    label_id.clone().into(),
+                    None,
+                )
+                .await;
 
-        if let Some(remote_message_id) = &self.remote_id {
-            // TODO: api.relabel_message return a MessageMetadata. Should we use it to update current message?
-            api.relabel_message(remote_message_id.clone().into(), labels_to_set)
-                .await?;
-        } else {
-            warn!(
-                "While labeling messages, message without remote_id: {:?}",
-                self.local_id
-            );
-        };
-        Ok(())
+            match response {
+                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
+                Err(e) => {
+                    error!("Failed to add message to added label: {e}");
+                    failed_ids.extend(message_ids);
+                }
+            }
+        }
+        for (label_id, message_ids) in removed_by_label {
+            let message_ids =
+                LocalId::counterparts::<Message, _>(Vec::from_iter(message_ids.clone()), interface)
+                    .await?;
+            let response = api
+                .put_messages_unlabel(
+                    message_ids.iter().cloned().map_into().collect(),
+                    label_id.clone().into(),
+                )
+                .await;
+
+            match response {
+                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
+                Err(e) => {
+                    error!("Failed to add message to added label: {e}");
+                    failed_ids.extend(message_ids);
+                }
+            }
+        }
+        Ok(failed_ids)
     }
 
     /// Find a group of Messages by their IDs.

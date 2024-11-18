@@ -9,6 +9,7 @@ use proton_action_queue::action::{
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, Stash, Tether};
@@ -75,7 +76,12 @@ impl LabelAs {
         for local_id in &self.data.local_ids {
             let labels =
                 ConversationLabel::labels_ids_for_conversation(*local_id, interface).await?;
-            let labels = HashSet::from_iter(labels.into_iter());
+            let labels = Label::find_by_ids(labels, interface).await?;
+            let labels = labels
+                .iter()
+                .filter(|l| l.label_type == LabelType::Label)
+                .filter_map(|l| l.local_id)
+                .collect();
             self.data
                 .added_labels
                 .insert(*local_id, &selected - &labels);

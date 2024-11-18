@@ -90,14 +90,21 @@ async fn label_as_without_archive() {
         message4.metadata.clone(),
     ])
     .await;
-    ctx.mock_relabel_message((&message1.metadata.id).into(), message1.metadata.clone())
-        .await;
-    ctx.mock_relabel_message((&message2.metadata.id).into(), message2.metadata.clone())
-        .await;
-    ctx.mock_relabel_message((&message3.metadata.id).into(), message3.metadata.clone())
-        .await;
-    ctx.mock_relabel_message((&message4.metadata.id).into(), message4.metadata.clone())
-        .await;
+    ctx.mock_label_messages(
+        &label1_id.clone().into_inner().into(),
+        vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
+    )
+    .await;
+    ctx.mock_unlabel_messages(
+        &label3_id.into_inner().into(),
+        vec![
+            message2.metadata.id.clone(),
+            message3.metadata.id.clone(),
+            message4.metadata.id.clone(),
+        ],
+        vec![],
+    )
+    .await;
     ctx.catch_all().await;
 
     ctx.init_user(user_ctx.clone()).await;
@@ -243,10 +250,17 @@ async fn label_as_with_archive() {
 
     ctx.mock_get_messages(vec![message1.metadata.clone(), message2.metadata.clone()])
         .await;
-    ctx.mock_relabel_message((&message1.metadata.id).into(), message1.metadata.clone())
-        .await;
-    ctx.mock_relabel_message((&message2.metadata.id).into(), message2.metadata.clone())
-        .await;
+    ctx.mock_label_messages(
+        &label1_id.clone().into_inner().into(),
+        vec![message1.metadata.id.clone()],
+    )
+    .await;
+    ctx.mock_unlabel_messages(
+        &label3_id.into_inner().into(),
+        vec![message2.metadata.id.clone()],
+        vec![],
+    )
+    .await;
     ctx.mock_label_messages(
         &LabelId::archive().into(),
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],

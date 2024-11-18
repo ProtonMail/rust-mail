@@ -1,7 +1,7 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::{LabelType, RollbackItemType, SystemLabelId};
+use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType, SystemLabelId};
 use crate::models::{Label, Message};
-use crate::MailUserContext;
+use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler as ActionHandler, Type,
@@ -76,13 +76,12 @@ impl LabelAs {
             HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
         for message_id in &self.data.local_ids {
             if let Some(message) = Message::load(*message_id, interface).await? {
-                let labels = message
-                    .label_ids
-                    .into_iter()
-                    .map(|l| l.into_inner())
+                let labels = message.all_message_labels(interface).await?;
+                let labels = labels
+                    .iter()
+                    .filter(|l| l.label_type == LabelType::Label)
+                    .filter_map(|l| l.local_id)
                     .collect();
-                let labels = RemoteId::counterparts::<Label, _>(labels, interface).await?;
-                let labels = HashSet::from_iter(labels.into_iter());
                 self.data
                     .added_labels
                     .insert(*message_id, &selected - &labels);
@@ -109,6 +108,50 @@ impl Action for LabelAs {
 
 #[derive(Default)]
 pub struct Handler;
+
+impl Handler {
+    pub(crate) async fn revert_one_locally<A>(
+        message_id: &LocalId,
+        added_labels: HashSet<LocalId>,
+        removed_labels: HashSet<LocalId>,
+        original_locations: Option<Option<ExclusiveLocation>>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(mut message) = Message::load(*message_id, interface).await? else {
+            warn!("While reverting locally, could not find message with local_id: {message_id:?}");
+            return Ok(());
+        };
+
+        let current_labels = message
+            .label_ids
+            .iter()
+            .map(|l| l.clone().into_inner())
+            .collect_vec();
+        let current_labels: HashSet<_> = HashSet::from_iter(current_labels.into_iter());
+        let removed_labels = LocalId::counterparts::<Label, _>(
+            Vec::from_iter(removed_labels.into_iter()),
+            interface,
+        )
+        .await?;
+        let removed_labels = HashSet::from_iter(removed_labels.into_iter());
+        let added_labels =
+            LocalId::counterparts::<Label, _>(Vec::from_iter(added_labels.into_iter()), interface)
+                .await?;
+        let added_labels = HashSet::from_iter(added_labels.into_iter());
+        let new_labels = &(&current_labels - &removed_labels) | &added_labels;
+        message.label_ids = new_labels.into_iter().map_into().collect();
+
+        if let Some(location) = original_locations {
+            message.exclusive_location = location;
+        }
+        message.save_using(interface).await?;
+
+        Ok(())
+    }
+}
 
 impl ActionHandler for Handler {
     type Action = LabelAs;
@@ -171,20 +214,35 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = session.api();
 
-        for message_id in &action.data.local_ids {
-            let Some(message) = Message::load(*message_id, stash).await? else {
-                warn!("While labeling messages, could not find message with id: {message_id:?}");
-                continue;
-            };
+        let failed_ids = Message::remote_relabel(
+            session,
+            &action.data.added_labels,
+            &action.data.removed_labels,
+            stash,
+        )
+        .await?;
 
-            message
-                .relabel_message(
-                    session,
-                    &action.data.local_selected_label_ids,
-                    &action.data.local_partially_selected_label_ids,
+        if !failed_ids.is_empty() {
+            error!("LabelAs message operation failed for messages: {failed_ids:?}");
+            let failed_ids = RemoteId::counterparts::<Message, _>(failed_ids, stash).await?;
+            for message_id in &failed_ids {
+                Self::revert_one_locally(
+                    message_id,
+                    action
+                        .data
+                        .added_labels
+                        .remove(message_id)
+                        .unwrap_or_default(),
+                    action
+                        .data
+                        .removed_labels
+                        .remove(message_id)
+                        .unwrap_or_default(),
+                    action.data.original_location.remove(message_id),
                     stash,
                 )
                 .await?;
+            }
         }
 
         if action.data.must_archive {
