@@ -168,7 +168,7 @@ impl Model<Messages> for AppModel {
             return Command::None;
         }
 
-        if let Event::Key(key) = &event {
+        if let Event::Key(key) = event {
             if key.kind == KeyEventKind::Press && key.code == KeyCode::F(2) {
                 self.display_log = !self.display_log;
                 return Command::None;
@@ -357,11 +357,19 @@ impl AppStateHandler for AppState {
 fn app_tracing_env_filter() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
-        .parse_lossy(
-            "info,proton_mail_tui=debug,proton_mail_db=trace,proton_sqlite3=trace,\
-                    proton_core_db=trace,proton_core_common=trace,proton_mail_common=trace,\
-                    proton_event_loop=trace,proton_api_core=trace,proton_action_queue=trace",
+        .parse(
+            "info,\
+        proton_mail_tui=debug,\
+        proton_api_core=debug,\
+        proton_mail_db=trace,\
+        proton_sqlite3=trace,\
+        proton_core_db=trace,\
+        proton_core_common=trace,\
+        proton_mail_common=trace,\
+        proton_event_loop=trace,\
+        proton_action_queue=trace",
         )
+        .expect("Error parsing tracing directives")
 }
 
 fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
