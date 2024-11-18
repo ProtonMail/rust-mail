@@ -19,7 +19,7 @@ use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, trace};
 
 /// Syntactic sugar for when there are no query parameters, clearer and more
 /// obvious than writing `None::<()>`.
@@ -748,7 +748,7 @@ pub trait ApiService {
         // At present we clone the body for the Bytes and String types, which is not
         // efficient, but is needed for retry handling. This could potentially be
         // improved — the body() function does consume, but there may be ways around
-        // it. For now it's not a great concern.
+        // it. For now it's not a great concern since it doesn't get used anywhere.
         // TODO: Improve handling of Bytes and String body types to not clone.
         Ok(match &request.body {
             Body::Bytes(data) => builder.body(data.clone()),
