@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fix
 
+  - `markConversationAsRead` now mark conversation as Read
   - `markMessageAsRead` now mark message as Read
   - `LabelAs` now update only LabelType::Label
   - `WatchHandle` now properly disconnects when it's dropped.

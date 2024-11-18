@@ -1,9 +1,10 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
 use crate::datatypes::RollbackItemType;
 use crate::models::Message;
 use crate::MailUserContext;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::consts::General;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
@@ -92,7 +93,11 @@ impl ActionHandler for Handler {
             .collect();
         let response = api.put_messages_read(message_ids).await?.responses;
 
-        let failed_ids = filter_responses(response);
+        // In this case General::NotExists is returned also for messages already marked as read
+        let failed_ids = filter_responses_by_codes(
+            response,
+            &[General::NoError as u32, General::NotExists as u32],
+        );
 
         if !failed_ids.is_empty() {
             error!("Read messages operation failed for: {failed_ids:?}");
