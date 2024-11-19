@@ -15,7 +15,6 @@ use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::mail::{MailSessionError, MailboxError};
-use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
@@ -237,33 +236,17 @@ pub async fn watch_message(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedMessage>, MailboxError> {
     let stash = session.user_stash().clone();
-    let watcher = WatchHandle::default();
-    let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let callback = damp(callback).await;
-        let message = if let Some((message, receiver)) =
+        let Some((message, receiver)) =
             RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
-        {
-            tokio::spawn(async move {
-                loop {
-                    if watcher_cloned.should_stop() {
-                        return;
-                    }
-
-                    if receiver.recv_async().await.is_err() {
-                        return;
-                    }
-
-                    callback();
-                }
-            });
-            Some(message)
-        } else {
-            None
+        else {
+            return Ok(None);
         };
-        Ok(message.map(|m| WatchedMessage {
-            message: m.into(),
-            handle: Arc::new(watcher),
+
+        let handle = watch_channel(receiver, callback).await;
+        Ok(Some(WatchedMessage {
+            message: message.into(),
+            handle,
         }))
     })
     .await
