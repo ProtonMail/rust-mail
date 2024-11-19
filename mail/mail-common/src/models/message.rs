@@ -1000,6 +1000,7 @@ impl Message {
             Self::save_using(&mut message, interface).await?;
             ids.push(message);
         }
+
         Ok(ids)
     }
 
@@ -1669,6 +1670,7 @@ impl Message {
         );
 
         let tx = stash.transaction().await?;
+        ConversationLabel::create_or_update_from_message_metadata(&response.messages, &tx).await?;
         Self::create_or_update_messages_from_metadata(response.messages, &tx).await?;
         tx.commit().await?;
         Ok(())
