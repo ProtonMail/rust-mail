@@ -186,12 +186,17 @@ impl Sidebar {
                 .map(|m| m.local_id.unwrap())
                 .collect::<Vec<_>>();
             let stop_flag = Arc::new(AtomicBool::new(false));
-            let stop_flag_clone = Arc::clone(&stop_flag);
+            let weak_stop_flag = Arc::downgrade(&stop_flag);
 
             spawn_async(async move {
                 let callback = damp(callback).await;
                 while let Ok(change) = receiver.recv_async().await {
-                    if stop_flag_clone.load(Ordering::SeqCst) {
+                    let Some(stop_flag) = weak_stop_flag.upgrade() else {
+                        debug!("Watch handle dropped, stopping watch");
+                        break;
+                    };
+
+                    if stop_flag.load(Ordering::SeqCst) {
                         debug!("Stop flag set, stopping watch");
                         break;
                     }

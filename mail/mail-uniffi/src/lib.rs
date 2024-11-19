@@ -287,12 +287,16 @@ where
     #[allow(clippy::redundant_closure)]
     let mut ids = results.iter().map(|m| get_local_id(m)).collect::<Vec<_>>();
     let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_clone = Arc::clone(&stop_flag);
+    let weak_stop_flag = Arc::downgrade(&stop_flag);
 
     spawn_async(async move {
         let callback = damp(callback).await;
         while let Ok(change) = receiver.recv_async().await {
-            if stop_flag_clone.load(Ordering::SeqCst) {
+            let Some(stop_flag) = weak_stop_flag.upgrade() else {
+                debug!("Watch handle dropped, stopping watch");
+                break;
+            };
+            if stop_flag.load(Ordering::SeqCst) {
                 debug!("Stop flag set, stopping watch");
                 break;
             }
@@ -410,10 +414,17 @@ fn watch_channel_inner<T: Send + 'static>(
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + 'static,
 ) {
+    let should_stop = Arc::downgrade(&watcher.stop_flag);
     drop(spawn_async(async move {
         loop {
-            if watcher.should_stop() {
-                return;
+            let Some(stop_flag) = should_stop.upgrade() else {
+                debug!("Watch handle dropped, stopping watch");
+                break;
+            };
+
+            if stop_flag.load(Ordering::SeqCst) {
+                debug!("Stop flag set, stopping watch");
+                break;
             }
 
             if channel.recv_async().await.is_err() {
