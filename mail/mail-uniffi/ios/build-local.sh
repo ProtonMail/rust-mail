@@ -12,7 +12,7 @@ TMP_DIR="/tmp/$(uuidgen)"
 
 rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi ./mail/mail-uniffi/uniffi.toml $TMP_DIR
 
-CRATE_VERSION=$(cargo pkgid --manifest-path=./mail/mail-uniffi/Cargo.toml | cut -d "#" -f2)
+CRATE_VERSION=$(cargo pkgid --manifest-path=./mail/mail-uniffi/Cargo.toml | cut -d "@" -f2)
 
 cp -r $TMP_DIR/$CRATE_VERSION/* $IOS_REPO_ROOT/localPackages/proton_app_uniffi/
 
