@@ -385,7 +385,7 @@ pub async fn watch_channel<T: Send + 'static>(
 ) -> Arc<WatchHandle> {
     let watcher = WatchHandle::new();
 
-    watch_channel_inner(watcher.clone(), channel, damp(callback).await);
+    watch_channel_inner(&watcher, channel, damp(callback).await);
 
     Arc::new(watcher)
 }
@@ -404,13 +404,13 @@ pub fn watch_channel_nodamp<T: Send + 'static>(
 ) -> Arc<WatchHandle> {
     let watcher = WatchHandle::new();
 
-    watch_channel_inner(watcher.clone(), channel, move || callback.on_update());
+    watch_channel_inner(&watcher, channel, move || callback.on_update());
 
     Arc::new(watcher)
 }
 
 fn watch_channel_inner<T: Send + 'static>(
-    watcher: WatchHandle,
+    watcher: &WatchHandle,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + 'static,
 ) {

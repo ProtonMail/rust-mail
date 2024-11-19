@@ -89,7 +89,7 @@ pub async fn watch_contact_list(
         let (contact_list, channel) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        watch_channel_inner(watcher.clone(), channel, callback);
+        watch_channel_inner(&watcher, channel, callback);
 
         Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
