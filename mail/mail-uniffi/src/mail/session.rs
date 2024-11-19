@@ -653,6 +653,7 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::Action(e) => Self::Action(e),
             MailContextError::QueuedAction(e) => Self::QueuedAction(e),
             MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
+            MailContextError::PGPKeySelection(e) => Self::PGPKeyAccess(anyhow!("{e}")),
             MailContextError::App(e) => Self::App(e),
             MailContextError::Stash(e) => Self::Stash(e),
             MailContextError::Login(e) => Self::Login(e),

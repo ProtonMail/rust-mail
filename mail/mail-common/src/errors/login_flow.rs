@@ -83,9 +83,9 @@ impl From<LoginError> for UserLoginFlowError {
 impl From<MailContextError> for UserLoginFlowError {
     fn from(error: MailContextError) -> Self {
         match error {
-            MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
-                Self::Unexpected(Unexpected::Crypto)
-            }
+            MailContextError::Crypto
+            | MailContextError::KeyChainHasNoKey
+            | MailContextError::PGPKeySelection(_) => Self::Unexpected(Unexpected::Crypto),
             MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
             MailContextError::IO(io_error) => Self::from(io_error),
             MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),

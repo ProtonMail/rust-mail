@@ -70,6 +70,7 @@ use proton_api_mail::services::proton::response_data::{
     ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::{AvatarInformation, LabelId, LocalId, RemoteId};
+use proton_crypto_account::keys::{EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
@@ -397,6 +398,16 @@ impl From<MimeType> for ApiMimeType {
     }
 }
 
+impl From<MimeType> for CryptoMimeType {
+    fn from(value: MimeType) -> Self {
+        match value {
+            MimeType::TextHtml => Self::Html,
+            MimeType::TextPlain => Self::Text,
+            _ => Self::Html,
+        }
+    }
+}
+
 impl FromSql for MimeType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
@@ -487,6 +498,15 @@ impl From<ApiPgpScheme> for PgpScheme {
         match value {
             ApiPgpScheme::Inline => Self::Inline,
             ApiPgpScheme::Mime => Self::Mime,
+        }
+    }
+}
+
+impl From<PgpScheme> for CryptoPgpScheme {
+    fn from(value: PgpScheme) -> Self {
+        match value {
+            PgpScheme::Inline => CryptoPgpScheme::PGPInline,
+            PgpScheme::Mime => CryptoPgpScheme::PGPMime,
         }
     }
 }
