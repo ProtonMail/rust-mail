@@ -144,19 +144,15 @@
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
-use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
-use stash::exports::ToSql;
-use stash::orm::{Model, ResultsetChange};
-use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
-use tracing::{debug, warn};
+use tracing::debug;
 use utils::damp;
 
 pub mod core;
@@ -300,10 +296,11 @@ pub fn watch_channel_nodamp<T: Send + 'static>(
 fn watch_channel_inner<T: Send + 'static>(
     watcher: &WatchHandle,
     channel: flume::Receiver<T>,
-    callback: impl Fn() + Send + 'static,
+    callback: impl Fn() + Send + Sync + 'static,
 ) {
     let should_stop = Arc::downgrade(&watcher.stop_flag);
     drop(spawn_async(async move {
+        let callback = Arc::new(callback);
         loop {
             let Some(stop_flag) = should_stop.upgrade() else {
                 debug!("Watch handle dropped, stopping watch");
@@ -319,7 +316,9 @@ fn watch_channel_inner<T: Send + 'static>(
                 return;
             }
 
-            callback();
+            let callback = callback.clone();
+            let callback = move || callback();
+            _ = async_runtime().spawn_blocking(callback).await;
         }
     }));
 }
