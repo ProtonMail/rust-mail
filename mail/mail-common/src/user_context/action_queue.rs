@@ -33,10 +33,8 @@ impl MailUserContext {
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        Ok(self
-            .action_queue
-            .execute_with_limit(self.session(), 1)
-            .await?)
+        let _ = self.action_queue.execute_one(self.session()).await?;
+        Ok(())
     }
 
     /// Execute all pending actions in the queue.

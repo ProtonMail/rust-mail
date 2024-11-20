@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `LabelAs` now update only LabelType::Label
   - `WatchHandle` now properly disconnects when it's dropped.
   - Blocking code is now allowed in the watcher callbacks.
+  - Double action execution for queued actions
 
 ## [0.21.4] - 2024-11-13
 
