@@ -13,7 +13,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
-    GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
+    GetKeysAllResponse, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
 };
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::MessageMetadata;
@@ -35,6 +35,9 @@ use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
+};
+use proton_core_test_utils::addresses_public::{
+    testdata_address_keys_other_user, TEST_OTHER_USER_EMAIL,
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{
@@ -70,6 +73,9 @@ pub struct Params {
 
     /// List of user addresses.
     pub addresses: Vec<ApiAddress>,
+
+    /// Keys from other users by email in format (email, key response).
+    pub recipient_keys: Vec<(String, GetKeysAllResponse)>,
 
     /// Mail settings. If `None`, some default values will be set.
     pub mail_settings: Option<ApiMailSettings>,
@@ -141,6 +147,10 @@ impl Params {
                 proton_mx: false,
                 signed_key_list: AddressSignedKeyList::default(),
             }],
+            recipient_keys: vec![(
+                TEST_OTHER_USER_EMAIL.to_owned(),
+                testdata_address_keys_other_user(),
+            )],
             conversations: vec![ApiConversation {
                 id: ApiRemoteId::from("myconv"),
                 order: 0,
@@ -476,6 +486,12 @@ impl MailTestContext {
             .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
+
+        for (email, response) in params.recipient_keys {
+            self.core_test_context
+                .mock_get_keys_all(&email, response)
+                .await;
+        }
     }
 
     /// Generate new mock expectations for retrieving conversations.

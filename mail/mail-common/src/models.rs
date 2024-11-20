@@ -92,6 +92,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
     KeyPackets as RealKeyPackets,
 };
+use proton_crypto_inbox::keys::CryptoMailSettings;
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
@@ -4630,6 +4631,15 @@ impl MailSettings {
             .await
             .unwrap_or_default()
             .unwrap_or_default()
+    }
+
+    /// Retrieves the portion of the mail settings that is relevant for email encryption.
+    pub fn crypto_mail_settings(&self) -> CryptoMailSettings {
+        CryptoMailSettings {
+            pgp_scheme: self.pgp_scheme.into(),
+            mime_type: self.draft_mime_type.into(),
+            sign: self.sign,
+        }
     }
 }
 

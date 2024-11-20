@@ -21,8 +21,11 @@ use proton_crypto_account::{
     proton_crypto::{crypto::PGPProviderSync, CryptoError},
 };
 use proton_vcard::{vcard::VCard, VCardError};
-use stash::params;
-use stash::{orm::Model, stash::StashError};
+use stash::{
+    orm::Model,
+    stash::{Interface, StashError},
+};
+use stash::{params, stash::AgnosticInterface};
 use thiserror::Error;
 use tracing::{debug, Level};
 
@@ -156,25 +159,30 @@ impl UserContext {
     ///
     /// Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp_provider`       - The pgp provider instance from `proton_crypto`.
+    /// * `db_interface`       - The database interface to query from.
     /// * `unlocked_user_keys` - Unlocked keys for the current user, these are used to decrypt and verify the contact cards.
-    /// * `email` - the email address that keys are being sought for.
+    /// * `email`              - the email address that keys are being sought for.
     ///
     /// # Errors
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, unlocked_user_keys))]
-    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, db_interface, unlocked_user_keys))]
+    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync, DB>(
         &self,
         pgp_provider: &Provider,
+        db_interface: &DB,
         unlocked_user_keys: &UnlockedUserKeys<Provider>,
         email: &str,
-    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
+    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>>
+    where
+        DB: Into<AgnosticInterface> + Interface,
+    {
         // First, we try to load an contact emails that matches the email.
         debug!("Try to load the contact email for {email} from the db");
         let contact_email =
-            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], self.stash())
+            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], db_interface)
                 .await?
                 .ok_or(ContactError::CardNotFound(email.to_owned()))?;
 
@@ -186,9 +194,9 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(local_contact_id, self.session().api(), self.stash()).await?;
+        Contact::sync_with_card(local_contact_id, self.session().api(), db_interface).await?;
 
-        let mut contact = Contact::load(local_contact_id, self.stash())
+        let mut contact = Contact::load(local_contact_id, db_interface)
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 

@@ -7,26 +7,30 @@ mod initialization;
 use crate::models::{Conversation, Message};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
-use crate::{MailContext, MailContextError, MailContextResult};
+use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
+use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::RemoteId;
-use proton_core_common::models::User;
-use proton_core_common::{LoadKeySecret, UserContext};
+use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::models::{Address, User};
+use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
+use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
 use stash::orm::Model;
-use stash::stash::Stash;
+use stash::stash::{AgnosticInterface, Interface, Stash};
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::join;
 use tracing::error;
 
 pub struct MailUserContext {
@@ -188,6 +192,104 @@ impl MailUserContext {
             .unlocked_address_keys(pgp_provider, self, address_id)
             .await?;
         Ok(keys)
+    }
+
+    /// Loads the send preferences of the recipient with the given email address.
+    ///
+    /// [`SendPreferences`] contains the send preferences for sending an email to the given recipient
+    /// including encryption/signing/formatting options and the encryption key.
+    /// The send preferences are used to build the request for sending emails via Proton.
+    /// [internal confluence docs](https://protonag.atlassian.net/wiki/spaces/MAILFE/pages/53117391/Send+preferences+for+outgoing+email)
+    /// This information is collected from the keys returned by the API, contact vCard data,
+    /// sender mail settings, and composer preferences.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider`        - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `db_interface`        - The database interface to query from.
+    /// * `email`               - The email address of the recipient.
+    /// * `settings`            - The [`CryptoMailSettings`] extracted from the mail settings [`super::models::MailSettings::crypto_mail_settings`]
+    /// * `composer_preference` - (currently unused) The composer preferences, use [`ComposerPreference::default()`].
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] or [`proton_crypto_inbox::keys::EncryptionPreferencesError`] if the operation fails.
+    ///
+    pub async fn recipient_send_preferences<Provider, DB>(
+        &self,
+        pgp_provider: &Provider,
+        db_interface: &DB,
+        email: &str,
+        settings: CryptoMailSettings,
+        composer_preference: ComposerPreference,
+    ) -> MailContextResult<SendPreferences<Provider::PublicKey>>
+    where
+        Provider: PGPProviderSync,
+        DB: Into<AgnosticInterface> + Interface,
+    {
+        let encryption_time = crypto_clock::server_crypto_clock().unix_time();
+        // If the email is from an owned address by the user, use the corresponding keys.
+        if let Some(address) = Address::by_email(email, db_interface)
+            .await
+            .inspect_err(|err| {
+                error!("send preferences: failed to search address by email: {err}")
+            })?
+        {
+            let address_rid = address.remote_id.as_ref().ok_or_else(|| {
+                MailContextError::App(AppError::RemoteIdNotFound(
+                    "address".to_owned(),
+                    address.local_id.unwrap_or(LocalId::from(0)),
+                ))
+            })?;
+
+            let address_keys = self
+                .unlocked_address_keys(pgp_provider, address_rid)
+                .await
+                .inspect_err(|err| error!("send preferences for self: {err}"))?;
+            let send_preferences =
+                SendPreferences::new_for_self(&address_keys, encryption_time, settings)
+                    .inspect_err(|err| error!("send preferences for self: {err}"))?;
+            return Ok(send_preferences);
+        }
+
+        let user_keys = self.unlocked_user_keys(pgp_provider).await?;
+        // Fetch API keys, and contact-pinned keys concurrently.
+        let (api_keys_result, vcard_keys_result) = join!(
+            self.user_context
+                .public_address_keys(pgp_provider, email, false),
+            self.user_context.public_address_keys_from_contacts(
+                pgp_provider,
+                db_interface,
+                &user_keys,
+                email
+            )
+        );
+
+        // Handle error when loading contact keys, but ignore CardNotFound as it's valid to have no contact.
+        if let Err(e) = &vcard_keys_result {
+            if !matches!(
+                e,
+                CoreContextError::ContactError(ContactError::CardNotFound(_))
+            ) {
+                error!(
+                    "send preferences: failed to load contact pinned keys: {}",
+                    e
+                );
+            }
+        }
+
+        // On error, we currently assume no pinned keys exists.
+        let vcard_keys = vcard_keys_result.ok().flatten();
+
+        let send_preferences = SendPreferences::new(
+            api_keys_result?,
+            vcard_keys,
+            encryption_time,
+            &settings,
+            composer_preference,
+        )
+        .inspect_err(|err| error!("send preferences: {err}"))?;
+
+        Ok(send_preferences)
     }
 
     /// Returns the cache path for mail related resource.
