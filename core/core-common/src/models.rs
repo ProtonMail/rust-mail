@@ -549,6 +549,33 @@ impl Address {
 
         Ok(())
     }
+
+    /// Loads the address for the given e-mail from the database if any.
+    ///
+    /// Returns [`None`] if no address with the given email is found.
+    ///
+    /// # Parameters
+    ///
+    /// * `email`     - The e-mail address to search for.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    /// # Errors
+    ///
+    /// Returns a [`StashError`] if the database access fails.
+    ///
+    pub async fn by_email<A>(email: &str, interface: &A) -> Result<Option<Address>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let address = Self::find(
+            "WHERE email = ?",
+            params![email.to_owned()],
+            interface,
+            None,
+        )
+        .await?;
+        Ok(address.into_iter().next())
+    }
 }
 
 impl From<ApiAddress> for Address {
