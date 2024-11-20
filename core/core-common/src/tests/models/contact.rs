@@ -202,3 +202,75 @@ mod contact_list {
         assert_eq!(result, expected);
     }
 }
+
+mod contact_watcher {
+    use stash::{exports::Action, orm::Model, params, stash::Interface};
+
+    use crate::{contact, models::Contact, rid, tests::common::new_core_test_connection};
+
+    #[tokio::test]
+    async fn test_contact_list_watcher() {
+        let stash = new_core_test_connection().await;
+        let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
+        contact.save_using(&stash).await.unwrap();
+        let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
+        let stash_reciever = stash.subscribe().await.unwrap();
+
+        // Rename contact
+        let tx = stash.transaction().await.unwrap();
+        contact.name = "Barbara Lox".to_string();
+        contact.save_using(&tx).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert!(list_receiver.recv_async().await.is_ok());
+
+        let notification = stash_reciever.recv_async().await.unwrap();
+        assert_eq!(notification.table, "contacts".to_string());
+        assert_eq!(notification.action, Action::SQLITE_UPDATE);
+
+        // Soft delete contact
+        let tx = stash.transaction().await.unwrap();
+        contact.deleted = true;
+        contact.save_using(&tx).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert!(list_receiver.recv_async().await.is_ok());
+
+        let notification = stash_reciever.recv_async().await.unwrap();
+
+        assert_eq!(notification.table, "contacts".to_string());
+        assert_eq!(notification.action, Action::SQLITE_UPDATE);
+
+        // Soft undelete contact
+        let tx = stash.transaction().await.unwrap();
+        contact.deleted = false;
+        contact.save_using(&tx).await.unwrap();
+        tx.commit().await.unwrap();
+
+        assert!(list_receiver.recv_async().await.is_ok());
+
+        let notification = stash_reciever.recv_async().await.unwrap();
+
+        assert_eq!(notification.table, "contacts".to_string());
+        assert_eq!(notification.action, Action::SQLITE_UPDATE);
+
+        // Hard delete contact
+        let tx = stash.transaction().await.unwrap();
+        tx.execute(
+            "DELETE FROM contacts WHERE local_id = ?",
+            params![contact.local_id],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let all_contacts = Contact::find("", vec![], &stash, None).await.unwrap();
+        assert_eq!(all_contacts.len(), 0);
+
+        assert!(list_receiver.recv_async().await.is_ok());
+
+        let notification = stash_reciever.recv_async().await.unwrap();
+
+        assert_eq!(notification.table, "contacts".to_string());
+        assert_eq!(notification.action, Action::SQLITE_DELETE);
+    }
+}

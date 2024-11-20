@@ -112,8 +112,7 @@ pub fn damp_contacts_callback(
     let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
-        let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
-        let mut interval = interval(Duration::from_millis(dampening_period));
+        let mut interval = interval(Duration::from_millis(DAMPENING_PERIOD));
         let callback = Arc::new(callback);
 
         loop {
@@ -124,7 +123,6 @@ pub fn damp_contacts_callback(
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
-                interval.tick().await;
                 let contact_list = contact_list(session.clone()).await;
 
                 if contact_list.is_err() {
