@@ -567,14 +567,7 @@ impl Address {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let address = Self::find(
-            "WHERE email = ?",
-            params![email.to_owned()],
-            interface,
-            None,
-        )
-        .await?;
-        Ok(address.into_iter().next())
+        Self::find_first("WHERE email = ?", params![email.to_owned()], interface).await
     }
 }
 
