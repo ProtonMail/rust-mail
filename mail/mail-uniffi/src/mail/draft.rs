@@ -190,4 +190,26 @@ impl Draft {
         })
         .await
     }
+
+    /// Sends the draft.
+    ///
+    /// Schedules an action which saves and then sends the draft.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn send(&self) -> Result<(), MailSessionError> {
+        let (save_action, send_action) = {
+            let draft = self.draft.read();
+            (draft.to_save_action(), draft.to_send_action()?)
+        };
+        let ctx = Arc::clone(&self.ctx);
+        uniffi_async(async move {
+            RealDraft::send(ctx.queue(), save_action, send_action)
+                .await
+                .map_err(MailContextError::from)?;
+            Ok(())
+        })
+        .await
+    }
 }

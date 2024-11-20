@@ -1,5 +1,5 @@
 ---
-source: mail/mail-common/src/tests/draft.rs
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
 expression: signature
 ---
 <br><br>My Address Signature<br><br>Mail settings signature

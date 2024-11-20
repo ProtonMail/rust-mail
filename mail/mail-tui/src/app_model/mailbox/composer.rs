@@ -5,6 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
 use proton_core_common::datatypes::LocalId;
+use proton_mail_common::actions::draft::Save;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
@@ -118,14 +119,7 @@ impl Composer {
 
     /// Save a draft.
     fn save(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        // We are TUI, what else can we do?
-        self.draft.mime_type = MimeType::TextPlain;
-        self.draft.subject = self.subject_input_state.value().to_owned();
-        self.draft.body = self.text_area.lines().join("\n");
-        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value());
-        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value());
-        self.draft.to_list = recipients_value_to_list(self.to_input_state.value());
-        let save_action = self.draft.to_save_action();
+        let save_action = self.create_save_action();
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Saving draft...".to_owned(),
@@ -137,12 +131,48 @@ impl Composer {
                         Ok(_) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e}");
-                            Command::batch([Command::message(MailContextError::from(e).into())])
+                            Command::message(MailContextError::from(e).into())
                         }
                     },
                 ])
             }),
         ])
+    }
+
+    fn create_save_action(&mut self) -> Save {
+        // We are TUI, what else can we do?
+        self.draft.mime_type = MimeType::TextPlain;
+        self.draft.subject = self.subject_input_state.value().to_owned();
+        self.draft.body = self.text_area.lines().join("\n");
+        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value());
+        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value());
+        self.draft.to_list = recipients_value_to_list(self.to_input_state.value());
+        self.draft.to_save_action()
+    }
+
+    /// Send the draft.
+    fn send(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
+        let save_action = self.create_save_action();
+        match self.draft.to_send_action() {
+            Ok(send_action) => Command::batch([
+                Command::message(Messages::DisplayBackgroundProgress(
+                    "Sending draft...".to_owned(),
+                )),
+                Command::task(async move {
+                    Command::batch([
+                        Command::message(Messages::DismissBackgroundProgress),
+                        match Draft::send(context.queue(), save_action, send_action).await {
+                            Ok(()) => Command::message(Message::CloseComposer.into()),
+                            Err(e) => {
+                                error!("Failed to save draft: {e}");
+                                Command::message(e.into())
+                            }
+                        },
+                    ])
+                }),
+            ]),
+            Err(e) => Command::message(MailContextError::from(e).into()),
+        }
     }
 
     fn new(draft: Draft) -> Self {
@@ -289,8 +319,10 @@ impl StateHandler for Composer {
             Span::from("Switch"),
             Span::from(" Shift+Tab: ").bold(),
             Span::from("Switch"),
-            Span::from(" S: ").bold(),
-            Span::from("Switch"),
+            Span::from(" Ctrl+s: ").bold(),
+            Span::from("Save"),
+            Span::from(" Ctrl+d: ").bold(),
+            Span::from("Send"),
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
         frame.render_widget(Line::from(help_text), footer);
@@ -333,6 +365,11 @@ impl StateHandler for Composer {
                         return Command::message(ComposerMessage::Save.into());
                     }
                 }
+                KeyCode::Char('d') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return Command::message(ComposerMessage::Send.into());
+                    }
+                }
                 _ => {}
             };
         }
@@ -370,6 +407,7 @@ impl StateHandler for Composer {
 
         match message {
             ComposerMessage::Save => self.save(mbox.user_context()),
+            ComposerMessage::Send => self.send(mbox.user_context()),
         }
     }
 }

@@ -3341,6 +3341,18 @@ impl MessageBodyMetadata {
                 if let Some(message) = message {
                     self.local_message_id = message.local_id;
                 }
+
+                // Need get row id or we will create new entry rather
+                // than updating.
+                if let Some(existing_body_metadata) = Self::find_first(
+                    "WHERE local_message_id=?",
+                    params![self.local_message_id],
+                    interface,
+                )
+                .await?
+                {
+                    self.row_id = existing_body_metadata.row_id;
+                }
             }
         }
 

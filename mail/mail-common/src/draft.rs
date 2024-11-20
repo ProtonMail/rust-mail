@@ -1,24 +1,28 @@
+use crate::actions::draft;
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
-use crate::datatypes::{Disposition, MessageAddress, MimeType, PmSignature};
+use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
+use crate::draft::compose::{
+    crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
+    prepare_html_reply, prepare_plain_text_reply,
+};
 use crate::models::{
     Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use chrono::DateTime;
+use proton_action_queue::action::Metadata;
 use proton_action_queue::queue::Queue;
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::request_data::{
-    DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
-};
+use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
-use proton_core_common::KeyHandlingError;
-use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
-use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
+use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
+use proton_crypto_inbox::message::MessageError;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
@@ -26,14 +30,10 @@ use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
-use std::fmt::Display;
-use std::io;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, error};
 
-#[cfg(test)]
-#[path = "tests/draft.rs"]
-mod tests;
+pub mod compose;
+pub(crate) mod send;
 
 /// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
@@ -42,6 +42,8 @@ pub enum Error {
     UserHasNoAddresses,
     #[error("User Address {0} not found")]
     AddressNotFound(RemoteId),
+    #[error("User Address {0} has no primary key")]
+    AddressWithoutPrimaryKey(RemoteId),
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalId),
     #[error("Create Metadata not found for {0}")]
@@ -54,6 +56,39 @@ pub enum Error {
     ReplyOrForwardToDraft(LocalId),
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
+    #[error("Draft has no message")]
+    DraftWithoutMessage,
+    #[error("Draft send failed: {0}")]
+    SendMessage(#[from] PackageError),
+    #[error("Draft has no recipients")]
+    NoRecipients,
+}
+
+/// Potential draft specific errors.
+#[derive(Debug, thiserror::Error)]
+pub enum PackageError {
+    #[error("Failed to encrypt package: {0}")]
+    PackageBodyEncrypt(#[from] MessageError),
+    #[error("Failed to load attachment content for mime body: {0}")]
+    MimeBodyAttachmentLoad(#[from] ApiServiceError),
+    #[error("Failed to get attachment remote id")]
+    AttachmentNoRemoteId,
+    #[error("Failed to write mime body to buffer: {0}")]
+    MimeBodyBuild(String),
+    #[error("Failed to extract attachment info for address: {0}")]
+    PackageBodyInfoReEncrypt(SessionKeyError),
+    #[error("Failed to extract attachment info for address: {0}")]
+    PackageAttachmentInfo(#[from] AttachmentDecryptionError),
+    #[error("Failed to encrypt attachment info to recipient: {0}")]
+    PackageAttachmentInfoReEncrypt(SessionKeyError),
+    #[error("Failed to encrypt attachment signature to recipient: {0}")]
+    PackageAttachmentInfoReEncryptSignature(AttachmentEncryptionError),
+    #[error("Package encryption type is is not supported: {0}")]
+    NotSupported(PackageCryptoType),
+    #[error("Should encrypt but no recipient key found")]
+    NoRecipientKey,
+    #[error("Primary key not found")]
+    PrimaryKeyNotFound,
 }
 
 /// Draft reply mode.
@@ -263,7 +298,7 @@ impl Draft {
         address: &Address,
         mail_settings: &MailSettings,
     ) -> Self {
-        let body = get_signature(address, mail_settings);
+        let body = compose::get_signature(address, mail_settings);
         Self {
             metadata_id,
             sender: address.email.clone(),
@@ -271,7 +306,7 @@ impl Draft {
             cc_list: Vec::new(),
             bcc_list: Vec::new(),
             address_id: address.remote_id.clone().unwrap(),
-            subject: DEFAULT_SUBJECT.to_owned(),
+            subject: compose::DEFAULT_SUBJECT.to_owned(),
             body,
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
@@ -558,6 +593,30 @@ impl Draft {
         Ok(())
     }
 
+    /// Apply an action which will send this draft.
+    ///
+    /// This requires both a save and send action that need to be chained.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to execute.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(queue, save_action,send_action))]
+    pub async fn send(
+        queue: &Queue,
+        save_action: Save,
+        send_action: draft::Send,
+    ) -> Result<(), MailContextError> {
+        //TODO: Atomic commit - needs queue modifications
+        let save_output = queue.queue_action(save_action).await?;
+        queue
+            .queue_action_with_metadata(
+                send_action,
+                Metadata::builder().with_dependency(save_output.id).build(),
+            )
+            .await?;
+        Ok(())
+    }
+
     /// Create a save action for the current state of the draft.
     ///
     /// This method is here to provide greater flexibility of integration
@@ -568,6 +627,22 @@ impl Draft {
     /// Returns error if the action failed to execute.
     pub fn to_save_action(&self) -> Save {
         Save::new(self)
+    }
+
+    /// Create a save action for the current state of the draft.
+    ///
+    /// This method is here to provide greater flexibility of integration
+    /// when used in multithreaded contexts.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to execute.
+    pub fn to_send_action(&self) -> Result<draft::Send, Error> {
+        if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
+            return Err(Error::NoRecipients);
+        }
+
+        Ok(draft::Send::new(self.metadata_id))
     }
 
     /// Get the message id associated with this draft.
@@ -606,280 +681,5 @@ impl Draft {
         };
 
         Ok(metadata.local_conversation_id)
-    }
-}
-
-/// Copy all the data from the `source_message` into `message` taking
-/// into account `reply_mode` of the draft.
-fn patch_draft_with_reply_mode(draft: &mut Draft, source_message: &Message, reply_mode: ReplyMode) {
-    // Copy over the addresses based on reply mode
-    match reply_mode {
-        ReplyMode::Sender => {
-            draft.to_list = vec![source_message.sender.address.clone()];
-            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
-        }
-        ReplyMode::All => {
-            draft.to_list = vec![source_message.sender.address.clone()];
-            draft.to_list.extend(
-                source_message
-                    .to_list
-                    .value
-                    .iter()
-                    .map(|v| v.address.clone()),
-            );
-            draft.cc_list = source_message
-                .cc_list
-                .value
-                .iter()
-                .map(|v| v.address.clone())
-                .collect();
-            draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
-        }
-        ReplyMode::Forward => {
-            draft.subject = apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject);
-        }
-    }
-}
-
-/// Create draft params from `message` and `message_body_metadata`
-fn crate_draft_params(
-    message: &Message,
-    message_body_metadata: &MessageBodyMetadata,
-    encrypted_draft: EncryptedDraft,
-) -> DraftParams {
-    DraftParams {
-        subject: message.subject.clone(),
-        unread: message.unread,
-        sender: DraftSender {
-            address: message.sender.address.clone(),
-            name: message.sender.name.clone(),
-        },
-        to_list: recipient_from_message_sender(&message.to_list.value),
-        cc_list: recipient_from_message_sender(&message.cc_list.value),
-        bcc_list: recipient_from_message_sender(&message.bcc_list.value),
-        external_id: message.external_id.clone().map(|id| id.to_string()),
-        draft_flags: 0,
-        body: encrypted_draft,
-        mime_type: message_body_metadata.mime_type.into(),
-    }
-}
-
-/// Build signature from mail settings.
-fn get_signature(address: &Address, mail_settings: &MailSettings) -> String {
-    let line_break = if mail_settings.draft_mime_type == MimeType::TextHtml {
-        HTML_LINE_BREAK
-    } else {
-        "\n"
-    };
-    let mut signature = if mail_settings.signature.is_empty() {
-        address.signature.clone()
-    } else if address.signature.is_empty() {
-        mail_settings.signature.clone()
-    } else {
-        format!(
-            "{}{line_break}{line_break}{}",
-            address.signature, mail_settings.signature
-        )
-    };
-
-    if mail_settings.pm_signature != PmSignature::Disabled {
-        signature.push_str(line_break);
-        signature.push_str(line_break);
-        if mail_settings.draft_mime_type == MimeType::TextHtml {
-            signature.push_str(PM_SIGNATURE_HTML);
-        } else {
-            signature.push_str(PM_SIGNATURE_PLAIN_TEXT);
-        }
-    }
-
-    if !signature.is_empty() {
-        signature.insert_str(0, &format!("{line_break}{line_break}"));
-    }
-
-    signature
-}
-
-fn recipient_from_message_sender(recipients: &[MessageAddress]) -> Vec<DraftRecipient> {
-    recipients
-        .iter()
-        .map(|v| {
-            DraftRecipient {
-                address: v.address.clone(),
-                name: v.name.clone(),
-                // TODO: where to get group from?
-                group: None,
-            }
-        })
-        .collect()
-}
-
-struct DraftBody<'b> {
-    body: &'b str,
-}
-
-impl EncryptableDraft for DraftBody<'_> {
-    fn plaintext_message_body(&self) -> &[u8] {
-        self.body.as_bytes()
-    }
-}
-
-/// Encrypt the `body` with the key for `address_id`.
-async fn encrypt_draft_body(
-    ctx: &MailUserContext,
-    address_id: &RemoteId,
-    body: &str,
-) -> Result<EncryptedDraft, MailContextError> {
-    let draft_body = DraftBody { body };
-    let pgp_provider = new_pgp_provider();
-    let unlocked_keys = ctx.unlocked_address_keys(&pgp_provider, address_id).await?;
-    let Some(draft_encryption_key) = unlocked_keys.primary() else {
-        error!(
-            "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
-        );
-        return Err(MailContextError::PGPKeyAccess(
-            KeyHandlingError::NoPrimaryKey,
-        ));
-    };
-    draft_body
-        .encrypt_draft_body(&pgp_provider, draft_encryption_key)
-        .map_err(|e| {
-            error!("Failed to encrypt draft: {e}");
-            MailContextError::Crypto
-        })
-}
-
-/// Create a new timestamp.
-pub(crate) fn create_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before Unix epoch")
-        .as_secs()
-}
-
-/// Generate HTML reply body for a message.
-fn prepare_html_reply(output: &mut String, message: &Message, original_body: &str, use_utc: bool) {
-    let sender_reply = generate_sender_reply(
-        &message.sender,
-        format_date_from_timestamp(message.time, use_utc),
-    );
-    output.reserve((ORIGINAL_MESSAGE_BLOCK.len() * 2) + original_body.len());
-    output.push_str(BEGIN_QUOTE);
-    output.push_str(HTML_LINE_BREAK);
-    output.push_str(HTML_LINE_BREAK);
-    output.push_str(ORIGINAL_MESSAGE_BLOCK);
-    output.push_str(HTML_LINE_BREAK);
-    output.push_str(&sender_reply);
-    output.push_str(HTML_LINE_BREAK);
-    output.push_str(BEGIN_BLOCKQUOTE);
-    output.push_str(original_body);
-    output.push_str(CLOSE_BLOCKQUOTE);
-    output.push_str(CLOSE_QUOTE);
-}
-
-/// Generate a plain text reply body for a message.
-fn prepare_plain_text_reply(
-    output: &mut String,
-    message: &Message,
-    mut original_body: String,
-    original_body_mime_type: MimeType,
-    use_utc: bool,
-) {
-    // Convert body to text if source is html
-    if original_body_mime_type == MimeType::TextHtml {
-        original_body = html_to_text(original_body);
-    }
-
-    let sender_reply = generate_sender_reply(
-        &message.sender,
-        format_date_from_timestamp(message.time, use_utc),
-    );
-
-    output.reserve((ORIGINAL_MESSAGE_BLOCK.len() * 2) + original_body.len());
-    output.push('\n');
-    output.push('\n');
-    output.push_str(ORIGINAL_MESSAGE_BLOCK);
-    output.push('\n');
-    output.push_str(&sender_reply);
-    output.push('\n');
-    output.push_str(&original_body);
-}
-
-/// Converts htm to plain text. If an error occurs the original messages
-/// is rerturned.
-fn html_to_text(input: String) -> String {
-    let cursor = io::Cursor::new(&input);
-    let config = html2text::config::plain();
-    match config.string_from_read(cursor, 80) {
-        Ok(text_body) => text_body,
-        Err(e) => {
-            error!("Failed to convert html to text: {e}");
-            input
-        }
-    }
-}
-
-/// Generates a reply similar to:
-/// > On Tuesday, 01/01/2024 14:25, Slack <notification@slack.com> wrote:
-fn generate_sender_reply(sender: &MessageAddress, formatted_date: String) -> String {
-    if !sender.name.is_empty() && !sender.address.is_empty() {
-        format!(
-            "{formatted_date} {} <{}> wrote:",
-            sender.name, sender.address
-        )
-    } else if !sender.name.is_empty() {
-        format!("{formatted_date} {} wrote:", sender.name)
-    } else {
-        format!("{formatted_date} {} wrote:", sender.address)
-    }
-}
-
-fn format_date_from_timestamp(timestamp: u64, use_utc: bool) -> String {
-    if use_utc {
-        format_date(date_from_timestamp::<chrono::Utc>(timestamp))
-    } else {
-        format_date(date_from_timestamp::<chrono::Local>(timestamp))
-    }
-}
-
-fn date_from_timestamp<Tz: chrono::TimeZone>(timestamp: u64) -> DateTime<Tz>
-where
-    DateTime<Tz>: From<DateTime<chrono::Utc>>,
-{
-    let timestamp_i64 = i64::try_from(timestamp).unwrap_or(0);
-    DateTime::<chrono::Utc>::from_timestamp(timestamp_i64, 0)
-        .unwrap_or_default()
-        .into()
-}
-
-fn format_date<Tz: chrono::TimeZone>(date: DateTime<Tz>) -> String
-where
-    <Tz as chrono::TimeZone>::Offset: Display,
-{
-    //On Tuesday, 01/01/2024 14:25
-    // Localize date representation
-    date.format("On %A, %x at %H:%M").to_string()
-}
-
-pub const REPLY_PREFIX: &str = "Re: ";
-pub const FORWARD_PREFIX: &str = "Fwd: ";
-
-pub const DEFAULT_SUBJECT: &str = "(No Subject)";
-pub const ORIGINAL_MESSAGE_BLOCK: &str = "-------- Original Message --------";
-pub const BEGIN_QUOTE: &str = "<div class=\"protonmail_quote\">";
-pub const BEGIN_BLOCKQUOTE: &str = "<blockquote class=\"protonmail_quote\">";
-pub const CLOSE_QUOTE: &str = "</div>";
-pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
-pub const HTML_LINE_BREAK: &str = "<br>";
-
-const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
-
-const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
-
-fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
-    let trimmed_subject = subject.trim();
-    if trimmed_subject.starts_with(prefix) {
-        trimmed_subject.to_string()
-    } else {
-        format!("{prefix} {trimmed_subject}")
     }
 }

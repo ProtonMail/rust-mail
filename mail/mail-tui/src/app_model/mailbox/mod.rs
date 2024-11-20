@@ -91,6 +91,7 @@ impl From<MessageMessage> for Messages {
 /// Message related to the composer.
 pub enum ComposerMessage {
     Save,
+    Send,
 }
 
 impl From<ComposerMessage> for Messages {

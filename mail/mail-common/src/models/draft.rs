@@ -180,7 +180,7 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn delete<A>(id: LocalId, interface: &A) -> Result<usize, StashError>
+    pub async fn delete<A>(id: MetadataId, interface: &A) -> Result<usize, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
