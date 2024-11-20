@@ -441,10 +441,10 @@ impl Conversation {
 
         let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
         let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
-        let messages = Self::find_by_ids(conversation_ids.to_vec(), interface).await?;
+        let conversations = Self::find_by_ids(conversation_ids.to_vec(), interface).await?;
         let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
             &current_label,
-            &messages,
+            &conversations,
             &bottom_bar_actions,
             &inbox,
             &archive,
@@ -453,7 +453,7 @@ impl Conversation {
         )?;
         let hidden_bottom_bar_actions = Self::hidden_bottom_bar_actions(
             current_label,
-            &messages,
+            &conversations,
             &visible_bottom_bar_actions,
             &inbox,
             &archive,

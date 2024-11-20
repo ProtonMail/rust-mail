@@ -1,8 +1,9 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
-use crate::datatypes::RollbackItemType;
+use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
+use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::consts::General;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
@@ -47,6 +48,15 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        // API call return an error 2501(Conversation was not updated) for conversation already unread
+        let conversations = Conversation::find_by_ids(action.0.target_ids.clone(), tx).await?;
+        action.0.target_ids = conversations
+            .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, action.0.label_id))
+            .filter(|c| c.num_unread < c.num_messages)
+            .map(|c| c.local_id)
+            .collect();
+
         action.0.resolve_ids(tx).await?;
 
         Conversation::mark_unread(action.0.label_id, action.0.target_ids.clone(), tx).await?;
@@ -74,13 +84,17 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let response = Conversation::mark_multiple_as_unread_remote::<Proton>(
+        let responses = Conversation::mark_multiple_as_unread_remote::<Proton>(
             action.0.remote_target_ids.clone(),
             ctx.session().api(),
         )
         .await?;
 
-        let failed_ids = filter_responses(response);
+        // In this case General::NotExists is returned also for conversations already marked as unread
+        let failed_ids = filter_responses_by_codes(
+            responses,
+            &[General::NoError as u32, General::NotExists as u32],
+        );
 
         if !failed_ids.is_empty() {
             error!("Mark unread operation failed for: {:?}", failed_ids);
