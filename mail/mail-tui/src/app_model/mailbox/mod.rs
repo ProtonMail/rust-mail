@@ -25,7 +25,6 @@ pub enum Message {
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
-    OpenUnlabelItemPopup(Item),
     SelectLabel(LocalId),
     ConversationState(ConversationMessage),
     LabelRefreshed(Label),
@@ -36,14 +35,21 @@ pub enum Message {
     NewLabelWatcher(WatchHandle),
     Composer(ComposerMessage),
 }
+pub struct LabelAs {
+    pub source_label_id: LocalId,
+    pub item_ids: Vec<LocalId>,
+    pub selected_label_ids: Vec<LocalId>,
+    pub partially_selected_label_ids: Vec<LocalId>,
+    pub must_archive: bool,
+}
+
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
     MarkConversationRead(LocalId),
     MarkConversationUnread(LocalId),
     DeleteConversation(LocalId),
     MoveConversation(LocalId, LocalId),
-    LabelConversation(LocalId, LocalId),
-    UnlabelConversation(LocalId, LocalId),
+    LabelConversation(Box<LabelAs>),
     StarConversation(LocalId),
     UnstarConversation(LocalId),
     OpenConversation(LocalId),
@@ -69,8 +75,7 @@ pub enum MessageMessage {
     NextPage(Vec<MailMessage>),
     DeleteMessage(LocalId),
     MoveMessage(LocalId, LocalId),
-    LabelMessage(LocalId, LocalId),
-    UnlabelMessage(LocalId, LocalId),
+    LabelMessage(Box<LabelAs>), // TODO: Handle selection
     MarkMessageRead(LocalId),
     MarkMessageUnread(LocalId),
     StarMessage(LocalId),
@@ -94,11 +99,19 @@ impl From<ComposerMessage> for Messages {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Item {
     Conversation(LocalId),
     //TODO:message actions
-    #[allow(dead_code)]
     Message(LocalId),
+}
+
+impl Item {
+    pub fn get_id(self) -> LocalId {
+        match self {
+            Item::Message(local_id) | Item::Conversation(local_id) => local_id,
+        }
+    }
 }
 
 impl From<Message> for Messages {

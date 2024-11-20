@@ -300,11 +300,11 @@ pub struct PutConversationsReadRequest {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnlabelRequest {
-    /// TODO: Document this field.
+    /// The ids of the conversations to unlabel
     #[serde(rename = "IDs")]
     pub ids: Vec<RemoteId>,
 
-    /// TODO: Document this field.
+    /// The label for the request
     #[serde(rename = "LabelID")]
     pub label_id: RemoteId,
 }
