@@ -70,10 +70,11 @@ impl From<JoinError> for CoreContextError {
 }
 
 impl proton_action_queue::action::Error for CoreContextError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        match self {
-            Self::Api(e) => Some(e),
-            _ => None,
+    fn is_network_failure(&self) -> bool {
+        if let Self::Api(e) = self {
+            e.is_network_failure()
+        } else {
+            false
         }
     }
 }
@@ -513,7 +514,7 @@ impl Context {
         flow: &Flow,
         cache_path: PathBuf,
         cache_size: u32,
-    ) -> CoreContextResult<UserContext> {
+    ) -> CoreContextResult<Arc<UserContext>> {
         if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         }
@@ -523,7 +524,9 @@ impl Context {
         let session = flow.session().to_owned();
         let stash = self.new_user_db_pool(&user_id).await?;
 
-        UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await
+        Ok(Arc::new(
+            UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await?,
+        ))
     }
 
     /// Get a user context from an existing session.
@@ -537,7 +540,7 @@ impl Context {
         session: &CoreSession,
         cache_path: PathBuf,
         cache_size: u32,
-    ) -> CoreContextResult<UserContext> {
+    ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
 
@@ -558,7 +561,9 @@ impl Context {
         let session = self.new_api_session(Some(session)).await?;
         let stash = self.new_user_db_pool(&user_id).await?;
 
-        UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await
+        Ok(Arc::new(
+            UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await?,
+        ))
     }
 
     /// Logs out all sessions of an account without deleting the account's data.

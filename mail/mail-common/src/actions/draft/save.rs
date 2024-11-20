@@ -9,7 +9,6 @@ use crate::models::{
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::Session;
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
@@ -306,9 +305,9 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let session = ctx.session();
         let tether = stash.connection();
 
         let message_id = action.message_id.expect("Should be set");

@@ -699,7 +699,6 @@ pub async fn apply_label_to_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_apply_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -729,7 +728,6 @@ pub async fn star_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_star(
-            user_context.session(),
             user_context.queue(),
             message_ids.into_iter().map(Into::into).collect(),
         )
@@ -758,7 +756,6 @@ pub async fn unstar_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_unstar(
-            user_context.session(),
             user_context.queue(),
             message_ids.into_iter().map(Into::into).collect(),
         )
@@ -789,7 +786,6 @@ pub async fn remove_label_from_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_remove_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -820,7 +816,6 @@ pub async fn mark_messages_read(
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_read(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -851,7 +846,6 @@ pub async fn mark_messages_unread(
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_unread(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -882,7 +876,6 @@ pub async fn delete_messages(
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_delete(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -963,7 +956,6 @@ pub async fn label_messages_as(
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
         Ok(RealMessage::action_label_as(
-            user_context.session(),
             user_context.queue(),
             source_label_id.into(),
             message_ids.into_iter().map_into().collect(),
@@ -1001,7 +993,6 @@ pub async fn move_messages(
     let source_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_move(
-            user_context.session(),
             user_context.queue(),
             source_id.into(),
             destination_id.into(),

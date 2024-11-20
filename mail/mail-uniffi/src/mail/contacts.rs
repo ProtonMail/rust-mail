@@ -42,13 +42,9 @@ pub async fn delete_contact(
 ) -> Result<(), MailSessionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealContact::action_delete(
-            user_context.session(),
-            user_context.queue(),
-            vec![contact_id.into()],
-        )
-        .await
-        .map_err(MailContextError::from)?;
+        RealContact::action_delete(user_context.queue(), vec![contact_id.into()])
+            .await
+            .map_err(MailContextError::from)?;
 
         Ok(())
     })

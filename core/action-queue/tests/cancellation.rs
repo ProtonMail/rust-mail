@@ -6,7 +6,6 @@ use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler, MetadataBuilder, Type,
 };
 use proton_action_queue::queue::QueuedError;
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 
@@ -192,7 +191,6 @@ impl Handler for CancelActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
@@ -249,7 +247,6 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");

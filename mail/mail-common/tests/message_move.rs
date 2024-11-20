@@ -88,7 +88,6 @@ async fn move_between_folders() {
     // Action:
     // * move message in the other folder
     Message::action_move(
-        user_ctx.session(),
         user_ctx.queue(),
         source.local_id.unwrap(),
         destination.local_id.unwrap(),
@@ -164,7 +163,6 @@ async fn move_from_label_does_not_unlabel() {
     // Action:
     // * move message in the other label
     Message::action_move(
-        user_ctx.session(),
         user_ctx.queue(),
         source.local_id.unwrap(),
         destination.local_id.unwrap(),
@@ -245,7 +243,6 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // Action:
     // * move message in trash
     Message::action_move(
-        user_ctx.session(),
         user_ctx.queue(),
         inbox.local_id.unwrap(),
         trash.local_id.unwrap(),
@@ -325,7 +322,6 @@ async fn move_into_spam_remove_labels() {
     // Action:
     // * move message in spam
     Message::action_move(
-        user_ctx.session(),
         user_ctx.queue(),
         custom.local_id.unwrap(),
         spam.local_id.unwrap(),
@@ -394,7 +390,6 @@ async fn move_out_of_spam_set_almost_all_mail() {
     // Action:
     // * move message out of spam
     Message::action_move(
-        user_ctx.session(),
         user_ctx.queue(),
         spam.local_id.unwrap(),
         inbox.local_id.unwrap(),

@@ -6,7 +6,7 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler as ActionHandler, Type,
 };
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
@@ -203,12 +203,11 @@ impl ActionHandler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let api = session.api();
+        let session = ctx.session();
 
         let failed_ids = Conversation::remote_relabel(
             session,
@@ -249,7 +248,8 @@ impl ActionHandler for Handler {
                 .into_iter()
                 .map_into()
                 .collect();
-            let response = api
+            let response = session
+                .api()
                 .put_conversations_label(
                     conversation_ids,
                     LabelId::archive().into_inner().into(),

@@ -74,7 +74,6 @@ async fn label_message() {
     // Actions:
     //   * Apply the label to the message
     Message::action_apply_label(
-        user_ctx.session(),
         user_ctx.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
@@ -131,14 +130,9 @@ async fn unlabel_message() {
         .await
         .unwrap()
         .unwrap();
-    Message::action_apply_label(
-        user_ctx.session(),
-        user_ctx.queue(),
-        label.local_id.unwrap(),
-        vec![1.into()],
-    )
-    .await
-    .unwrap();
+    Message::action_apply_label(user_ctx.queue(), label.local_id.unwrap(), vec![1.into()])
+        .await
+        .unwrap();
 
     let message = Message::load(1.into(), stash).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&label_id));
@@ -148,7 +142,6 @@ async fn unlabel_message() {
     // Actions:
     //   * Apply the label to the message
     Message::action_remove_label(
-        user_ctx.session(),
         user_ctx.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
@@ -209,7 +202,6 @@ async fn message_action_read_unread() {
     // Actions:
     //   * Mark message unread
     Message::action_mark_unread(
-        user_context.session(),
         user_context.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
@@ -228,7 +220,6 @@ async fn message_action_read_unread() {
     // Actions:
     //   * Mark message read
     Message::action_mark_read(
-        user_context.session(),
         user_context.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
@@ -285,7 +276,6 @@ async fn message_action_delete() {
     // Actions:
     //   * delete message
     Message::action_delete(
-        user_context.session(),
         user_context.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],

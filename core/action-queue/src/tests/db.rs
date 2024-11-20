@@ -3,7 +3,6 @@
 use super::*;
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
-use proton_api_core::service::ApiServiceError;
 use stash::orm::Model;
 use stash::stash::Interface;
 
@@ -26,8 +25,8 @@ async fn action_store_and_retrieve() {
     enum Error {}
 
     impl action::Error for Error {
-        fn request_error(&self) -> Option<&ApiServiceError> {
-            None
+        fn is_network_failure(&self) -> bool {
+            false
         }
     }
 

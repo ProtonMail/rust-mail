@@ -3,7 +3,7 @@ use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{self, Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
@@ -72,9 +72,8 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let remote_label_id = action
@@ -85,7 +84,7 @@ impl proton_action_queue::action::Handler for Handler {
         let responses = Conversation::delete_multiple_remote(
             action.0.remote_target_ids.clone(),
             remote_label_id,
-            session.api(),
+            ctx.session().api(),
         )
         .await
         .map_err(|e| {

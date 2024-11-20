@@ -36,7 +36,7 @@ use tracing::error;
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: MailContext,
-    user_context: UserContext,
+    user_context: Arc<UserContext>,
     event_loop: EventLoop,
     action_queue: Queue,
     cache: Cache,
@@ -45,12 +45,13 @@ pub struct MailUserContext {
 impl MailUserContext {
     pub async fn new(
         mail_context: MailContext,
-        user_context: UserContext,
+        user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let cache = Cache::new(cache_path, mail_context.mail_cache_size, &stash).await?;
         let action_queue = new_action_queue(stash).await?;
+        let user_context_weak = Arc::downgrade(&user_context);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -62,6 +63,7 @@ impl MailUserContext {
 
         this.queue()
             .register_execution_context(Weak::clone(&this.this));
+        this.queue().register_execution_context(user_context_weak);
 
         this.init_expiration_loop();
         Ok(this)
