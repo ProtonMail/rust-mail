@@ -67,10 +67,11 @@ pub enum MailContextError {
 }
 
 impl proton_action_queue::action::Error for MailContextError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        match self {
-            Self::Api(err) => Some(err),
-            _ => None,
+    fn is_network_failure(&self) -> bool {
+        if let Self::Api(e) = self {
+            e.is_network_failure()
+        } else {
+            false
         }
     }
 }

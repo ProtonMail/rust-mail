@@ -1,52 +1,24 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{new_queue_typed, new_session};
+use common::new_queue_typed;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::ActionRemoteOutput;
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn auto_queued_on_network_failure() {
     // check if the remote action returns a network error it is queued for execution later.
-    let session = new_session().await;
     let queue = new_queue_typed::<ErrorAction>().await;
 
-    for error in [
-        ErrorType::Timeout,
-        ErrorType::Connect,
-        ErrorType::Redirect,
-        ErrorType::Http429,
-        ErrorType::Http500,
-        ErrorType::Http503,
-    ] {
-        let output = queue
-            .apply_action(&session, ErrorAction { error_type: error })
-            .await
-            .unwrap();
+    let output = queue.apply_action(ErrorAction {}).await.unwrap();
 
-        assert!(
-            matches!(output.remote, ActionRemoteOutput::Queued(_)),
-            "Error type {error:?} did not result in queued action"
-        );
-    }
+    assert!(matches!(output.remote, ActionRemoteOutput::Queued(_)),);
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-enum ErrorType {
-    Timeout,
-    Redirect,
-    Connect,
-    Http429,
-    Http500,
-    Http503,
-}
 #[derive(Serialize, Deserialize)]
-struct ErrorAction {
-    error_type: ErrorType,
-}
+struct ErrorAction {}
 
 impl Action for ErrorAction {
     const TYPE: Type = Type("error");
@@ -92,22 +64,9 @@ impl Handler for ErrorActionHandler {
     async fn apply_remote(
         &self,
         _: &Self::Context,
-        action: &mut Self::Action,
-        _: &Session,
+        _: &mut Self::Action,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        use proton_api_core::service::ApiServiceError;
-        let err = match action.error_type {
-            ErrorType::Timeout => ApiServiceError::Timeout(String::new()),
-            ErrorType::Redirect => ApiServiceError::Redirect(String::new(), String::new()),
-            ErrorType::Connect => ApiServiceError::ConnectionError(String::new()),
-            ErrorType::Http429 => ApiServiceError::TooManyRequest(String::new(), String::new()),
-            ErrorType::Http500 => {
-                ApiServiceError::InternalServerError(String::new(), String::new())
-            }
-            ErrorType::Http503 => ApiServiceError::ServiceUnavailable(String::new(), String::new()),
-        };
-
-        Err(err.into())
+        Err(DefaultError::NetworkFailure)
     }
 }

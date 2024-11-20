@@ -1,12 +1,11 @@
 mod common;
 
 use crate::common::{new_factory, DefaultError};
-use common::{new_queue_with_stash, new_session, new_stash};
+use common::{new_queue_with_stash, new_stash};
 use proton_action_queue::action;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
 };
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 
@@ -32,8 +31,7 @@ async fn queued_version_migration() {
 
     let queue = new_queue_with_stash(pool.clone(), factory_v2).await;
     assert!(queue.contains(queued_id).await.unwrap());
-    let session = new_session().await;
-    queue.execute_all(&session).await.unwrap();
+    queue.execute_all().await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,7 +81,6 @@ impl Handler for V1ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
@@ -150,7 +147,6 @@ impl Handler for V2ActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.value, END_VALUE);

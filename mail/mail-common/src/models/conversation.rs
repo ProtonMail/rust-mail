@@ -34,20 +34,18 @@ impl Conversation {
     /// Returns an error if the action failed.
     ///
     pub async fn action_apply_label(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, conversation_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Star multiple conversations.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `conversation_ids` - The IDs of the conversations to star.
     ///
@@ -56,7 +54,6 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_star(
-        session: &Session,
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
@@ -66,14 +63,13 @@ impl Conversation {
             .map_err(|e| ActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Unstar multiple conversations.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `conversation_ids` - The IDs of the conversations to unstar.
     ///
@@ -82,7 +78,6 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_unstar(
-        session: &Session,
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
@@ -91,14 +86,13 @@ impl Conversation {
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Unlabel multiple conversations.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `label_id`         - The ID of the label to apply to the conversations.
     /// * `conversation_ids` - The IDs of the conversations to unlabel.
@@ -108,13 +102,12 @@ impl Conversation {
     /// Returns an error if the action failed.
     ///
     pub async fn action_remove_label(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple conversations as read.
@@ -131,20 +124,18 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_read(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<MarkRead>, ActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple conversations as unread.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `label_id`         - The ID of the label to apply to the conversations.
     /// * `conversation_ids` - The IDs of the target conversations.
@@ -154,20 +145,18 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_unread(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<MarkUnread>, ActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple conversations as read.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `label_id`         - The ID of the label to apply to the conversations.
     /// * `conversation_ids` - The IDs of the target conversations.
@@ -177,20 +166,18 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_delete(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Move multiple conversations.
     ///
     /// # Parameters
     ///
-    /// * `session`        - The session.
     /// * `queue`          - The action queue.
     /// * `source_id`      - The ID of the label where the conversations are.
     /// * `destination_id` - The ID of the label where the conversations go.
@@ -201,21 +188,19 @@ impl Conversation {
     /// Returns an error if the action failed.
     ///
     pub async fn action_move(
-        session: &Session,
         queue: &Queue,
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Move>, ActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Soft delete multiple conversations.
     ///
     /// # Parameters
     ///
-    /// * `session`          - The session.
     /// * `queue`            - The action queue.
     /// * `label_id`         - The ID of the current view.
     /// * `conversation_ids` - The IDs of the converstations to delete.
@@ -225,13 +210,12 @@ impl Conversation {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_deleted(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: impl IntoIterator<Item = LocalId>,
     ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Action to change labels on a batch of conversations.
@@ -242,7 +226,6 @@ impl Conversation {
     ///
     /// # Parameters
     ///
-    /// * `session`                      - The session.
     /// * `queue`                        - The action queue.
     /// * `source_label_id`              - Id of the currently used label.
     /// * `conversation_ids`             - List of ids of the conversations to label.
@@ -255,7 +238,6 @@ impl Conversation {
     /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
-        session: &Session,
         queue: &Queue,
         source_label_id: LocalId,
         conversation_ids: Vec<LocalId>,
@@ -271,7 +253,7 @@ impl Conversation {
             must_archive,
         );
         let ActionOutput { local, .. } = queue
-            .apply_action(session, action)
+            .apply_action(action)
             .await
             .map_err(|e| AppError::Other(anyhow!(e)))?;
         Ok(local)

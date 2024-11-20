@@ -2,7 +2,7 @@ use crate::datatypes::RollbackItemType;
 use crate::models::{Label, RollbackItem};
 use crate::{actions::ActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -122,9 +122,8 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let action_equal_original_state = action
@@ -162,7 +161,7 @@ impl proton_action_queue::action::Handler for Handler {
             }
         };
 
-        Label::patch_expanded(remote_id, action.expand, session.api()).await?;
+        Label::patch_expanded(remote_id, action.expand, ctx.session().api()).await?;
 
         Ok(())
     }

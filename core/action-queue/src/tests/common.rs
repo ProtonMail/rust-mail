@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use crate::action::{Action, Handler};
-use proton_api_core::session::Session;
 use stash::stash::{Stash, Tether};
 use std::future::Future;
 use std::marker::PhantomData;
@@ -44,7 +43,6 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {
         std::future::ready(Ok(T::RemoteOutput::default()))

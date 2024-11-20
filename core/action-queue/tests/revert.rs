@@ -1,35 +1,30 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{new_queue_typed, new_session, TestExtension};
+use common::{new_queue_typed, TestExtension};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn network_failure_causes_revert_on_apply() {
     // Check that if remote fails to execute when action is applied, local state is reverted.
-    let session = new_session().await;
     let queue = new_queue_typed::<RevertAction>().await;
 
     let key = "foo";
     let value = 30_u32;
     let result = queue
-        .apply_action(
-            &session,
-            RevertAction {
-                key: key.to_string(),
-                value,
-            },
-        )
+        .apply_action(RevertAction {
+            key: key.to_string(),
+            value,
+        })
         .await;
     assert!(matches!(
         result,
-        Err(ActionError::<RevertAction>::Action(DefaultError::Request(
-            _
-        )))
+        Err(ActionError::<RevertAction>::Action(
+            DefaultError::APIFailure
+        ))
     ));
     assert!(queue
         .stash()
@@ -43,7 +38,6 @@ async fn network_failure_causes_revert_on_apply() {
 #[tokio::test]
 async fn network_failure_causes_revert_on_queue() {
     // Check that if remote fails to execute when action is queued, local state is reverted.
-    let session = new_session().await;
     let queue = new_queue_typed::<RevertAction>().await;
 
     let key = "foo";
@@ -69,15 +63,14 @@ async fn network_failure_causes_revert_on_queue() {
         value
     );
 
-    let QueuedError::Action(error, metadata) = queue.execute_all(&session).await.unwrap_err()
-    else {
+    let QueuedError::Action(error, metadata) = queue.execute_all().await.unwrap_err() else {
         panic!("unexpected queued action error");
     };
 
     let down_casted = error.as_action_error::<RevertAction>().unwrap();
     assert!(matches!(
         down_casted,
-        ActionError::<RevertAction>::Action(DefaultError::Request(_))
+        ActionError::<RevertAction>::Action(DefaultError::APIFailure)
     ));
 
     assert_eq!(metadata.id, action_id);
@@ -137,10 +130,8 @@ impl Handler for RevertActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        use proton_api_core::service::ApiServiceError;
-        Err(ApiServiceError::UnknownError("it failed".to_owned()).into())
+        Err(DefaultError::APIFailure)
     }
 }

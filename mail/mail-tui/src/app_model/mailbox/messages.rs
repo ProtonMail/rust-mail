@@ -580,9 +580,7 @@ fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match MailMessage::action_mark_read(ctx.session(), ctx.queue(), current_label_id, vec![id])
-            .await
-        {
+        match MailMessage::action_mark_read(ctx.queue(), current_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark message as read: {e}");
@@ -597,14 +595,7 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match MailMessage::action_mark_unread(
-            ctx.session(),
-            ctx.queue(),
-            current_label_id,
-            vec![id],
-        )
-        .await
-        {
+        match MailMessage::action_mark_unread(ctx.queue(), current_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark message as unread: {e}");
@@ -624,9 +615,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
             "Are you sure you wish to permanently delete the currently selected message?",
         )
         .on_accept(Command::task(async move {
-            match MailMessage::action_delete(ctx.session(), ctx.queue(), current_label_id, vec![id])
-                .await
-            {
+            match MailMessage::action_delete(ctx.queue(), current_label_id, vec![id]).await {
                 Ok(_) => Command::None,
                 Err(e) => {
                     let e = anyhow!("Failed to delete message: {e}");
@@ -641,7 +630,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
 fn star_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match MailMessage::action_star(ctx.session(), ctx.queue(), vec![id]).await {
+        match MailMessage::action_star(ctx.queue(), vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
@@ -655,7 +644,7 @@ fn star_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
 fn unstar_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match MailMessage::action_unstar(ctx.session(), ctx.queue(), vec![id]).await {
+        match MailMessage::action_unstar(ctx.queue(), vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
@@ -678,7 +667,6 @@ fn label_message(
     let ctx = mailbox.user_context();
     Command::task(async move {
         match MailMessage::action_label_as(
-            ctx.session(),
             ctx.queue(),
             source_label_id,
             conversation_ids,
@@ -702,15 +690,7 @@ fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Me
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match MailMessage::action_move(
-            ctx.session(),
-            ctx.queue(),
-            current_label_id,
-            label_id,
-            vec![id],
-        )
-        .await
-        {
+        match MailMessage::action_move(ctx.queue(), current_label_id, label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");

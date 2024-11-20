@@ -30,7 +30,6 @@ impl Message {
     ///
     /// # Parameters
     ///
-    /// * `session`     - The session.
     /// * `queue`       - The action queue.
     /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the messages to label.
@@ -40,13 +39,12 @@ impl Message {
     /// Returns an error if the action failed.
     ///
     pub async fn action_apply_label(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Star multiple messages.
@@ -62,7 +60,6 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_star(
-        session: &Session,
         queue: &Queue,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
@@ -72,14 +69,13 @@ impl Message {
             .map_err(|e| ActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Unstar multiple messages.
     ///
     /// # Parameters
     ///
-    /// * `session`     - The session.
     /// * `queue`       - The action queue.
     /// * `message_ids` - The IDs of the messages to unstar.
     ///
@@ -88,7 +84,6 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_unstar(
-        session: &Session,
         queue: &Queue,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
@@ -97,14 +92,13 @@ impl Message {
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Unlabel multiple messages.
     ///
     /// # Parameters
     ///
-    /// * `session`     - The session.
     /// * `queue`       - The action queue.
     /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the messages to unlabel.
@@ -114,20 +108,18 @@ impl Message {
     /// Returns an error if the action failed.
     ///
     pub async fn action_remove_label(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple messages as read.
     ///
     /// # Parameters
     ///
-    /// * `session`     - The session.
     /// * `queue`       - The action queue.
     /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the target messages.
@@ -137,13 +129,12 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_read(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Read>, ActionError<Read>> {
         let action = Read::new(label_id, message_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple messages as unread.
@@ -160,20 +151,18 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_mark_unread(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unread>, ActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple messages as read.
     ///
     /// # Parameters
     ///
-    /// * `session`     - The session.
     /// * `queue`       - The action queue.
     /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the target messages.
@@ -183,20 +172,18 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn action_delete(
-        session: &Session,
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Move multiple messages.
     ///
     /// # Parameters
     ///
-    /// * `session`        - The session.
     /// * `queue`          - The action queue.
     /// * `source_id`      - The ID of the label where the messages are.
     /// * `destination_id` - The ID of the label where the messages go.
@@ -207,14 +194,13 @@ impl Message {
     /// Returns an error if the action failed.
     ///
     pub async fn action_move(
-        session: &Session,
         queue: &Queue,
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Move>, ActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Mark multiple messages as read.
@@ -401,7 +387,6 @@ impl Message {
     /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
-        session: &Session,
         queue: &Queue,
         source_label_id: LocalId,
         message_ids: Vec<LocalId>,
@@ -417,7 +402,7 @@ impl Message {
             must_archive,
         );
         match queue
-            .apply_action(session, action)
+            .apply_action(action)
             .await
             .map_err(|e| AppError::Other(anyhow!(e)))?
             .remote

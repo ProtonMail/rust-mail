@@ -35,10 +35,11 @@ pub enum ActionError {
 }
 
 impl proton_action_queue::action::Error for ActionError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        match self {
-            Self::Http(e) => Some(e),
-            _ => None,
+    fn is_network_failure(&self) -> bool {
+        if let Self::Http(e) = self {
+            e.is_network_failure()
+        } else {
+            false
         }
     }
 }

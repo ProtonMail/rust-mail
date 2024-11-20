@@ -260,7 +260,7 @@ impl TestContext {
     /// Get the test user context.
     ///
     /// # Panics
-    pub async fn user_context(&self) -> UserContext {
+    pub async fn user_context(&self) -> Arc<UserContext> {
         let cache_path = self.tmp_dir.path().join("image_cache");
         self.context
             .user_context_from_session(

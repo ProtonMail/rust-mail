@@ -4,7 +4,7 @@ use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
@@ -70,9 +70,8 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let response = Conversation::apply_label_to_multiple_remote::<Proton>(
@@ -84,7 +83,7 @@ impl proton_action_queue::action::Handler for Handler {
                 .clone(),
             action.0.remote_target_ids.clone(),
             None,
-            session.api(),
+            ctx.session().api(),
         )
         .await?;
 

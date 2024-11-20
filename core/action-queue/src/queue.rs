@@ -12,7 +12,6 @@ use flume::{Receiver, RecvError, SendError, Sender};
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use parking_lot::RwLock;
-use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Interface, Stash, StashError, Tether};
@@ -490,10 +489,9 @@ impl Queue {
     /// Returns error if action could not be executed locally or remotely.
     pub async fn apply_action<T: Action>(
         &self,
-        session: &Session,
         action: T,
     ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
-        self.apply_action_with_metadata::<T>(session, action, Metadata::default())
+        self.apply_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
 
@@ -510,11 +508,10 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally or remotely.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, session, metadata, action), name =
+    #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
     "ApplyAction")]
     pub async fn apply_action_with_metadata<T: Action>(
         &self,
-        session: &Session,
         mut action: T,
         metadata: Metadata,
     ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
@@ -529,7 +526,6 @@ impl Queue {
             .map_err(|e| ActionError::Queue(e.into()))?;
 
         let stash = self.shared.stash.clone();
-        let session = session.clone();
 
         let future = async move {
             let output = async {
@@ -540,15 +536,9 @@ impl Queue {
                 debug!("Action queued with id={id}");
 
                 // 2) Execute remote counter part
-                let remote_output = execute_action_remote(
-                    &stash,
-                    id,
-                    context.as_ref(),
-                    &handler,
-                    &mut action,
-                    &session,
-                )
-                .await?;
+                let remote_output =
+                    execute_action_remote(&stash, id, context.as_ref(), &handler, &mut action)
+                        .await?;
 
                 Ok(ActionOutput {
                     local: local_output,
@@ -577,34 +567,28 @@ impl Queue {
             .map_err(|_| ActionError::Queue(Error::WorkerChannel))?
     }
 
-    /// Execute one action from the queue, if available, using the given `session` for remote
-    /// communication.
+    /// Execute one action from the queue.
     ///
     /// # Errors
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
-    pub async fn execute_one(&self, session: &Session) -> QueuedResult<Option<Id>> {
+    pub async fn execute_one(&self) -> QueuedResult<Option<Id>> {
         let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send_async(Command::ExecuteOne(session.clone(), sender))
-            .await?;
+        self.sender.send_async(Command::ExecuteOne(sender)).await?;
 
         receiver.await?
     }
 
-    /// Execute all available actions from the queue, using the given `session` for
-    /// remote communication.
+    /// Execute all available actions from the queue.
     ///
     /// # Errors
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
-    pub async fn execute_all(&self, session: &Session) -> QueuedResult<()> {
+    pub async fn execute_all(&self) -> QueuedResult<()> {
         let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send_async(Command::ExecuteAll(session.clone(), sender))
-            .await?;
+        self.sender.send_async(Command::ExecuteAll(sender)).await?;
 
         receiver.await?
     }
@@ -712,7 +696,6 @@ pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &Shared,
-        session: &'s Session,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
@@ -738,7 +721,6 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &Shared,
-        session: &'s Session,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
@@ -752,7 +734,6 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 context.as_ref(),
                 &self.handler,
                 &mut self.action,
-                session,
             )
             .await
             .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
@@ -813,9 +794,9 @@ enum Command {
     /// Run immediate action
     Apply(BoxFuture<'static, ()>),
     /// Execute one queued action
-    ExecuteOne(Session, oneshot::Sender<QueuedResult<Option<Id>>>),
+    ExecuteOne(oneshot::Sender<QueuedResult<Option<Id>>>),
     /// Execute all queued actions
-    ExecuteAll(Session, oneshot::Sender<QueuedResult<()>>),
+    ExecuteAll(oneshot::Sender<QueuedResult<()>>),
     /// Cancel an action
     Cancel(Id, oneshot::Sender<QueuedResult<()>>),
     /// Cancel an action and all the actions which depend on this action
@@ -866,16 +847,16 @@ impl BackgroundWorker {
                 Command::Apply(future) => {
                     self.apply_tasks.spawn(future);
                 }
-                Command::ExecuteAll(session, tx) => {
+                Command::ExecuteAll(tx) => {
                     self.wait_on_tasks().await;
-                    let r = self.execute_all(session).await;
+                    let r = self.execute_all().await;
                     if tx.send(r).is_err() {
                         error!("Failed to send execute one result back to callee");
                     }
                 }
-                Command::ExecuteOne(session, tx) => {
+                Command::ExecuteOne(tx) => {
                     self.wait_on_tasks().await;
-                    let r = self.execute_impl(&session).await;
+                    let r = self.execute_impl().await;
                     if tx.send(r).is_err() {
                         error!("Failed to send execute one result back to callee");
                     }
@@ -910,8 +891,8 @@ impl BackgroundWorker {
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, session))]
-    async fn execute_impl(&self, session: &Session) -> QueuedResult<Option<Id>> {
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    async fn execute_impl(&self) -> QueuedResult<Option<Id>> {
         let Some(action) = self.next_action().await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
             e
@@ -929,15 +910,15 @@ impl BackgroundWorker {
         );
         let (mut decoded, metadata) = self.decode_action(action)?;
 
-        decoded.execute(&self.shared, session, metadata).await?;
+        decoded.execute(&self.shared, metadata).await?;
 
         Ok(Some(action_id))
     }
 
     /// See [`Queue::execute_all()`] for more details.
 
-    async fn execute_all(&self, session: Session) -> QueuedResult<()> {
-        while self.execute_impl(&session).await?.is_some() {}
+    async fn execute_all(&self) -> QueuedResult<()> {
+        while self.execute_impl().await?.is_some() {}
         Ok(())
     }
 
@@ -1064,7 +1045,6 @@ async fn execute_action_remote<T: Action>(
     context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
-    session: &Session,
 ) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
     let tether = stash.connection();
 
@@ -1072,7 +1052,7 @@ async fn execute_action_remote<T: Action>(
     debug!("Applying action on remote");
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
-    let result = handler.apply_remote(context, action, session, stash).await;
+    let result = handler.apply_remote(context, action, stash).await;
 
     match result {
         Ok(result) => {

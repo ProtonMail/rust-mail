@@ -150,7 +150,6 @@ async fn label_as_without_archive() {
 
     // Action:
     let action_result = Message::action_label_as(
-        user_ctx.session(),
         user_ctx.queue(),
         inbox.local_id.unwrap(),
         vec![
@@ -306,7 +305,6 @@ async fn label_as_with_archive() {
 
     // Action:
     let action_result = Message::action_label_as(
-        user_ctx.session(),
         user_ctx.queue(),
         inbox.local_id.unwrap(),
         vec![message1.local_id.unwrap(), message2.local_id.unwrap()],

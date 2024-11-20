@@ -13,7 +13,6 @@ futures = { workspace = true }
 indoc = { workspace = true }
 log = "0.4.20"
 parking_lot = { workspace = true }
-proton-api-core = { workspace = true }
 proton-sqlite3 = { workspace = true }
 rmp = { workspace = true }
 rmp-serde = { workspace = true }

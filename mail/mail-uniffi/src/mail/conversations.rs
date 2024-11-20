@@ -53,7 +53,6 @@ pub async fn apply_label_to_conversations(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealConversation::action_apply_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             ids.into_iter().map(Into::into).collect(),
@@ -84,7 +83,6 @@ pub async fn delete_conversations(
     let user_context = mailbox.mbox().user_context();
     uniffi_async(async move {
         RealConversation::action_mark_deleted(
-            user_context.session(),
             user_context.queue(),
             label_id,
             conversation_ids.into_iter().map(Into::into),
@@ -405,7 +403,6 @@ pub async fn mark_conversations_as_read(
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
         RealConversation::action_mark_read(
-            user_context.session(),
             user_context.queue(),
             mailbox.label_id().into(),
             ids.into_iter().map(Into::into).collect(),
@@ -435,7 +432,6 @@ pub async fn mark_conversations_as_unread(
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
         RealConversation::action_mark_unread(
-            user_context.session(),
             user_context.queue(),
             mailbox.label_id().into(),
             ids.into_iter().map(Into::into).collect(),
@@ -471,7 +467,6 @@ pub async fn move_conversations(
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
         RealConversation::action_move(
-            user_context.session(),
             user_context.queue(),
             mailbox.label_id().into(),
             label_id.into(),
@@ -551,7 +546,6 @@ pub async fn remove_label_from_conversations(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealConversation::action_remove_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             ids.into_iter().map(Into::into).collect(),
@@ -618,7 +612,6 @@ pub async fn star_conversations(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealConversation::action_star(
-            user_context.session(),
             user_context.queue(),
             ids.into_iter().map(Into::into).collect(),
         )
@@ -647,7 +640,6 @@ pub async fn unstar_conversations(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealConversation::action_unstar(
-            user_context.session(),
             user_context.queue(),
             ids.into_iter().map(Into::into).collect(),
         )
@@ -798,7 +790,6 @@ pub async fn label_conversations_as(
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
         Ok(RealConversation::action_label_as(
-            user_context.session(),
             user_context.queue(),
             source_label_id.into(),
             conversation_ids.into_iter().map_into().collect(),

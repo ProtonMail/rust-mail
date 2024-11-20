@@ -119,7 +119,6 @@ async fn action_label_as_without_archive() {
 
     // Action
     Conversation::action_label_as(
-        user_ctx.session(),
         user_ctx.queue(),
         inbox_label.local_id.unwrap(),
         vec![
@@ -277,7 +276,6 @@ async fn action_label_as_with_archive() {
 
     // Action
     Conversation::action_label_as(
-        user_ctx.session(),
         user_ctx.queue(),
         inbox_label.local_id.unwrap(),
         vec![
