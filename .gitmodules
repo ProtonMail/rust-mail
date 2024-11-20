@@ -1,3 +1,0 @@
-[submodule "rust-build"]
-	path = rust-build
-	url = https://gitlab.protontech.ch/rust/rust-build.git
