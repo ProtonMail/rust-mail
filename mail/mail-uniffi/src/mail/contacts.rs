@@ -1,4 +1,4 @@
-use crate::{spawn_async, utils::DAMPENING_PERIOD, UniffiRecord};
+use crate::{utils::DAMPENING_PERIOD, watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
 use proton_mail_common::MailContextError;
 use std::{
@@ -86,23 +86,10 @@ pub async fn watch_contact_list(
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
         let watcher = WatchHandle::new();
-        let watcher_clone = watcher.clone();
         let (contact_list, channel) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        drop(spawn_async(async move {
-            loop {
-                if watcher_clone.should_stop() {
-                    return;
-                }
-
-                if channel.recv_async().await.is_err() {
-                    return;
-                }
-
-                callback();
-            }
-        }));
+        watch_channel_inner(&watcher, channel, callback);
 
         Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),

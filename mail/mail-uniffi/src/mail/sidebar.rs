@@ -11,7 +11,8 @@ use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::utils::damp;
-use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
+use itertools::Itertools;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
@@ -184,14 +185,23 @@ impl Sidebar {
             let mut ids = results
                 .iter()
                 .map(|m| m.local_id.unwrap())
-                .collect::<Vec<_>>();
+                .collect_vec();
             let stop_flag = Arc::new(AtomicBool::new(false));
-            let stop_flag_clone = Arc::clone(&stop_flag);
+            let weak_stop_flag = Arc::downgrade(&stop_flag);
 
             spawn_async(async move {
                 let callback = damp(callback).await;
+
+            let callback = Arc::new(callback);
                 while let Ok(change) = receiver.recv_async().await {
-                    if stop_flag_clone.load(Ordering::SeqCst) {
+            let callback = callback.clone();
+            let callback = move || callback();
+                    let Some(stop_flag) = weak_stop_flag.upgrade() else {
+                        debug!("Watch handle dropped, stopping watch");
+                        break;
+                    };
+
+                    if stop_flag.load(Ordering::SeqCst) {
                         debug!("Stop flag set, stopping watch");
                         break;
                     }
@@ -201,7 +211,7 @@ impl Sidebar {
                                 debug!("Received new label for watched label type ({label_type})");
                                 // Unwrapping is safe here, as we will always have the local ID
                                 ids.push(label.local_id.unwrap());
-                                callback();
+                                _ = async_runtime().spawn_blocking(callback).await;
                             } else {
                                 debug!("Received new label for different label type ({} instead of {label_type})", label.label_type);
                             }
@@ -209,7 +219,7 @@ impl Sidebar {
                         ResultsetChange::Updated(label) => {
                             if label.label_type == label_type.into() {
                                 debug!("Received updated label for watched label type ({label_type})");
-                                callback();
+                                _ = async_runtime().spawn_blocking(callback).await;
                             } else {
                                 debug!("Received updated label for different label type ({} instead of {label_type})", label.label_type);
                             }
@@ -217,7 +227,7 @@ impl Sidebar {
                         ResultsetChange::Deleted(local_label_id) => {
                             if ids.contains(&local_label_id) {
                                 debug!("Received deleted label for watched label type ({label_type})");
-                                callback();
+                                _ = async_runtime().spawn_blocking(callback).await;
                             } else {
                                 debug!("Received deleted label for different label type (unknown instead of {label_type})");
                             }
