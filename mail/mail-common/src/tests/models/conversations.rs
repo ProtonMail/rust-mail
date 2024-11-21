@@ -631,13 +631,13 @@ mod available_label_as_actions {
                 label_id: 0.into(),
                 name: "label1".into(),
                 color: LabelColor::purple(),
-                is_selected: Some( true )
+                is_selected: Some(false)
             },
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label2".into(),
                 color: Default::default(),
-                is_selected: Some( true )
+                is_selected: Some(false)
             }
         ]); "TEST3: conversations with all labels")]
     #[test_case(
@@ -655,13 +655,13 @@ mod available_label_as_actions {
                 label_id: 0.into(),
                 name: "label1".into(),
                 color: LabelColor::purple(),
-                is_selected: None,
+                is_selected: Some(false),
             },
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label2".into(),
                 color: Default::default(),
-                is_selected: None,
+                is_selected: Some(false),
             }
         ]); "TEST4: each conversation with different label")]
     #[tokio::test]
