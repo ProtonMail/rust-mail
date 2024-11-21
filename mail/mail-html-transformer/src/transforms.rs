@@ -142,6 +142,10 @@ pub fn proxy_images(document: NodeRef, user_session_id: &str) {
         let mut attrs = element.attributes.borrow_mut();
 
         attrs.entry("src").and_modify(|src| {
+            // We should not proxy cid images
+            if src.value.starts_with("cid:") {
+                return;
+            }
             let mut new = base.clone();
             new.query_pairs_mut().append_pair("Url", &src.value); // PERF: This is kinda slow
             src.value = new.into();
