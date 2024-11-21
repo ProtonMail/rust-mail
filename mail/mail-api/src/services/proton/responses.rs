@@ -293,3 +293,17 @@ pub struct PostCreateDraftResponse {
 pub struct PutUpdateDraftResponse {
     pub message: Message,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostSendMessageResponse {
+    /// The expected epoch of delivery
+    pub delivery_time: u32,
+
+    /// The sent message
+    pub sent: Message,
+
+    /// The updated conversation.
+    pub conversation: Conversation,
+}
