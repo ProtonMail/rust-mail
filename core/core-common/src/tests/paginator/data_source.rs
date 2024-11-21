@@ -24,15 +24,6 @@ pub struct TestModel {
 }
 
 impl TestModel {
-    /// Override save for create or ignore.
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
     /// Override `save_using` for create or ignore
     pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
