@@ -1,13 +1,16 @@
 #![allow(non_snake_case)]
 
-use super::super::*;
+use super::*;
 use crate as proton_mail_common;
-use crate::actions::MovableSystemFolderAction;
-use crate::datatypes::MovableSystemFolder;
-use crate::datatypes::{
-    attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags, SystemLabel,
-    SystemLabelId,
+use crate::actions::{
+    LabelAsAction, MessageAction, MessageAvailableActions, MovableSystemFolderAction, MoveAction,
+    MoveItemAction,
 };
+use crate::datatypes::{
+    attachment, ContextualConversation, ExclusiveLocation, LabelColor, MessageCount, MessageFlags,
+    MovableSystemFolder, SystemLabel, SystemLabelId,
+};
+use crate::models::{Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
 use futures::FutureExt;
 use lazy_static::lazy_static;
@@ -36,6 +39,7 @@ use proton_mail_test_utils::utils::{
 };
 use serde_json::json;
 use stash::orm::Model;
+use stash::params;
 use stash::stash::Tether;
 use velcro::hash_map;
 
@@ -984,7 +988,7 @@ async fn test_create_message_with_attachments() {
 //                 header: "".to_string(),
 //                 parsed_headers: Default::default(),
 //                 body: "".to_string(),
-//                 mime_type: MimeType::TextPlain,
+//                 mime_type: attachment::MimeType::TextPlain,
 //                 attachments: vec![MessageAttachment {
 //                     id: attachment_metadata.id.clone(),
 //                     name: attachment_metadata.name.clone(),

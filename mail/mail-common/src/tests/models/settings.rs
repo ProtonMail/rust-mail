@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use super::super::*;
+use super::*;
 use proton_mail_test_utils::db::new_test_connection;
 use stash::orm::Model;
 

@@ -1,12 +1,12 @@
 #![allow(non_snake_case)]
 
-use super::super::*;
+use super::*;
 use crate as proton_mail_common;
-use crate::datatypes::MovableSystemFolder;
 use crate::datatypes::{
-    ContextualConversation, ConversationCount, LabelType, MessageAddress, MessageFlags,
-    SystemLabelId,
+    attachment, ContextualConversation, ConversationCount, LabelColor, LabelType, MessageAddress,
+    MessageFlags, MovableSystemFolder, SystemLabel, SystemLabelId,
 };
+use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -31,10 +31,12 @@ use proton_mail_test_utils::utils::{
 };
 use stash::orm::Model;
 use stash::params;
+use stash::stash::AgnosticInterface;
 
 mod first_unread_message {
     use super::*;
     use pretty_assertions::assert_eq;
+    use proton_core_common::datatypes::LocalId;
     use test_case::test_case;
 
     lazy_static! {
