@@ -3366,6 +3366,17 @@ impl Conversation {
             .cloned()
             .collect()
     }
+
+    /// Checks if current conversation present in given `Label`.
+    pub async fn present_in_label(&self, label: Label) -> bool {
+        let conversation =
+            Conversation::in_label(label.local_id.unwrap(), &label.stash.unwrap(), None)
+                .await
+                .unwrap();
+        conversation
+            .iter()
+            .any(|c| c.local_id.unwrap() == self.local_id.unwrap())
+    }
 }
 
 impl From<ApiConversation> for Conversation {

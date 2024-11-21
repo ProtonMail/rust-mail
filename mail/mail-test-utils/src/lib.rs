@@ -11,6 +11,8 @@ pub mod init;
 #[cfg(any(test, debug_assertions))]
 pub mod labels;
 #[cfg(any(test, debug_assertions))]
+pub mod mailbox;
+#[cfg(any(test, debug_assertions))]
 pub mod message_body;
 #[cfg(any(test, debug_assertions))]
 pub mod messages;
