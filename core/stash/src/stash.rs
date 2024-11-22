@@ -414,6 +414,7 @@ use tracing::info;
 use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
+use crate::registry::{StashRegistry, REGISTRY};
 
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries, but can be
@@ -1320,7 +1321,7 @@ pub struct Stash {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify an individual stash. The handle is an atomic counter,
     /// to manually keep track of the number of instances.
-    handle: Arc<()>,
+    pub(crate) handle: Arc<()>,
 
     /// The sender for the stash operations. This is used to send operations to
     /// the worker thread for execution. This is the manner by which the order
@@ -1428,6 +1429,33 @@ impl Stash {
             start_time: Arc::new(Instant::now()),
             stash: self.clone(),
         }
+    }
+
+    /// Factory method that uses the registry.
+    ///
+    /// This method is used to get a [`Stash`] instance from the registry. If
+    /// the instance does not exist, it is created and added to the registry.
+    ///
+    /// # Parameters
+    ///
+    /// * `path` - The path to the SQLite database file. If `None`, an in-memory
+    ///            database is created.
+    ///
+    /// # Errors
+    ///
+    /// If there is a problem creating the database or connection pool, an error
+    /// will be returned.
+    ///
+    pub fn get_instance(path: &Path) -> Result<Self, StashError> {
+        let global = REGISTRY.get_or_init(|| Mutex::new(StashRegistry::new()));
+
+        let mut registry = global.lock();
+
+        // Periodically clean up dead entries
+        if fastrand::bool() {
+            registry.cleanup();
+        }
+        registry.get_or_create(path.to_path_buf())
     }
 
     /// Subscribes to notifications of changes to the database.
