@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+- Mime writer takes ownership of attachments
+
 ## [0.3.3] - 2024-11-19
 
 ### Changed
