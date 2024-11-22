@@ -162,7 +162,7 @@ Sent with Proton Mail secure email.";
 
     let inline_attachment =
         base64_decode(EXAMPLE_IMAGE.as_bytes()).expect("Unable to read file as bytes");
-    let attachment = b"hello";
+    let attachment = b"hello".to_vec();
     let mut data = Vec::new();
     InboxMimeBuilder::new()
         .text_body(text)
@@ -172,7 +172,7 @@ Sent with Proton Mail secure email.";
             "36ff9cd9@proton.me",
             "proton_logo.png",
             Some("image/png"),
-            &inline_attachment,
+            inline_attachment,
         )
         .attachment(
             "attachment.rs",
@@ -221,16 +221,20 @@ fn test_write_html() {
             "inline_html",
             "inline_html_logo.png",
             Some("image/png"),
-            b"inline_html",
+            b"inline_html".to_vec(),
         )
         .end_html_body()
         .inline_attachment(
             "inline_attachment",
             "inline_attachment_logo.png",
             Some("image/png"),
-            b"inline_attachment",
+            b"inline_attachment".to_vec(),
         )
-        .attachment("attachment", Some("application/test"), attachment_data)
+        .attachment(
+            "attachment",
+            Some("application/test"),
+            attachment_data.to_vec(),
+        )
         .write_to(&mut data)
         .unwrap();
 
@@ -267,7 +271,11 @@ fn test_write_no_html() {
     let mut data = Vec::new();
     InboxMimeBuilder::new()
         .text_body(text)
-        .attachment("attachment", Some("application/test"), attachment_data)
+        .attachment(
+            "attachment",
+            Some("application/test"),
+            attachment_data.to_vec(),
+        )
         .write_to(&mut data)
         .unwrap();
 

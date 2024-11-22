@@ -20,7 +20,10 @@
 //!   - **Attachment**
 //!
 //! NOTE: There is no streaming API at the moment.
-use std::io::{self, Write};
+use std::{
+    borrow::Cow,
+    io::{self, Write},
+};
 
 use mail_builder::{
     headers::content_type::ContentType,
@@ -74,7 +77,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///         "image1",                   // Content-ID for the inline image
 ///         "example.png",              // Filename
 ///         Some("image/png"),          // MIME type
-///         b"PNG image data"           // Content of the image
+///         b"PNG image data".to_vec()            // Content of the image
 ///     )
 ///     // Finalize the HTML part and return to the main builder
 ///     .end_html_body()
@@ -83,7 +86,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///     .attachment(
 ///         "example.pdf",              // Filename
 ///         Some("application/pdf"),    // MIME type
-///         b"%PDF-1.4 example data"    // Content of the file
+///         b"%PDF-1.4 example data".to_vec()     // Content of the file
 ///     )
 ///     
 ///     // Add an inline attachment (an image in this case).
@@ -93,7 +96,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///         "image2",                   // Content-ID for the inline image
 ///         "2.png",                    // Filename
 ///         Some("image/png"),          // MIME type
-///         b"PNG image data"           // Content of the image
+///         b"PNG image data".to_vec()           // Content of the image
 ///     )
 ///
 ///     // Write the generated MIME message to an output stream (e.g., a file or network stream)
@@ -171,8 +174,8 @@ impl<'x> InboxMimeBuilder<'x> {
     pub fn attachment(
         mut self,
         filename: &'x str,
-        mime_type: Option<&'x str>,
-        content: &'x [u8],
+        mime_type: Option<impl Into<Cow<'x, str>>>,
+        content: Vec<u8>,
     ) -> Self {
         let part = create_attachment_mime_part(
             Disposition::Attachment,
@@ -202,8 +205,8 @@ impl<'x> InboxMimeBuilder<'x> {
         mut self,
         content_id: &'x str,
         filename: &'x str,
-        mime_type: Option<&'x str>,
-        content: &'x [u8],
+        mime_type: Option<impl Into<Cow<'x, str>>>,
+        content: Vec<u8>,
     ) -> Self {
         let part = create_attachment_mime_part(
             Disposition::Inline,
@@ -289,8 +292,8 @@ impl<'x> HtmlBodyPartBuilder<'x> {
         mut self,
         content_id: &'x str,
         filename: &'x str,
-        mime_type: Option<&'x str>,
-        content: &'x [u8],
+        mime_type: Option<impl Into<Cow<'x, str>>>,
+        content: Vec<u8>,
     ) -> Self {
         let part = create_attachment_mime_part(
             Disposition::Inline,
@@ -319,12 +322,18 @@ fn create_attachment_mime_part<'x>(
     disposition: Disposition,
     content_id: Option<&'x str>,
     filename: &'x str,
-    mime_type: Option<&'x str>,
-    content: &'x [u8],
+    mime_type: Option<impl Into<Cow<'x, str>>>,
+    content: Vec<u8>,
 ) -> MimePart<'x> {
-    let content_type = ContentType::new(mime_type.unwrap_or(DEFAULT_MIME_TYPE_ATTACHMENT))
-        .attribute(FILENAME, filename)
-        .attribute(NAME, filename);
+    let content_type = if let Some(mime_type) = mime_type {
+        ContentType::new(mime_type)
+            .attribute(FILENAME, filename)
+            .attribute(NAME, filename)
+    } else {
+        ContentType::new(DEFAULT_MIME_TYPE_ATTACHMENT)
+            .attribute(FILENAME, filename)
+            .attribute(NAME, filename)
+    };
 
     let mut part = MimePart::new(content_type, content);
     part.headers.push((
