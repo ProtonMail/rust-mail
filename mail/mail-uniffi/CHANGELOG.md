@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+  - Now moving message work in message view mode too.
+
 ## [0.21.6] - 2024-11-22
 
 ### Fix

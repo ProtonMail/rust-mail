@@ -47,7 +47,9 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::num::NonZeroU32;
+use std::ops::AddAssign;
 use tracing::{debug, error, info, warn};
+
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("conversations")]
 #[ModelActions(on_load, on_save)]
@@ -3169,6 +3171,8 @@ impl Conversation {
                 .collect();
             let mut new_conversation: Conversation = conversation_response.conversation.into();
 
+            ConversationLabel::create_or_update_from_message_metadata(&message_metadata, &tx)
+                .await?;
             Message::create_or_update_messages_from_metadata(message_metadata, &tx)
                 .await
                 .map_err(|e| {
@@ -3670,6 +3674,124 @@ impl ConversationLabel {
 
         Ok(())
     }
+
+    /// Given a list of message metadata, tries to update `ConversationLabel`
+    ///
+    /// # Parameters
+    /// * `metadata`  - The message metadata returned from the API.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for accessing the database.
+    ///
+    /// # Errors
+    ///
+    /// On database error.
+    ///
+    pub(crate) async fn create_or_update_from_message_metadata<A>(
+        metadata: &[ApiMessageMetadata],
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut conversation_label_counters = HashMap::new();
+        for metadata in metadata {
+            let local_conversation_id = if let Some(local_conversation_id) =
+                RemoteId::counterpart::<Conversation, _>(
+                    &metadata.conversation_id.clone().into(),
+                    interface,
+                )
+                .await?
+            {
+                local_conversation_id
+            } else {
+                let mut conversation = Conversation {
+                    remote_id: Some(metadata.conversation_id.clone().into()),
+                    ..Default::default()
+                };
+                conversation.save_using(interface).await?;
+                conversation.local_id.expect("Should be set")
+            };
+            for label_id in metadata.label_ids.clone() {
+                conversation_label_counters
+                    .entry(local_conversation_id)
+                    .or_insert_with(HashMap::new)
+                    .entry(label_id)
+                    .and_modify(|s: &mut ConversationMessageLabelStats| *s += metadata)
+                    .or_insert(metadata.into());
+            }
+        }
+
+        for (conversation_id, label_counters) in conversation_label_counters {
+            for (label_id, counters) in label_counters {
+                let local_label_id =
+                    RemoteId::counterpart::<Label, _>(&label_id.clone().into(), interface)
+                        .await?
+                        .expect("Should be set");
+                let label_id = LabelId::from(label_id);
+                let conversation_label = Self::find_by_conversation_and_label(
+                    &conversation_id,
+                    &local_label_id,
+                    interface,
+                )
+                .await?;
+
+                if let Some(mut conversation_label) = conversation_label {
+                    conversation_label += counters;
+                    conversation_label.save_using(interface).await?
+                } else {
+                    let mut conversation_label = ConversationLabel::from(counters);
+                    conversation_label.local_conversation_id = Some(conversation_id);
+                    conversation_label.remote_label_id = Some(label_id);
+                    conversation_label.local_label_id = Some(local_label_id);
+                    conversation_label.save_using(interface).await?
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn find_by_conversation_and_label<A>(
+        conversation_id: &LocalId,
+        label_id: &LocalId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::find_first(
+            "WHERE local_conversation_id = ? AND local_label_id = ?",
+            params![*conversation_id, *label_id],
+            interface,
+        )
+        .await
+    }
+}
+
+impl AddAssign<ConversationMessageLabelStats> for ConversationLabel {
+    fn add_assign(&mut self, rhs: ConversationMessageLabelStats) {
+        self.context_size += rhs.size;
+        self.context_time = self.context_time.max(rhs.time);
+        self.context_expiration_time = self.context_expiration_time.max(rhs.expiration_time);
+        self.context_num_messages += rhs.count;
+        self.context_num_unread += rhs.unread;
+        self.context_num_attachments += rhs.num_attachments as u64;
+        self.context_snooze_time = self.context_snooze_time.max(rhs.snooze_time);
+    }
+}
+
+impl From<ConversationMessageLabelStats> for ConversationLabel {
+    fn from(value: ConversationMessageLabelStats) -> Self {
+        Self {
+            context_expiration_time: value.expiration_time,
+            context_num_attachments: value.num_attachments as u64,
+            context_num_messages: value.count,
+            context_num_unread: value.unread,
+            context_size: value.size,
+            context_snooze_time: value.snooze_time,
+            context_time: value.time,
+            ..Default::default()
+        }
+    }
 }
 
 impl From<ApiConversationLabel> for ConversationLabel {
@@ -3695,6 +3817,7 @@ impl From<ApiConversationLabel> for ConversationLabel {
 
 /// Calculates the combined information for a list of message that belong to a given
 /// conversation and a given label.
+#[derive(Clone)]
 pub struct ConversationMessageLabelStats {
     pub size: u64,
     pub time: u64,
@@ -3789,6 +3912,34 @@ impl ConversationMessageLabelStats {
         }
 
         stats
+    }
+}
+
+impl From<&ApiMessageMetadata> for ConversationMessageLabelStats {
+    fn from(metadata: &ApiMessageMetadata) -> Self {
+        Self {
+            size: metadata.size,
+            time: metadata.time,
+            expiration_time: metadata.expiration_time,
+            count: 1,
+            unread: if metadata.unread { 1 } else { 0 },
+            num_attachments: metadata.num_attachments,
+            snooze_time: metadata.snooze_time,
+        }
+    }
+}
+
+impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
+    fn add_assign(&mut self, metadata: &ApiMessageMetadata) {
+        self.size += metadata.size;
+        self.time = self.time.max(metadata.time);
+        self.expiration_time = self.expiration_time.max(metadata.expiration_time);
+        self.count += 1;
+        if metadata.unread {
+            self.unread += 1;
+        }
+        self.num_attachments += metadata.num_attachments;
+        self.snooze_time = self.snooze_time.max(metadata.snooze_time);
     }
 }
 
