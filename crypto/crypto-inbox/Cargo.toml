@@ -10,6 +10,7 @@ proton-crypto-account = { workspace = true }
 proton-crypto-inbox-mime = { workspace = true }
 thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
+serde_repr = "0.1"
 base64 = { workspace = true }
 zeroize = { workspace = true }
 

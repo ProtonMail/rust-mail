@@ -26,7 +26,7 @@ pub enum EncryptionPreferencesError {
 #[allow(clippy::module_name_repetitions)]
 pub enum CryptoPackageTypeError {
     #[error("Failed to convert {0} to a package type.")]
-    Parse(i32),
+    Parse(u8),
 }
 
 #[derive(Debug, Clone, thiserror::Error)]

@@ -10,6 +10,8 @@
 //!
 //! In future iterations, we may explore opportunities to simplify this code, keeping it in sync with potential changes in the web implementation.
 
+use std::fmt::Display;
+
 use proton_crypto_account::{
     keys::{
         ContactType, DecryptedAddressKey, EmailMimeType, PGPScheme, PinnedPublicKeys,
@@ -20,6 +22,7 @@ use proton_crypto_account::{
         keytransparency::KTVerificationResult,
     },
 };
+use serde_repr::Serialize_repr;
 
 use crate::message::packages::PackageMimeType;
 
@@ -51,41 +54,49 @@ pub struct ComposerPreference {
 }
 
 /// All possible encryption types as requested by the Proton API.
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
+
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash, Serialize_repr)]
+#[repr(u8)]
 pub enum PackageCryptoType {
     /// Encrypted using `ProtonMail`'s native encryption.
-    ProtonMail,
+    ProtonMail = 1,
 
     /// Encrypted with a password for users outside of `ProtonMail`'s system.
-    EncryptedOutside,
+    EncryptedOutside = 2,
 
     /// Message is not encrypted and is in plain text.
     #[default]
-    Cleartext,
+    Cleartext = 4,
 
     /// PGP encryption using inline PGP format.
-    PgpInline,
+    PgpInline = 8,
 
     /// PGP encryption using MIME format.
-    PgpMime,
+    PgpMime = 16,
 
     /// Cleartext message with MIME formatting.
-    ClearMime,
+    ClearMime = 32,
+}
+
+impl Display for PackageCryptoType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PackageCryptoType::ProtonMail => f.write_str("proton mail"),
+            PackageCryptoType::EncryptedOutside => f.write_str("encrypt to outside"),
+            PackageCryptoType::Cleartext => f.write_str("cleartext"),
+            PackageCryptoType::PgpInline => f.write_str("pgp inline"),
+            PackageCryptoType::PgpMime => f.write_str("pgp mime"),
+            PackageCryptoType::ClearMime => f.write_str("pgp clear mime"),
+        }
+    }
 }
 
 impl PackageCryptoType {
-    pub fn type_value(&self) -> i32 {
-        match self {
-            PackageCryptoType::ProtonMail => 1,
-            PackageCryptoType::EncryptedOutside => 2,
-            PackageCryptoType::Cleartext => 4,
-            PackageCryptoType::PgpInline => 8,
-            PackageCryptoType::PgpMime => 16,
-            PackageCryptoType::ClearMime => 32,
-        }
+    pub fn type_value(self) -> u8 {
+        self as u8
     }
 
-    pub fn enum_of(value: i32) -> Option<PackageCryptoType> {
+    pub fn enum_of(value: u8) -> Option<PackageCryptoType> {
         match value {
             1 => Some(PackageCryptoType::ProtonMail),
             2 => Some(PackageCryptoType::EncryptedOutside),
@@ -119,10 +130,10 @@ impl PackageCryptoType {
     }
 }
 
-impl TryFrom<i32> for PackageCryptoType {
+impl TryFrom<u8> for PackageCryptoType {
     type Error = CryptoPackageTypeError;
 
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         Self::enum_of(value).ok_or(CryptoPackageTypeError::Parse(value))
     }
 }

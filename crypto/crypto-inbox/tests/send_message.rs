@@ -674,7 +674,7 @@ mod send_logic {
         );
 
         package.package_type = package.addresses.iter().fold(0, |acc, (_, address)| {
-            acc | address.address_type.type_value()
+            acc | i32::from(address.address_type.type_value())
         });
 
         package
@@ -824,7 +824,7 @@ mod send_logic {
                     builder = builder.attachment(
                         &attachment.name,
                         Some(&attachment.mime_type),
-                        b"loaded content",
+                        b"loaded content".to_vec(),
                     );
                 }
                 proton_crypto_inbox_mime::Disposition::Inline => {
@@ -833,13 +833,13 @@ mod send_logic {
                             content_id,
                             &attachment.name,
                             Some(&attachment.mime_type),
-                            b"loaded content",
+                            b"loaded content".to_vec(),
                         );
                     } else {
                         builder = builder.attachment(
                             &attachment.name,
                             Some(&attachment.mime_type),
-                            b"loaded content",
+                            b"loaded content".to_vec(),
                         );
                     }
                 }
