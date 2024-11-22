@@ -1462,6 +1462,12 @@ impl Message {
                 .await?;
         }
 
+        // If exclusive location is not set, we try to calculate it now.
+        if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
+            self.exclusive_location =
+                ExclusiveLocation::from_label_ids(&self.label_ids, interface).await?;
+        }
+
         Ok(())
     }
 
@@ -2340,6 +2346,7 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let label_ids: Vec<LabelId> = value.label_ids.into_iter().map_into().collect();
+        let exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, interface).await?;
 
         Ok(Self {
             local_id: None,
@@ -2372,7 +2379,7 @@ impl Message {
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
             is_replied_all: value.is_replied_all,
-            exclusive_location: None,
+            exclusive_location,
             label_ids,
             num_attachments: value.num_attachments,
             reply_tos: MessageAddresses {

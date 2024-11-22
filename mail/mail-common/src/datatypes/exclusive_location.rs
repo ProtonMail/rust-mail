@@ -7,8 +7,10 @@ use crate::{
     models::Label,
 };
 use itertools::Itertools;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ExclusiveLocation {
@@ -60,6 +62,31 @@ impl ExclusiveLocation {
                 }
             },
         }
+    }
+
+    /// Calculate exclusive location from a list of label ids.
+    ///
+    /// # Parameters:
+    /// * `label_ids` - list of label ids.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    pub async fn from_label_ids<A>(
+        label_ids: &[LabelId],
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let label_ids = label_ids
+            .iter()
+            .map(|l| l.clone().into_inner())
+            .collect_vec();
+        let labels = Label::find_by_ids(label_ids, interface).await?;
+        Ok(ExclusiveLocation::from_labels(&labels))
     }
 
     fn new_inner(label: &Label) -> Option<Self> {
