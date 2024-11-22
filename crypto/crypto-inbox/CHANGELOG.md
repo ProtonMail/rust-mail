@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.8.0] - 2024-11-22
+
 ### Changed
 
 - Make types serializable for email sending.
+- Update `proton-crypto-account` to 0.7.2 and `proton-crypto-inbox-mime` to 0.4.0
 
 ## [0.7.3] - 2024-11-19
 
