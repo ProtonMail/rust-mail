@@ -2754,64 +2754,28 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        // If all messages of a conversation are labeled we show a full selection.
+        // If all messages of all conversations are labeled we show a full selection.
         // If only some are labeled we show a partial selection.
         // If none are labeled we show a non-selection.
         //
         // Thus we need all messages that belong to all conversations,
         // then we find out which labels are in all of the messages and which are only in some.
 
-        let messages: Vec<Message> = Message::find(
-            format!(
-                "WHERE local_conversation_id in ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
-
-        // We count how many messages are there per label.
-        // This is a map of each label id and how many messages are labeled.
-        let mut label_count_map = HashMap::<LocalId, usize>::new();
-        let message_count = messages.len();
-        for message in messages {
-            for label in message.custom_labels {
-                label_count_map
-                    .entry(label.local_id)
-                    .and_modify(|v| *v += 1)
-                    .or_insert(1);
-            }
-        }
-
-        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
-        let label_as_actions = all_labels
-            .into_iter()
-            .map(|label| {
-                let label_id = label.id().unwrap();
-                let is_selected = if let Some(n) = label_count_map.get(&label_id) {
-                    if *n == message_count {
-                        // If all messages have this label show full selection
-                        Some(true)
-                    } else {
-                        // If not all messages have this label show partial selection
-                        None
-                    }
-                } else {
-                    // If no messages have this label show no selection.
-                    Some(false)
-                };
-
-                LabelAsAction {
-                    label_id,
-                    name: label.name,
-                    color: label.color,
-                    is_selected,
-                }
-            })
-            .collect_vec();
-        Ok(label_as_actions)
+        let conn = interface.transaction().await?;
+        let message_ids: Vec<LocalId> = conn
+            .query_values(
+                format!(
+                    "SELECT local_id AS value
+                     FROM messages 
+                     WHERE local_conversation_id in ({})",
+                    local_ids.iter().map(ToString::to_string).join(",")
+                ),
+                vec![],
+            )
+            .await?;
+        let res = Message::available_label_as_actions(message_ids, &conn).await?;
+        conn.commit().await?;
+        Ok(res)
     }
 
     /// Watches `label as` actions for conversations
