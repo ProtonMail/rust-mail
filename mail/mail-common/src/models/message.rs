@@ -720,15 +720,15 @@ impl Message {
             .await?
             .ok_or(AppError::MessageBodyMetadataMissing(id))?;
 
-        let inline_att = mdata
-            .attachments
-            .into_iter()
-            .filter(|at| matches!(at.disposition, Disposition::Inline));
-        let Some(att) = inline_att
-            .clone()
-            .find(|at| at.content_id.as_deref() == Some(cid))
-        else {
-            let available_cids = inline_att.filter_map(|x| x.content_id).join(", ");
+        let inline_att = mdata.attachments.into_iter().filter_map(|at| {
+            if matches!(at.disposition, Disposition::Inline) {
+                at.content_id
+            } else {
+                None
+            }
+        });
+        let Some(att) = inline_att.clone().find(|at_cid| at_cid == cid) else {
+            let available_cids = inline_att.join(", ");
             Err(AppError::UnknownCid(cid.to_string(), available_cids))?
         };
 
