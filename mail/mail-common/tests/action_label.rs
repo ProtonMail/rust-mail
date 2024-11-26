@@ -30,7 +30,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Set up test data
     let remote_label_name = "selected";
     let (remote_label, remote_label_id) =
-        ApiLabel::get_api_label(remote_label_name, LabelType::Label);
+        ApiLabel::create_api_label(remote_label_name, LabelType::Label);
     let remote_labels = hash_map! {
         ApiLabelType::Label: vec![remote_label.clone()],
     };
@@ -87,8 +87,9 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .present_in_label(inbox_local_label.clone())
-            .await,
+            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation_id,
         inbox_local_label.name
@@ -96,8 +97,9 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that custom label mailbox contains conversation.
     assert!(
         local_conversation
-            .present_in_label(custom_label_local_label.clone())
-            .await,
+            .has_label(custom_label_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation.id().unwrap(),
         remote_label_name
@@ -115,8 +117,9 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .present_in_label(inbox_local_label.clone())
-            .await,
+            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation.id().unwrap(),
         inbox_local_label.name
@@ -124,8 +127,9 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that custom label mailbox does NOT contain conversation.
     assert!(
         !local_conversation
-            .present_in_label(custom_label_local_label.clone())
-            .await,
+            .has_label(custom_label_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
         local_conversation.id().unwrap(),
         remote_label_name
@@ -200,8 +204,9 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .present_in_label(inbox_local_label.clone())
-            .await,
+            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation.id().unwrap(),
         inbox_local_label.clone().name
@@ -209,8 +214,9 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that starred mailbox contains conversation.
     assert!(
         local_conversation
-            .present_in_label(starred_local_label.clone())
-            .await,
+            .has_label(starred_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation.id().unwrap(),
         starred_local_label.clone().name
@@ -228,16 +234,18 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that conversation contains label.
     assert!(
         local_conversation
-            .present_in_label(inbox_local_label.clone())
-            .await,
+            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
         local_conversation.id().unwrap(),
         inbox_local_label.clone().name
     );
     assert!(
         !local_conversation
-            .present_in_label(starred_local_label.clone())
-            .await,
+            .has_label(starred_local_label.local_id.unwrap(), stash)
+            .await
+            .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
         local_conversation.id().unwrap(),
         starred_local_label.clone().name

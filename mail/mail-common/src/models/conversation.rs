@@ -3367,15 +3367,26 @@ impl Conversation {
             .collect()
     }
 
-    /// Checks if current conversation present in given `Label`.
-    pub async fn present_in_label(&self, label: Label) -> bool {
-        let conversation =
-            Conversation::in_label(label.local_id.unwrap(), &label.stash.unwrap(), None)
-                .await
-                .unwrap();
-        conversation
-            .iter()
-            .any(|c| c.local_id.unwrap() == self.local_id.unwrap())
+    /// Queries `ConversationLabel` database and finds if there is a label with given `LocalId` in it.
+    pub async fn has_label<A>(
+        &self,
+        label_local_id: LocalId,
+        interface: &A,
+    ) -> Result<bool, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_conversation_id = self.id().unwrap();
+
+        // Find the first matching label
+        let label = ConversationLabel::find_first(
+            "WHERE local_conversation_id = ? AND local_label_id = ? AND deleted = 0",
+            params![local_conversation_id, label_local_id],
+            interface,
+        )
+        .await?;
+
+        Ok(label.is_some())
     }
 }
 

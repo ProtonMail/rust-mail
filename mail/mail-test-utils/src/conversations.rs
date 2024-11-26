@@ -1,5 +1,4 @@
 use crate::test_context::MailTestContext;
-use ::stash::stash::Stash;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
@@ -13,10 +12,6 @@ use proton_api_mail::services::proton::responses::{
     GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
     PutConversationsUnlabelResponse,
 };
-use proton_core_common::datatypes::LocalId;
-use proton_mail_common::models::{Conversation, ConversationLabel};
-use stash::orm::Model;
-use stash::params;
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -199,29 +194,6 @@ fn build_conv_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec<Op
             }
         })
         .collect()
-}
-
-#[allow(async_fn_in_trait)]
-pub trait ConversationTestUtils {
-    async fn has_label(&self, label_local_id: LocalId, stash: &Stash) -> bool;
-}
-
-impl ConversationTestUtils for Conversation {
-    async fn has_label(&self, label_local_id: LocalId, stash: &Stash) -> bool {
-        let local_conversation_id = self.id().unwrap();
-        let labels = ConversationLabel::find(
-            // get all labels from your conversation
-            "WHERE local_conversation_id = ?",
-            params![local_conversation_id],
-            stash,
-            None,
-        )
-        .await
-        .unwrap();
-        labels
-            .iter()
-            .any(|c| c.local_label_id == Some(label_local_id))
-    }
 }
 
 pub trait ApiConversationTestUtils {

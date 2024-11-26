@@ -53,12 +53,12 @@ impl MailTestContext {
 }
 
 pub trait ApiLabelTestUtils {
-    fn get_api_label(label_name: &str, label_type: LabelType) -> (ApiLabel, LabelId);
+    fn create_api_label(label_name: &str, label_type: LabelType) -> (ApiLabel, LabelId);
     fn get_api_label_with_given_id(label_id: LabelId) -> ApiLabel;
 }
 
 impl ApiLabelTestUtils for ApiLabel {
-    fn get_api_label(label_name: &str, label_type: LabelType) -> (ApiLabel, LabelId) {
+    fn create_api_label(label_name: &str, label_type: LabelType) -> (ApiLabel, LabelId) {
         let label_id = LabelId::from(label_name);
         (
             ApiLabel {
