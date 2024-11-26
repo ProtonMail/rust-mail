@@ -1,7 +1,10 @@
 pub use super::*;
 use crate::datatypes::attachment;
-use crate::datatypes::{MessageAddress, MessageAddresses};
-use proton_core_common::datatypes::{AddressStatus, AddressType};
+use crate::datatypes::{Disposition, MessageAddress, MessageAddresses};
+use crate::draft::compose::DEFAULT_SUBJECT;
+use crate::draft::{Draft, MetadataId};
+use crate::models::Attachment;
+use proton_core_common::datatypes::{AddressStatus, AddressType, LocalId};
 use std::str::FromStr;
 
 #[test]

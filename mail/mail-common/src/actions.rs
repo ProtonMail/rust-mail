@@ -71,6 +71,7 @@ pub(crate) fn new_action_factory() -> Factory {
         .register::<messages::unread::Unread>()
         .expect(ERR_MSG);
     factory.register::<draft::Save>().expect(ERR_MSG);
+    factory.register::<draft::Send>().expect(ERR_MSG);
     factory
 }
 

@@ -19,11 +19,14 @@
 
 use crate::services::proton::response_data::MimeType;
 use proton_api_core::services::proton::common::RemoteId;
-use proton_crypto_inbox::attachment::KeyPackets;
+use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, KeyPackets};
+use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
+use proton_crypto_inbox::message::packages::PackageMimeType;
 use proton_crypto_inbox::message::EncryptedDraft;
+use proton_crypto_inbox::proton_crypto::crypto::SessionKeyAlgorithm;
 use serde::Serialize;
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{base64::Base64, serde_as, BoolFromInt, DisplayFromStr};
 use std::collections::HashMap;
 //  ENUMS
 //==============================================================================
@@ -117,3 +120,123 @@ pub struct DraftParams {
 }
 
 pub type DraftAttachmentKeyPackets = HashMap<RemoteId, KeyPackets>;
+
+pub type PackageAddresses = HashMap<String, AddressSubPackage>;
+pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;
+pub type PackageAttachmentEncSignatures = HashMap<String, AttachmentEncryptedSignature>;
+pub type PackageAttachmentExposedKeys = HashMap<String, ExposedKey>;
+
+/// Signature mode of a sub-package.
+#[derive(Debug, Default, Serialize_repr, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
+pub enum PackageSignaturesMode {
+    /// No signatures.
+    #[default]
+    None = 0,
+
+    /// Attachment signatures.
+    Attachments = 1,
+}
+
+impl From<bool> for PackageSignaturesMode {
+    fn from(value: bool) -> Self {
+        if value {
+            Self::Attachments
+        } else {
+            Self::None
+        }
+    }
+}
+
+/// Package in a send email request.
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct Package {
+    /// The per address sub-packages.
+    pub addresses: PackageAddresses,
+
+    /// The mime type of the package body.
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(rename = "MIMEType")]
+    pub mime_type: PackageMimeType,
+
+    /// The package type derived from the `address_type` sub-packages
+    #[serde(rename = "Type")]
+    pub package_type: u8,
+
+    /// An exposed body session key to decrypt the body.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_key: Option<ExposedKey>,
+
+    /// An the exposed attachment keys
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_keys: Option<PackageAttachmentExposedKeys>,
+
+    /// The raw body.
+    ///
+    /// TODO: In forms this could be bytes instead of b64
+    #[serde_as(as = "Option<Base64>")]
+    pub body: Option<Vec<u8>>,
+}
+
+/// Per address sub-package in a send email request.
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressSubPackage {
+    /// The encryption type to this address.
+    #[serde(rename = "Type")]
+    pub address_type: PackageCryptoType,
+
+    /// The encrypted body session key towards the address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_key_packet: Option<KeyPacket>,
+
+    /// The encrypted attachment session keys towards the address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_key_packets: Option<PackageAttachmentKeyPackets>,
+
+    /// The encrypted  attachment signatures towards the address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachment_enc_signatures: Option<PackageAttachmentEncSignatures>,
+
+    /// The signature mode towards this address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<PackageSignaturesMode>,
+
+    /// TODO: add docs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token: Option<String>,
+
+    /// TODO: add docs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enc_token: Option<String>,
+
+    /// TODO: add docs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<()>,
+
+    /// TODO: add docs
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_hint: Option<String>,
+}
+
+/// A session key that is exposed to the backend.
+#[derive(Debug, PartialEq, Serialize, Eq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ExposedKey {
+    /// The exposed session key base64 encoded.
+    pub key: SessionKeyExposed,
+
+    /// The session key algorithm of the exposed key.
+    pub algorithm: SessionKeyAlgorithm,
+}
+
+impl From<InboxSessionKey> for ExposedKey {
+    fn from(value: InboxSessionKey) -> Self {
+        Self {
+            key: value.expose_secret(),
+            algorithm: value.algorithm(),
+        }
+    }
+}
