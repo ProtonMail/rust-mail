@@ -13,6 +13,7 @@ use rusqlite::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::{errors::CardCryptoError, keys::UnlockedUserKey};
 
@@ -26,12 +27,16 @@ crate::string_id! {
     EncryptedCard
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize_repr, Serialize_repr)]
 #[repr(u8)]
 pub enum ContactCardType {
+    /// The card is in cleartext.
     ClearText = 0,
+    /// The card is encrypted but not singed.
     Encrypted = 1,
+    /// The card is signed.
     Signed = 2,
+    /// The card is encrypted and signed.
     EncryptedAndSigned = 3,
 }
 
