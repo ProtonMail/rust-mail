@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.22.0] - 2024-11-26
 
 ### Added
 
@@ -25,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Embedded images no longer get proxied.
 
 ## [0.21.5] - 2024-11-20
+
 ### Fix
 
   - `markConversationAsRead` now mark conversation as Read
