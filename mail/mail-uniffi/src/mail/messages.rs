@@ -900,19 +900,15 @@ pub async fn get_embedded_attachment(
     mailbox: Arc<Mailbox>,
     id: Id,
     cid: String,
-) -> Result<Option<EmbeddedAttachmentInfo>, MailboxError> {
+) -> Result<EmbeddedAttachmentInfo, MailboxError> {
     uniffi_async(async move {
-        let Some(att) =
-            models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?
-        else {
-            return Ok(None);
-        };
-        Ok(Some(EmbeddedAttachmentInfo {
+        let att = models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?;
+        Ok(EmbeddedAttachmentInfo {
             data: att.data,
             mime: att.mime,
             height: att.height,
             width: att.width,
-        }))
+        })
     })
     .await
 }

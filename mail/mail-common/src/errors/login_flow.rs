@@ -176,6 +176,7 @@ impl From<AppError> for UserLoginFlowError {
             AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::UnknownMessage(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::UnknownCid(_, _) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
         }
     }

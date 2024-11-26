@@ -84,7 +84,7 @@ pub enum ComposerMode {
     Maximized = 1,
 }
 
-/// TODO: Document this enum.
+/// Whether this is an embedded attachment.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "lowercase")]
@@ -293,7 +293,7 @@ pub enum ViewMode {
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Attachment {
-    /// TODO: Document this field.
+    /// The remote id of this attachment.
     #[serde(rename = "ID")]
     pub id: RemoteId,
 
@@ -301,11 +301,15 @@ pub struct Attachment {
     #[serde(rename = "AddressID")]
     pub address_id: RemoteId,
 
-    /// TODO: Document this field.
+    /// What conversation this attachment belongs to
     #[serde(rename = "ConversationID")]
     pub conversation_id: RemoteId,
 
-    /// TODO: Document this field.
+    /// What message this attachment belongs to
+    #[serde(rename = "MessageID")]
+    pub message_id: RemoteId,
+
+    /// Whether this is an embedded attachment.
     pub disposition: Disposition,
 
     /// TODO: Document this field.
@@ -317,26 +321,22 @@ pub struct Attachment {
     /// TODO: Document this field.
     pub key_packets: KeyPackets,
 
-    /// TODO: Document this field.
-    #[serde(rename = "MessageID")]
-    pub message_id: RemoteId,
-
     /// Attachment's MIME type may differ from the MIME type of the message.
     /// There is a lot of possible MIME types, so it is not possible to list
     /// all here. The safest bet is to deserialize it to string at that point.
     #[serde(rename = "MIMEType")]
     pub mime_type: String,
 
-    /// TODO: Document this field.
+    /// The name of the attachment.
     pub name: String,
 
     /// TODO: Document this field.
     pub sender: Option<MessageAddress>,
 
-    /// TODO: Document this field.
+    /// See [`AttachmentSignature`]
     pub signature: Option<AttachmentSignature>,
 
-    /// TODO: Document this field.
+    /// The size of the attachment in bytes.
     pub size: u64,
 }
 

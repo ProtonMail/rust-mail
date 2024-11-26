@@ -704,7 +704,6 @@ impl Message {
     }
 
     /// Gets the embedded attachment by cid for a message.
-    /// Returns None if it does not exist
     ///
     /// # Parameters
     ///
@@ -716,29 +715,40 @@ impl Message {
         mailbox: &Mailbox,
         id: LocalId,
         cid: &str,
-    ) -> Result<Option<EmbeddedAttachmentInfo>, MailboxError> {
+    ) -> Result<EmbeddedAttachmentInfo, MailboxError> {
         let mdata = MessageBodyMetadata::for_message(id, mailbox.stash())
             .await?
             .ok_or(AppError::MessageBodyMetadataMissing(id))?;
 
-        let Some(att) = mdata
+        let inline_att = mdata
             .attachments
             .into_iter()
-            .filter(|at| matches!(at.disposition, Disposition::Inline))
-            .find(|at| at.content_id.as_deref() == Some(cid))
-        else {
-            return Ok(None);
+            .filter(|at| matches!(at.disposition, Disposition::Inline));
+
+        let Some(att) = inline_att.clone().find(|at| {
+            at.content_id
+                .as_deref()
+                .expect("Disposition inline but no content id!")
+                == cid
+        }) else {
+            let available_cids = inline_att
+                .map(|at| {
+                    at.content_id
+                        .expect("Disposition inline but no content id!")
+                })
+                .join(", ");
+            Err(AppError::UnknownCid(cid.to_string(), available_cids))?
         };
 
         // PERF: Optimize this part
         let path = mailbox.get_attachment_content(&att).await?;
         let data = tokio::fs::read(path).await?;
-        Ok(Some(EmbeddedAttachmentInfo {
+        Ok(EmbeddedAttachmentInfo {
             data,
             mime: att.mime_type.to_string(),
             height: att.image_height.clone(),
             width: att.image_width.clone(),
-        }))
+        })
     }
 
     /// Get the available actions from bottom bar for given messages
