@@ -2754,31 +2754,28 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
-        let conversations = Conversation::find(
-            format!(
-                "WHERE local_id IN ({})",
-                local_ids.iter().map(ToString::to_string).join(",")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await?;
-        let all_label_as_actions = conversations
-            .iter()
-            .flat_map(|conversation| {
-                LabelAsAction::vec(all_label_as.iter(), |label| {
-                    conversation
-                        .custom_labels
-                        .iter()
-                        .map(|label| Some(label.local_id))
-                        .contains(&label.local_id)
-                })
-            })
-            .collect_vec();
+        // If all messages of all conversations are labeled we show a full selection.
+        // If only some are labeled we show a partial selection.
+        // If none are labeled we show a non-selection.
+        //
+        // Thus we need all messages that belong to all conversations,
+        // then we find out which labels are in all of the messages and which are only in some.
 
-        Ok(LabelAsAction::finalize(all_label_as_actions))
+        let conn = interface.transaction().await?;
+        let message_ids: Vec<LocalId> = conn
+            .query_values(
+                format!(
+                    "SELECT local_id AS value
+                     FROM messages 
+                     WHERE local_conversation_id in ({})",
+                    local_ids.iter().map(ToString::to_string).join(",")
+                ),
+                vec![],
+            )
+            .await?;
+        let res = Message::available_label_as_actions(message_ids, &conn).await?;
+        conn.commit().await?;
+        Ok(res)
     }
 
     /// Watches `label as` actions for conversations

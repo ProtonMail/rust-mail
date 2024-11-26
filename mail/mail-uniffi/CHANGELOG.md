@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fix
 
+  - Properly show partial selection on conversations when a message does't have a label.
   - Now moving message work in message view mode too.
 
 ## [0.21.6] - 2024-11-22
 
 ### Fix
+
   - Embedded images no longer get proxied.
 
 ## [0.21.5] - 2024-11-20
