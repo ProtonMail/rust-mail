@@ -728,6 +728,18 @@ impl Message {
         let Some(att) = inline_att.clone().find(|at| {
             at.content_id
                 .as_deref()
+                .map(|x| {
+                    // If the cid is provided in the `<foo@bar>` format
+                    if x.starts_with('<') && x.ends_with('>') {
+                        &x[1..x.len() - 1]
+                    } else {
+                        // We leave this warning here to check if we need to support other cases in
+                        // the future.
+                        // TODO: remove me at some point.
+                        warn!("Weird cid format: {x}");
+                        x
+                    }
+                })
                 .expect("Disposition inline but no content id!")
                 == cid
         }) else {
