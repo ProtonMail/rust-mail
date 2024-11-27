@@ -30,6 +30,8 @@ use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
 
+use super::request_data::Package;
+
 /// Parameters to filter/search conversations with a given criteria.
 #[serde_as]
 #[derive(Clone, Debug, Serialize, SmartDefault)]
@@ -300,11 +302,11 @@ pub struct PutConversationsReadRequest {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnlabelRequest {
-    /// TODO: Document this field.
+    /// The ids of the conversations to unlabel
     #[serde(rename = "IDs")]
     pub ids: Vec<RemoteId>,
 
-    /// TODO: Document this field.
+    /// The label for the request
     #[serde(rename = "LabelID")]
     pub label_id: RemoteId,
 }
@@ -445,4 +447,37 @@ pub struct PutUpdateDraftRequest {
 
     /// Map of attachment id to encoded key packet.
     pub attachment_key_packets: DraftAttachmentKeyPackets,
+}
+
+/// Send email request.
+/// TODO: Add types for unix timestamps
+#[serde_as]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostSendRequest {
+    /// TODO: document
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_time: Option<u64>,
+
+    /// TODO: document
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+
+    /// Indicates if contacts should be automatically created for the recipients.
+    #[serde_as(as = "Option<BoolFromInt>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_save_contacts: Option<bool>,
+
+    /// Amount of seconds to delay the message delivery. 0 or absent means delivery now.
+    /// If this option is used the message will be considered an undoable send.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_seconds: Option<u64>,
+
+    /// Date when the message has to be delivered. It takes precedence over DelaySeconds.
+    /// If this option is used, the message will be marked as schedule send.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_time: Option<u64>,
+
+    /// The packages that contain the encrypted emails.
+    pub packages: Vec<Package>,
 }

@@ -9,12 +9,13 @@ use proton_api_mail::services::proton::requests::{
     PutUpdateDraftRequest,
 };
 use proton_api_mail::services::proton::response_data::{
-    Message as ApiMessage, MessageMetadata, MimeType, OperationResult,
+    Conversation as ApiConversation, Message as ApiMessage, MessageMetadata, MimeType,
+    OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetMessageResponse, GetMessagesResponse, PostCreateDraftResponse, PostMessagesRelabelResponse,
-    PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
-    PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
+    PostSendMessageResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse,
+    PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
@@ -203,6 +204,36 @@ impl MailTestContext {
                 },
             )))
             .and(path("/api/mail/v4/messages".to_string()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate a new mock expectation for sending a draft.
+    ///
+    /// Note that this mock does not validate the parameters, only
+    /// that the request was made.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id` - Message to send
+    /// * `result_message` - Updated message returned by the API.
+    /// * `result_conversation` - Updated conversation returned by API.
+    #[allow(clippy::doc_markdown)]
+    pub async fn mock_send_draft_basic(
+        &self,
+        message_id: ApiRemoteId,
+        result_message: ApiMessage,
+        result_conversation: ApiConversation,
+    ) {
+        let response = PostSendMessageResponse {
+            delivery_time: 0,
+            sent: result_message,
+            conversation: result_conversation,
+        };
+        Mock::given(method("POST"))
+            .and(path(format!("/api/mail/v4/messages/{message_id}")))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
             .mount(self.mock_server())

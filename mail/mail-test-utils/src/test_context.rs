@@ -37,6 +37,11 @@ impl MailTestContext {
     }
 
     #[must_use]
+    pub fn core_test_context(&self) -> &TestContext {
+        &self.core_test_context
+    }
+
+    #[must_use]
     pub fn mock_server(&self) -> &MockServer {
         &self.mock_web_server
     }

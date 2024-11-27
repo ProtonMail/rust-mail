@@ -44,7 +44,9 @@ use bytes::Bytes;
 use proton_api_core::service::{ApiService, ApiServiceError, Json, NO_PARAMS};
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Proton;
-use requests::GetLabelsByIdsOptions;
+use request_data::Package;
+use requests::{GetLabelsByIdsOptions, PostSendRequest};
+use responses::PostSendMessageResponse;
 
 pub trait ProtonMail: ApiService {
     const BASE_PATH_CORE: &'static str = "core/v4";
@@ -734,6 +736,39 @@ pub trait ProtonMail: ApiService {
                 message,
                 attachment_key_packets: attachments,
             },
+            None,
+        )
+        .await
+    }
+
+    /// Sends an e-mail send request to the server.
+    ///
+    /// # Params
+    ///
+    ///  * `message_id`         - message id (draft) to send.
+    ///  * `packages`           - The packages of the message containing the encrypted e-mail data for the recipients.
+    ///  * `auto_save_contacts` - Whether the server should automatically create contacts for the recipients.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails.
+    async fn send_mail(
+        &self,
+        message_id: RemoteId,
+        packages: Vec<Package>,
+        auto_save_contacts: Option<bool>,
+    ) -> Result<PostSendMessageResponse, ApiServiceError> {
+        let send_request = PostSendRequest {
+            expiration_time: None,
+            expires_in: None,
+            auto_save_contacts,
+            delay_seconds: None,
+            delivery_time: None,
+            packages,
+        };
+        self.post::<_, Json<_>>(
+            &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
+            send_request,
             None,
         )
         .await

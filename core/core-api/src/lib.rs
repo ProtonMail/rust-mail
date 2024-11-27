@@ -2,7 +2,7 @@
 
 pub mod auth;
 pub mod consts;
-mod crypto_clock;
+pub mod crypto_clock;
 pub mod login;
 pub mod service;
 pub mod services;

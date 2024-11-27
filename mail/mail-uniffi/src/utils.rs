@@ -1,47 +1,19 @@
 use std::{
-    iter::{Cycle, StepBy},
-    ops::RangeInclusive,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, LazyLock,
+        Arc,
     },
     time::Duration,
 };
 
-use tokio::{sync::Mutex, task, time::interval};
+use tokio::{task, time::interval};
 
 use crate::LiveQueryCallback;
 
 /// Period of delay for dampening, in milliseconds. Each set of updates will be
 /// held back for up until this amount of time before the callback is triggered
 /// to notify the client.
-pub const MIN_DAMPENING_PERIOD: u64 = 10;
-pub const MAX_DAMPENING_PERIOD: u64 = 50;
-
-pub struct Dampening {
-    iter: Cycle<StepBy<RangeInclusive<u64>>>,
-}
-
-impl Iterator for Dampening {
-    type Item = u64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-}
-
-impl Dampening {
-    fn new() -> Self {
-        let iter = (MIN_DAMPENING_PERIOD..=MAX_DAMPENING_PERIOD)
-            .step_by(10)
-            .cycle();
-
-        Self { iter }
-    }
-}
-
-pub static DAMPENING_PERIOD: LazyLock<Mutex<Dampening>> =
-    LazyLock::new(|| Mutex::new(Dampening::new()));
+pub const DAMPENING_PERIOD: u64 = 50;
 
 /// Obtains dampening function.
 ///
@@ -70,7 +42,6 @@ pub fn damp_with_duration(
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
                 let callback_clone = callback.clone();
-                interval.tick().await;
 
                 if task::spawn_blocking(move || callback_clone.on_update())
                     .await
@@ -94,6 +65,5 @@ pub fn damp_with_duration(
 /// call as often as you want.
 ///
 pub async fn damp(callback: Box<dyn LiveQueryCallback>) -> impl Fn() + Clone {
-    let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
-    damp_with_duration(callback, Duration::from_millis(dampening_period))
+    damp_with_duration(callback, Duration::from_millis(DAMPENING_PERIOD))
 }

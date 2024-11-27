@@ -1,5 +1,7 @@
 #![allow(clippy::unreadable_literal)]
+
 pub enum General {
+    NoError = 1000,
     ///  Missing field is required
     InvalidRequirements = 2000,
     ///  The field is not correct (most generic error)

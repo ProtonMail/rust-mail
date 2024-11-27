@@ -3,7 +3,6 @@
 use crate::paginator::{DataSource, Paginator, Param};
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::orm::ResultsetChange;
 use stash::stash::{Interface, Stash, StashError};
 use std::future::Future;
 use std::num::NonZeroU32;
@@ -60,28 +59,6 @@ async fn create_records(stash: &Stash) {
         test.save_using(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
-}
-
-pub async fn paginate_test_models(
-    stash: &Stash,
-) -> (
-    Paginator<TestModel, NullDataSource>,
-    flume::Receiver<ResultsetChange<TestModel, u64>>,
-) {
-    let (msg_sender, msg_receiver) = flume::unbounded();
-    let data_source = NullDataSource {};
-    let paginator = Paginator::new(
-        "WHERE number > ? ORDER BY number ASC",
-        vec![Param::Integer(250)],
-        stash,
-        NonZeroU32::new(50).unwrap(),
-        data_source,
-        true,
-        Some(msg_sender),
-    )
-    .await
-    .unwrap();
-    (paginator, msg_receiver)
 }
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]

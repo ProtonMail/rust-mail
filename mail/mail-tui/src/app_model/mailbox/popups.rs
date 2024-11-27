@@ -3,14 +3,18 @@ use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessa
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::LocalId;
+use proton_mail_common::actions::LabelAsAction;
 use proton_mail_common::datatypes::{LabelType, ViewMode};
-use proton_mail_common::models::Label;
+use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::{MailContextResult, MailUserContext};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
 use ratatui::{symbols, Frame};
 use std::sync::Arc;
+
+use super::LabelAs;
 
 pub struct MoveItemPopup {
     folders: Vec<Label>,
@@ -80,34 +84,54 @@ impl crate::app_model::Popup for MoveItemPopup {
 }
 
 pub struct LabelItemPopup {
-    labels: Vec<Label>,
+    labels: Vec<LabelAsAction>,
     list_state: ScrollableListState,
     item: Item,
-    apply: bool,
 }
 
 impl LabelItemPopup {
-    pub async fn new(ctx: &MailUserContext, item: Item, apply: bool) -> MailContextResult<Self> {
-        let labels = Label::find_by_kind(LabelType::Label, ctx.user_stash()).await?;
+    pub async fn new(ctx: &MailUserContext, item: Item) -> MailContextResult<Self> {
+        let stash = ctx.user_stash();
+        let labels = match item {
+            Item::Conversation(local_id) => {
+                Conversation::available_label_as_actions(vec![local_id], stash).await?
+            }
+            Item::Message(local_id) => {
+                proton_mail_common::models::Message::available_label_as_actions(
+                    vec![local_id],
+                    stash,
+                )
+                .await?
+            }
+        };
+
         Ok(Self {
             labels,
             item,
             list_state: ScrollableListState::new(Some(0)),
-            apply,
         })
     }
-    fn selected_label_id(&self) -> Option<LocalId> {
+    fn selected_label(&self) -> Option<&LabelAsAction> {
         let index = self.list_state.selected()?;
-        self.labels.get(index).map(|v| v.local_id.unwrap())
+        Some(
+            self.labels
+                .get(index)
+                .expect("Index for labels out of bounds"),
+        )
+    }
+
+    fn selected_label_mut(&mut self) -> Option<&mut LabelAsAction> {
+        let index = self.list_state.selected()?;
+        Some(
+            self.labels
+                .get_mut(index)
+                .expect("Index for labels out of bounds"),
+        )
     }
 }
 impl crate::app_model::Popup for LabelItemPopup {
     fn title(&self) -> Option<String> {
-        Some(if self.apply {
-            "Select Label to Apply".to_owned()
-        } else {
-            "Select Label to Remove".to_owned()
-        })
+        Some("Select or deselect labels".to_owned())
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
@@ -124,35 +148,64 @@ impl crate::app_model::Popup for LabelItemPopup {
                 self.list_state.next();
                 Command::None
             }
-            KeyCode::Enter => self
-                .selected_label_id()
-                .map(|id| match self.item {
-                    Item::Conversation(item_id) => {
-                        if self.apply {
-                            Command::message(
-                                ConversationMessage::LabelConversation(item_id, id).into(),
-                            )
-                        } else {
-                            Command::message(
-                                ConversationMessage::UnlabelConversation(item_id, id).into(),
-                            )
-                        }
+            KeyCode::Char('s') => {
+                if let Some(label) = self.selected_label_mut() {
+                    label.is_selected = match label.is_selected {
+                        // If it's partially selected or if it's selected: Deselect it
+                        Some(true) | None => Some(false),
+                        // If it's not selected: Select it
+                        Some(false) => Some(true),
+                    };
+                }
+                Command::None
+            }
+            KeyCode::Enter => {
+                let Some(action) = self.selected_label() else {
+                    return Command::None;
+                };
+                let mut selected_label_ids = vec![];
+                let mut partially_selected_label_ids = vec![];
+
+                for label in &self.labels {
+                    match label.is_selected {
+                        Some(true) => selected_label_ids.push(label.label_id),
+                        None => partially_selected_label_ids.push(label.label_id),
+                        Some(false) => (),
                     }
-                    Item::Message(item_id) => {
-                        if self.apply {
-                            Command::message(MessageMessage::LabelMessage(item_id, id).into())
-                        } else {
-                            Command::message(MessageMessage::UnlabelMessage(item_id, id).into())
-                        }
+                }
+                let label_as = Box::new(LabelAs {
+                    source_label_id: action.label_id,
+                    item_ids: vec![self.item.get_id()],
+                    selected_label_ids,
+                    partially_selected_label_ids,
+                    must_archive: false, // TODO: add this button
+                });
+                match self.item {
+                    Item::Conversation(_) => {
+                        Command::message(ConversationMessage::LabelConversation(label_as).into())
                     }
-                })
-                .unwrap_or_default(),
+                    Item::Message(_) => {
+                        Command::message(MessageMessage::LabelMessage(label_as).into())
+                    }
+                }
+            }
             _ => Command::None,
         }
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let list = self.labels.as_list();
+        let list = self
+            .labels
+            .iter()
+            .map(|x| {
+                let sigl = match x.is_selected {
+                    Some(true) => "✔",
+                    Some(false) => " ",
+                    None => "~",
+                };
+                Span::from(format!("{sigl} {}", x.name))
+            }) // TODO: Color this
+            .collect::<List<'_>>();
         let list = ScrollableList::new(list);
         frame.render_stateful_widget(list, area, &mut self.list_state);
     }

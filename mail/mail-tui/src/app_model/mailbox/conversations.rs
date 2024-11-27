@@ -23,6 +23,8 @@ use ratatui::Frame;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
+use super::LabelAs;
+
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
@@ -201,12 +203,6 @@ impl StateHandler for ConversationsState {
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::UnstarConversation(id).into()))
                 .unwrap_or_default(),
-            KeyCode::Char('L') => self
-                .selected_conversation()
-                .map(|id| {
-                    Command::message(Message::OpenUnlabelItemPopup(Item::Conversation(id)).into())
-                })
-                .unwrap_or_default(),
             KeyCode::Enter => self
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::OpenConversation(id).into()))
@@ -239,11 +235,8 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::MoveConversation(id, label_id) => {
                         move_conversation(mbox, id, label_id)
                     }
-                    ConversationMessage::LabelConversation(id, label_id) => {
-                        label_conversation(mbox, id, label_id)
-                    }
-                    ConversationMessage::UnlabelConversation(id, label_id) => {
-                        unlabel_conversation(mbox, id, label_id)
+                    ConversationMessage::LabelConversation(label_as) => {
+                        label_conversation(mbox, *label_as)
                     }
                     ConversationMessage::OpenConversation(id) => self.open_conversation(mbox, id),
                     ConversationMessage::Refreshed(conversations) => {
@@ -314,9 +307,7 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let local_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_mark_read(ctx.session(), ctx.queue(), local_label_id, vec![id])
-            .await
-        {
+        match Conversation::action_mark_read(ctx.queue(), local_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
@@ -331,14 +322,7 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages>
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_mark_unread(
-            ctx.session(),
-            ctx.queue(),
-            current_label_id,
-            vec![id],
-        )
-        .await
-        {
+        match Conversation::action_mark_unread(ctx.queue(), current_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
@@ -359,7 +343,6 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
         )
         .on_accept(Command::task(async move {
             match Conversation::action_mark_deleted(
-                ctx.session(),
                 ctx.queue(),
                 current_label_id,
                 std::iter::once(id),
@@ -386,7 +369,6 @@ fn move_conversation(
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match Conversation::action_move(
-            ctx.session(),
             ctx.queue(),
             current_label_id,
             label_id,
@@ -407,7 +389,7 @@ fn move_conversation(
 fn star_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match Conversation::action_star(ctx.session(), ctx.queue(), vec![conversation_id]).await {
+        match Conversation::action_star(ctx.queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
@@ -421,7 +403,7 @@ fn star_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Mes
 fn unstar_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match Conversation::action_unstar(ctx.session(), ctx.queue(), vec![conversation_id]).await {
+        match Conversation::action_unstar(ctx.queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
@@ -434,47 +416,29 @@ fn unstar_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<M
 
 fn label_conversation(
     mailbox: &Mailbox,
-    conversation_id: LocalId,
-    label_id: LocalId,
+    LabelAs {
+        source_label_id,
+        item_ids: conversation_ids,
+        selected_label_ids,
+        partially_selected_label_ids,
+        must_archive,
+    }: LabelAs,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match Conversation::action_apply_label(
-            ctx.session(),
+        match Conversation::action_label_as(
             ctx.queue(),
-            label_id,
-            vec![conversation_id],
+            source_label_id,
+            conversation_ids,
+            selected_label_ids,
+            partially_selected_label_ids,
+            must_archive,
         )
         .await
         {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
-                Command::message(e.into())
-            }
-        }
-    })
-}
-
-fn unlabel_conversation(
-    mailbox: &Mailbox,
-    conversation_id: LocalId,
-    label_id: LocalId,
-) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    Command::task(async move {
-        match Conversation::action_remove_label(
-            ctx.session(),
-            ctx.queue(),
-            label_id,
-            vec![conversation_id],
-        )
-        .await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to unlabel conversation: {e}");
                 tracing::error!("{e}");
                 Command::message(e.into())
             }

@@ -1,7 +1,5 @@
 use crate::db::StoredAction;
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::session::Session;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::exports::{
@@ -20,21 +18,11 @@ use std::ops::{Deref, DerefMut};
 /// Actions can return any error type, but we need to be able to inspect the http request error
 /// to detect network failure.
 pub trait Error: std::error::Error + Send + Sync {
-    /// If the error contains a request error, return a reference to this error for inspection.
-    fn request_error(&self) -> Option<&ApiServiceError>;
-
     /// Check if the error is the result of a network failure.
     ///
     /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
     /// or there was an issue with the underlying network transport layer.
-    #[must_use]
-    fn is_network_failure(&self) -> bool {
-        let Some(request_error) = self.request_error() else {
-            return false;
-        };
-
-        request_error.is_network_failure()
-    }
+    fn is_network_failure(&self) -> bool;
 }
 
 /// Errors that may occur during action version conversion.
@@ -181,13 +169,13 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     type RemoteOutput: Send;
 
     /// Output returned by executing this action on the local state.
-    type LocalOutput;
+    type LocalOutput: Send;
 
     /// Error type returned if this action fails.
     ///
     /// To ensure we can correctly implement network error detection errors need
     /// to implement the [`Error`] trait.
-    type Error: Error;
+    type Error: Error + Send;
 
     /// Type of the execution context associated with this action.
     ///
@@ -230,12 +218,14 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    async fn apply_local(
+    fn apply_local(
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>;
+    ) -> impl Future<
+        Output = Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>,
+    > + Send;
 
     /// Revert the `action` from the local database using the given `tx` transaction.
     ///
@@ -253,7 +243,7 @@ pub trait Handler: Default + 'static + Send + Sync {
         tx: &Tether,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
 
-    /// Apply the `action` on the server with the given `session`.
+    /// Apply the `action` on the server.
     ///
     /// Adjust local data if necessary.
     ///
@@ -271,7 +261,6 @@ pub trait Handler: Default + 'static + Send + Sync {
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
@@ -599,8 +588,8 @@ impl Display for NoopError {
 }
 
 impl Error for NoopError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        None
+    fn is_network_failure(&self) -> bool {
+        false
     }
 }
 

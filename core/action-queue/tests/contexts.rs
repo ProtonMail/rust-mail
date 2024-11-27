@@ -1,9 +1,8 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{new_queue_typed, new_session};
+use common::new_queue_typed;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 use std::any::Any;
@@ -13,7 +12,6 @@ use std::sync::Arc;
 #[tokio::test]
 async fn actions_with_different_contexts() -> Result<(), anyhow::Error> {
     // Check that if remote fails to execute when action is applied, local state is reverted.
-    let session = new_session().await;
     let queue = new_queue_typed::<Action1>().await;
     queue.register::<Action2>()?;
 
@@ -23,8 +21,8 @@ async fn actions_with_different_contexts() -> Result<(), anyhow::Error> {
     queue.register_execution_context(Arc::downgrade(&context1));
     queue.register_execution_context(Arc::downgrade(&context2));
 
-    queue.apply_action(&session, Action1 {}).await?;
-    queue.apply_action(&session, Action2 {}).await?;
+    queue.apply_action(Action1 {}).await?;
+    queue.apply_action(Action2 {}).await?;
 
     Ok(())
 }
@@ -97,7 +95,6 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Session,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Ok(<Self::Action as Action>::RemoteOutput::default())

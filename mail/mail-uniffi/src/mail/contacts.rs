@@ -4,7 +4,7 @@ use crate::{
     core::datatypes::{GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
-use crate::{spawn_async, utils::DAMPENING_PERIOD, UniffiRecord};
+use crate::{utils::DAMPENING_PERIOD, watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
 use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
 use proton_mail_common::MailContextError;
@@ -42,13 +42,9 @@ pub async fn contact_list(
 pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidProtonMailResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealContact::action_delete(
-            user_context.session(),
-            user_context.queue(),
-            vec![contact_id.into()],
-        )
-        .await
-        .map_err(MailContextError::from)?;
+        RealContact::action_delete(user_context.queue(), vec![contact_id.into()])
+            .await
+            .map_err(MailContextError::from)?;
 
         Result::<_, RealMailErrorDetails>::Ok(())
     })
@@ -88,23 +84,10 @@ pub async fn watch_contact_list(
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
         let watcher = WatchHandle::new();
-        let watcher_clone = watcher.clone();
         let (contact_list, channel) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        drop(spawn_async(async move {
-            loop {
-                if watcher_clone.should_stop() {
-                    return;
-                }
-
-                if channel.recv_async().await.is_err() {
-                    return;
-                }
-
-                callback();
-            }
-        }));
+        watch_channel_inner(&watcher, channel, callback);
 
         Result::<_, RealMailErrorDetails>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
@@ -128,8 +111,7 @@ pub fn damp_contacts_callback(
     let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
-        let dampening_period = DAMPENING_PERIOD.lock().await.next().unwrap();
-        let mut interval = interval(Duration::from_millis(dampening_period));
+        let mut interval = interval(Duration::from_millis(DAMPENING_PERIOD));
         let callback = Arc::new(callback);
 
         loop {
@@ -140,7 +122,6 @@ pub fn damp_contacts_callback(
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
-                interval.tick().await;
                 let contact_list = contact_list(session.clone()).await;
 
                 match contact_list {

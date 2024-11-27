@@ -135,11 +135,11 @@ path = "mail/uniffi-macros"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-inbox]
-version = "0.7"
+version = "0.8.1"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.7"
+version = "0.7.3"
 registry = "proton"
 features = ["sql"]
 
@@ -157,12 +157,12 @@ features = [
     "socks",
 ]
 
-[workspace.dependencies.proton-core-test-utils] 
+[workspace.dependencies.proton-core-test-utils]
 version = "0.1"
 path = "core/core-test-utils"
 registry = "proton"
 
-[workspace.dependencies.proton-mail-test-utils] 
+[workspace.dependencies.proton-mail-test-utils]
 version = "0.1"
 path = "mail/mail-test-utils"
 registry = "proton"

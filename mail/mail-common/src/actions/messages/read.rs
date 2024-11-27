@@ -1,10 +1,11 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
 use crate::datatypes::RollbackItemType;
 use crate::models::Message;
 use crate::MailUserContext;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::consts::General;
+use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
@@ -49,6 +50,14 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        // API call return an error 2501(Message does not exist) for message already read
+        let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+        action.0.target_ids = messages
+            .into_iter()
+            .filter(|m| m.unread)
+            .filter_map(|m| m.local_id)
+            .collect();
+
         action.0.resolve_ids(tx).await?;
         Message::mark_read(action.0.target_ids.clone(), tx).await?;
         Ok(())
@@ -70,12 +79,11 @@ impl ActionHandler for Handler {
 
     async fn apply_remote(
         &self,
-        _: &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = session.api();
+        let api = ctx.session().api();
         let message_ids = action
             .0
             .remote_target_ids
@@ -85,7 +93,11 @@ impl ActionHandler for Handler {
             .collect();
         let response = api.put_messages_read(message_ids).await?.responses;
 
-        let failed_ids = filter_responses(response);
+        // In this case General::NotExists is returned also for messages already marked as read
+        let failed_ids = filter_responses_by_codes(
+            response,
+            &[General::NoError as u32, General::NotExists as u32],
+        );
 
         if !failed_ids.is_empty() {
             error!("Read messages operation failed for: {failed_ids:?}");

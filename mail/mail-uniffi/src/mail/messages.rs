@@ -246,33 +246,16 @@ pub async fn watch_message(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedMessage>, ProtonMailError> {
     let stash = session.user_stash().clone();
-    let watcher = WatchHandle::default();
-    let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let callback = damp(callback).await;
-        let message = if let Some((message, receiver)) =
+        let Some((message, receiver)) =
             RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
-        {
-            tokio::spawn(async move {
-                loop {
-                    if watcher_cloned.should_stop() {
-                        return;
-                    }
-
-                    if receiver.recv_async().await.is_err() {
-                        return;
-                    }
-
-                    callback();
-                }
-            });
-            Some(message)
-        } else {
-            None
+        else {
+            return Ok(None);
         };
+        let handle = watch_channel(receiver, callback).await;
         Result::<_, RealMailErrorDetails>::Ok(message.map(|m| WatchedMessage {
             message: m.into(),
-            handle: Arc::new(watcher),
+            handle,
         }))
     })
     .await
@@ -743,7 +726,6 @@ pub async fn apply_label_to_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_apply_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -776,7 +758,6 @@ pub async fn star_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_star(
-            user_context.session(),
             user_context.queue(),
             message_ids.into_iter().map(Into::into).collect(),
         )
@@ -808,7 +789,6 @@ pub async fn unstar_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_unstar(
-            user_context.session(),
             user_context.queue(),
             message_ids.into_iter().map(Into::into).collect(),
         )
@@ -842,7 +822,6 @@ pub async fn remove_label_from_messages(
     let user_context = session.ctx();
     uniffi_async(async move {
         RealMessage::action_remove_label(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -876,7 +855,6 @@ pub async fn mark_messages_read(
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_read(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -910,7 +888,6 @@ pub async fn mark_messages_unread(
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_unread(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -941,7 +918,6 @@ pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> Voi
     let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_delete(
-            user_context.session(),
             user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
@@ -971,17 +947,13 @@ pub async fn get_embedded_attachment(
     cid: String,
 ) -> Result<Option<EmbeddedAttachmentInfo>, ProtonMailError> {
     uniffi_async(async move {
-        let Some(att) =
-            models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?
-        else {
-            return Ok(None);
-        };
-        Result::<_, RealMailErrorDetails>::Ok(Some(EmbeddedAttachmentInfo {
+        let att = models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?;
+        Result::<_, RealMailErrorDetails>::Ok(EmbeddedAttachmentInfo {
             data: att.data,
             mime: att.mime,
             height: att.height,
             width: att.width,
-        }))
+        })
     })
     .await
     .map_err(|details| MailErrorKind::UserActionError.with(details))
@@ -1027,7 +999,6 @@ pub async fn label_messages_as(
     uniffi_async(async move {
         Result::<_, RealMailErrorDetails>::Ok(
             RealMessage::action_label_as(
-                user_context.session(),
                 user_context.queue(),
                 source_label_id.into(),
                 message_ids.into_iter().map_into().collect(),
@@ -1067,7 +1038,6 @@ pub async fn move_messages(
     let source_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_move(
-            user_context.session(),
             user_context.queue(),
             source_id.into(),
             destination_id.into(),

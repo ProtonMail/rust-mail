@@ -1,10 +1,9 @@
 mod common;
 
 use crate::common::{DefaultError, TestExtension};
-use common::{new_factory, new_queue, new_session};
+use common::{new_factory, new_queue};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::ActionRemoteOutput;
-use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 
@@ -13,12 +12,11 @@ async fn state_preserved_after_local_change() {
     // Check if the action state is persisted after local changes and correctly transmitted
     // to subsequent follow ups.
 
-    let session = new_session().await;
     let queue = new_queue(new_factory::<TestAction>()).await;
 
     // Check direct execution.
     let output = queue
-        .apply_action(&session, TestAction { v: ACTION_VALUE })
+        .apply_action(TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
     assert!(matches!(
@@ -43,7 +41,7 @@ async fn state_preserved_after_local_change() {
         .queue_action(TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
-    queue.execute_all(&session).await.unwrap();
+    queue.execute_all().await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,7 +101,6 @@ impl Handler for TestActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        _: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);

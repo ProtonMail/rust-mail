@@ -10,7 +10,6 @@ use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::Session;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -411,12 +410,11 @@ impl Contact {
     }
 
     pub async fn action_delete(
-        session: &Session,
         queue: &Queue,
         contact_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
         let action = ContactsDelete::new(contact_ids);
-        queue.apply_action(session, action).await
+        queue.apply_action(action).await
     }
 
     /// Marks a contact as deleted.

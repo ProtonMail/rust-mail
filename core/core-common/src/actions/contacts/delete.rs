@@ -1,8 +1,8 @@
 use crate::datatypes::{Id, LocalId, RemoteId};
 use crate::models::{Contact, ModelExtension};
-use crate::CoreContextError;
+use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
 
@@ -32,7 +32,7 @@ impl Action for Delete {
     type LocalOutput = ();
     type Error = CoreContextError;
 
-    type Context = ();
+    type Context = UserContext;
 }
 
 #[derive(Default)]
@@ -40,11 +40,11 @@ pub struct Handler;
 
 impl proton_action_queue::action::Handler for Handler {
     type Action = Delete;
-    type Context = ();
+    type Context = UserContext;
 
     async fn apply_local(
         &self,
-        (): &Self::Context,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -64,7 +64,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn revert_local(
         &self,
-        (): &Self::Context,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -79,12 +79,11 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        (): &Self::Context,
+        ctx: &Self::Context,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let failed = Contact::delete_from_remote(&action.remote_ids, session.api()).await?;
+        let failed = Contact::delete_from_remote(&action.remote_ids, ctx.session().api()).await?;
         let mut failed_local_ids = Vec::with_capacity(failed.len());
 
         if failed.is_empty() {

@@ -15,6 +15,7 @@ use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
 };
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
+use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
@@ -43,8 +44,10 @@ pub enum MailContextError {
     Action(#[from] ActionError),
     #[error("QueuedAction: {0}")]
     QueuedAction(#[from] QueuedError),
-    #[error("Failed to access PGP keys: {0}")]
+    #[error("Failed to access OpenPGP keys: {0}")]
     PGPKeyAccess(KeyHandlingError),
+    #[error("Failed to select OpenPGP keys for encryption: {0}")]
+    PGPKeySelection(#[from] EncryptionPreferencesError),
     #[error("App Error: {0}")]
     App(#[from] AppError),
     #[error("Stash Error: {0}")]
@@ -64,10 +67,11 @@ pub enum MailContextError {
 }
 
 impl proton_action_queue::action::Error for MailContextError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        match self {
-            Self::Api(err) => Some(err),
-            _ => None,
+    fn is_network_failure(&self) -> bool {
+        if let Self::Api(e) = self {
+            e.is_network_failure()
+        } else {
+            false
         }
     }
 }

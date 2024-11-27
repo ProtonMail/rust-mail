@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 use proton_action_queue::action::{Action, Error, Factory};
 use proton_action_queue::queue::Queue;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::session::Session;
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Interface, Stash, StashError, Tether};
@@ -29,18 +27,6 @@ pub async fn new_stash() -> Stash {
 
 pub async fn new_queue_typed<T: Action<Context: Default>>() -> Queue {
     new_queue(new_factory::<T>()).await
-}
-
-/// Create a new test session with bogus values.
-pub async fn new_session() -> Session {
-    let config = proton_api_core::services::proton::Config {
-        app_version: "TEST".to_owned(),
-        base_url: "https://test.com".to_owned(),
-        user_agent: "TEST".to_owned(),
-        allow_http: true,
-        skip_srp_proof_validation: true,
-    };
-    Session::new(config, None).await.unwrap()
 }
 
 /// Create a new factory with an action.
@@ -110,8 +96,10 @@ impl TestExtension for Tether {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DefaultError {
-    #[error("{0}")]
-    Request(#[from] ApiServiceError),
+    #[error("Network Failure")]
+    NetworkFailure,
+    #[error("API Failure")]
+    APIFailure,
     #[error("{0}")]
     Other(anyhow::Error),
     #[error("{0}")]
@@ -119,11 +107,7 @@ pub enum DefaultError {
 }
 
 impl Error for DefaultError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        let Self::Request(err) = self else {
-            return None;
-        };
-
-        Some(err)
+    fn is_network_failure(&self) -> bool {
+        matches!(self, DefaultError::NetworkFailure)
     }
 }

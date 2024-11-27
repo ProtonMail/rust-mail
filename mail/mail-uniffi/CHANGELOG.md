@@ -118,6 +118,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
 
+
+## [0.22.1] - 2024-11-26
+
+### Changed
+
+- `get_embedded_attachment` now triggers errors on unknown CIDs
+
+## [0.22.0] - 2024-11-26
+
+### Added
+
+ - `Draft::send` to send drafts
+
+### Fix
+
+  - Properly show partial selection on conversations when a message does't have a label.
+  - Now moving message work in message view mode too.
+
+## [0.21.6] - 2024-11-22
+
+### Fix
+
+  - Embedded images no longer get proxied.
+
+## [0.21.5] - 2024-11-20
+
+### Fix
+
+  - `markConversationAsRead` now mark conversation as Read
+  - `markMessageAsRead` now mark message as Read
+  - `LabelAs` now update only LabelType::Label
+  - `WatchHandle` now properly disconnects when it's dropped.
+  - Blocking code is now allowed in the watcher callbacks.
+  - Double action execution for queued actions
+
 ## [0.21.4] - 2024-11-13
 
 ### Added

@@ -135,7 +135,7 @@ pub trait ModelExtension: Model {
     }
 
     /// Finds a records by its IDs.
-    /// Only `#[IdField]` is supported as it uses `find` method.
+    /// Work with `local_id` field or `remote_id` field.
     ///
     /// # Parameters
     ///
@@ -153,25 +153,29 @@ pub trait ModelExtension: Model {
     /// * [`load()`](Model::load())
     /// * [`load_by_id()`](ModelExtension::load_by_id())
     ///
-    async fn find_by_ids<I, A>(ids: Vec<I>, interface: &A) -> Result<Vec<Self>, StashError>
+    async fn find_by_ids<I, A>(
+        ids: impl IntoIterator<Item = I>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
     where
         I: Into<AgnosticId> + Id + ToSql + 'static,
         A: Into<AgnosticInterface> + Interface,
     {
-        let query = format!(
-            "WHERE {} IN ({})",
-            Self::id_field_name(),
-            vec!["?"; ids.len()].join(","),
-        );
-        let params: Vec<Box<_>> = ids
-            .into_iter()
-            .map(|id| {
-                let boxed_id: Box<dyn ToSql + Send> = Box::new(id);
-                boxed_id
-            })
-            .collect();
+        let mut ids = ids.into_iter().peekable();
+        let field_name = if let Some(first) = ids.peek() {
+            // We make the assumption that all ids are the same AgnosticId variant
+            Into::<AgnosticId>::into(first.clone()).id_field_name()
+        } else {
+            return Ok(vec![]);
+        };
+        #[allow(trivial_casts)]
+        let (placeholders, parameters): (Vec<_>, Vec<_>) = ids
+            .map(|i| ("?", Box::new(i) as Box<dyn ToSql + Send>))
+            .unzip();
+        let placeholders = placeholders.join(", ");
 
-        Self::find(query, params, interface, None).await
+        let query = format!("WHERE {field_name} IN ({placeholders})");
+        Self::find(query, parameters, interface, None).await
     }
 
     /// Finds local record IDs matching given criteria.
@@ -548,6 +552,26 @@ impl Address {
         tx.commit().await?;
 
         Ok(())
+    }
+
+    /// Loads the address for the given e-mail from the database if any.
+    ///
+    /// Returns [`None`] if no address with the given email is found.
+    ///
+    /// # Parameters
+    ///
+    /// * `email`     - The e-mail address to search for.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    /// # Errors
+    ///
+    /// Returns a [`StashError`] if the database access fails.
+    ///
+    pub async fn by_email<A>(email: &str, interface: &A) -> Result<Option<Address>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::find_first("WHERE email = ?", params![email.to_owned()], interface).await
     }
 }
 

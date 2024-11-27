@@ -55,6 +55,7 @@ static CRYPTO_CLOCK: ServerCryptoClock = ServerCryptoClock(RwLock::new(None));
 ///
 /// This clock is used for crypto operations.
 #[allow(clippy::module_name_repetitions)]
+#[must_use]
 pub fn server_crypto_clock() -> &'static ServerCryptoClock {
     &CRYPTO_CLOCK
 }

@@ -10,6 +10,7 @@ use crate::models::{Label, RollbackItem};
 use crate::AppError;
 use itertools::Itertools;
 use proton_action_queue::action::Factory;
+use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
@@ -35,10 +36,11 @@ pub enum ActionError {
 }
 
 impl proton_action_queue::action::Error for ActionError {
-    fn request_error(&self) -> Option<&ApiServiceError> {
-        match self {
-            Self::Http(e) => Some(e),
-            _ => None,
+    fn is_network_failure(&self) -> bool {
+        if let Self::Http(e) = self {
+            e.is_network_failure()
+        } else {
+            false
         }
     }
 }
@@ -69,6 +71,7 @@ pub(crate) fn new_action_factory() -> Factory {
         .register::<messages::unread::Unread>()
         .expect(ERR_MSG);
     factory.register::<draft::Save>().expect(ERR_MSG);
+    factory.register::<draft::Send>().expect(ERR_MSG);
     factory
 }
 
@@ -150,9 +153,17 @@ where
 
 /// Filter server response on which the operation failed.
 pub fn filter_responses(responses: Vec<OperationResult>) -> Vec<RemoteId> {
+    filter_responses_by_codes(responses, &[General::NoError as u32])
+}
+
+/// Filter server response on which the operation failed.
+pub fn filter_responses_by_codes(
+    responses: Vec<OperationResult>,
+    accepted: &[u32],
+) -> Vec<RemoteId> {
     responses
         .into_iter()
-        .filter(|r| r.response.code != 1000)
+        .filter(|r| !accepted.contains(&r.response.code))
         .map(|r| RemoteId::from(r.id))
         .collect::<Vec<_>>()
 }

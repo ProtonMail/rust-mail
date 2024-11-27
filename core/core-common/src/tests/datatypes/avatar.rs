@@ -23,6 +23,10 @@ use test_case::test_case;
 #[test_case("OnePart" => "O")]
 #[test_case("onepart@test.com" => "O")]
 #[test_case("🧑‍🔬 Doctor Rebecca" => "D")]
+#[test_case("Milti-Part Surname" => "M")] // Name with dashes
+#[test_case("日本人の氏名" => "日")] // Japanese
+#[test_case("ім'я прізвище" => "І")] // Ukrainian (Cyrillic)
+#[test_case("שם משפחה" => "ש")] // Hebrew
 fn test_avatar_text(name: &str) -> String {
     AvatarInformation::from(name).text
 }

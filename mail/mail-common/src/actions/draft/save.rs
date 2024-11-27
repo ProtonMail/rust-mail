@@ -1,18 +1,18 @@
+use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, MessageAddress, MessageAddresses, MimeType, SystemLabelId,
+    AttachmentMetadata, Disposition, MessageAddress, MessageAddresses, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{
-    Attachment, Conversation, DraftMetadata, Label, Message, MessageBodyMetadata, MetadataId,
+    Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::session::Session;
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -94,7 +94,7 @@ impl Action for Save {
     const TYPE: Type = Type("save_draft");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = SaveHandler;
     type RemoteOutput = ();
 
     type LocalOutput = ();
@@ -104,9 +104,9 @@ impl Action for Save {
 }
 
 #[derive(Default)]
-pub struct Handler {}
+pub struct SaveHandler {}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for SaveHandler {
     type Action = Save;
 
     type Context = MailUserContext;
@@ -169,7 +169,7 @@ impl proton_action_queue::action::Handler for Handler {
             conversation.local_id.unwrap()
         };
 
-        let time = draft::create_timestamp();
+        let time = draft::compose::create_timestamp();
         let message = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
             let Some(mut message) = Message::find_by_id(message_id, tether)
@@ -306,9 +306,9 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        session: &Session,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let session = ctx.session();
         let tether = stash.connection();
 
         let message_id = action.message_id.expect("Should be set");
@@ -335,12 +335,6 @@ impl proton_action_queue::action::Handler for Handler {
             return Err(AppError::MessageBodyMetadataMissing(message_id).into());
         };
 
-        // Load body.
-        let key = CacheMessageKey::from_message(&message, &tether);
-        let Some(message_body_reader) = ctx.messages_cache().get_item(&key)? else {
-            return Err(AppError::MessageBodyMissing(message_id).into());
-        };
-
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
             let Some(remote_id) = parent_id
                 .counterpart::<Message, _>(&tether)
@@ -356,7 +350,8 @@ impl proton_action_queue::action::Handler for Handler {
             None
         };
 
-        let stored = StorableMessageBody::from_reader(message_body_reader)?;
+        // Load body.
+        let stored = load_message_body(ctx, &message, &tether)?;
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -610,17 +605,4 @@ where
         AppError::Cache(e)
     })?;
     Ok(())
-}
-
-/// Resolve the Drafts local label id.
-async fn local_draft_label_id<A>(interface: &A) -> Result<LocalId, MailContextError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let Some(local_draft_label_id) = LabelId::drafts().counterpart::<Label, _>(interface).await?
-    else {
-        return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
-    };
-
-    Ok(local_draft_label_id)
 }

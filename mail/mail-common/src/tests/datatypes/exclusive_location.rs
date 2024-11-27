@@ -78,7 +78,7 @@ use test_case::test_case;
     => Some(ExclusiveLocation::System { name: SystemLabel::Inbox, local_id: 1.into() }); "TEST13 - in custom folder and inbox"
 )]
 #[test_case(&[
-        (&LabelId::drafts(), System),
+        (&LabelId::starred(), System),
         (&LabelId::from("label"), Label),
         (&LabelId::from("contact_group"), ContactGroup),
         (&LabelId::from("custom_folder"), Folder),

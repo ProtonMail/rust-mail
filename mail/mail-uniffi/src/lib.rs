@@ -144,19 +144,15 @@
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
-use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
-use stash::exports::ToSql;
-use stash::orm::{Model, ResultsetChange};
-use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
-use tracing::{debug, warn};
+use tracing::debug;
 use utils::damp;
 
 pub mod core;
@@ -228,114 +224,6 @@ impl WatchHandle {
     }
 }
 
-/// Watches records in the database using specific query logic.
-///
-/// This function calls [`Model::find()`] with the provided query logic and
-/// parameters, sets up a queue, and then listens for changes to the result
-/// set. When changes occur, they are sent to the queue.
-///
-/// # Parameters
-///
-/// * `query_logic`  - The query logic to use for finding the records. This
-///                    should be a string that represents the conditions,
-///                    ordering, offset, and limit for the query, as may be
-///                    required. It can be empty. Note that each part of the
-///                    logic is optional — so if conditions are passed, for
-///                    instance, the `WHERE` keyword needs to be included.
-/// * `params`       - The parameters to use in the query. These should be in
-///                    the order they are expected in the query logic, and match
-///                    with any expectations set in the query logic.
-/// * `check_record` - A function that checks if the record is associated with
-///                    the records being watched. This function should return
-///                    `true` if the record is associated, and `false` otherwise
-///                    and should accept one parameter, which is the record to
-///                    check (of type `T`). This is used for `INSERT` and
-///                    `UPDATE` change events.
-/// * `get_local_id` - A function that returns the local ID of the record. This
-///                    function should accept one parameter, which is the record
-///                    to get the ID from (of type `T`), and should return the
-///                    local ID of the record.
-/// * `interface`    - The database interface, i.e. [`Stash`] or [`Tether`], to
-///                    use for finding the records.
-/// * `callback`     - The callback to use for updates. When the specified
-///                    result set changes, the callback will be invoked.
-///
-/// # Errors
-///
-/// See [`Stash::find()`].
-///
-/// # See also
-///
-/// * [`Model::find()`]
-/// * [`params!`](crate::utils::params)
-///
-pub async fn watch<Q, A, T>(
-    query_logic: Q,
-    params: Vec<Box<dyn ToSql + Send>>,
-    check_record: impl Fn(&T) -> bool + Send + Sync + 'static,
-    get_local_id: impl Fn(&T) -> RealLocalId + Send + Sync + 'static,
-    interface: &A,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<(Vec<T>, Arc<WatchHandle>), StashError>
-where
-    Q: Into<String> + Send,
-    A: Into<AgnosticInterface> + Interface,
-    T: Model<IdType = RealLocalId>,
-{
-    let (sender, receiver) = flume::unbounded::<ResultsetChange<T, RealLocalId>>();
-    let results = T::find(query_logic, params, interface.stash(), Some(sender)).await?;
-    // Unwrapping is safe here, as we will always have the local ID
-    #[allow(clippy::redundant_closure)]
-    let mut ids = results.iter().map(|m| get_local_id(m)).collect::<Vec<_>>();
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_clone = Arc::clone(&stop_flag);
-
-    spawn_async(async move {
-        let callback = damp(callback).await;
-        while let Ok(change) = receiver.recv_async().await {
-            if stop_flag_clone.load(Ordering::SeqCst) {
-                debug!("Stop flag set, stopping watch");
-                break;
-            }
-            match change {
-                ResultsetChange::Inserted(record) => {
-                    if check_record(&record) {
-                        debug!("Received new record for watched set");
-                        ids.push(get_local_id(&record));
-                        callback();
-                    } else {
-                        debug!("Received new record not related to set");
-                    }
-                }
-                ResultsetChange::Updated(record) => {
-                    if check_record(&record) {
-                        debug!("Received updated record for watched set");
-                        callback();
-                    } else {
-                        debug!("Received updated record not related to set");
-                    }
-                }
-                ResultsetChange::Deleted(record_id) => {
-                    if ids.contains(&record_id) {
-                        debug!("Received deleted record for watched set");
-                        callback();
-                    } else {
-                        debug!("Received deleted record not related to set");
-                    }
-                }
-                _ => {
-                    warn!("Received unknown change type");
-                }
-            };
-        }
-    });
-
-    Ok((
-        results.into_iter().map(Into::into).collect(),
-        Arc::new(WatchHandle { stop_flag }),
-    ))
-}
-
 /// Get the async runtime.
 #[must_use]
 pub fn async_runtime() -> &'static Runtime {
@@ -382,7 +270,7 @@ pub async fn watch_channel<T: Send + 'static>(
 ) -> Arc<WatchHandle> {
     let watcher = WatchHandle::new();
 
-    watch_channel_inner(watcher.clone(), channel, damp(callback).await);
+    watch_channel_inner(&watcher, channel, damp(callback).await);
 
     Arc::new(watcher)
 }
@@ -401,27 +289,37 @@ pub fn watch_channel_nodamp<T: Send + 'static>(
 ) -> Arc<WatchHandle> {
     let watcher = WatchHandle::new();
 
-    watch_channel_inner(watcher.clone(), channel, move || callback.on_update());
+    watch_channel_inner(&watcher, channel, move || callback.on_update());
 
     Arc::new(watcher)
 }
 
 fn watch_channel_inner<T: Send + 'static>(
-    watcher: WatchHandle,
+    watcher: &WatchHandle,
     channel: flume::Receiver<T>,
-    callback: impl Fn() + Send + 'static,
+    callback: impl Fn() + Send + Sync + 'static,
 ) {
+    let should_stop = Arc::downgrade(&watcher.stop_flag);
     drop(spawn_async(async move {
+        let callback = Arc::new(callback);
         loop {
-            if watcher.should_stop() {
-                return;
+            let Some(stop_flag) = should_stop.upgrade() else {
+                debug!("Watch handle dropped, stopping watch");
+                break;
+            };
+
+            if stop_flag.load(Ordering::SeqCst) {
+                debug!("Stop flag set, stopping watch");
+                break;
             }
 
             if channel.recv_async().await.is_err() {
                 return;
             }
 
-            callback();
+            let callback = callback.clone();
+            let callback = move || callback();
+            _ = async_runtime().spawn_blocking(callback).await;
         }
     }));
 }

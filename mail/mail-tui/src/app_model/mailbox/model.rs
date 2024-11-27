@@ -244,25 +244,7 @@ impl Model {
 
         let ctx = self.mailbox.user_context();
         Command::task(async move {
-            match LabelItemPopup::new(&ctx, item, true).await {
-                Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
-                Err(e) => {
-                    let e = anyhow!("Failed to load labels: {e}");
-                    tracing::error!("{e}");
-                    Command::message(e.into())
-                }
-            }
-        })
-    }
-
-    fn open_unlabel_popup(&mut self, item: Item) -> Command<Messages> {
-        if matches!(&self.state, State::Syncing(_)) {
-            return Command::None;
-        };
-
-        let ctx = self.mailbox.user_context();
-        Command::task(async move {
-            match LabelItemPopup::new(&ctx, item, false).await {
+            match LabelItemPopup::new(&ctx, item).await {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
                 Err(e) => {
                     let e = anyhow!("Failed to load labels: {e}");
@@ -338,7 +320,6 @@ impl AppStateHandler for Model {
             Message::SelectLabel(label_id) => self.select_label(label_id),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
-            Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state
                     .update(ctx, message, &self.mailbox, &self.mail_settings)
@@ -390,10 +371,8 @@ impl AppStateHandler for Model {
             Span::from("Read"),
             Span::from(" U: ").bold(),
             Span::from("Unread"),
-            Span::from(" L: ").bold(),
+            Span::from(" l: ").bold(),
             Span::from("Label"),
-            Span::from(" K: ").bold(),
-            Span::from("Unlabel"),
             Span::from(" D: ").bold(),
             Span::from("Delete"),
             Span::from(" Shift+▲: ").bold(),

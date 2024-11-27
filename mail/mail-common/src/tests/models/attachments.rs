@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use super::super::*;
+use super::*;
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,

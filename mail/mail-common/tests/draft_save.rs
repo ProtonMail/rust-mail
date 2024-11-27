@@ -21,9 +21,8 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
-use proton_mail_common::draft::{
-    Draft, Error, ReplyMode, DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX,
-};
+use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
+use proton_mail_common::draft::{Draft, Error, ReplyMode};
 use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::init::Params as TestParams;
