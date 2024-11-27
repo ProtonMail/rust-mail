@@ -38,7 +38,7 @@ use syn::{
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::DbRecord;
-/// use stash::orm::{CsvArray, DbRecord};
+/// use stash::orm::DbRecord;
 ///
 /// #[derive(Clone, Debug, DbRecord, Deserialize, PartialEq, Serialize)]
 /// struct Foo {
@@ -47,9 +47,6 @@ use syn::{
 ///
 ///     #[DbField]
 ///     value: i32,
-///
-///     #[DbField(via CsvArray<i32>)]
-///     values: Vec<i32>,
 /// }
 /// ```
 ///
@@ -157,7 +154,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::Model;
-/// use stash::orm::{CsvArray, Model};
+/// use stash::orm::Model;
 /// use stash::stash::Stash;
 /// use uuid::Uuid;
 ///
@@ -173,9 +170,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[DbField]
 ///     value: i32,
 ///
-///     #[DbField(via CsvArray<i32>)]
-///     values: Vec<i32>,
-///
 ///     #[RowIdField]
 ///     #[serde(skip)]
 ///     row_id: Option<u64>,
@@ -187,7 +181,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::Model;
-/// use stash::orm::{CsvArray, Model};
+/// use stash::orm::Model;
 /// use stash::stash::Stash;
 /// use uuid::Uuid;
 ///
@@ -203,9 +197,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[DbField]
 ///     value: i32,
 ///
-///     #[DbField(via CsvArray<i32>)]
-///     values: Vec<i32>,
-///
 ///     #[RowIdField]
 ///     #[serde(skip)]
 ///     row_id: Option<u64>,
@@ -217,7 +208,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::Model;
-/// use stash::orm::{CsvArray, Model};
+/// use stash::orm::Model;
 /// use stash::stash::Stash;
 /// use uuid::Uuid;
 ///
@@ -233,8 +224,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[DbField]
 ///     value: i32,
 ///
-///     #[DbField(via CsvArray<i32>)]
-///     values: Vec<i32>,
 ///
 ///     #[RowIdField]
 ///     #[serde(skip)]
