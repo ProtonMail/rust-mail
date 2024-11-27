@@ -9,7 +9,7 @@ use std::ffi::OsString;
 use std::fs::{read_dir, remove_file, DirEntry};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use tracing::error;
+use tracing::{error, warn};
 
 /// Structure to group all caches
 pub struct Cache {
@@ -94,7 +94,7 @@ impl CacheAttachmentKey {
     /// Get all Attachments that are currently cached.
     async fn get_all_cached(root_path: PathBuf) -> Result<Vec<Self>, AppError> {
         let mut keys = vec![];
-        for entry in read_dir(root_path.clone())
+        for entry in read_dir(&root_path)
             .inspect_err(|e| error!("Could not read dir({root_path:?}): {e}"))?
         {
             let entry = entry?;
@@ -109,14 +109,14 @@ impl CacheAttachmentKey {
     fn from_dir_entry(entry: DirEntry) -> Option<Self> {
         let filetype = entry
             .file_type()
-            .inspect_err(|e| error!("Can't get file type for dir entry({entry:?}): {e}"))
+            .inspect_err(|e| warn!("Can't get file type for dir entry({entry:?}): {e}"))
             .ok()?;
         if filetype.is_file() {
             let filename = entry.file_name();
             if let Some(filename) = filename.to_str() {
                 Self::from_filename(filename)
             } else {
-                error!("Can't parse os filename({filename:?}) as an attachment cache key");
+                warn!("Can't parse os filename({filename:?}) as an attachment cache key");
                 None
             }
         } else {
@@ -126,12 +126,12 @@ impl CacheAttachmentKey {
 
     fn from_filename(filename: &str) -> Option<Self> {
         let Some((id, filename)) = filename.split_once('-') else {
-            error!("Can't parse filename({filename:?}) as a attachment cache key");
+            warn!("Can't parse filename({filename:?}) as a attachment cache key");
             return None;
         };
         let attachment_id = id
             .parse()
-            .inspect_err(|_| error!("Can't parse str({id:?}) as an attachment id"))
+            .inspect_err(|_| warn!("Can't parse str({id:?}) as an attachment id"))
             .ok()?;
         Some(Self {
             attachment_id,
@@ -215,7 +215,7 @@ impl CacheMessageKey {
     fn from_dir_entry(entry: DirEntry) -> Option<Self> {
         let filetype = entry
             .file_type()
-            .inspect_err(|e| error!("Can't get file type for dir entry({entry:?}): {e}"))
+            .inspect_err(|e| warn!("Can't get file type for dir entry({entry:?}): {e}"))
             .ok()?;
         if filetype.is_file() {
             let filename = entry.file_name();
@@ -223,12 +223,12 @@ impl CacheMessageKey {
                 let message_id = filename
                     .parse()
                     .inspect_err(|_| {
-                        error!("Can't parse filename ({filename:?}) as a message cache key")
+                        warn!("Can't parse filename ({filename:?}) as a message cache key")
                     })
                     .ok()?;
                 Some(Self { message_id })
             } else {
-                error!("Can't parse os filename ({filename:?}) as a message cache key");
+                warn!("Can't parse os filename ({filename:?}) as a message cache key");
                 None
             }
         } else {

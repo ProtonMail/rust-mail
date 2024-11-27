@@ -16,8 +16,10 @@
 //!         - the returned value is stored in that file
 //!         - the path to this file is returned.
 
+use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_file, set_permissions, File, OpenOptions, Permissions};
@@ -28,6 +30,7 @@ use std::marker::PhantomData;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::{error, warn};
 
 /// Errors from `ProtonCache`
@@ -37,6 +40,9 @@ pub enum CacheError {
     /// Insert in cache failed for a key
     #[error("Insert in cache failed for key {0}")]
     InsertFailed(String),
+
+    #[error("Given Key don't exists")]
+    KeyDontExist,
 
     /// Extra metadata are needed for this operation
     #[error("Extra metadata are needed for this operation")]
@@ -168,6 +174,7 @@ pub struct DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
+    pinned: Arc<RwLock<HashSet<Config::Key>>>,
     phantom_data: PhantomData<Config>,
 }
 
@@ -175,8 +182,9 @@ impl<Config> DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
-    fn new() -> Self {
+    fn new(pinned: Arc<RwLock<HashSet<Config::Key>>>) -> Self {
         Self {
+            pinned,
             phantom_data: PhantomData,
         }
     }
@@ -215,6 +223,10 @@ where
             key.after_evict();
         }
     }
+
+    fn is_pinned(&self, key: &Config::Key, _val: &Metadata<Config::ExtraMetadata>) -> bool {
+        self.pinned.read().contains(key)
+    }
 }
 
 /// A cache structure to store and retrieve data
@@ -234,6 +246,9 @@ where
     >,
     /// Path to the root of the cache
     cache_buf: PathBuf,
+
+    /// List of currently pinned items
+    pinned: Arc<RwLock<HashSet<Config::Key>>>,
 }
 
 impl<Config> ProtonCache<Config>
@@ -251,6 +266,7 @@ where
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
     fn _new(cache_buf: PathBuf, size: u32) -> CacheResult<Self> {
+        let pinned = Arc::new(RwLock::new(HashSet::new()));
         // create in memory cache
         let cache = Cache::with_options(
             OptionsBuilder::new()
@@ -260,7 +276,7 @@ where
                 .map_err(|e| CacheError::QuickCache(e.into()))?,
             DefaultWeighter::new(),
             DefaultHashBuilder::default(),
-            DefaultLifecycle::new(),
+            DefaultLifecycle::new(pinned.clone()),
         );
 
         // create file directory
@@ -270,7 +286,11 @@ where
             set_permissions(cache_buf.clone(), Permissions::from_mode(0o700))?;
         }
 
-        Ok(Self { cache, cache_buf })
+        Ok(Self {
+            cache,
+            cache_buf,
+            pinned,
+        })
     }
 
     /// Initialize a new cache from existing keys.
@@ -501,6 +521,31 @@ where
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
+    }
+
+    /// Ensure, the item corresponding to given key will not be evicted from cache until unlocked.
+    ///
+    /// Note: This doesn't prevent explicit remove.
+    ///
+    /// # params:
+    /// * `key`: key to the item to lock.
+    ///
+    pub fn lock_item(&mut self, key: Config::Key) -> CacheResult<()> {
+        if self.cache.peek(&key).is_some() {
+            self.pinned.write().insert(key);
+            Ok(())
+        } else {
+            Err(CacheError::KeyDontExist)
+        }
+    }
+
+    /// Unlock the given item.
+    ///
+    /// # params:
+    /// * `key`: key to the item to unlock.
+    ///
+    pub fn unlock_item(&mut self, key: &Config::Key) {
+        self.pinned.write().remove(key);
     }
 
     /// Get the path corresponding to a key using extra metadata
