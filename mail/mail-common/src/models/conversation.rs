@@ -3363,6 +3363,28 @@ impl Conversation {
             .cloned()
             .collect()
     }
+
+    /// Queries `ConversationLabel` database and finds if there is a label with given `LocalId` in it.
+    pub async fn has_label<A>(
+        &self,
+        label_local_id: LocalId,
+        interface: &A,
+    ) -> Result<bool, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_conversation_id = self.id().unwrap();
+
+        // Find the first matching label
+        let label = ConversationLabel::find_first(
+            "WHERE local_conversation_id = ? AND local_label_id = ? AND deleted = 0",
+            params![local_conversation_id, label_local_id],
+            interface,
+        )
+        .await?;
+
+        Ok(label.is_some())
+    }
 }
 
 impl From<ApiConversation> for Conversation {
