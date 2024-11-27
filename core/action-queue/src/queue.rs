@@ -524,19 +524,24 @@ impl Queue {
             .resolve_execution_context::<T>()
             .map_err(|e| ActionError::Queue(e.into()))?;
 
-        let stash = self.shared.stash.clone();
+        let shared = Arc::clone(&self.shared);
 
         let future = async move {
             let output = async {
                 // 1) Apply local action and store in the queue
-                let (local_output, id) =
-                    execute_action_local(&stash, context.as_ref(), &handler, &mut action, metadata)
-                        .await?;
+                let (local_output, id) = execute_action_local(
+                    &shared.stash,
+                    context.as_ref(),
+                    &handler,
+                    &mut action,
+                    metadata,
+                )
+                .await?;
                 debug!("Action queued with id={id}");
 
                 // 2) Execute remote counter part
                 let remote_output =
-                    execute_action_remote(&stash, id, context.as_ref(), &handler, &mut action)
+                    execute_action_remote(&shared, id, context.as_ref(), &handler, &mut action)
                         .await?;
 
                 Ok(ActionOutput {
@@ -640,41 +645,19 @@ impl Queue {
         Ok(stored_action.map(QueuedMetadata::from))
     }
 
-    /// Deletes an action with `action_id` and allows the action to undo the local state.
-    ///
-    /// To remove an action from the queue without reverting state see [`Queue::delete_action()`].
-    ///
-    /// To cancel this action and all the actions that depend on it see
-    /// [`Queue::cancel_with_dependees()`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query failed, the action could not be found or another thread
-    /// is currently invoking this function.
-    pub async fn cancel(&self, action_id: Id) -> QueuedResult<()> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send_async(Command::Cancel(action_id, sender))
-            .await?;
-
-        receiver.await?
-    }
-
     /// Deletes an action with `action_id` and allows the action to undo the local state. All other
     /// actions that depend on this action are also cancelled.
     ///
     /// To remove an action from the queue without reverting state see [`Queue::delete_action()`].
     ///
-    /// To cancel this actions without the dependees see [`Queue::cancel()`].
-    ///
     /// # Errors
     ///
     /// Returns error if the db query failed or the action could not be found or another thread
     /// is currently invoking this function.
-    pub async fn cancel_with_dependees(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
+    pub async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
         let (sender, receiver) = oneshot::channel();
         self.sender
-            .send_async(Command::CancelDeps(action_id, sender))
+            .send_async(Command::Cancel(action_id, sender))
             .await?;
 
         receiver.await?
@@ -694,13 +677,13 @@ impl Queue {
 pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
-        shared: &Shared,
+        shared: &'a Shared,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
-        shared: &Shared,
+        shared: &'a Shared,
         tx: &'a Tether,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
@@ -719,16 +702,15 @@ pub(crate) struct TypeErasedAction<T: Action + Send> {
 impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn execute<'a, 's: 'a>(
         &'a mut self,
-        shared: &Shared,
+        shared: &'a Shared,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
-        let stash = shared.stash.clone();
         Box::pin(async move {
             let context = result?;
             // Can't return result here as there is no one to consume it.
             let _ = execute_action_remote(
-                &stash,
+                shared,
                 self.action_id,
                 context.as_ref(),
                 &self.handler,
@@ -742,7 +724,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 
     fn cancel<'a>(
         &'a mut self,
-        shared: &Shared,
+        shared: &'a Shared,
         tx: &'a Tether,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
@@ -750,42 +732,29 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         Box::pin(async move {
             let context = result?;
             // Can't return result here as there is no one to consume it.
-            cancel_action_impl(
-                tx,
+            debug!(
+                "Reverting local state for {} type={}",
                 self.action_id,
-                context.as_ref(),
-                &self.handler,
-                &mut self.action,
-            )
-            .await
-            .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
+                T::TYPE
+            );
+            // Revert local changes and remove action from queue.
+            if let Err(e) = self
+                .handler
+                .revert_local(&context, &mut self.action, tx)
+                .await
+            {
+                error!("Failed to revert local changes: {e}");
+            }
+            StoredAction::delete(tx, self.action_id)
+                .await
+                .map_err(|e| {
+                    error!("Failed to delete action: {e}");
+                    e
+                })
+                .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
             Ok(())
         })
     }
-}
-
-/// Shared snippet to cancel actions.
-async fn cancel_action_impl<T: Action>(
-    tx: &Tether,
-    id: Id,
-    context: &T::Context,
-    handler: &T::Handler,
-    action: &mut T,
-) -> std::result::Result<(), ActionError<T>> {
-    debug!("Reverting local state");
-    // Revert local changes and remove action from queue.
-    handler
-        .revert_local(context, action, tx)
-        .await
-        .map_err(|e| {
-            error!("Failed to revert local changes: {e}");
-            ActionError::Action(e)
-        })?;
-    StoredAction::delete(tx, id).await.map_err(|e| {
-        error!("Failed to delete action: {e}");
-        e
-    })?;
-    Ok(())
 }
 
 /// Worker commands
@@ -796,10 +765,8 @@ enum Command {
     ExecuteOne(oneshot::Sender<QueuedResult<Option<Id>>>),
     /// Execute all queued actions
     ExecuteAll(oneshot::Sender<QueuedResult<()>>),
-    /// Cancel an action
-    Cancel(Id, oneshot::Sender<QueuedResult<()>>),
     /// Cancel an action and all the actions which depend on this action
-    CancelDeps(Id, oneshot::Sender<QueuedResult<Vec<Id>>>),
+    Cancel(Id, oneshot::Sender<QueuedResult<Vec<Id>>>),
     /// Delete an action without cancelling
     Delete(Id, oneshot::Sender<QueuedResult<()>>),
 }
@@ -867,13 +834,6 @@ impl BackgroundWorker {
                         error!("Failed to send cancel result back to callee");
                     }
                 }
-                Command::CancelDeps(id, tx) => {
-                    self.wait_on_tasks().await;
-                    let r = self.cancel_with_dependees(id).await;
-                    if tx.send(r).is_err() {
-                        error!("Failed to send cancel result back to callee");
-                    }
-                }
                 Command::Delete(id, tx) => {
                     self.wait_on_tasks().await;
                     let r = self.delete(id).await;
@@ -907,7 +867,7 @@ impl BackgroundWorker {
             action.action_type,
             action.short_dbg_str()
         );
-        let (mut decoded, metadata) = self.decode_action(action)?;
+        let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
         decoded.execute(&self.shared, metadata).await?;
 
@@ -934,50 +894,9 @@ impl BackgroundWorker {
 
     /// See [`Queue::cancel()`] for more details.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    async fn cancel(&self, action_id: Id) -> QueuedResult<()> {
-        let conn = self.shared.stash.connection();
-        let Some(action) = StoredAction::load(action_id, &conn).await? else {
-            return Err(QueuedError::ActionNotFound(action_id));
-        };
-
-        let (mut decoded, metadata) = self.decode_action(action)?;
-        conn.transaction().await?;
-        decoded.cancel(&self.shared, &conn, metadata).await?;
-        conn.commit().await?;
-        Ok(())
-    }
-
-    /// See [`Queue::cancel_with_dependees()`] for more details.
-    #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    async fn cancel_with_dependees(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
+    async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
         let tx = self.shared.stash.transaction().await?;
-        let mut remaining_actions = vec![action_id];
-        let mut sorter = TopologicalSort::<Id>::new();
-        let mut cancelled_actions = Vec::new();
-        while let Some(action_id) = remaining_actions.pop() {
-            let dependees = StoredAction::dependees(&tx, action_id).await.map_err(|e| {
-                error!("Failed to load action dependees: {e}");
-                e
-            })?;
-            debug!("Dependees: {dependees:?}");
-            remaining_actions.extend(dependees.iter().copied());
-            for id in dependees {
-                sorter.add_dependency(id, action_id);
-            }
-        }
-
-        // Cancel all actions in reversed order
-        while let Some(action_id) = sorter.pop() {
-            let Some(action) = StoredAction::load(action_id, &tx).await? else {
-                return Err(QueuedError::ActionNotFound(action_id));
-            };
-
-            let (mut decoded, metadata) = self.decode_action(action)?;
-
-            decoded.cancel(&self.shared, &tx, metadata).await?;
-
-            cancelled_actions.push(action_id);
-        }
+        let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
         tx.commit().await?;
         Ok(cancelled_actions)
     }
@@ -985,22 +904,6 @@ impl BackgroundWorker {
     /// Wait on all the executing immediate actions.
     async fn wait_on_tasks(&mut self) {
         while self.apply_tasks.join_next().await.is_some() {}
-    }
-
-    /// Decode stored action and return an executor.
-    fn decode_action(
-        &self,
-        stored_action: StoredAction,
-    ) -> QueuedResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
-        let action_id = stored_action.id.unwrap();
-        self.shared
-            .factory
-            .read()
-            .decode(stored_action)
-            .map_err(|e| {
-                error!("Failed to decode action: {e}");
-                QueuedError::Factory(action_id, e)
-            })
     }
 }
 
@@ -1038,25 +941,24 @@ async fn execute_action_local<T: Action>(
 
 /// Shared snippet to execute actions remotely.
 async fn execute_action_remote<T: Action>(
-    stash: &Stash,
+    shared: &Shared,
     id: Id,
     context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
 ) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
-    let tether = stash.connection();
-
     //1) Attempt to execute on remote
     debug!("Applying action on remote");
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
-    let result = handler.apply_remote(context, action, stash).await;
+    let result = handler.apply_remote(context, action, &shared.stash).await;
 
-    match result {
+    let tether = shared.stash.connection();
+
+    tether.transaction().await?;
+    let result = match result {
         Ok(result) => {
-            tether.transaction().await?;
             StoredAction::delete(&tether, id).await?;
-            tether.commit().await?;
 
             Ok(ActionRemoteOutput::Executed(result))
         }
@@ -1066,24 +968,77 @@ async fn execute_action_remote<T: Action>(
                 // if this failed due to network error we should leave it in the queue.
                 return Ok(ActionRemoteOutput::Queued(id));
             }
-
-            // Revert local changes and remove action from queue.
-            if let Err(e) = async {
-                tether.transaction().await?;
-                handler
-                    .revert_local(context, action, &tether)
-                    .await
-                    .map_err(ActionError::<T>::Action)?;
-                StoredAction::delete(&tether, id).await?;
-                tether.commit().await?;
-                Ok::<(), ActionError<T>>(())
-            }
-            .await
-            {
-                error!("Failed to revert local changes: {e}");
+            debug!("Reverting self and dependees");
+            if let Err(e) = cancel_action_with_dependees(shared, &tether, id).await {
+                error!("Failed to cancel action and depeendees: {e}");
             }
 
             Err(ActionError::Action(e))
         }
+    };
+    tether.commit().await?;
+    result
+}
+
+/// Cancel
+async fn cancel_action_with_dependees(
+    shared: &Shared,
+    tx: &Tether,
+    action_id: Id,
+) -> QueuedResult<Vec<Id>> {
+    let mut remaining_actions = vec![action_id];
+    let mut sorter = TopologicalSort::<Id>::new();
+    let mut cancelled_actions = Vec::new();
+    while let Some(action_id) = remaining_actions.pop() {
+        let dependees = StoredAction::dependees(tx, action_id).await.map_err(|e| {
+            error!("Failed to load action dependees: {e}");
+            e
+        })?;
+        debug!("Action {action_id} has {:?} as dependees", dependees);
+        remaining_actions.extend(dependees.iter().copied());
+        for id in dependees {
+            sorter.add_dependency(id, action_id);
+        }
     }
+
+    if sorter.is_empty() {
+        // This means that the current action has no dependency chain
+        // we should only revert this action.
+        let Some(action) = StoredAction::load(action_id, tx).await? else {
+            return Err(QueuedError::ActionNotFound(action_id));
+        };
+
+        let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
+
+        decoded.cancel(shared, tx, metadata).await?;
+
+        cancelled_actions.push(action_id);
+    } else {
+        debug!("Reverting {} dependent actions", sorter.len());
+        // Cancel all actions in reversed order
+        while let Some(current_action_id) = sorter.pop() {
+            let Some(action) = StoredAction::load(current_action_id, tx).await? else {
+                return Err(QueuedError::ActionNotFound(current_action_id));
+            };
+
+            let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
+
+            decoded.cancel(shared, tx, metadata).await?;
+
+            cancelled_actions.push(current_action_id);
+        }
+    }
+    Ok(cancelled_actions)
+}
+
+/// Decode stored action and return an executor.
+fn decode_action(
+    factory: &RwLock<Factory>,
+    stored_action: StoredAction,
+) -> QueuedResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+    let action_id = stored_action.id.unwrap();
+    factory.read().decode(stored_action).map_err(|e| {
+        error!("Failed to decode action: {e}");
+        QueuedError::Factory(action_id, e)
+    })
 }
