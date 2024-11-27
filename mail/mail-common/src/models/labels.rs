@@ -20,7 +20,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -116,11 +116,6 @@ pub struct Label {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl Label {
@@ -135,11 +130,7 @@ impl Label {
     /// label_id is not set, the local label can not be found or the query
     /// failed.
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update a Label.
@@ -163,7 +154,6 @@ impl Label {
                 self.local_parent_id = label.local_parent_id;
                 self.local_id = label.local_id;
                 self.row_id = label.row_id;
-                self.stash = label.stash;
             }
         }
 
@@ -612,7 +602,6 @@ impl From<ApiLabel> for Label {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -640,7 +629,6 @@ impl Default for Label {
             unread_conv: Default::default(),
             unread_msg: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }

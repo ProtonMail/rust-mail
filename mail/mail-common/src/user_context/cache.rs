@@ -55,7 +55,7 @@ impl Cache {
 pub struct CacheAttachmentConfig;
 impl CacheConfig for CacheAttachmentConfig {
     type Key = CacheAttachmentKey;
-    type Init = Stash;
+    type Interface = Stash;
     type ExtraMetadata = ();
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
@@ -64,7 +64,7 @@ impl CacheConfig for CacheAttachmentConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
+    async fn handle_failed(failed: Vec<Self::Key>, _: Stash) -> CacheResult<()> {
         CacheAttachmentKey::batch_unset(failed)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
@@ -171,7 +171,7 @@ impl Hash for CacheAttachmentKey {
 }
 
 impl CacheKey for CacheAttachmentKey {
-    fn after_evict(&self) {
+    fn after_evict(&self, _: &Stash) {
         block_on(async {
             let _ = self.unset_cached().await;
         })
@@ -183,7 +183,7 @@ impl CacheKey for CacheAttachmentKey {
 pub struct CacheMessageConfig;
 impl CacheConfig for CacheMessageConfig {
     type Key = CacheMessageKey;
-    type Init = Stash;
+    type Interface = Stash;
     type ExtraMetadata = ();
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
@@ -192,7 +192,7 @@ impl CacheConfig for CacheMessageConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
+    async fn handle_failed(failed: Vec<Self::Key>, _: Stash) -> CacheResult<()> {
         CacheMessageKey::batch_unset(failed)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
@@ -284,7 +284,7 @@ impl Hash for CacheMessageKey {
 }
 
 impl CacheKey for CacheMessageKey {
-    fn after_evict(&self) {
+    fn after_evict(&self, _: &Stash) {
         block_on(async {
             let _ = self.unset_cached().await;
         })

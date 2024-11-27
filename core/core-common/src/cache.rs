@@ -18,6 +18,7 @@
 
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
+use stash::stash::{Interface, Stash};
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_file, set_permissions, File, OpenOptions, Permissions};
@@ -73,14 +74,17 @@ pub trait CacheConfig: Clone {
     /// Type of key
     type Key: CacheKey;
     /// Type of the resource needed to get existing items.
-    type Init;
+    type Interface: Interface;
     type ExtraMetadata: Clone;
 
     /// Get existing items (used at creation).
-    fn get_existing(init: Self::Init) -> impl Future<Output = CacheResult<Vec<Self::Key>>>;
+    fn get_existing(init: Self::Interface) -> impl Future<Output = CacheResult<Vec<Self::Key>>>;
 
     /// Handle items that should be there, but where not found (used at creation).
-    fn handle_failed(failed: Vec<Self::Key>) -> impl Future<Output = CacheResult<()>>;
+    fn handle_failed(
+        failed: Vec<Self::Key>,
+        init: Self::Interface,
+    ) -> impl Future<Output = CacheResult<()>>;
 
     /// Get extra metadata corresponding to given key (used at creation).
     fn extra_for_key(_key: &Self::Key) -> Option<Self::ExtraMetadata> {
@@ -104,7 +108,7 @@ pub trait CacheConfig: Clone {
 pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
     /// Callback executed after this key is evicted.
     #[allow(clippy::unused_async)]
-    fn after_evict(&self) {}
+    fn after_evict(&self, _stash: &Stash) {}
 }
 
 /// Metadata about one value, stored in memory
@@ -168,17 +172,15 @@ pub struct DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
-    phantom_data: PhantomData<Config>,
+    init: Config::Interface,
 }
 
 impl<Config> DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
-    fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
+    fn new(init: Config::Interface) -> Self {
+        Self { init }
     }
 }
 
@@ -212,7 +214,7 @@ where
             if let Err(error) = remove_file(path) {
                 error!("Couldn't remove file for key {key:?}: {error:?}");
             }
-            key.after_evict();
+            key.after_evict(self.init.stash());
         }
     }
 }
@@ -234,6 +236,7 @@ where
     >,
     /// Path to the root of the cache
     cache_buf: PathBuf,
+    init: Config::Interface,
 }
 
 impl<Config> ProtonCache<Config>
@@ -250,7 +253,7 @@ where
     /// # Errors
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
-    fn _new(cache_buf: PathBuf, size: u32) -> CacheResult<Self> {
+    fn _new(cache_buf: PathBuf, size: u32, init: Config::Interface) -> CacheResult<Self> {
         // create in memory cache
         let cache = Cache::with_options(
             OptionsBuilder::new()
@@ -260,7 +263,7 @@ where
                 .map_err(|e| CacheError::QuickCache(e.into()))?,
             DefaultWeighter::new(),
             DefaultHashBuilder::default(),
-            DefaultLifecycle::new(),
+            DefaultLifecycle::new(init.clone()),
         );
 
         // create file directory
@@ -270,7 +273,11 @@ where
             set_permissions(cache_buf.clone(), Permissions::from_mode(0o700))?;
         }
 
-        Ok(Self { cache, cache_buf })
+        Ok(Self {
+            cache,
+            cache_buf,
+            init,
+        })
     }
 
     /// Initialize a new cache from existing keys.
@@ -287,9 +294,9 @@ where
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
     ///
-    pub async fn new(cache_buf: PathBuf, size: u32, init: Config::Init) -> CacheResult<Self> {
-        let existing = Config::get_existing(init).await?;
-        let cache = Self::_new(cache_buf, size)?;
+    pub async fn new(cache_buf: PathBuf, size: u32, init: Config::Interface) -> CacheResult<Self> {
+        let existing = Config::get_existing(init.clone()).await?;
+        let cache = Self::_new(cache_buf, size, init.clone())?;
 
         let mut failed = vec![];
         for key in existing {
@@ -298,7 +305,7 @@ where
                 failed.push(key.clone());
             }
         }
-        Config::handle_failed(failed).await?;
+        Config::handle_failed(failed, init).await?;
         Ok(cache)
     }
 
@@ -486,7 +493,7 @@ where
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
             remove_file(path)?;
-            key.after_evict();
+            key.after_evict(self.init.stash());
         }
         self.cache.remove(key);
         Ok(())

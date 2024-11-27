@@ -435,7 +435,7 @@ impl Context {
             .await?
             .ok_or(CoreContextError::Other(anyhow!("account not found")))?
             .with_primary_now()
-            .save()
+            .save_using(&self.stash)
             .await?;
 
         Ok(())

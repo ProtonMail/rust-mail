@@ -72,10 +72,6 @@ pub struct SenderImage {
     /// as a consistent identifier for records when listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl SenderImage {
@@ -87,9 +83,17 @@ impl SenderImage {
     /// # Errors
     /// * if a database request fail.
     ///
-    pub async fn batch_delete(values: impl IntoIterator<Item = Self>) -> Result<(), StashError> {
+    pub async fn batch_delete<A>(
+        values: impl IntoIterator<Item = Self>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        // TODO(pry): Use a single query to delete all values
+        // TODO(pry): Use a transaction
         for value in values {
-            value.delete().await?;
+            value.delete(interface).await?;
         }
         Ok(())
     }
@@ -99,8 +103,10 @@ impl SenderImage {
     /// # Error
     /// * If the database request fail.
     ///
-    pub(crate) async fn delete(&self) -> Result<(), StashError> {
-        let interface = self.stash.clone().ok_or(StashError::NoStashAvailable)?;
+    pub(crate) async fn delete<A>(&self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         interface
             .execute(
                 r"DELETE FROM sender_image_cache WHERE local_id = ?",
@@ -194,11 +200,7 @@ impl SenderImage {
     /// Returns error if a database request fail.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update a `SenderImage`.
@@ -216,18 +218,14 @@ impl SenderImage {
         A: Into<AgnosticInterface> + Interface,
     {
         let (query, params) = self.build_query();
-        if self.stash.is_none() {
-            self.set_stash(interface.stash());
-        }
-
         let transaction = interface.transaction().await?;
         let mut values = Self::find(query, params, &transaction, None).await?;
+
         match values.len() {
             0 => <Self as Model>::save_using(self, &transaction).await?,
             1 => {
                 let value = values.get_mut(0).expect("One item present").clone();
                 self.local_id = value.local_id;
-                self.stash.clone_from(&value.stash);
                 self.row_id = value.row_id;
             }
             _ => {
@@ -303,7 +301,7 @@ impl From<&SenderImage> for GetImagesLogoOptions {
 
 impl CacheConfig for SenderImage {
     type Key = Self;
-    type Init = Stash;
+    type Interface = Stash;
     type ExtraMetadata = SenderImageMetadata;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
@@ -312,8 +310,8 @@ impl CacheConfig for SenderImage {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
-        Self::batch_delete(failed)
+    async fn handle_failed(failed: Vec<Self::Key>, stash: Stash) -> CacheResult<()> {
+        Self::batch_delete(failed, &stash)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
@@ -337,10 +335,10 @@ impl CacheConfig for SenderImage {
 }
 
 impl CacheKey for SenderImage {
-    fn after_evict(&self) {
+    fn after_evict(&self, stash: &Stash) {
         block_on(async {
             let _ = self
-                .delete()
+                .delete(stash)
                 .await
                 .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
         });

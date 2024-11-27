@@ -211,7 +211,7 @@ impl AuthStore {
 
         account
             .with_info(username, display_name, primary_addr)
-            .save()
+            .save_using(&self.stash)
             .await?;
 
         Ok(())

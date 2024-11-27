@@ -75,7 +75,7 @@ async fn move_between_folders() {
         .unwrap();
     source.total_conv = 1;
     source.total_msg = 1;
-    source.save().await.unwrap();
+    source.save_using(stash).await.unwrap();
 
     let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], stash)
         .await
@@ -355,7 +355,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap();
     spam.total_conv = 1;
     spam.total_msg = 1;
-    spam.save().await.unwrap();
+    spam.save_using(stash).await.unwrap();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
         .await

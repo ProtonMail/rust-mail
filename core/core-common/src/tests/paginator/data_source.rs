@@ -18,9 +18,6 @@ pub struct TestModel {
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
 }
 
 impl TestModel {
@@ -32,7 +29,6 @@ impl TestModel {
         if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], interface).await?
         {
             self.row_id = element.row_id;
-            self.set_stash(element.stash().unwrap());
         } else {
             <Self as Model>::save_using(self, interface).await?;
         }
@@ -65,7 +61,6 @@ impl TestDataSource {
             let mut value = TestModel {
                 id: i.into(),
                 row_id: None,
-                stash: None,
             };
             value.save_using(&tx).await?;
             result.push(value);
@@ -289,7 +284,6 @@ async fn data_source_sync_with_callback() {
     let mut new_value = TestModel {
         id: 19,
         row_id: None,
-        stash: Some(stash.clone()),
     };
     new_value.save_using(&stash).await.unwrap();
 
@@ -318,7 +312,6 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
     let iter = range.into_iter().map(|id| TestModel {
         id: u64::from(id),
         row_id: Some(u64::from(id)),
-        stash: Some(stash.clone()),
     });
 
     let expected = if let Some(max) = max_len {
@@ -367,7 +360,6 @@ async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
     let iter = (start..end).map(|id| TestModel {
         id: u64::from(id),
         row_id: Some(u64::from(id)),
-        stash: Some(stash.clone()),
     });
 
     let expected = if let Some(max) = max_len {

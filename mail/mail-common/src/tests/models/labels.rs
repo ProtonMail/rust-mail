@@ -223,7 +223,6 @@ async fn create_local_label() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
         new_label
             .save_using(&tx)
@@ -264,7 +263,6 @@ async fn create_local_label_1_char_long_name() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
         new_label
             .save_using(&tx)
@@ -305,7 +303,6 @@ async fn create_local_label_100_char_long_name() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
         new_label
             .save_using(&tx)
@@ -350,7 +347,6 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: None,
         };
         new_label1
             .save_using(&tx)
@@ -377,7 +373,6 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: None,
         };
         new_label2
             .save_using(&tx)
@@ -418,7 +413,6 @@ async fn update_local_label() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
     new_label
         .save_using(&tx)
@@ -445,7 +439,6 @@ async fn update_local_label() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
     new_label
         .save_using(&tx)
@@ -518,7 +511,6 @@ async fn test_mark_labels_as_initialized() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
     new_label
         .save_using(&tx)
@@ -560,7 +552,6 @@ async fn test_watch_label() {
     }
     .into();
 
-    label.set_stash(&stash);
     label.save_using(&stash).await.unwrap();
 
     let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &stash)

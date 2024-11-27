@@ -75,9 +75,6 @@ pub struct TestModel {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl TestModel {
@@ -87,7 +84,6 @@ impl TestModel {
             text,
             number,
             row_id: None,
-            stash: None,
         }
     }
 }

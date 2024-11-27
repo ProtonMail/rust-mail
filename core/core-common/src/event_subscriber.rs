@@ -80,7 +80,6 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
             for event in events.iter_mut() {
                 if let Some(user) = event.get_core_event_user_mut() {
                     debug!("Handling user event");
-                    user.set_stash(&stash);
                     user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update user: {e}");
                         e
@@ -89,7 +88,6 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 if let Some(settings) = event.get_core_event_user_settings_mut() {
                     debug!("Handling user setting event");
                     settings.remote_id = Some(user_id.clone());
-                    settings.set_stash(&stash);
                     settings.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update user settings:{e}");
                         e
@@ -99,7 +97,6 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user space event");
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.used_space = used_space;
-                    user.set_stash(&stash);
                     user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
@@ -109,7 +106,6 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user product space event");
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
-                    user.set_stash(&stash);
                     user.save_using(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e

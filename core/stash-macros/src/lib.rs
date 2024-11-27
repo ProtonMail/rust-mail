@@ -117,9 +117,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     apply `#[serde(skip)]` to this field to avoid it being included in the
 ///     serialisation requirements. It is a special internal field, and not
 ///     included in the list of database fields.
-///   - `#[StashField]`: The field that contains the associated `Stash` for the
-///     record. Note that it is important to apply `#[serde(skip)]` to this
-///     field to avoid it being included in the serialisation requirements.
 ///   - `#[IdField]`: The field that contains the primary key for the record.
 ///     This can be any type, as defined by the associated type [`Model::Id`].
 ///     If the field is `optional` or `autoincrement` then it will need to be
@@ -154,7 +151,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///                database, and triggered by "load" and "find" operations.
 ///   - `on_save`: This action is called when the model is saved to the
 ///                database. It is triggered by "save" operations.
-///  
+///
 /// In both cases the custom action occurs after the normal operation has
 /// been carried out.
 ///
@@ -187,10 +184,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[RowIdField]
 ///     #[serde(skip)]
 ///     row_id: Option<u64>,
-///
-///     #[StashField]
-///     #[serde(skip)]
-///     stash: Option<Stash>,
 /// }
 /// ```
 ///
@@ -221,10 +214,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[RowIdField]
 ///     #[serde(skip)]
 ///     row_id: Option<u64>,
-///
-///     #[StashField]
-///     #[serde(skip)]
-///     stash: Option<Stash>,
 /// }
 /// ```
 ///
@@ -255,16 +244,12 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[RowIdField]
 ///     #[serde(skip)]
 ///     row_id: Option<u64>,
-///
-///     #[StashField]
-///     #[serde(skip)]
-///     stash: Option<Stash>,
 /// }
 /// ```
 ///
 #[proc_macro_derive(
     Model,
-    attributes(DbField, IdField, ModelActions, RowIdField, StashField, TableName)
+    attributes(DbField, IdField, ModelActions, RowIdField, TableName)
 )]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -278,10 +263,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fields = extract_fields(&input, "Model");
     let (id_field, id_type, is_optional, is_autoincrement) = extract_id_field(&fields);
     let row_id_field = extract_row_id_field(&fields);
-    let stash_field = extract_stash_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
     let db_fields_without_id = extract_db_fields(&fields, false);
-    let internal_fields = Some((&row_id_field, &stash_field));
+    let internal_fields = Some(&row_id_field);
     let default_fields = extract_default_fields(&fields, &db_fields, internal_fields);
     let via_attrs = extract_via_attrs(&fields, true);
     let via_attrs_without_id = extract_via_attrs(&fields, false);
@@ -375,9 +359,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let on_save_impl = if has_on_save {
         quote! {
             async fn save(&mut self) -> Result<(), stash::stash::StashError> {
-                stash::orm::perform_save(self, None).await?;
-                // Unwrapping is safe here because we just did a save with the stash
-                self.on_save(&self.stash().unwrap().into()).await
+                unreachable!()
             }
             async fn save_using<A>(&mut self, interface: &A) -> Result<(), stash::stash::StashError>
             where
@@ -449,10 +431,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 self.#row_id_field
             }
 
-            fn stash(&self) -> Option<&stash::stash::Stash> {
-                self.#stash_field.as_ref()
-            }
-
             fn set_id(&mut self, id: Self::Id) {
                 self.#id_field = id;
             }
@@ -463,10 +441,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn set_row_id(&mut self, id: Option<u64>) {
                 self.#row_id_field = id;
-            }
-
-            fn set_stash(&mut self, stash: &stash::stash::Stash) {
-                self.#stash_field = Some(stash.clone());
             }
 
             fn table_name() -> &'static str {
@@ -566,7 +540,7 @@ fn extract_db_fields(fields: &[&Field], include_id_field: bool) -> Vec<Ident> {
 fn extract_default_fields(
     all_fields: &[&Field],
     db_fields: &[Ident],
-    internal_fields: Option<(&Ident, &Ident)>,
+    internal_fields: Option<&Ident>,
 ) -> Vec<Ident> {
     all_fields
         .iter()
@@ -574,8 +548,8 @@ fn extract_default_fields(
             !db_fields.contains(field.ident.as_ref().unwrap())
                 && !matches!(
                     internal_fields,
-                    Some((row_id_field, stash_field))
-                    if field.ident.as_ref() == Some(row_id_field) || field.ident.as_ref() == Some(stash_field)
+                    Some(row_id_field)
+                    if field.ident.as_ref() == Some(row_id_field)
                 )
         })
         .map(|field| field.ident.clone().unwrap())
@@ -771,40 +745,6 @@ fn extract_row_id_field(fields: &[&Field]) -> Ident {
         .ident
         .clone()
         .expect("RowIdField must have an identifier")
-}
-
-/// Extract the field that is marked as the `stash` field.
-///
-/// This function extracts the field that is marked as the `stash` field from
-/// the struct fields. It is expected that there is exactly one field marked
-/// with the `StashField` attribute.
-///
-/// The `stash` field is the field that contains the associated `Stash` for the
-/// record.
-///
-/// # Parameters
-///
-/// * `fields` - The fields of the struct. Specifically, *all* the fields that
-///              the struct has.
-///
-/// # Panics
-///
-/// This function panics if the `StashField` attribute is missing, or does not
-/// have an identifier.
-///
-fn extract_stash_field(fields: &[&Field]) -> Ident {
-    fields
-        .iter()
-        .find(|field| {
-            field
-                .attrs
-                .iter()
-                .any(|attr| attr.path().is_ident("StashField"))
-        })
-        .expect("StashField attribute is missing")
-        .ident
-        .clone()
-        .expect("StashField must have an identifier")
 }
 
 /// Extract the table name from the struct attributes.
@@ -1028,16 +968,15 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 fn generate_fn_from_row_impl(
     db_fields: &[Ident],
     default_fields: &[Ident],
-    internal_fields: Option<(&Ident, &Ident)>,
+    internal_fields: Option<&Ident>,
     from_row_values_impl: &[TokenStream2],
 ) -> TokenStream2 {
-    let internal_fields_impl = if let Some((row_id_field, stash_field)) = internal_fields {
+    let internal_fields_impl = if let Some(row_id_field) = internal_fields {
         quote! {
             #row_id_field: Some(row.get(
                 columns.iter().position(|c| c == "rowid")
                     .ok_or_else(|| stash::orm::ConversionError::MissingColumn("rowid".to_owned()))?
             )?),
-            #stash_field: Some(stash.clone()),
         }
     } else {
         quote! {}

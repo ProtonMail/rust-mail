@@ -1468,7 +1468,6 @@ impl From<MailSettings> for RealMailSettings {
             view_layout: value.view_layout.into(),
             view_mode: value.view_mode.into(),
             row_id: None,
-            stash: None,
         }
     }
 }

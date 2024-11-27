@@ -35,7 +35,6 @@ async fn test_attachment_create_without_metadata() {
     expected.row_id = attachment.row_id;
     expected.local_message_id = Some(1.into());
     expected.local_conversation_id = Some(1.into());
-    expected.set_stash(&stash);
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
         .await
         .unwrap()
@@ -71,7 +70,6 @@ async fn test_attachment_create_with_metadata() {
     let mut expected = attachment.clone();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
-    expected.stash = Some(stash.clone());
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
         .await
         .unwrap()
@@ -136,7 +134,6 @@ async fn create_attachment_dependencies(
         proton_mx: false,
         signed_key_list: Default::default(),
         row_id: None,
-        stash: None,
     }
     .save_using(tx)
     .await?;

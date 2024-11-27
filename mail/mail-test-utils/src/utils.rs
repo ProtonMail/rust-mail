@@ -9,7 +9,6 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
-use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};
 
@@ -72,8 +71,10 @@ pub async fn prepare_and_patch_db_state_and_skip(
         let the_label = if let Some(ref l) = db_label {
             l
         } else {
-            label.set_stash(&stash);
-            label.save().await.expect("failed to create label");
+            label
+                .save_using(&stash)
+                .await
+                .expect("failed to create label");
             label
         };
         local_label_ids.push(the_label.local_id);
@@ -208,8 +209,10 @@ pub async fn prepare_and_patch_db_state_and_skip(
     if !skip_messages {
         let mut local_message_ids = vec![];
         for message in &mut env.messages {
-            message.set_stash(&stash);
-            message.save().await.expect("failed to create message");
+            message
+                .save_using(&stash)
+                .await
+                .expect("failed to create message");
             local_message_ids.push(message.local_id);
             result.messages.insert(
                 message.remote_id.clone().unwrap(),
@@ -363,7 +366,6 @@ pub fn test_address() -> Address {
             revision: 0,
         },
         row_id: None,
-        stash: None,
     }
 }
 

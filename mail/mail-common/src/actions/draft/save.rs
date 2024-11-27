@@ -226,7 +226,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 parsed_headers: Default::default(),
                 attachments,
                 row_id: None,
-                stash: None,
             };
 
             message_body_metadata
@@ -487,7 +486,6 @@ impl Save {
             custom_labels: vec![],
             cached: false,
             row_id: None,
-            stash: None,
         }
     }
 
@@ -549,7 +547,6 @@ impl Save {
             custom_labels: vec![],
             has_messages: false,
             row_id: None,
-            stash: None,
         }
     }
 

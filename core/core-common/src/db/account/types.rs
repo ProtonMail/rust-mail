@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use stash::{params, sql_using_serde};
 use std::ops::Deref;
 use std::string::FromUtf8Error;
@@ -66,9 +66,6 @@ pub struct CoreAccount {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl CoreAccount {
@@ -93,7 +90,6 @@ impl CoreAccount {
             primary_addr: None,
             primary_at: None,
             row_id: None,
-            stash: None,
         }
     }
 
@@ -159,11 +155,7 @@ impl CoreAccount {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a account to the database.
@@ -226,9 +218,6 @@ pub struct CoreSession {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl CoreSession {
@@ -262,7 +251,6 @@ impl CoreSession {
             // --- Optional fields ---
             key_secret: None,
             row_id: None,
-            stash: None,
         })
     }
 

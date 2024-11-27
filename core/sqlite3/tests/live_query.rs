@@ -14,9 +14,6 @@ pub struct Foo {
     #[RowIdField]
     #[serde(skip)]
     row_id: Option<u64>,
-    #[StashField]
-    #[serde(skip)]
-    stash: Option<Stash>,
 }
 
 #[tokio::test]

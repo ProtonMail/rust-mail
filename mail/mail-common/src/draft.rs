@@ -210,7 +210,6 @@ impl Draft {
                 local_parent_id: None,
                 reply_mode: None,
                 row_id: None,
-                stash: None,
             };
             metadata
                 .save_using(&tether)

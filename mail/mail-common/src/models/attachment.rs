@@ -24,7 +24,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 
 /// Represents a mail attachment.
 ///
@@ -178,12 +178,6 @@ pub struct Attachment {
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
 }
 
 impl Attachment {
@@ -235,10 +229,7 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update the attachment in the database.
@@ -500,7 +491,6 @@ impl From<ApiAttachment> for Attachment {
             image_width: None,
             image_height: None,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -531,7 +521,6 @@ impl From<ApiMessageAttachment> for Attachment {
             image_width: value.headers.image_width,
             image_height: value.headers.image_height,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -562,7 +551,6 @@ impl From<AttachmentMetadata> for Attachment {
             image_width: None,
             image_height: None,
             row_id: None,
-            stash: None,
         }
     }
 }

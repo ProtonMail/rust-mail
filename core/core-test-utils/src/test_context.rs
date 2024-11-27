@@ -216,8 +216,7 @@ impl TestContext {
                 TfaStatus::None,
                 PasswordMode::One,
             )
-            .with_stash(&stash)
-            .with_save()
+            .with_save(&stash)
             .await
             .expect("fake account should save");
 
@@ -239,8 +238,7 @@ impl TestContext {
                 .expect("session should be created")
                 .with_key_secret(&user_key_secret, &encryption_key)
                 .expect("key secret should be set")
-                .with_stash(&stash)
-                .with_save()
+                .with_save(&stash)
                 .await
                 .expect("fake session should save");
 

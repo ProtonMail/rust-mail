@@ -9,12 +9,12 @@ use crate::models::{User, UserSettings};
 use crate::tests::common::new_core_test_connection;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
-use stash::stash::{Interface, Stash};
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn test_core_store_and_load_user() {
     let stash = new_core_test_connection().await;
-    let mut user = new_test_user(stash.clone());
+    let mut user = new_test_user();
     {
         let tx = stash
             .transaction()
@@ -34,7 +34,7 @@ async fn test_core_store_and_load_user() {
 #[tokio::test]
 async fn test_core_user_space_updates() {
     let stash = new_core_test_connection().await;
-    let mut user = new_test_user(stash.clone());
+    let mut user = new_test_user();
     {
         let tx = stash
             .transaction()
@@ -120,7 +120,6 @@ async fn test_core_store_and_load_user_settings() {
         },
         session_account_recovery: true,
         row_id: None,
-        stash: Some(stash.clone()),
     };
 
     {
@@ -142,7 +141,7 @@ async fn test_core_store_and_load_user_settings() {
     .unwrap();
 }
 
-fn new_test_user(stash: Stash) -> User {
+fn new_test_user() -> User {
     User {
         remote_id: Some(RemoteId::from("my_user_id")),
         name: Some("my_user_name".to_owned()),
@@ -210,6 +209,5 @@ fn new_test_user(stash: Stash) -> User {
             no_proton_address: true,
         },
         row_id: None,
-        stash: Some(stash),
     }
 }

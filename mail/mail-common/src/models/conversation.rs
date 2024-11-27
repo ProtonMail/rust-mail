@@ -156,11 +156,6 @@ pub struct Conversation {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl Conversation {
@@ -724,7 +719,6 @@ impl Conversation {
             is_known: false,
             custom_labels: vec![],
             row_id: None,
-            stash: None,
             has_messages: false,
         }
     }
@@ -740,11 +734,7 @@ impl Conversation {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a message to the database.
@@ -770,7 +760,6 @@ impl Conversation {
             if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
-                self.stash = existing.stash;
             }
         }
 
@@ -844,7 +833,6 @@ impl Conversation {
                         context_time: 0,
                         deleted: false,
                         row_id: None,
-                        stash: None,
                     };
                     let conversation_labels = ConversationLabel::find(
                         "WHERE local_conversation_id=?",
@@ -2595,7 +2583,7 @@ impl Conversation {
             .expect("AllMail should be set");
 
         let (query, mut parameters) = find_in_query!(
-            "DELETE FROM conversation_labels WHERE local_conversation_id in ({}) AND local_label_id != ?", 
+            "DELETE FROM conversation_labels WHERE local_conversation_id in ({}) AND local_label_id != ?",
             conversation_ids
         );
         parameters.push(Box::new(all_mail_id) as Box<dyn ToSql + Send>);
@@ -2766,7 +2754,7 @@ impl Conversation {
             .query_values(
                 format!(
                     "SELECT local_id AS value
-                     FROM messages 
+                     FROM messages
                      WHERE local_conversation_id in ({})",
                     local_ids.iter().map(ToString::to_string).join(",")
                 ),
@@ -3100,7 +3088,6 @@ impl Conversation {
                 context_time: stats.time,
                 deleted: false,
                 row_id: None,
-                stash: None,
             }
         };
 
@@ -3401,7 +3388,6 @@ impl From<ApiConversation> for Conversation {
             size: value.size,
             subject: value.subject,
             row_id: None,
-            stash: None,
             is_known: true,
             has_messages: false,
         }
@@ -3474,11 +3460,6 @@ pub struct ConversationLabel {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl ConversationLabel {
@@ -3546,11 +3527,7 @@ impl ConversationLabel {
     /// label_id is not set, the local label can not be found or the query
     /// failed.
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update a Conversation Label.
@@ -3807,7 +3784,6 @@ impl From<ApiConversationLabel> for ConversationLabel {
             context_time: value.context_time,
             deleted: false,
             row_id: None,
-            stash: None,
         }
     }
 }

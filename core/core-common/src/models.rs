@@ -373,20 +373,16 @@ pub trait ModelExtension: Model {
             .await
     }
 
-    /// Sets the stash, returning the updated model.
-    #[must_use]
-    fn with_stash(mut self, stash: &Stash) -> Self {
-        self.set_stash(stash);
-        self
-    }
-
     /// Saves the model by value, returning the updated model.
     ///
     /// # Errors
     ///
     /// See [`Model::save()`].
-    async fn with_save(mut self) -> Result<Self, StashError> {
-        self.save().await?;
+    async fn with_save<A>(mut self, interface: &A) -> Result<Self, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.save_using(interface).await?;
         Ok(self)
     }
 }
@@ -470,11 +466,6 @@ pub struct Address {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl Address {
@@ -489,11 +480,7 @@ impl Address {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!();
     }
 
     /// Save an address to the database.
@@ -546,7 +533,6 @@ impl Address {
 
         let tx = stash.transaction().await?;
         for mut address in addresses {
-            address.set_stash(stash);
             address.save_using(&tx).await?;
         }
         tx.commit().await?;
@@ -594,7 +580,6 @@ impl From<ApiAddress> for Address {
             signed_key_list: value.signed_key_list.into(),
             status: value.status.into(),
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -695,11 +680,6 @@ pub struct User {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl From<ApiUser> for User {
@@ -727,7 +707,6 @@ impl From<ApiUser> for User {
             used_space: value.used_space,
             user_type: value.user_type.into(),
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -756,11 +735,7 @@ impl User {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a user to the database.
@@ -806,12 +781,12 @@ impl User {
         let mut user = User::from(api.get_users().await?.user);
         let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
         settings.remote_id.clone_from(&user.remote_id);
-        user.set_stash(stash);
-        settings.set_stash(stash);
+
         let tx = stash.transaction().await?;
         user.save_using(&tx).await?;
         settings.save_using(&tx).await?;
         tx.commit().await?;
+
         Ok(())
     }
 }
@@ -921,11 +896,6 @@ pub struct UserSettings {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl UserSettings {
@@ -940,11 +910,7 @@ impl UserSettings {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!();
     }
 
     /// Save a user's settings to the database.
@@ -1003,7 +969,6 @@ impl From<ApiUserSettings> for UserSettings {
             week_start: value.week_start.into(),
             welcome: value.welcome,
             row_id: None,
-            stash: None,
         }
     }
 }

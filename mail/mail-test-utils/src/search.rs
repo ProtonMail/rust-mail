@@ -317,7 +317,6 @@ pub fn test_address() -> Address {
             revision: 0,
         },
         row_id: None,
-        stash: None,
     }
 }
 

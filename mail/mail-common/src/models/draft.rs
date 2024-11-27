@@ -7,7 +7,7 @@ use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::fmt::{Display, Formatter};
 
 /// Identifier for draft [`DraftMetadata`]
@@ -59,11 +59,6 @@ pub struct DraftMetadata {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl DraftMetadata {
@@ -83,7 +78,6 @@ impl DraftMetadata {
             local_parent_id: None,
             reply_mode: None,
             row_id: None,
-            stash: None,
         };
 
         metadata.save_using(interface).await?;
@@ -112,7 +106,6 @@ impl DraftMetadata {
             local_parent_id: Some(source_message_id),
             reply_mode: Some(reply_mode),
             row_id: None,
-            stash: None,
         };
 
         metadata.save_using(interface).await?;
