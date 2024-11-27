@@ -180,7 +180,7 @@ impl proton_action_queue::action::Handler for SendHandler {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let stored_message_body = load_message_body(context, &message_metadata, &tether)?;
+        let stored_message_body = load_message_body(context, &message_metadata)?;
 
         // Get recipient emails.
         let recipient_emails = load_all_recipients(&message_metadata);

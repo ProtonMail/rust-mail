@@ -34,7 +34,7 @@ use tracing::{error, warn};
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum CacheError {
-    /// Error from `QuickCache`
+    /// Insert in cache failed for a key
     #[error("Insert in cache failed for key {0}")]
     InsertFailed(String),
 
@@ -288,11 +288,10 @@ where
     /// * Can't create data structure on disk
     ///
     pub async fn new(cache_buf: PathBuf, size: u32, init: Config::Init) -> CacheResult<Self> {
-        let existing = Config::get_existing(init).await?;
         let cache = Self::_new(cache_buf, size)?;
 
         let mut failed = vec![];
-        for key in existing {
+        for key in Config::get_existing(init).await? {
             let extra = Config::extra_for_key(&key);
             if !cache.add_existing_item(key.clone(), extra)? {
                 failed.push(key.clone());

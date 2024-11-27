@@ -17,7 +17,7 @@ use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -249,11 +249,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Store body in cache.
-        store_body_in_cache(ctx.messages_cache(), &message, &action.body, tether).inspect_err(
-            |e| {
-                error!("Failed to store draft body in cache :{e}");
-            },
-        )?;
+        store_body_in_cache(ctx.messages_cache(), &message, &action.body).inspect_err(|e| {
+            error!("Failed to store draft body in cache :{e}");
+        })?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
         metadata.save_using(tether).await.inspect_err(|e| {
@@ -351,7 +349,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Load body.
-        let stored = load_message_body(ctx, &message, &tether)?;
+        let stored = load_message_body(ctx, &message)?;
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -485,7 +483,6 @@ impl Save {
             to_list: to_message_addresses(&self.to_list),
             unread: false,
             custom_labels: vec![],
-            cached: false,
             row_id: None,
             stash: None,
         }
@@ -585,16 +582,12 @@ fn to_message_addresses<'a>(addresses: impl IntoIterator<Item = &'a String>) -> 
 }
 
 /// Store the message body in the cache.
-fn store_body_in_cache<A>(
+fn store_body_in_cache(
     cache: &ProtonCache<CacheMessageConfig>,
     message: &Message,
     body: &str,
-    interface: &A,
-) -> Result<(), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let key = CacheMessageKey::from_message(message, interface);
+) -> Result<(), AppError> {
+    let key = CacheMessageKey::from(message);
 
     let storable = StorableMessageBody {
         body: body.to_owned(),

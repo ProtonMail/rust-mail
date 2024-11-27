@@ -9,7 +9,7 @@ use crate::{AppError, MailContextError, MailUserContext};
 use proton_core_common::datatypes::{Id, LabelId, LocalId};
 pub use save::*;
 pub use send::*;
-use stash::stash::{AgnosticInterface, Interface, Tether};
+use stash::stash::{AgnosticInterface, Interface};
 use tracing::error;
 
 /// Resolve the Drafts folder local label id.
@@ -42,9 +42,8 @@ where
 fn load_message_body(
     context: &MailUserContext,
     message: &Message,
-    tether: &Tether,
 ) -> Result<StorableMessageBody, AppError> {
-    let key = CacheMessageKey::from_message(message, tether);
+    let key = CacheMessageKey::from(message);
     let Some(message_body_reader) = context.messages_cache().get_item(&key)? else {
         return Err(AppError::MessageBodyMissing(message.local_id.unwrap()));
     };

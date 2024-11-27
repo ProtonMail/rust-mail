@@ -9,6 +9,7 @@ use proton_core_common::datatypes::LocalId;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use std::ffi::OsString;
+use std::fs::{read_dir, remove_file, DirEntry};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use tracing::error;
@@ -32,9 +33,9 @@ impl Cache {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        let messages_path = root_path.join("messages");
         // Since message body are weightless, any size would do the same, i.e. live forever
-        let messages_cache =
-            ProtonCache::new(root_path.join("messages"), size, interface.stash().clone()).await?;
+        let messages_cache = ProtonCache::new(messages_path.clone(), size, messages_path).await?;
 
         let attachments_cache = ProtonCache::new(
             root_path.join("attachments"),
@@ -183,19 +184,22 @@ impl CacheKey for CacheAttachmentKey {
 pub struct CacheMessageConfig;
 impl CacheConfig for CacheMessageConfig {
     type Key = CacheMessageKey;
-    type Init = Stash;
+    type Init = PathBuf;
     type ExtraMetadata = ();
 
-    async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
-        CacheMessageKey::get_all_cached(&stash)
+    async fn get_existing(root_path: PathBuf) -> CacheResult<Vec<Self::Key>> {
+        CacheMessageKey::get_all_cached(root_path.clone())
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
     async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
-        CacheMessageKey::batch_unset(failed)
-            .await
-            .map_err(|e| CacheError::Callback(anyhow!(e)))
+        error!("Couldn't load existing files({failed:?}), removing them");
+        for key in failed {
+            let file = Self::key_to_filename(&key, None)?;
+            drop(remove_file(file).inspect_err(|e| error!("Couldn't remove file: {e}")));
+        }
+        Ok(())
     }
 
     fn key_to_filename(key: &Self::Key, _extra: Option<&()>) -> CacheResult<OsString> {
@@ -211,69 +215,54 @@ impl CacheConfig for CacheMessageConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CacheMessageKey {
     message_id: u64,
-    stash: Stash,
 }
 
 impl CacheMessageKey {
     /// Get all currently cached MessageBody.
-    async fn get_all_cached<A>(interface: &A) -> Result<Vec<Self>, StashError>
-    where
-        A: Interface + Into<AgnosticInterface>,
-    {
-        let cached = Message::find("WHERE cached = true", vec![], interface, None).await?;
-        let stash = interface.stash();
-        Ok(cached
-            .iter()
-            .map(|v| Self::from_message(v, stash))
-            .collect())
+    async fn get_all_cached(root_path: PathBuf) -> Result<Vec<Self>, AppError> {
+        let mut keys = vec![];
+        for entry in read_dir(root_path.clone())
+            .inspect_err(|e| error!("Could not read dir({root_path:?}) : {e}"))?
+        {
+            let entry = entry?;
+            let Some(key) = Self::from_dir_entry(entry) else {
+                continue;
+            };
+            keys.push(key);
+        }
+        Ok(keys)
     }
 
-    /// Generate a key for a Message
-    pub fn from_message<A>(message: &Message, interface: &A) -> Self
-    where
-        A: Interface + Into<AgnosticInterface>,
-    {
+    fn from_dir_entry(entry: DirEntry) -> Option<Self> {
+        let filetype = entry
+            .file_type()
+            .inspect_err(|e| error!("Can't get file type for dir entry({entry:?}): {e}"))
+            .ok()?;
+        if filetype.is_file() {
+            let filename = entry.file_name();
+            if let Some(filename) = filename.to_str() {
+                let message_id = filename
+                    .parse()
+                    .inspect_err(|_| {
+                        error!("Can't parse filename ({filename:?}) as a message cache key")
+                    })
+                    .ok()?;
+                Some(Self { message_id })
+            } else {
+                error!("Can't parse os filename ({filename:?}) as a message cache key");
+                None
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl From<&Message> for CacheMessageKey {
+    fn from(message: &Message) -> Self {
         Self {
             message_id: message.local_id.expect("Should be set").as_u64(),
-            stash: interface.stash().clone(),
         }
-    }
-
-    /// Set a batch of MessageBody as uncached.
-    async fn batch_unset(keys: impl IntoIterator<Item = Self>) -> Result<(), AppError> {
-        for key in keys {
-            key.unset_cached().await?
-        }
-        Ok(())
-    }
-
-    /// Set a MessageBody as uncached.
-    async fn unset_cached(&self) -> Result<(), AppError> {
-        self.set_cached_status(false).await
-    }
-
-    /// Set a MessageBody as cached.
-    pub(crate) async fn set_cached(&self) -> Result<(), AppError> {
-        self.set_cached_status(true).await
-    }
-
-    /// Set the cached status of a MessageBody.
-    async fn set_cached_status(&self, status: bool) -> Result<(), AppError> {
-        let transaction = self.stash.transaction().await?;
-        let message = Message::load(self.message_id.into(), &transaction)
-            .await
-            .inspect_err(|e| error!("Couldn't load message: {e}"))?;
-        let Some(mut message) = message else {
-            error!("Couldn't load message {}", self.message_id);
-            return Err(AppError::MessageMissing(self.message_id.into()));
-        };
-        message.cached = status;
-        message
-            .save_using(&transaction)
-            .await
-            .inspect_err(|e| error!("Couldn't save message: {e}"))?;
-        transaction.commit().await?;
-        Ok(())
     }
 }
 
@@ -283,10 +272,4 @@ impl Hash for CacheMessageKey {
     }
 }
 
-impl CacheKey for CacheMessageKey {
-    fn after_evict(&self) {
-        block_on(async {
-            let _ = self.unset_cached().await;
-        })
-    }
-}
+impl CacheKey for CacheMessageKey {}

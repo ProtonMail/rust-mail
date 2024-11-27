@@ -213,7 +213,6 @@ fn existing_message() -> Message {
         to_list: Default::default(),
         unread: false,
         custom_labels: vec![],
-        cached: false,
         row_id: None,
         stash: None,
     }

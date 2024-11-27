@@ -113,7 +113,7 @@ impl Mailbox {
             .await
             .map_err(|e| {
                 error!("Failed to decrypt attachment({attachment_id}): {e})");
-                CacheError::Callback(anyhow!(e.to_string()))
+                CacheError::Callback(anyhow!(e))
             })?;
         key.set_cached()
             .await

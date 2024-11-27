@@ -199,10 +199,6 @@ pub struct Message {
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
-    /// True when message body is in cache.
-    #[DbField]
-    pub cached: bool,
-
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -2097,14 +2093,14 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let key = CacheMessageKey::from_message(self, interface);
+        let key = CacheMessageKey::from(self);
 
         // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
         // Recover from cache issues by requesting the data again.
         let file_path: PathBuf = cache
             .get_path_or_insert(
                 &key,
-                self.store_message_body(&key, address_keys, pgp_provider, api, interface),
+                self.store_message_body(address_keys, pgp_provider, api, interface),
             )
             .await?;
 
@@ -2119,7 +2115,6 @@ impl Message {
     /// Fetch, decrypt and store message body in cache.
     async fn store_message_body<P: PgpProviderSync, PM: ProtonMail, A>(
         &self,
-        key: &CacheMessageKey,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
@@ -2132,10 +2127,6 @@ impl Message {
             .decrypt_from_remote(address_keys, pgp_provider, api, interface)
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
-
-        key.set_cached()
-            .await
-            .map_err(|e| CacheError::Callback(anyhow!("Couldn't set message as cached: {e}")))?;
 
         StorableMessageBody::from(decrypted_message_body)
             .serialize()
@@ -2406,7 +2397,6 @@ impl Message {
                 value: value.to_list.into_iter().map(|v| v.into()).collect(),
             },
             unread: value.unread,
-            cached: false,
             row_id: None,
             stash: Some(interface.stash().to_owned()),
             custom_labels: vec![],
@@ -3237,7 +3227,6 @@ impl Default for Message {
             time: Default::default(),
             to_list: Default::default(),
             unread: Default::default(),
-            cached: false,
             custom_labels: Default::default(),
             row_id: Default::default(),
             stash: Default::default(),
