@@ -643,7 +643,7 @@ impl Context {
 
     async fn new_user_db_pool(&self, user_id: &RemoteId) -> Result<Stash, MigratorError> {
         let user_db_path = get_user_db_path(&self.user_db_path, user_id);
-        let stash = Stash::get_instance(&user_db_path)?;
+        let stash = Stash::new(Some(&user_db_path))?;
         debug!("initializing core database");
         // initialize core db
         migrate_account_db(&stash).await?;
