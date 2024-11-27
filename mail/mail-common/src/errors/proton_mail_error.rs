@@ -175,6 +175,7 @@ impl From<AppError> for MailErrorDetails {
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
+            AppError::UnknownCid(_, _) => todo!(),
         }
     }
 }
@@ -201,6 +202,7 @@ impl From<MailContextError> for MailErrorDetails {
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(draft_error) => Self::from(draft_error),
+            MailContextError::PGPKeySelection(_encryption_preferences_error) => todo!(),
         }
     }
 }
@@ -222,6 +224,10 @@ impl From<DraftError> for MailErrorDetails {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
             DraftError::MetadataNotFound(_metadata_id) => Self::Unexpected(Unexpected::Database),
+            DraftError::AddressWithoutPrimaryKey(_remote_id) => todo!(),
+            DraftError::DraftWithoutMessage => todo!(),
+            DraftError::SendMessage(_package_error) => todo!(),
+            DraftError::NoRecipients => todo!(),
         }
     }
 }

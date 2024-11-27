@@ -195,18 +195,22 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn send(&self) -> Result<(), MailSessionError> {
+    pub async fn send(&self) -> VoidProtonMailResult {
         let (save_action, send_action) = {
             let draft = self.draft.read();
-            (draft.to_save_action(), draft.to_send_action()?)
+            (draft.to_save_action(), draft.to_send_action())
         };
         let ctx = Arc::clone(&self.ctx);
+
         uniffi_async(async move {
-            RealDraft::send(ctx.queue(), save_action, send_action)
+            RealDraft::send(ctx.queue(), save_action, send_action?)
                 .await
-                .map_err(MailContextError::from)?;
-            Ok(())
+                .map_err(RealMailErrorDetails::from)?;
+
+            Result::<_, RealMailErrorDetails>::Ok(())
         })
         .await
+        .map_err(|details| MailErrorKind::UserDraftError.with(details))
+        .into()
     }
 }

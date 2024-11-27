@@ -15,7 +15,6 @@ use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
 use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
@@ -253,8 +252,8 @@ pub async fn watch_message(
             return Ok(None);
         };
         let handle = watch_channel(receiver, callback).await;
-        Result::<_, RealMailErrorDetails>::Ok(message.map(|m| WatchedMessage {
-            message: m.into(),
+        Result::<_, RealMailErrorDetails>::Ok(Some(WatchedMessage {
+            message: message.into(),
             handle,
         }))
     })
@@ -945,7 +944,7 @@ pub async fn get_embedded_attachment(
     mailbox: Arc<Mailbox>,
     id: Id,
     cid: String,
-) -> Result<Option<EmbeddedAttachmentInfo>, ProtonMailError> {
+) -> Result<EmbeddedAttachmentInfo, ProtonMailError> {
     uniffi_async(async move {
         let att = models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?;
         Result::<_, RealMailErrorDetails>::Ok(EmbeddedAttachmentInfo {
