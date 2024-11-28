@@ -1,3 +1,4 @@
+#![allow(clippy::ignored_unit_patterns)]
 mod common;
 
 use crate::common::{DefaultError, TestExtension};
