@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Config;

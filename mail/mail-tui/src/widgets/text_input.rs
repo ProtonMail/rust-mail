@@ -105,7 +105,7 @@ impl<'a> TextInput<'a> {
     }
 }
 
-impl<'a> StatefulWidget for TextInput<'a> {
+impl StatefulWidget for TextInput<'_> {
     type State = TextInputState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

@@ -3,9 +3,8 @@ use std::collections::HashSet;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::ParameterType;
 
-/// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class
-/// characteristics of the associated property.
-
+// /// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class
+// /// characteristics of the associated property.
 //  related-type-value = "contact" / "acquaintance" / "friend" / "met"
 //                     / "co-worker" / "colleague" / "co-resident"
 //                     / "neighbor" / "child" / "parent"

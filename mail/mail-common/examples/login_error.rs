@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use clap::Parser;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::Config;

@@ -6,17 +6,17 @@ use stash::stash::Stash;
 #[macro_export]
 macro_rules! lid {
     ($id:expr) => {{
-        use crate::datatypes::LocalId;
+        use $crate::datatypes::LocalId;
         Some(LocalId::from($id))
     }};
 }
 
 /// Macro wrapping &str into Option<RemoteId> for easier model definition.
-/// Since it calls .into() on the RemoteId, it allows creation of Option<LabelId> as well.
+/// Since it calls .`into()` on the `RemoteId`, it allows creation of Option<LabelId> as well.
 #[macro_export]
 macro_rules! rid {
     ($id:expr) => {{
-        use crate::datatypes::RemoteId;
+        use $crate::datatypes::RemoteId;
         Some(RemoteId::from($id).into())
     }};
 }
@@ -24,7 +24,7 @@ macro_rules! rid {
 #[macro_export]
 macro_rules! contact {
     ($($field:tt)*) => {{
-        use crate::models::Contact;
+        use $crate::models::Contact;
         Contact {
             $($field)*,
             ..Default::default()
@@ -35,7 +35,7 @@ macro_rules! contact {
 #[macro_export]
 macro_rules! contact_email {
     ($($field:tt)*) => {{
-        use crate::models::ContactEmail;
+        use $crate::models::ContactEmail;
         ContactEmail {
             $($field)*,
             ..Default::default()
@@ -44,6 +44,7 @@ macro_rules! contact_email {
 }
 
 pub async fn new_core_test_connection() -> Stash {
+    use crate::db::migrations::migrate_core_db;
     use std::io::stdout;
     use tracing::subscriber::set_global_default;
     use tracing::Level;
@@ -56,7 +57,6 @@ pub async fn new_core_test_connection() -> Stash {
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    use crate::db::migrations::migrate_core_db;
     let stash = Stash::new(None).expect("Failed to create Stash");
     migrate_core_db(&stash).await.unwrap();
     stash

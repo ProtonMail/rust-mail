@@ -21,12 +21,12 @@ use tracing_subscriber::{registry, EnvFilter};
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
 async fn new_test_connection() -> Stash {
+    use crate::db::migrations::migrate_account_db;
     drop(set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    use crate::db::migrations::migrate_account_db;
     let stash = Stash::new(None).expect("Failed to create Stash");
     migrate_account_db(&stash).await.expect("failed to migrate");
     stash

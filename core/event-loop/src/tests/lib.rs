@@ -39,6 +39,7 @@ impl Event for LoopEvent {
 
 impl GetEventResponse for LoopEvent {}
 
+#[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn test_loop_event_collection() {
     let first_event_id = RemoteId::from("0");
@@ -325,9 +326,9 @@ async fn test_error_handler_pause_pauses_loop() {
         .expect_on_error()
         .times(1)
         .return_once(|_| {
-            let _ = spawn(async move {
+            drop(spawn(async move {
                 loop_cloned.cancel();
-            });
+            }));
             EventLoopErrorHandlerReply::Pause
         })
         .in_sequence(&mut sequence);

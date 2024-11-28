@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+#![allow(clippy::ignored_unit_patterns)]
 
 use crate::action::{Action, Handler};
 use stash::stash::{Stash, Tether};

@@ -296,7 +296,6 @@ impl From<StoredAction> for QueuedMetadata {
 /// isolation. If more than one location attempts to call these functions currently
 /// we will return [`QueuedError::Busy`].
 ///
-
 pub struct Queue {
     shared: Arc<Shared>,
     // Keep the default context alive so that it is available for any action
@@ -916,7 +915,6 @@ impl BackgroundWorker {
     }
 
     /// See [`Queue::execute_all()`] for more details.
-
     async fn execute_all(&self) -> QueuedResult<()> {
         while self.execute_impl().await?.is_some() {}
         Ok(())

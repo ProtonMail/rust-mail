@@ -527,7 +527,8 @@ fn test_user_key() -> LockedKey {
 }
 
 fn test_mail_settings() -> ApiMailSettings {
-    let mut settings: ApiMailSettings = ApiMailSettings::default();
-    settings.view_mode = ApiViewMode::Messages;
-    settings
+    ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    }
 }

@@ -313,9 +313,10 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
 }
 
 fn test_mail_settings() -> ApiMailSettings {
-    let mut settings: ApiMailSettings = ApiMailSettings::default();
-    settings.view_mode = ApiViewMode::Messages;
-    settings
+    ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    }
 }
 
 fn test_label(label_id: &LabelId) -> ApiLabel {
