@@ -573,7 +573,8 @@ fn test_addresses() -> Vec<ApiAddress> {
 }
 
 fn test_mail_settings() -> ApiMailSettings {
-    let mut settings: ApiMailSettings = ApiMailSettings::default();
-    settings.view_mode = ApiViewMode::Messages;
-    settings
+    ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    }
 }

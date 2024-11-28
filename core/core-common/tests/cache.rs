@@ -395,6 +395,7 @@ async fn concurrent_insert_different() {
 
 #[tokio::test]
 async fn use_extra_metadata() {
+    #[allow(clippy::unused_async)]
     async fn with(value: Vec<u8>, extra: u8) -> CacheResult<(Vec<u8>, u8)> {
         Ok((value, extra))
     }

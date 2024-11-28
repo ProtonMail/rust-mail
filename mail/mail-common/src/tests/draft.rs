@@ -151,16 +151,18 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
 }
 
 fn mail_settings_with_signature() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        ..Default::default()
+    }
 }
 
 fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings.pm_signature = PmSignature::Enabled;
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        pm_signature: PmSignature::Enabled,
+        ..Default::default()
+    }
 }
 
 fn existing_message() -> Message {

@@ -1,3 +1,4 @@
+#![allow(clippy::needless_pass_by_value)]
 mod contact_list {
     use crate::{
         contact, contact_email,

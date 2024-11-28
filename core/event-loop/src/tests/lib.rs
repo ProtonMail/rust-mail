@@ -14,7 +14,6 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
-use std::mem;
 use std::time::Duration;
 use tokio::spawn;
 
@@ -327,7 +326,7 @@ async fn test_error_handler_pause_pauses_loop() {
         .expect_on_error()
         .times(1)
         .return_once(|_| {
-            mem::drop(spawn(async move {
+            drop(spawn(async move {
                 loop_cloned.cancel();
             }));
             EventLoopErrorHandlerReply::Pause
