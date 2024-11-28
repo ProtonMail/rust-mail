@@ -44,6 +44,7 @@ macro_rules! contact_email {
 }
 
 pub async fn new_core_test_connection() -> Stash {
+    use crate::db::migrations::migrate_core_db;
     use std::io::stdout;
     use tracing::subscriber::set_global_default;
     use tracing::Level;
@@ -56,7 +57,6 @@ pub async fn new_core_test_connection() -> Stash {
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    use crate::db::migrations::migrate_core_db;
     let stash = Stash::new(None).expect("Failed to create Stash");
     migrate_core_db(&stash).await.unwrap();
     stash

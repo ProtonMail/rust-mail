@@ -47,13 +47,13 @@ pub struct JsonWriteBufferResult<'w> {
     buffer: &'w mut JsonWriteBuffer,
 }
 
-impl<'w> Drop for JsonWriteBufferResult<'w> {
+impl Drop for JsonWriteBufferResult<'_> {
     fn drop(&mut self) {
         self.buffer.clear()
     }
 }
 
-impl<'w> Deref for JsonWriteBufferResult<'w> {
+impl Deref for JsonWriteBufferResult<'_> {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -61,14 +61,14 @@ impl<'w> Deref for JsonWriteBufferResult<'w> {
     }
 }
 
-impl<'w> AsRef<str> for JsonWriteBufferResult<'w> {
+impl AsRef<str> for JsonWriteBufferResult<'_> {
     fn as_ref(&self) -> &str {
         // SAFETY: serde_json does never produce invalid utf8
         unsafe { str::from_utf8_unchecked(&self.buffer.b) }
     }
 }
 
-impl<'w> ToSql for JsonWriteBufferResult<'w> {
+impl ToSql for JsonWriteBufferResult<'_> {
     fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
         self.as_ref().to_sql()
     }

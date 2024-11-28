@@ -14,6 +14,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
+use std::mem;
 use std::time::Duration;
 use tokio::spawn;
 
@@ -39,6 +40,7 @@ impl Event for LoopEvent {
 
 impl GetEventResponse for LoopEvent {}
 
+#[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn test_loop_event_collection() {
     let first_event_id = RemoteId::from("0");
@@ -325,9 +327,9 @@ async fn test_error_handler_pause_pauses_loop() {
         .expect_on_error()
         .times(1)
         .return_once(|_| {
-            let _ = spawn(async move {
+            mem::drop(spawn(async move {
                 loop_cloned.cancel();
-            });
+            }));
             EventLoopErrorHandlerReply::Pause
         })
         .in_sequence(&mut sequence);

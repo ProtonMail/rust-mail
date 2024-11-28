@@ -1,3 +1,4 @@
+#![allow(clippy::needless_pass_by_value)]
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -299,8 +300,7 @@ async fn test_sync_and_modify_event_contact() {
         contact.contact_emails.len(),
         modified_contact.contact_emails.len()
     );
-    let expected_cards: Vec<ContactCard> = modified_contact
-        .cards.to_vec();
+    let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
     let mut cards = contact
         .cards()
         .await

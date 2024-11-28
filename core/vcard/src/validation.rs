@@ -142,7 +142,7 @@ fn validate_contact_cardinality(contact: &VcardContact) -> VcardValidationResult
     fn get_altid(property: &Property) -> Option<String> {
         property.params.as_ref().and_then(|p| {
             p.iter().find_map(|(n, v)| {
-                if n.to_ascii_uppercase() == "ALTID" && !v.is_empty() {
+                if n.eq_ignore_ascii_case("ALTID") && !v.is_empty() {
                     Some(v[0].clone())
                 } else {
                     None

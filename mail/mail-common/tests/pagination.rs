@@ -57,7 +57,7 @@ async fn paginate_conversations() {
         let last_page_0_item = page_chunks[0].last().unwrap();
         ctx.mock_get_conversations_page(
             std::iter::once(last_page_0_item.clone())
-                .chain(page_chunks[1].to_vec().into_iter())
+                .chain(page_chunks[1].iter().cloned())
                 .collect(),
             Some(last_page_0_item.id.clone().into()),
             Some(last_page_0_item.labels[0].context_time),
@@ -73,7 +73,7 @@ async fn paginate_conversations() {
         let last_page_1_item = page_chunks[1].last().unwrap();
         ctx.mock_get_conversations_page(
             std::iter::once(last_page_1_item.clone())
-                .chain(page_chunks[2].to_vec().into_iter())
+                .chain(page_chunks[2].iter().cloned())
                 .collect(),
             Some(last_page_1_item.id.clone().into()),
             Some(last_page_1_item.labels[0].context_time),
@@ -163,7 +163,7 @@ async fn paginate_messages() {
         let last_page_0_item = page_chunks[0].last().unwrap();
         ctx.mock_get_message_metadata_page(
             std::iter::once(last_page_0_item.clone())
-                .chain(page_chunks[1].to_vec().into_iter())
+                .chain(page_chunks[1].iter().cloned())
                 .collect(),
             Some(last_page_0_item.id.clone().into()),
             None,
@@ -179,7 +179,7 @@ async fn paginate_messages() {
         let last_page_1_item = page_chunks[1].last().unwrap();
         ctx.mock_get_message_metadata_page(
             std::iter::once(last_page_1_item.clone())
-                .chain(page_chunks[2].to_vec().into_iter())
+                .chain(page_chunks[2].iter().cloned())
                 .collect(),
             Some(last_page_1_item.id.clone().into()),
             Some(last_page_1_item.time),

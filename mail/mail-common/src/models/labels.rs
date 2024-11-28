@@ -267,14 +267,13 @@ impl Label {
     /// Checks if label is a System label - starred.
     pub fn is_starred(&self) -> bool {
         self.remote_id
-            .as_ref()
-            .map_or(false, |rid| *rid == LabelId::starred())
+            .as_ref().is_some_and(|rid| *rid == LabelId::starred())
     }
 
     /// TODO: Document this function.
     pub fn is_movable_folder(&self) -> bool {
         self.label_type == LabelType::Folder
-            || self.remote_id.as_ref().map_or(false, |rid| {
+            || self.remote_id.as_ref().is_some_and(|rid| {
                 LabelId::movable_sys_folder_list().contains(rid)
             })
     }

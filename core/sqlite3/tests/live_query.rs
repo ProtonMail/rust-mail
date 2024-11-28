@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
