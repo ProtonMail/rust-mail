@@ -6,17 +6,17 @@ use stash::stash::Stash;
 #[macro_export]
 macro_rules! lid {
     ($id:expr) => {{
-        use crate::datatypes::LocalId;
+        use $crate::datatypes::LocalId;
         Some(LocalId::from($id))
     }};
 }
 
 /// Macro wrapping &str into Option<RemoteId> for easier model definition.
-/// Since it calls .into() on the RemoteId, it allows creation of Option<LabelId> as well.
+/// Since it calls .`into()` on the `RemoteId`, it allows creation of Option<LabelId> as well.
 #[macro_export]
 macro_rules! rid {
     ($id:expr) => {{
-        use crate::datatypes::RemoteId;
+        use $crate::datatypes::RemoteId;
         Some(RemoteId::from($id).into())
     }};
 }
@@ -24,7 +24,7 @@ macro_rules! rid {
 #[macro_export]
 macro_rules! contact {
     ($($field:tt)*) => {{
-        use crate::models::Contact;
+        use $crate::models::Contact;
         Contact {
             $($field)*,
             ..Default::default()
@@ -35,7 +35,7 @@ macro_rules! contact {
 #[macro_export]
 macro_rules! contact_email {
     ($($field:tt)*) => {{
-        use crate::models::ContactEmail;
+        use $crate::models::ContactEmail;
         ContactEmail {
             $($field)*,
             ..Default::default()

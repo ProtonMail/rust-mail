@@ -119,8 +119,7 @@ async fn create_empty_draft() {
     assert!(conversation
         .labels
         .iter()
-        .find(|l| { l.remote_label_id == LabelId::drafts().into() })
-        .is_some());
+        .any(|l| { l.remote_label_id == LabelId::drafts().into() }));
 
     // Opening this draft should work;
     Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -445,7 +444,7 @@ async fn create_draft_forward_inherits_all_attachments() {
     let inline_attachment = gen_inline_attachment();
     let normal_attachment = gen_normal_attachment();
 
-    compare_inline_attachment(&attachment_1, inline_attachment);
+    compare_inline_attachment(attachment_1, inline_attachment);
     assert_eq!(
         attachment_2.remote_id.clone().unwrap(),
         normal_attachment.id.into()

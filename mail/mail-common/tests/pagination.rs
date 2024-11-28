@@ -88,7 +88,7 @@ async fn paginate_conversations() {
     {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_conversations_page(
-            vec![last_page_2_item.clone().into()],
+            vec![last_page_2_item.clone()],
             Some(last_page_2_item.id.clone().into()),
             Some(last_page_2_item.labels[0].context_time),
             page_size as u64 + 1_u64,
@@ -120,15 +120,15 @@ async fn paginate_conversations() {
     .unwrap();
 
     let page1 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page1, &page_chunks[0]).await;
+    compare_conversations(&user_ctx, &page1, page_chunks[0]).await;
 
     // page 2
     let page2 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page2, &page_chunks[1]).await;
+    compare_conversations(&user_ctx, &page2, page_chunks[1]).await;
 
     // page 3
     let page3 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page3, &page_chunks[2]).await;
+    compare_conversations(&user_ctx, &page3, page_chunks[2]).await;
 
     // page 4, no more values
     let page4 = paginator.next_page().await.unwrap();
@@ -194,7 +194,7 @@ async fn paginate_messages() {
     {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_message_metadata_page(
-            vec![last_page_2_item.clone().into()],
+            vec![last_page_2_item.clone()],
             Some(last_page_2_item.id.clone().into()),
             Some(last_page_2_item.time),
             page_size as u64 + 1_u64,
@@ -227,15 +227,15 @@ async fn paginate_messages() {
     .unwrap();
 
     let page1 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page1, &page_chunks[0]).await;
+    compare_messages(&user_ctx, &page1, page_chunks[0]).await;
 
     // page 2
     let page2 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page2, &page_chunks[1]).await;
+    compare_messages(&user_ctx, &page2, page_chunks[1]).await;
 
     // page 3
     let page3 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page3, &page_chunks[2]).await;
+    compare_messages(&user_ctx, &page3, page_chunks[2]).await;
 
     // page 4, no more values
     let page4 = paginator.next_page().await.unwrap();
@@ -304,7 +304,6 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
             signed_key_list: Default::default(),
         }],
         conversations: (0..count)
-            .into_iter()
             .map(|i| ApiConversation {
                 id: conversation_id(i),
                 order: (i + 1).try_into().unwrap(),
@@ -337,7 +336,6 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
     };
 
     let messages = (0..count)
-        .into_iter()
         .map(|i| ApiMessageMetadata {
             id: message_id(i),
             conversation_id: conversation_id(i),
@@ -375,8 +373,8 @@ async fn paginate_conversations_for_label_with_filter() {
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -434,7 +432,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -458,7 +456,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -476,7 +474,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -502,8 +500,8 @@ async fn paginate_messages_for_label_with_filter() {
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -554,7 +552,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -575,7 +573,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -594,7 +592,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -617,8 +615,8 @@ async fn paginate_search() {
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
     let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -672,7 +670,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )
@@ -689,7 +687,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )
@@ -708,7 +706,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )

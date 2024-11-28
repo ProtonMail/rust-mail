@@ -2375,7 +2375,7 @@ async fn message_exclusive_location_on_save(
         local_address_id: address.local_id.unwrap(),
         label_ids: labels
             .iter()
-            .map(|l| l.remote_id.clone().unwrap().into())
+            .map(|l| l.remote_id.clone().unwrap())
             .collect_vec(),
         ..Default::default()
     };

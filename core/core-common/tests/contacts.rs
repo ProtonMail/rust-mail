@@ -300,10 +300,7 @@ async fn test_sync_and_modify_event_contact() {
         modified_contact.contact_emails.len()
     );
     let expected_cards: Vec<ContactCard> = modified_contact
-        .cards
-        .iter()
-        .map(|value| value.clone())
-        .collect();
+        .cards.to_vec();
     let mut cards = contact
         .cards()
         .await

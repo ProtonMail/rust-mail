@@ -40,7 +40,7 @@ use test_case::test_case;
             is_selected: Some(false),
 }]; "TEST5: none selected")]
 #[test_case(
-    &[label!(local_id: lid!(0)), label!(local_id: lid!(0), name: format!("name"))],
+    &[label!(local_id: lid!(0)), label!(local_id: lid!(0), name: "name".to_string())],
     // Function returns selection based on name equality:
     // one is selected while other is not
     |label| label.name.as_str() == "name",
