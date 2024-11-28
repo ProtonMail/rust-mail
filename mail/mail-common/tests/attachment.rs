@@ -100,7 +100,7 @@ async fn load_attachment_from_cache() {
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
-    let key = CacheAttachmentKey::new(attachment_local_id, "foo", user_ctx.user_stash().clone());
+    let key = CacheAttachmentKey::new(attachment_local_id, "foo");
     user_ctx
         .attachements_cache()
         .add_item(key, &testdata_attachment_data())
@@ -181,11 +181,7 @@ async fn load_attachment_content_from_cache() {
 
     ctx.catch_all().await;
 
-    let key = CacheAttachmentKey::new(
-        attachment_local_id,
-        &attachment.filename,
-        user_ctx.user_stash().clone(),
-    );
+    let key = CacheAttachmentKey::new(attachment_local_id, &attachment.filename);
     user_ctx
         .attachements_cache()
         .add_item(key, b"abcdef")
@@ -235,7 +231,6 @@ where
         sender: None,
         signature: None,
         size: attachment.size,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,

@@ -215,7 +215,6 @@ fn existing_message() -> Message {
         to_list: Default::default(),
         unread: false,
         custom_labels: vec![],
-        cached: false,
         row_id: None,
         stash: None,
     }
@@ -279,7 +278,6 @@ fn inline_attachment() -> Attachment {
         filename: "image.jpeg".to_owned(),
         signature: None,
         size: 123,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,
@@ -307,7 +305,6 @@ fn normal_attachment() -> Attachment {
         filename: "doc.pdf".to_owned(),
         signature: None,
         size: 1024,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,

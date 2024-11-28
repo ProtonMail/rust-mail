@@ -151,10 +151,6 @@ pub struct Attachment {
     #[DbField]
     pub size: u64,
 
-    /// True if this Attachment is cached
-    #[DbField]
-    pub cached: bool,
-
     #[DbField]
     /// Content id of the attachment if inlined in the message.
     pub content_id: Option<String>,
@@ -494,7 +490,6 @@ impl From<ApiAttachment> for Attachment {
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-            cached: false,
             content_id: None,
             transfer_encoding: None,
             image_width: None,
@@ -525,7 +520,6 @@ impl From<ApiMessageAttachment> for Attachment {
             sender: None,
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-            cached: false,
             content_id: value.headers.content_id,
             transfer_encoding: value.headers.content_transfer_encoding,
             image_width: value.headers.image_width,
@@ -556,7 +550,6 @@ impl From<AttachmentMetadata> for Attachment {
             sender: None,
             signature: None,
             size: value.size,
-            cached: false,
             content_id: None,
             transfer_encoding: None,
             image_width: None,

@@ -49,7 +49,7 @@ impl MailUserContext {
     ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
-        let cache = Cache::new(cache_path, mail_context.mail_cache_size, &stash).await?;
+        let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
         let this = Arc::new_cyclic(|this| Self {
