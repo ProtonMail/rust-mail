@@ -423,4 +423,38 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()>;
+
+    /// Get the payment plans available to the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_plans(
+        &self,
+        options: GetPaymentsPlansOptions,
+    ) -> ApiServiceResult<GetPaymentsPlansResponse>;
+
+    /// Create a payment token.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn post_payments_tokens(
+        &self,
+        amount: u64,
+        currency: Currency,
+        payment: PaymentReceipt,
+        payment_method_id: PaymentMethodId,
+    ) -> ApiServiceResult<PostPaymentsTokensResponse>;
+
+    /// Create a payment subscription.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn post_payments_subscription(
+        &self,
+        subscription: Subscription,
+        new_values: NewSubscriptionValues,
+    ) -> ApiServiceResult<()>;
 }

@@ -152,6 +152,27 @@ pub struct GetSettingsResponse {
     pub user_settings: UserSettings,
 }
 
+/// The response containing plans available to the user.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetPaymentsPlansResponse {
+    /// The list of plans available to the user.
+    pub plans: Vec<Plan>,
+
+    /// What cycle to display by default
+    pub default_cycle: PlanCycle,
+}
+
+/// The response containing the created payment token.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostPaymentsTokensResponse {
+    pub token: String,
+    pub status: u64,
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]

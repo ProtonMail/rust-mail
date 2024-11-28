@@ -23,11 +23,7 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{
-    AddressId, ContactEmailId, ContactUID, HumanVerificationType, LabelId, SaltId, UserId,
-};
-use crate::services::proton::prelude::ContactId;
-use crate::services::proton::responses::GetEventResponse;
+use crate::services::proton::prelude::*;
 use derive_more::Display;
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
@@ -41,7 +37,6 @@ use serde_repr::Deserialize_repr;
 use serde_repr::Serialize_repr;
 use serde_with::{serde_as, BoolFromInt, DefaultOnNull, FromInto};
 
-use super::LabelType;
 //  ENUMS
 //==============================================================================
 

@@ -13,9 +13,8 @@ use muon::env::EnvId;
 use muon::error::ErrorKind as MuonErrorKind;
 use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
 use muon::util::ProtonRequestExt;
-use muon::Result as MuonResult;
 use muon::{serde_to_query, Status, StatusErr};
-use muon::{ProtonRequest, ProtonResponse};
+use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
@@ -261,6 +260,55 @@ impl ProtonCore for Proton {
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()> {
         POST!("{CORE_V4}/devices")
             .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
+
+    async fn get_payments_plans(
+        &self,
+        options: GetPaymentsPlansOptions,
+    ) -> ApiServiceResult<GetPaymentsPlansResponse> {
+        Ok(GET!("/payments/v5/plans")
+            .query(serde_to_query(options)?)
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn post_payments_tokens(
+        &self,
+        amount: u64,
+        currency: Currency,
+        payment: PaymentReceipt,
+        payment_method_id: PaymentMethodId,
+    ) -> ApiServiceResult<PostPaymentsTokensResponse> {
+        Ok(POST!("/payments/v5/tokens")
+            .body_json(PostPaymentsTokensRequest {
+                amount,
+                currency,
+                payment,
+                payment_method_id,
+            })?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn post_payments_subscription(
+        &self,
+        subscription: Subscription,
+        new_values: NewSubscriptionValues,
+    ) -> ApiServiceResult<()> {
+        POST!("/payments/v5/subscription")
+            .body_json(PostPaymentsSubscriptionRequest {
+                subscription,
+                new_values,
+            })?
             .send_with(self)
             .await?
             .ok()?;
