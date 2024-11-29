@@ -1,7 +1,7 @@
-use crate::errors::{MailErrorKind, VoidProtonMailResult};
+use crate::errors::{EventError, VoidEventResult};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
-use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -9,14 +9,14 @@ impl MailUserSession {
     ///
     /// *NOTE*: do not call this function concurrently.
     #[allow(clippy::unused_async)]
-    pub async fn poll_events(&self) -> VoidProtonMailResult {
+    pub async fn poll_events(&self) -> VoidEventResult {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.poll_event_loop().await?;
-            Result::<_, RealMailErrorDetails>::Ok(())
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(|details| MailErrorKind::UpdateEventError.with(details))
+        .map_err(EventError::from)
         .into()
     }
 }

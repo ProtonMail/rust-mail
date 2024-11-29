@@ -1,9 +1,9 @@
-use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
+use crate::errors::{LoginError, VoidLoginResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_api_core::auth::{ExposeSecret, SecretString};
 use proton_api_core::login::Flow as CoreLoginFlow;
-use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -41,48 +41,48 @@ impl LoginFlow {
 #[uniffi::export]
 impl LoginFlow {
     /// Login with user and password.
-    pub async fn login(&self, email: String, password: String) -> VoidProtonMailResult {
+    pub async fn login(&self, email: String, password: String) -> VoidLoginResult {
         let flow = self.flow.clone();
         let password = SecretString::from(password);
-        uniffi_async::<_, RealMailErrorDetails, _>(async move {
+        uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
                 .login(email, password.expose_secret().clone(), None)
                 .await
-                .map_err(RealMailErrorDetails::from)
+                .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+        .map_err(LoginError::from)
         .into()
     }
 
     /// Submit 2FA totp code.
-    pub async fn submit_totp(&self, code: String) -> VoidProtonMailResult {
+    pub async fn submit_totp(&self, code: String) -> VoidLoginResult {
         let flow = self.flow.clone();
-        uniffi_async::<_, RealMailErrorDetails, _>(async move {
+        uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
                 .submit_totp(code)
                 .await
-                .map_err(RealMailErrorDetails::from)
+                .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+        .map_err(LoginError::from)
         .into()
     }
 
     /// Submit mailbox password.
-    pub async fn submit_mailbox_password(&self, mailbox_password: String) -> VoidProtonMailResult {
+    pub async fn submit_mailbox_password(&self, mailbox_password: String) -> VoidLoginResult {
         let flow = self.flow.clone();
-        uniffi_async::<_, RealMailErrorDetails, _>(async move {
+        uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
                 .submit_mailbox_password(&mailbox_password)
                 .await
-                .map_err(RealMailErrorDetails::from)
+                .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+        .map_err(LoginError::from)
         .into()
     }
 }
@@ -99,7 +99,7 @@ impl LoginFlow {
     ///
     /// This can be used to resume a login flow.
     #[must_use]
-    pub fn user_id(&self) -> Result<String, ProtonMailError> {
+    pub fn user_id(&self) -> Result<String, LoginError> {
         async_runtime()
             .block_on(async {
                 self.flow
@@ -107,16 +107,16 @@ impl LoginFlow {
                     .await
                     .user_id()
                     .map(|id| id.to_owned().into_inner())
-                    .map_err(RealMailErrorDetails::from)
+                    .map_err(RealProtonMailError::from)
             })
-            .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+            .map_err(LoginError::from)
     }
 
     /// Get the session ID that has been (or is in the process of) being created.
     ///
     /// This can be used to resume a login flow.
     #[must_use]
-    pub fn session_id(&self) -> Result<String, ProtonMailError> {
+    pub fn session_id(&self) -> Result<String, LoginError> {
         async_runtime()
             .block_on(async {
                 self.flow
@@ -124,9 +124,9 @@ impl LoginFlow {
                     .await
                     .session_id()
                     .map(|id| id.to_owned().into_inner())
-                    .map_err(RealMailErrorDetails::from)
+                    .map_err(RealProtonMailError::from)
             })
-            .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+            .map_err(LoginError::from)
     }
 
     /// Check whether the login flow is awaiting 2FA input.
@@ -143,7 +143,7 @@ impl LoginFlow {
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
     #[must_use]
-    pub fn to_user_context(&self) -> Result<Arc<MailUserSession>, ProtonMailError> {
+    pub fn to_user_context(&self) -> Result<Arc<MailUserSession>, LoginError> {
         async_runtime()
             .block_on(async {
                 let guard = self.flow.lock().await;
@@ -151,9 +151,9 @@ impl LoginFlow {
                     .ctx
                     .user_context_from_login_flow(&guard)
                     .await
-                    .map_err(RealMailErrorDetails::from)?;
-                Ok::<_, RealMailErrorDetails>(MailUserSession::new(user_ctx))
+                    .map_err(RealProtonMailError::from)?;
+                Ok::<_, RealProtonMailError>(MailUserSession::new(user_ctx))
             })
-            .map_err(|details| MailErrorKind::LoginFlowError.with(details))
+            .map_err(LoginError::from)
     }
 }
