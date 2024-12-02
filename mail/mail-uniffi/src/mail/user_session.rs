@@ -9,14 +9,9 @@ use crate::{
     mail::{MailSessionError, MailSessionResult},
     uniffi_async,
 };
-use parking_lot::Mutex;
-use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
-use std::collections::HashSet;
-use std::sync::{Arc, OnceLock};
-
-static CONTEXT_INSTANCES: OnceLock<Mutex<HashSet<RemoteId>>> = OnceLock::new();
+use std::sync::Arc;
 
 /// [`MailUserSession`] represents an active user session.
 ///
@@ -36,22 +31,8 @@ pub struct MailUserSession {
     ctx: Arc<MailUserContext>,
 }
 
-impl Drop for MailUserSession {
-    fn drop(&mut self) {
-        // Remove this instance from the tracked list.
-        context_instances().lock().remove(self.ctx.user_id());
-    }
-}
-
 impl MailUserSession {
     pub(crate) fn new(ctx: Arc<MailUserContext>) -> Arc<Self> {
-        // Catch duplicate instances of this type for a given user id.
-        // this is a bug and should never happen.
-        assert!(
-            context_instances().lock().insert(ctx.user_id().clone()),
-            "An existing instance for user {} is still active",
-            ctx.user_id()
-        );
         Arc::new(Self { ctx })
     }
     pub(crate) fn ctx(&self) -> Arc<MailUserContext> {
@@ -129,8 +110,4 @@ impl MailUserSession {
     pub fn user_stash(&self) -> &Stash {
         self.ctx.user_stash()
     }
-}
-
-fn context_instances() -> &'static Mutex<HashSet<RemoteId>> {
-    CONTEXT_INSTANCES.get_or_init(Default::default)
 }
