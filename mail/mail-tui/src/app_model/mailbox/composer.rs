@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::actions::draft::Save;
 use proton_mail_common::datatypes::{Disposition, MimeType};
-use proton_mail_common::draft::{Draft, ReplyMode};
+use proton_mail_common::draft::{recipients, Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
@@ -119,7 +119,15 @@ impl Composer {
 
     /// Save a draft.
     fn save(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let save_action = self.create_save_action();
+        let save_action = match self.create_save_action() {
+            Ok(action) => action,
+            Err(err) => {
+                return Command::message(Messages::DisplayError(
+                    Some("Invalid recipient".to_owned()),
+                    err.into(),
+                ));
+            }
+        };
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Saving draft...".to_owned(),
@@ -139,20 +147,28 @@ impl Composer {
         ])
     }
 
-    fn create_save_action(&mut self) -> Save {
+    fn create_save_action(&mut self) -> Result<Save, recipients::Error> {
         // We are TUI, what else can we do?
         self.draft.mime_type = MimeType::TextPlain;
         self.draft.subject = self.subject_input_state.value().to_owned();
         self.draft.body = self.text_area.lines().join("\n");
-        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value());
-        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value());
-        self.draft.to_list = recipients_value_to_list(self.to_input_state.value());
-        self.draft.to_save_action()
+        self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value())?;
+        self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value())?;
+        self.draft.to_list = recipients_value_to_list(self.to_input_state.value())?;
+        Ok(self.draft.to_save_action())
     }
 
     /// Send the draft.
     fn send(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let save_action = self.create_save_action();
+        let save_action = match self.create_save_action() {
+            Ok(action) => action,
+            Err(err) => {
+                return Command::message(Messages::DisplayError(
+                    Some("Invalid recipient".to_owned()),
+                    err.into(),
+                ));
+            }
+        };
         match self.draft.to_send_action() {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
@@ -177,9 +193,9 @@ impl Composer {
 
     fn new(draft: Draft) -> Self {
         let sender = draft.sender.clone();
-        let to_list = draft.to_list.clone().join(", ");
-        let cc_list = draft.cc_list.clone().join(", ");
-        let bcc_list = draft.bcc_list.clone().join(", ");
+        let to_list = recipient_list_to_display_value(&draft.to_list);
+        let cc_list = recipient_list_to_display_value(&draft.cc_list);
+        let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
         let text_area = if draft.mime_type == MimeType::TextHtml {
             let config = html2text::config::plain();
             let cursor = Cursor::new(&draft.body);
@@ -421,6 +437,21 @@ enum SelectedInput {
     Body,
 }
 
-fn recipients_value_to_list(recipients: &str) -> Vec<String> {
-    recipients.split(',').map(ToOwned::to_owned).collect()
+fn recipients_value_to_list(recipients: &str) -> Result<recipients::List, recipients::Error> {
+    let mut list = recipients::List::default();
+    for addr in recipients.split(',') {
+        list.add_single(recipients::Entry {
+            email: addr.to_owned(),
+            display_name: None,
+        })?;
+    }
+    Ok(list)
+}
+
+fn recipient_list_to_display_value(list: &recipients::List) -> String {
+    list.to_message_recipients()
+        .into_iter()
+        .map(|v| v.address)
+        .collect::<Vec<_>>()
+        .join(", ")
 }

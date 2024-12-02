@@ -1,4 +1,5 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
+use crate::draft::recipients::{ContactGroupResolver, List};
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
@@ -19,7 +20,8 @@ mod tests;
 
 /// Copy all the data from the `source_message` into `message` taking
 /// into account `reply_mode` of the draft.
-pub(super) fn patch_draft_with_reply_mode(
+pub(super) async fn patch_draft_with_reply_mode(
+    contact_group_resolver: &impl ContactGroupResolver,
     draft: &mut Draft,
     source_message: &Message,
     reply_mode: ReplyMode,
@@ -27,24 +29,25 @@ pub(super) fn patch_draft_with_reply_mode(
     // Copy over the addresses based on reply mode
     match reply_mode {
         ReplyMode::Sender => {
-            draft.to_list = vec![source_message.sender.address.clone()];
+            draft.to_list = List::from_message_recipients(
+                contact_group_resolver,
+                std::iter::once(source_message.sender.clone().into()),
+            )
+            .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::All => {
-            draft.to_list = vec![source_message.sender.address.clone()];
-            draft.to_list.extend(
-                source_message
-                    .to_list
-                    .value
-                    .iter()
-                    .map(|v| v.address.clone()),
-            );
-            draft.cc_list = source_message
-                .cc_list
-                .value
-                .iter()
-                .map(|v| v.address.clone())
-                .collect();
+            draft.to_list = List::from_message_recipients(
+                contact_group_resolver,
+                std::iter::once(source_message.sender.clone().into())
+                    .chain(source_message.to_list.value.clone()),
+            )
+            .await;
+            draft.cc_list = List::from_message_recipients(
+                contact_group_resolver,
+                source_message.cc_list.value.clone(),
+            )
+            .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::Forward => {

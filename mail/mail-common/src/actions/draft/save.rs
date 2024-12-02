@@ -5,6 +5,7 @@ use crate::datatypes::{
     MessageSenders, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
+use crate::draft::recipients::{Recipient, Single, ValidationState};
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{
     Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
@@ -31,11 +32,11 @@ use tracing::{debug, error};
 pub struct Save {
     metadata_id: MetadataId,
     /// To Recipients - only email to preserve display name privacy
-    to_list: Vec<String>,
+    to_list: Vec<Recipient>,
     /// CC Recipients - only email to preserve display name privacy
-    cc_list: Vec<String>,
+    cc_list: Vec<Recipient>,
     /// BCC recipients - only email to preserve display name privacy
-    bcc_list: Vec<String>,
+    bcc_list: Vec<Recipient>,
     /// Local id of the message this conversation belongs to
     message_id: Option<LocalId>,
     /// Local id of the conversation this message belongs to
@@ -69,9 +70,9 @@ impl Save {
     pub fn new(draft: &Draft) -> Self {
         Self {
             metadata_id: draft.metadata_id,
-            to_list: draft.to_list.clone(),
-            cc_list: draft.cc_list.clone(),
-            bcc_list: draft.bcc_list.clone(),
+            to_list: draft.to_list.recipients().to_vec(),
+            cc_list: draft.cc_list.recipients().to_vec(),
+            bcc_list: draft.bcc_list.recipients().to_vec(),
             message_id: None,
             conversation_id: None,
             address_id: draft.address_id.clone(),
@@ -160,6 +161,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
+                action.subject.clone(),
             );
             conversation
                 .save(tether)
@@ -522,6 +524,7 @@ impl Save {
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
+        subject: String,
     ) -> Conversation {
         Conversation {
             local_id: None,
@@ -546,7 +549,7 @@ impl Save {
                 }],
             },
             size: body_len,
-            subject: self.subject.clone(),
+            subject,
             is_known: false,
             custom_labels: vec![],
             has_messages: false,
@@ -566,20 +569,40 @@ impl Save {
     }
 }
 
-fn to_message_recipients<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageRecipients {
-    MessageRecipients {
-        value: addresses
-            .into_iter()
-            .map(|email| {
-                //TODO(ET-1416): Resolve contact info.
-                MessageRecipient {
-                    address: email.clone(),
-                    is_proton: false,
-                    name: String::new(),
-                    group: None,
+fn to_message_recipients<'a>(
+    addresses: impl IntoIterator<Item = &'a Recipient>,
+) -> MessageRecipients {
+    let iter = addresses.into_iter();
+    let mut addresses = Vec::with_capacity(iter.size_hint().0);
+
+    for recipient in iter {
+        match recipient {
+            Recipient::Single(recipient) => {
+                addresses.push(message_recipient_from_recipient(recipient, None));
+            }
+            Recipient::Group(group) => {
+                for recipient in &group.recipients {
+                    addresses.push(message_recipient_from_recipient(
+                        recipient,
+                        Some(group.group_name.clone()),
+                    ));
                 }
-            })
-            .collect(),
+            }
+        }
+    }
+
+    MessageRecipients { value: addresses }
+}
+
+fn message_recipient_from_recipient(recipient: &Single, group: Option<String>) -> MessageRecipient {
+    MessageRecipient {
+        address: recipient.email.clone(),
+        is_proton: match recipient.state {
+            ValidationState::Valid(is_proton) => is_proton,
+            _ => false,
+        },
+        name: recipient.display_name.clone().unwrap_or_default(),
+        group,
     }
 }
 

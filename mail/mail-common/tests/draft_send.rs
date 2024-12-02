@@ -1,7 +1,9 @@
+use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
+use proton_api_core::consts::CoreBundle;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, ApiErrorInfo,
 };
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
 use proton_api_mail::services::proton::request_data::{
@@ -18,8 +20,10 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
+use proton_mail_common::draft::recipients::Entry;
 use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{MailSettings, Message, MessageBodyMetadata};
+use proton_mail_common::{draft, MailContextError};
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -122,8 +126,14 @@ async fn basic_send_check() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let mut draft = Draft::empty(tether.stash()).await.unwrap();
-    draft.to_list.push("foo@bar.com".into());
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(Entry {
+            email: "foo@bar.com".into(),
+            display_name: None,
+        })
+        .unwrap();
     draft.save(user_ctx.queue()).await.unwrap();
 
     // Save at least once so we can retrieve the message id.
@@ -158,6 +168,115 @@ async fn basic_send_check() {
         .unwrap()
         .unwrap();
     assert_eq!(body_metadata.header, sent_message.body.header);
+}
+
+#[tokio::test]
+async fn send_fails_if_recipient_is_not_valid() {
+    let err =
+        send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
+
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .unwrap();
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(draft::Error::SendMessage(
+            draft::PackageError::RecipientEmailInvalid(_)
+        )))
+    ));
+}
+
+#[tokio::test]
+async fn send_fails_if_recipient_is_not_a_known_proton_address() {
+    let err =
+        send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetAddressMissing as u32).await;
+
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .unwrap();
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(draft::Error::SendMessage(
+            draft::PackageError::ProtonRecipientDoesNotExist(_)
+        )))
+    ));
+}
+
+async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyhow::Error {
+    // Check :
+    // * Draft is saved before sent
+    // * Send API endpoint is updated
+    // * Draft is moved to sent folder
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        RemoteId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts().into());
+    sent_message.metadata.label_ids.push(LabelId::sent().into());
+    sent_message.metadata.flags.set(MessageFlags::SENT, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        DraftAction::Reply,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.core_test_context()
+        .mock_get_keys_all_failure(
+            "foo@bar.com",
+            Some(false),
+            ApiErrorInfo {
+                code: api_error_code,
+                error: None,
+                details: None,
+            },
+        )
+        .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(Entry {
+            email: "foo@bar.com".into(),
+            display_name: None,
+        })
+        .unwrap();
+    let save_action = draft.to_save_action();
+    let send_action = draft.to_send_action().unwrap();
+
+    Draft::send(user_ctx.queue(), save_action, send_action)
+        .await
+        .unwrap();
+
+    // Execute action.
+    let err = user_ctx.execute_pending_actions().await.unwrap_err();
+    let MailContextError::QueuedAction(QueuedError::Action(err, _)) = err else {
+        panic!("invalid error");
+    };
+
+    err
 }
 
 fn draft_test_params() -> TestParams {

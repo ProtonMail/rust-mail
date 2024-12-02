@@ -1,0 +1,720 @@
+use crate::datatypes::MessageRecipient;
+use crate::MailUserContext;
+use email_address::EmailAddress;
+use parking_lot::{Mutex, RwLock};
+use proton_api_core::consts::CoreBundle;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::session::CoreSession;
+use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::str::FromStr;
+use std::sync::Arc;
+use tracing::{error, warn};
+
+#[cfg(test)]
+#[path = "../tests/draft/recipients.rs"]
+mod tests;
+
+/// State of the recipient validation
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ValidationState {
+    /// Has been checked by the proton server. If true, it means it is a
+    /// proton address.
+    Valid(bool),
+    /// This proton address does not exist
+    DoesNotExist,
+    /// The email is formatted correctly
+    InvalidEmail,
+    /// This recipient has not yet been checked, there may be no network
+    /// or the validation hasn't started.
+    Unchecked,
+    /// This recipient being validated.
+    Validating,
+    /// This triggers when there is an error during validation that
+    /// was not accounted for.
+    Unknown,
+}
+
+/// Represents a single recipient
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Single {
+    /// Optional display name for the recipient.
+    pub display_name: Option<String>,
+    /// Recipient's email
+    pub email: String,
+    /// Validation state.
+    pub state: ValidationState,
+}
+
+/// Represents list of recipients in named group.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Group {
+    /// Recipients that compose this group
+    pub recipients: Vec<Single>,
+    /// Name of the group
+    pub group_name: String,
+    /// Total number of addresses in this group.
+    pub total_in_group: u64,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Address {0} already exists in the recipient list")]
+    DuplicateAddress(String),
+}
+
+/// An email recipient.
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum Recipient {
+    Single(Single),
+    Group(Group),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct Entry {
+    pub display_name: Option<String>,
+    pub email: String,
+}
+
+/// Abstraction over possible contact group resolvers.
+pub trait ContactGroupResolver {
+    /// Resolve the total number of members in a contract group.
+    ///
+    /// Return 0 on error or if the group can't be found.
+    fn resolve_contact_group_total(&self, name: &str) -> impl Future<Output = u64>;
+}
+
+/// Default contact group resolver, always returns 0
+#[derive(Default, Copy, Clone)]
+pub struct NullContactGroupResolver;
+impl ContactGroupResolver for NullContactGroupResolver {
+    async fn resolve_contact_group_total(&self, _: &str) -> u64 {
+        0
+    }
+}
+
+impl ContactGroupResolver for MailUserContext {
+    async fn resolve_contact_group_total(&self, _: &str) -> u64 {
+        // TODO: resolve total contact group count - depends on ET-476
+        warn!("Mail user context contact group resolving is not implemented yet");
+        0
+    }
+}
+
+/// A list of email recipients.
+///
+/// This recipient list is meant to be used in conjunction with the
+/// contact picker. Contacts are resolved by the contact APIs and then
+/// fed to this list.
+///
+/// Unless the email format is not valid, all recipients are added in an
+/// unchecked state. Before the Draft is sent we will verify that the
+/// recipients are valid. If the recipient is a proton address, we will
+/// also check whether the address actually exists.
+///
+#[derive(Debug, Default, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub struct List {
+    recipients: Vec<Recipient>,
+}
+
+impl List {
+    /// Create a new empty list.
+    pub fn new() -> Self {
+        Self {
+            recipients: Vec::new(),
+        }
+    }
+
+    /// Create a list from a [`Message`]'s recipient list.
+    ///
+    /// This function expect the data to be valid. Errors are silently
+    /// ignore.
+    pub async fn from_message_recipients(
+        contact_group_resolver: &impl ContactGroupResolver,
+        recipients: impl IntoIterator<Item = MessageRecipient>,
+    ) -> Self {
+        let mut list = Self::new();
+        for recipient in recipients {
+            let entry = Entry {
+                email: recipient.address,
+                display_name: if recipient.name.is_empty() {
+                    None
+                } else {
+                    Some(recipient.name)
+                },
+            };
+            if let Some(group_name) = recipient.group {
+                //if group is not found, assume total is the number of entries
+                //in the current group.
+                list.add_group(&group_name, [entry], 0);
+            } else if let Err(e) = list.add_single(entry) {
+                error!("Failed to add single recipient: {e}");
+            }
+        }
+
+        // path all groups that have 0 length
+        for recipient in &mut list.recipients {
+            if let Recipient::Group(group) = recipient {
+                group.total_in_group = contact_group_resolver
+                    .resolve_contact_group_total(&group.group_name)
+                    .await;
+                if group.total_in_group == 0 {
+                    group.total_in_group = group.recipients.len() as u64;
+                }
+            }
+        }
+
+        list
+    }
+
+    /// Add a new recipient to the list.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the address is not valid or was already added
+    /// to this list.
+    pub fn add_single(&mut self, entry: Entry) -> Result<&mut Single, Error> {
+        self.add_single_with_state(entry, ValidationState::Unchecked)
+    }
+
+    fn add_single_with_state(
+        &mut self,
+        entry: Entry,
+        state: ValidationState,
+    ) -> Result<&mut Single, Error> {
+        if self.is_duplicate_address(&entry.email) {
+            return Err(Error::DuplicateAddress(entry.email));
+        }
+
+        let state = if EmailAddress::from_str(&entry.email).is_err() {
+            ValidationState::InvalidEmail
+        } else {
+            state
+        };
+
+        self.recipients.push(Recipient::Single(Single {
+            display_name: entry.display_name,
+            email: entry.email,
+            state,
+        }));
+        match self
+            .recipients
+            .last_mut()
+            .expect("always has a single recipient")
+        {
+            Recipient::Single(single) => Ok(single),
+            Recipient::Group(_) => unreachable!(),
+        }
+    }
+
+    /// Remove a recipient from this list by `email`.
+    pub fn remove_single(&mut self, email: &str) {
+        self.recipients.retain(|r| {
+            let Recipient::Single(recipient) = r else {
+                return true;
+            };
+
+            recipient.email != *email
+        });
+    }
+
+    /// Add a new recipient group to this list.
+    ///
+    /// If the group does not exist, it will be created.
+    ///
+    /// If the group already exists, the recipients will be added to this group.
+    ///
+    /// If duplicates are found, they are returned by this function.
+    ///
+    /// The `total_in_group` should always match the total number of members
+    /// of the contact group. The recipient list group should only contain
+    /// active members of that group.
+    pub fn add_group(
+        &mut self,
+        group_name: &str,
+        entries: impl IntoIterator<Item = Entry>,
+        total_in_group: u64,
+    ) -> (&mut Group, Vec<Entry>) {
+        assert!(!group_name.is_empty());
+        self.add_group_with_state(
+            group_name,
+            entries,
+            total_in_group,
+            ValidationState::Unchecked,
+        )
+    }
+
+    fn add_group_with_state(
+        &mut self,
+        group_name: &str,
+        entries: impl IntoIterator<Item = Entry>,
+        total_in_group: u64,
+        state: ValidationState,
+    ) -> (&mut Group, Vec<Entry>) {
+        let mut duplicates = Vec::new();
+        let iter = entries.into_iter();
+        let mut recipients = Vec::with_capacity(iter.size_hint().0);
+
+        for recipient in iter {
+            if self.is_duplicate_address(&recipient.email) {
+                duplicates.push(recipient);
+                continue;
+            }
+
+            let state = if EmailAddress::from_str(&recipient.email).is_err() {
+                ValidationState::InvalidEmail
+            } else {
+                state
+            };
+
+            recipients.push(Single {
+                display_name: recipient.display_name,
+                email: recipient.email,
+                state,
+            });
+        }
+
+        let group = self.get_or_create_group(group_name);
+        group.total_in_group = total_in_group;
+        group.recipients.extend(recipients);
+        (group, duplicates)
+    }
+
+    /// Remove an entire group from the recipient list.
+    pub fn remove_group(&mut self, group_name: &str) {
+        self.recipients.retain(|r| {
+            let Recipient::Group(recipient) = r else {
+                return true;
+            };
+
+            recipient.group_name != *group_name
+        })
+    }
+
+    /// Remove a recipient with `email` from the group with `group_name`.
+    pub fn remove_group_recipient(&mut self, group_name: &str, email: &str) {
+        self.remove_group_recipients(group_name, std::iter::once(email));
+    }
+
+    /// Remove recipients with `emails` from the group with `group_name`.
+    pub fn remove_group_recipients<T: AsRef<str>>(
+        &mut self,
+        group_name: &str,
+        emails: impl IntoIterator<Item = T>,
+    ) {
+        if let Some(group) = self.find_group_mut(group_name) {
+            for email in emails {
+                group.recipients.retain(|r| r.email != *email.as_ref())
+            }
+        }
+    }
+
+    /// Get all recipients.
+    pub fn recipients(&self) -> &[Recipient] {
+        &self.recipients
+    }
+    fn find_group_mut(&mut self, group_name: &str) -> Option<&mut Group> {
+        for r in self.recipients.iter_mut() {
+            if let Recipient::Group(recipient) = r {
+                if recipient.group_name == group_name {
+                    return Some(recipient);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Create a new message recipient list fom the current state.
+    ///
+    /// Invalid recipients are ignored.
+    pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
+        let mut recipients = Vec::with_capacity(self.recipients.len());
+        for recipient in &self.recipients {
+            match recipient {
+                Recipient::Single(single) => {
+                    let is_proton = match single.state {
+                        ValidationState::Valid(is_proton) => is_proton,
+                        ValidationState::Validating | ValidationState::Unchecked => false,
+                        _ => continue,
+                    };
+                    recipients.push(MessageRecipient {
+                        address: single.email.clone(),
+                        is_proton,
+                        name: single.display_name.clone().unwrap_or_default(),
+                        group: None,
+                    })
+                }
+                Recipient::Group(group) => {
+                    for recipient in &group.recipients {
+                        let is_proton = match recipient.state {
+                            ValidationState::Valid(is_proton) => is_proton,
+                            ValidationState::Validating | ValidationState::Unchecked => false,
+                            _ => continue,
+                        };
+                        recipients.push(MessageRecipient {
+                            address: recipient.email.clone(),
+                            is_proton,
+                            name: recipient.display_name.clone().unwrap_or_default(),
+                            group: Some(group.group_name.clone()),
+                        })
+                    }
+                }
+            }
+        }
+
+        recipients
+    }
+
+    /// Number of recipients in this list.
+    pub fn len(&self) -> usize {
+        self.recipients.len()
+    }
+
+    /// Whether this recipient list is empty
+    pub fn is_empty(&self) -> bool {
+        self.recipients.is_empty()
+    }
+
+    fn find_recipient_by_email(&self, email: &str) -> Option<&Single> {
+        for recipient in &self.recipients {
+            match recipient {
+                Recipient::Single(single) => {
+                    if single.email == *email {
+                        return Some(single);
+                    }
+                }
+                Recipient::Group(group) => {
+                    for recipient in &group.recipients {
+                        if recipient.email == *email {
+                            return Some(recipient);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn find_recipient_by_email_mut(&mut self, email: &str) -> Option<&mut Single> {
+        for recipient in &mut self.recipients {
+            match recipient {
+                Recipient::Single(single) => {
+                    if single.email == *email {
+                        return Some(single);
+                    }
+                }
+                Recipient::Group(group) => {
+                    for recipient in &mut group.recipients {
+                        if recipient.email == *email {
+                            return Some(recipient);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn update_recipient_validation_state(&mut self, email: &str, state: ValidationState) {
+        if let Some(recipient) = self.find_recipient_by_email_mut(email) {
+            recipient.state = state;
+        }
+    }
+
+    /// Check whether this list contains the given `email`.
+    pub fn contains_email(&self, email: &str) -> bool {
+        self.find_recipient_by_email(email).is_some()
+    }
+
+    /// Check whether this list contains all the given `emails`.
+    pub fn contains_emails<T: AsRef<str>>(&self, emails: impl IntoIterator<Item = T>) -> bool {
+        for email in emails {
+            if self.contains_email(email.as_ref()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn get_or_create_group(&mut self, group_name: &str) -> &mut Group {
+        // Still can't do get or insert properly due to false positive
+        // in borrow checker, so do the index trick.
+        let position = self.recipients.iter().position(|r| {
+            if let Recipient::Group(group) = r {
+                return group_name == group.group_name;
+            }
+
+            false
+        });
+
+        let recipient = if let Some(position) = position {
+            &mut self.recipients[position]
+        } else {
+            let group = Group {
+                recipients: vec![],
+                group_name: group_name.to_owned(),
+                total_in_group: 0,
+            };
+            self.recipients.push(Recipient::Group(group));
+            self.recipients.last_mut().expect("recipients must exist")
+        };
+        match recipient {
+            Recipient::Group(group) => group,
+            _ => unreachable!(),
+        }
+    }
+
+    fn is_duplicate_address(&self, email: &str) -> bool {
+        for recipient in &self.recipients {
+            match recipient {
+                Recipient::Single(r) => {
+                    if r.email == email {
+                        return true;
+                    }
+                }
+                Recipient::Group(g) => {
+                    for recipient in &g.recipients {
+                        if recipient.email == email {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+}
+
+/// Specifies the behaviour for the mechanism through which updates are notified.
+pub trait OnBackgroundValidationComplete: Send + Sync + Clone + 'static {
+    fn recipients_validation_state_updated(&self) -> impl Future<Output = ()> + Send;
+}
+
+/// Channel based background validation updates.
+#[derive(Clone)]
+pub struct ChannelBackgroundValidationComplete(flume::Sender<()>);
+
+impl ChannelBackgroundValidationComplete {
+    pub fn new(capacity: usize) -> (Self, flume::Receiver<()>) {
+        let (sender, receiver) = flume::bounded(capacity);
+        (Self(sender), receiver)
+    }
+}
+
+impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
+    async fn recipients_validation_state_updated(&self) {
+        let _ = self.0.send_async(()).await;
+    }
+}
+
+/// This version of a recipient list validates recipient addresses in the background when
+/// they are added to the list.
+///
+/// Background validation is performed via async tasks. Once validation finishes the list is
+/// updated in place and user is notified via the provided
+/// [`OnBackgroundValidationComplete`] implementation.
+///
+/// This type exists so that the UI layer can defer the validation of the addresses as the user
+/// types them.
+pub struct ValidatingList<T: OnBackgroundValidationComplete> {
+    list: Arc<RwLock<List>>,
+    cb: Mutex<Option<T>>,
+}
+impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
+    /// Create a new instance.
+    pub fn new(on_updated: Option<T>) -> Self {
+        Self {
+            list: Arc::new(RwLock::new(List::new())),
+            cb: Mutex::new(on_updated),
+        }
+    }
+
+    /// Create a new instance from an existing `list`.
+    pub fn with_list(list: List, on_updated: Option<T>) -> Self {
+        Self {
+            list: Arc::new(RwLock::new(list)),
+            cb: Mutex::new(on_updated),
+        }
+    }
+
+    /// Set or remove the callback for validation changes.
+    pub fn set_callback(&self, cb: Option<T>) {
+        *self.cb.lock() = cb;
+    }
+
+    /// See [`List::add_single`] for more details.
+    pub fn add_single(&self, ctx: Arc<MailUserContext>, entry: Entry) -> Result<(), Error> {
+        let mut list = self.list.write();
+        let entry = list.add_single(entry)?;
+        if entry.state == ValidationState::Unchecked {
+            let list_cloned = Arc::clone(&self.list);
+            let email = entry.email.clone();
+            entry.state = ValidationState::Validating;
+
+            let cb = { self.cb.lock().clone() };
+
+            // run validation in the background.
+            tokio::spawn(async move {
+                let new_state = validate_address(&ctx, email.clone()).await;
+                {
+                    let mut list = list_cloned.write();
+                    list.update_recipient_validation_state(&email, new_state);
+                    drop(list);
+                }
+                if let Some(cb) = cb {
+                    cb.recipients_validation_state_updated().await;
+                }
+            });
+        }
+
+        Ok(())
+    }
+
+    /// See [`List::remove_group`] for more details.
+    pub fn remove_single(&self, email: &str) {
+        self.list.write().remove_single(email);
+    }
+
+    /// See [`List::add_group`] for more details.
+    pub fn add_group(
+        &self,
+        ctx: Arc<MailUserContext>,
+        group_name: &str,
+        entries: impl IntoIterator<Item = Entry>,
+        total_in_group: u64,
+    ) -> Vec<Entry> {
+        let mut list = self.list.write();
+        let (group, duplicates) = list.add_group(group_name, entries, total_in_group);
+
+        let to_validate = group
+            .recipients
+            .iter_mut()
+            .filter_map(|r| {
+                if r.state == ValidationState::Unchecked {
+                    r.state = ValidationState::Validating;
+                    Some(r.email.clone())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let cb = { self.cb.lock().clone() };
+        let list_cloned = Arc::clone(&self.list);
+        tokio::spawn(async move {
+            let mut update_statuses = Vec::with_capacity(to_validate.len());
+            for email in to_validate {
+                let status = validate_address(&ctx, email.clone()).await;
+                update_statuses.push((email, status));
+            }
+
+            {
+                let mut list = list_cloned.write();
+                for (email, state) in update_statuses {
+                    list.update_recipient_validation_state(&email, state);
+                }
+                drop(list);
+            }
+
+            if let Some(cb) = cb {
+                cb.recipients_validation_state_updated().await;
+            }
+        });
+
+        duplicates
+    }
+
+    /// See [`List::remove_group`] for more details;
+    pub fn remove_group(&self, group_name: &str) {
+        self.list.write().remove_group(group_name);
+    }
+
+    /// See [`List::remove_group_recipient`] for more details.
+    pub fn remove_group_recipient(&self, group_name: &str, email: &str) {
+        self.list.write().remove_group_recipient(group_name, email);
+    }
+
+    /// See [`List::remove_group_recipients`] for more details.
+    pub fn remove_group_recipients<E: AsRef<str>>(
+        &self,
+        group_name: &str,
+        emails: impl IntoIterator<Item = E>,
+    ) {
+        self.list
+            .write()
+            .remove_group_recipients(group_name, emails);
+    }
+
+    /// Get all recipients.
+    pub fn recipients(&self) -> Vec<Recipient> {
+        self.list.read().recipients.to_vec()
+    }
+
+    /// See [`List::to_message_recipients`] for more details.
+    pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
+        self.list.read().to_message_recipients()
+    }
+
+    /// Number of recipients in this list.
+    pub fn len(&self) -> usize {
+        self.list.read().len()
+    }
+
+    /// Whether this recipient list is empty
+    pub fn is_empty(&self) -> bool {
+        self.list.read().is_empty()
+    }
+
+    /// Check whether this list contains the given `email`.
+    pub fn contains_email(&self, email: &str) -> bool {
+        self.list.read().contains_email(email)
+    }
+
+    /// Check whether this list contains all the given `emails`.
+    pub fn contains_emails<E: AsRef<str>>(&self, emails: impl IntoIterator<Item = E>) -> bool {
+        self.list.read().contains_emails(emails)
+    }
+
+    /// Returns a copy of the underlying recipient list.
+    pub fn list(&self) -> List {
+        self.list.read().clone()
+    }
+}
+
+/// Validates an address using the get keys route for the given `email`.
+///
+/// Network failures do not result in errors, but return [`ValidationState::Unchecked`] instead.
+///
+async fn validate_address(ctx: &MailUserContext, email: String) -> ValidationState {
+    match ctx
+        .user_context()
+        .session()
+        .api()
+        .get_keys_all(email.clone(), Some(false))
+        .await
+    {
+        Ok(response) => ValidationState::Valid(response.is_proton),
+        Err(e) => api_error_into_validation_state(&e),
+    }
+}
+
+/// Convert the given API error into a validation state.
+pub fn api_error_into_validation_state(err: &ApiServiceError) -> ValidationState {
+    if err.is_network_failure() {
+        return ValidationState::Unchecked;
+    }
+
+    if let Some(proton_error) = err.to_proton_error() {
+        if proton_error.code == CoreBundle::KeyGetInputInvalid as u32 {
+            // 33101 = Invalid email address
+            return ValidationState::InvalidEmail;
+        } else if proton_error.code == CoreBundle::KeyGetAddressMissing as u32 {
+            // 33102 = Proton Address does not exist
+            return ValidationState::DoesNotExist;
+        }
+    }
+
+    ValidationState::Unknown
+}

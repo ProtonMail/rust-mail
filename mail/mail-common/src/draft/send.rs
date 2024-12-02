@@ -1,8 +1,9 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
-use crate::draft::{compose::html_to_text, PackageError};
+use crate::draft::recipients::{api_error_into_validation_state, ValidationState};
+use crate::draft::{compose::html_to_text, Error, PackageError};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
-use crate::{MailContextResult, MailUserContext};
+use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_mail::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
@@ -60,11 +61,37 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
                 ComposerPreference::default(),
             )
             .await
-            .inspect_err(|err| {
+            .map_err(|err| {
                 error!(
                     "Failed to load send preferences for recipient {}: {}",
                     recipient, err
                 );
+
+                // Catch recipient validation errors.
+                if let MailContextError::Api(err) = &err {
+                    match api_error_into_validation_state(err) {
+                        ValidationState::InvalidEmail => {
+                            return Error::SendMessage(PackageError::RecipientEmailInvalid(
+                                recipient.clone(),
+                            ))
+                            .into();
+                        }
+                        ValidationState::DoesNotExist => {
+                            return Error::SendMessage(PackageError::ProtonRecipientDoesNotExist(
+                                recipient.clone(),
+                            ))
+                            .into();
+                        }
+                        ValidationState::Unknown => {
+                            return Error::SendMessage(PackageError::RecipientEmailInvalid(
+                                recipient.clone(),
+                            ))
+                            .into();
+                        }
+                        _ => {}
+                    }
+                }
+                err
             })?;
         send_preferences.insert(recipient.clone(), send_preference);
     }

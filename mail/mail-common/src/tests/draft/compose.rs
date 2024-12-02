@@ -2,6 +2,7 @@ pub use super::*;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::compose::DEFAULT_SUBJECT;
+use crate::draft::recipients::NullContactGroupResolver;
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalId};
@@ -21,43 +22,37 @@ fn new_draft_message_creation() {
     assert!(draft.bcc_list.is_empty());
 }
 
-#[test]
-fn reply_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::Sender);
+#[tokio::test]
+async fn reply_draft_message_creation() {
+    let (draft, source_message) = create_reply(ReplyMode::Sender).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert_eq!(draft.to_list, vec![source_message.sender.address]);
+    assert!(draft.to_list.contains_email(&source_message.sender.address));
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
     assert_eq!(draft.attachments, vec![inline_attachment()])
 }
 
-#[test]
-fn reply_all_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::All);
+#[tokio::test]
+async fn reply_all_draft_message_creation() {
+    let (draft, source_message) = create_reply(ReplyMode::All).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert_eq!(draft.to_list, vec![source_message.sender.address]);
-    assert_eq!(
-        draft.cc_list,
-        source_message
-            .cc_list
-            .value
-            .into_iter()
-            .map(|v| v.address)
-            .collect::<Vec<_>>()
-    );
+    assert!(draft.to_list.contains_email(&source_message.sender.address));
+    assert!(draft
+        .cc_list
+        .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address)));
     assert!(draft.bcc_list.is_empty());
     assert_eq!(draft.attachments, vec![inline_attachment()])
 }
 
-#[test]
-fn forward_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::Forward);
+#[tokio::test]
+async fn forward_draft_message_creation() {
+    let (draft, source_message) = create_reply(ReplyMode::Forward).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject)
@@ -110,15 +105,17 @@ fn message_signature_with_all_signatures() {
     insta::assert_snapshot!(signature);
 }
 
-fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
+async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
     let address = address_with_signature("");
     let source_message = existing_message();
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
     let mail_settings = MailSettings::default();
 
+    let resolver = NullContactGroupResolver {};
     (
         Draft::new_draft_reply(
+            &resolver,
             MetadataId(0),
             reply_mode,
             &address,
@@ -127,7 +124,8 @@ fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
             source_body_metadata,
             source_body,
             true,
-        ),
+        )
+        .await,
         source_message,
     )
 }
