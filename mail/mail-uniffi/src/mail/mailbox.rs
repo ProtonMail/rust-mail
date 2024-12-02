@@ -9,7 +9,7 @@ use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::{
-    ProtonMailError as RealProtonMailError, SessionErrorReason as RealSessionErrorReason,
+    ContextErrorReason as RealSessionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::models::Label as RealLabel;
 use stash::stash::Stash;

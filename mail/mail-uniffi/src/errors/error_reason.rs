@@ -1,11 +1,15 @@
 use super::login_flow::HumanChallenge;
 use crate::UniffiEnum;
 use proton_mail_common::errors::{
-    ActionErrorReason as RealActionErrorReason, DraftErrorReason as RealDraftErrorReason,
-    EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
-    OtherErrorReason as RealOtherErrorReason, SessionErrorReason as RealSessionErrorReason,
+    ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
+    DraftErrorReason as RealDraftErrorReason, EventErrorReason as RealEventErrorReason,
+    LoginErrorReason as RealLoginErrorReason, OtherErrorReason as RealOtherErrorReason,
 };
 
+/// Specific Reason for error occurrence within ActionQueue
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in oreder to provide only the necessary information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum ActionErrorReason {
     UnknownLabel,
@@ -21,19 +25,30 @@ impl From<RealActionErrorReason> for ActionErrorReason {
     }
 }
 
+/// Specific Reason for error occurrence within Session.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling session related operations in order to provide only the necessary
+/// information to the user. This error type in common library is named `ContextErrorReason`
+/// as context is nomeclature used in the common library.
 #[derive(Debug, UniffiEnum)]
 pub enum SessionErrorReason {
     UnknownLabel,
 }
 
-impl From<RealSessionErrorReason> for SessionErrorReason {
-    fn from(reason: RealSessionErrorReason) -> Self {
+impl From<RealContextErrorReason> for SessionErrorReason {
+    fn from(reason: RealContextErrorReason) -> Self {
         match reason {
-            RealSessionErrorReason::UnknownLabel => SessionErrorReason::UnknownLabel,
+            RealContextErrorReason::UnknownLabel => SessionErrorReason::UnknownLabel,
         }
     }
 }
 
+/// Specific Reason for error occurrence within Login Flow.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling login related operations in order to provide only the necessary
+/// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum LoginErrorReason {
     HumanVerificationChallenge(HumanChallenge),
@@ -55,6 +70,11 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
     }
 }
 
+/// Specific Reason for error occurrence within Draft.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while drafting a new message in order to provide only the necessary
+/// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum DraftErrorReason {
     UnknownMimeType,
@@ -68,6 +88,11 @@ impl From<RealDraftErrorReason> for DraftErrorReason {
     }
 }
 
+/// Specific Reason for error occurrence within Event Loop.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling event loop related operations in order to provide only the necessary
+/// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum EventErrorReason {
     Placeholder,
@@ -81,6 +106,11 @@ impl From<RealEventErrorReason> for EventErrorReason {
     }
 }
 
+/// Specific Reason for error occurrence within the application.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling application related operations in order to provide a way to descirbe
+/// common reasons across the application execution errors.
 #[derive(Debug, UniffiEnum)]
 pub enum OtherErrorReason {
     InvalidParameter,

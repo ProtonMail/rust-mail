@@ -123,7 +123,7 @@ impl From<AppError> for ProtonMailError {
             AppError::EmptyListOfConversations => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::EmptyListOfMessages => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
-            AppError::MessageHasNoRemoteId(_local_id) => Self::Network,
+            AppError::MessageHasNoRemoteId(_local_id) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Database),
             AppError::UnknownMessage(_remote_id) => Self::Unexpected(Unexpected::Unknown),
             AppError::NoConversationWithValidRemoteIdFoundInPage => {
