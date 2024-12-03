@@ -1,0 +1,45 @@
+use crate::errors::api_service_error::UserApiServiceError;
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::OtherErrorReason;
+use crate::UniffiEnum;
+use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+
+#[derive(Debug, UniffiEnum)]
+pub enum ProtonError {
+    OtherReason(OtherErrorReason),
+    SessionExpired,
+    ServerError(UserApiServiceError),
+    Network,
+    Unexpected(UnexpectedError),
+}
+
+impl From<RealProtonMailError> for ProtonError {
+    fn from(error: RealProtonMailError) -> Self {
+        {
+            match error {
+                RealProtonMailError::SessionExpired => ProtonError::SessionExpired,
+                RealProtonMailError::ServerError(err) => ProtonError::ServerError(err.into()),
+                RealProtonMailError::Network => ProtonError::Network,
+                RealProtonMailError::Unexpected(err) => ProtonError::Unexpected(err.into()),
+                RealProtonMailError::Reason(reason) => ProtonError::from(reason),
+            }
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for ProtonError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::OtherReason(reason) => ProtonError::OtherReason(reason.into()),
+            reason => {
+                tracing::error!(
+                    "Reason mapping failed, this is serious bug, expected OtherErrorReason: {:?}",
+                    reason
+                );
+
+                ProtonError::Unexpected(UnexpectedError::ErrorMapping)
+            }
+        }
+    }
+}

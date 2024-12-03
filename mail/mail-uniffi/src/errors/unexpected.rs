@@ -25,6 +25,8 @@ pub enum UnexpectedError {
     Queue,
     /// Error related to the composing draft
     Draft,
+    /// Error mapping failed, this is serious issue and has to be addressed asap
+    ErrorMapping,
     /// Error with no identified operation
     Unknown,
 }

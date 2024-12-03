@@ -1,9 +1,21 @@
+mod action_error;
 pub(crate) mod api_service_error;
+mod draft_error;
+mod error_reason;
+mod event_error;
+mod login_error;
 pub(crate) mod login_flow;
-mod proton_mail_error;
+mod proton_error;
+mod session_error;
 pub(crate) mod unexpected;
 
-pub use self::proton_mail_error::*;
+pub use self::action_error::*;
+pub use self::draft_error::*;
+pub use self::error_reason::*;
+pub use self::event_error::*;
+pub use self::login_error::*;
+pub use self::proton_error::*;
+pub use self::session_error::*;
 
 #[macro_export]
 macro_rules! export_void_result {

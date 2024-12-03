@@ -6,53 +6,17 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
 use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 
-/// Represent all the errors that can be returned by the ProtonMail SDK.
-///
-/// Currently this is not used in uniffi export as it has its own `ProtonMailError` struct.
-/// But for Rust implementations such as TUI this struct is valid.
-#[derive(Debug)]
-pub struct ProtonMailError {
-    pub kind: MailErrorKind,
-    pub details: MailErrorDetails,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum MailErrorKind {
-    /// User Localizable Error for Invoked Actions
-    UserActionError,
-
-    /// User Localizable Error for Session operations
-    UserSessionError,
-
-    /// User Localizable Error for Draft new message
-    UserDraftError,
-
-    /// User Localizable Error for Login flow
-    LoginFlowError,
-
-    /// Localizable Error for Live Event Updates
-    UpdateEventError,
-}
-
-impl MailErrorKind {
-    pub fn with<D: Into<MailErrorDetails>>(self, details: D) -> ProtonMailError {
-        ProtonMailError {
-            kind: self,
-            details: details.into(),
-        }
-    }
-}
+use super::mail_error_reason::*;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
 /// It implements From trait for all the internal errors that can occur.
 #[derive(Debug)]
-pub enum MailErrorDetails {
+pub enum ProtonMailError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     Reason(MailErrorReason),
     /// This error is related with the session (i.e. like a session expired)
@@ -65,31 +29,26 @@ pub enum MailErrorDetails {
     Unexpected(Unexpected),
 }
 
-/// Specific Reason for error occurrence
-#[derive(Debug)]
-pub enum MailErrorReason {
-    InvalidParameter,
-    UnknownLabel,
-    UnknownMessage,
-    HumanVerificationChallenge(HumanVerificationChallenge),
-    InvalidCredentials,
-    UnsupportedTfa,
-    CantUnlockUserKey,
+impl ProtonMailError {
+    /// Shorthand for creating a `ProtonMailError::Reason`.
+    pub fn reason<R: Into<MailErrorReason>>(reason: R) -> Self {
+        Self::Reason(reason.into())
+    }
 }
 
-impl<E: Into<Unexpected>> From<E> for MailErrorDetails {
+impl<E: Into<Unexpected>> From<E> for ProtonMailError {
     fn from(error: E) -> Self {
         Self::Unexpected(error.into())
     }
 }
 
-impl From<MailErrorReason> for MailErrorDetails {
+impl From<MailErrorReason> for ProtonMailError {
     fn from(reason: MailErrorReason) -> Self {
         Self::Reason(reason)
     }
 }
 
-impl From<ApiServiceError> for MailErrorDetails {
+impl From<ApiServiceError> for ProtonMailError {
     fn from(error: ApiServiceError) -> Self {
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
@@ -98,37 +57,37 @@ impl From<ApiServiceError> for MailErrorDetails {
     }
 }
 
-impl From<LoginError> for MailErrorDetails {
+impl From<LoginError> for ProtonMailError {
     fn from(error: LoginError) -> Self {
         match error {
-            LoginError::HumanVerificationRequired(human_verification_challenge) => Self::Reason(
-                MailErrorReason::HumanVerificationChallenge(human_verification_challenge),
+            LoginError::HumanVerificationRequired(human_verification_challenge) => Self::reason(
+                LoginErrorReason::HumanVerificationChallenge(human_verification_challenge),
             ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
             LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
-                Self::Reason(MailErrorReason::CantUnlockUserKey)
+                Self::reason(LoginErrorReason::CantUnlockUserKey)
             }
             LoginError::KeySecretSaltFetch(api_service_error) => match api_service_error {
                 // HTTP code 422
                 ApiServiceError::UnprocessableEntity(_string1, _string2) => {
                     // TODO(ET-1076): use api_code: 8002 -> InvalidCredentials ; 2005 -> EmptyInput ; other -> Self::from(api_service_error)
-                    Self::Reason(MailErrorReason::InvalidCredentials)
+                    Self::reason(LoginErrorReason::InvalidCredentials)
                 }
                 _ => Self::from(api_service_error),
             },
             LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
-                Self::Reason(MailErrorReason::InvalidCredentials)
+                Self::reason(LoginErrorReason::InvalidCredentials)
             }
-            LoginError::UnsupportedTfa => Self::Reason(MailErrorReason::UnsupportedTfa),
+            LoginError::UnsupportedTfa => Self::Reason(LoginErrorReason::UnsupportedTfa.into()),
             LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
             LoginError::AuthStore(store_error) => Self::from(store_error),
         }
     }
 }
 
-impl From<AppError> for MailErrorDetails {
+impl From<AppError> for ProtonMailError {
     fn from(error: AppError) -> Self {
         match error {
             AppError::API(api_service_error) => Self::from(api_service_error),
@@ -136,7 +95,9 @@ impl From<AppError> for MailErrorDetails {
                 Self::Unexpected(Unexpected::Internal)
             }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::InvalidMimeType(_string) => Self::Reason(MailErrorReason::InvalidParameter),
+            AppError::InvalidMimeType(_string) => {
+                Self::Reason(DraftErrorReason::UnknownMimeType.into())
+            }
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
@@ -159,10 +120,10 @@ impl From<AppError> for MailErrorDetails {
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoRemoteId(_local_id) => Self::Network,
-            AppError::EmptyListOfConversations => Self::Reason(MailErrorReason::InvalidParameter),
-            AppError::EmptyListOfMessages => Self::Reason(MailErrorReason::InvalidParameter),
-            AppError::InvalidMobileActions(_) => Self::Reason(MailErrorReason::InvalidParameter),
-            AppError::MessageHasNoRemoteId(_local_id) => Self::Network,
+            AppError::EmptyListOfConversations => Self::reason(OtherErrorReason::InvalidParameter),
+            AppError::EmptyListOfMessages => Self::reason(OtherErrorReason::InvalidParameter),
+            AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
+            AppError::MessageHasNoRemoteId(_local_id) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Database),
             AppError::UnknownMessage(_remote_id) => Self::Unexpected(Unexpected::Unknown),
             AppError::NoConversationWithValidRemoteIdFoundInPage => {
@@ -171,7 +132,7 @@ impl From<AppError> for MailErrorDetails {
             AppError::NoMessageWithValidRemoteIdFoundInPage => {
                 Self::Unexpected(Unexpected::Database)
             }
-            AppError::UserNotFound => Self::Reason(MailErrorReason::InvalidParameter),
+            AppError::UserNotFound => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
@@ -180,7 +141,7 @@ impl From<AppError> for MailErrorDetails {
     }
 }
 
-impl From<MailContextError> for MailErrorDetails {
+impl From<MailContextError> for ProtonMailError {
     fn from(error: MailContextError) -> Self {
         match error {
             MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
@@ -207,7 +168,7 @@ impl From<MailContextError> for MailErrorDetails {
     }
 }
 
-impl From<DraftError> for MailErrorDetails {
+impl From<DraftError> for ProtonMailError {
     fn from(error: DraftError) -> Self {
         match error {
             DraftError::UserHasNoAddresses => Self::Unexpected(Unexpected::Database),
@@ -232,7 +193,7 @@ impl From<DraftError> for MailErrorDetails {
     }
 }
 
-impl From<EventLoopError> for MailErrorDetails {
+impl From<EventLoopError> for ProtonMailError {
     fn from(error: EventLoopError) -> Self {
         match error {
             EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
@@ -245,7 +206,7 @@ impl From<EventLoopError> for MailErrorDetails {
     }
 }
 
-impl From<SubscriberError> for MailErrorDetails {
+impl From<SubscriberError> for ProtonMailError {
     fn from(error: SubscriberError) -> Self {
         match error {
             SubscriberError::Api(api_service_error) => Self::from(api_service_error),
@@ -258,10 +219,10 @@ impl From<SubscriberError> for MailErrorDetails {
     }
 }
 
-impl From<ContactError> for MailErrorDetails {
+impl From<ContactError> for ProtonMailError {
     fn from(error: ContactError) -> Self {
         match error {
-            ContactError::CardNotFound(_string) => Self::Reason(MailErrorReason::InvalidParameter),
+            ContactError::CardNotFound(_string) => Self::reason(OtherErrorReason::InvalidParameter),
             ContactError::ContactCardRemoteIdNotPresent(_string)
             | ContactError::FullContactNotFound(_string) => Self::Unexpected(Unexpected::Database),
             ContactError::Validation(_vcard_validation_error) => {
@@ -271,7 +232,7 @@ impl From<ContactError> for MailErrorDetails {
     }
 }
 
-impl From<ActionError> for MailErrorDetails {
+impl From<ActionError> for ProtonMailError {
     fn from(error: ActionError) -> Self {
         match error {
             ActionError::Http(api_service_error) => Self::from(api_service_error),
@@ -283,7 +244,7 @@ impl From<ActionError> for MailErrorDetails {
     }
 }
 
-impl<T> From<InternalActionError<T>> for MailErrorDetails
+impl<T> From<InternalActionError<T>> for ProtonMailError
 where
     T: Action,
     T::Error: Into<Self>,
@@ -297,14 +258,14 @@ where
     }
 }
 
-impl From<MailboxError> for MailErrorDetails {
+impl From<MailboxError> for ProtonMailError {
     fn from(error: MailboxError) -> Self {
         match error {
             // Mailbox::new:     can't load Label from database
             // Mailbox::refresh: can't load Label from database
             // Mailbox::sync:    can't load Label from database
             MailboxError::LabelNotFound(_local_label_id) => {
-                Self::Reason(MailErrorReason::UnknownLabel)
+                Self::reason(ActionErrorReason::UnknownLabel)
             }
             // Mailbox::refresh: remote_id is None
             // Mailbox::sync:    remote_id is None
@@ -334,7 +295,7 @@ impl From<MailboxError> for MailErrorDetails {
     }
 }
 
-impl From<SidebarError> for MailErrorDetails {
+impl From<SidebarError> for ProtonMailError {
     fn from(error: SidebarError) -> Self {
         match error {
             SidebarError::MailContext(mail_context_error) => Self::from(mail_context_error),

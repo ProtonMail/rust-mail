@@ -1,12 +1,12 @@
 use super::MailUserSession;
-use crate::errors::{MailErrorKind, ProtonMailError, VoidProtonMailResult};
+use crate::errors::{ActionError, VoidActionResult};
 use crate::{
     core::datatypes::{GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
 use crate::{utils::DAMPENING_PERIOD, watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
-use proton_mail_common::errors::MailErrorDetails as RealMailErrorDetails;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContextError;
 use std::{
     sync::{
@@ -23,9 +23,9 @@ use tokio::{task, time::interval};
 #[proton_uniffi_macros::export_result]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
-) -> Result<Vec<GroupedContacts>, ProtonMailError> {
+) -> Result<Vec<GroupedContacts>, ActionError> {
     uniffi_async(async move {
-        Result::<_, RealMailErrorDetails>::Ok(
+        Result::<_, RealProtonMailError>::Ok(
             RealContact::contact_list(session.user_stash())
                 .await?
                 .into_iter()
@@ -34,22 +34,22 @@ pub async fn contact_list(
         )
     })
     .await
-    .map_err(|details| MailErrorKind::UserActionError.with(details))
+    .map_err(ActionError::from)
 }
 
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
-pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidProtonMailResult {
+pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealContact::action_delete(user_context.queue(), vec![contact_id.into()])
             .await
             .map_err(MailContextError::from)?;
 
-        Result::<_, RealMailErrorDetails>::Ok(())
+        Result::<_, RealProtonMailError>::Ok(())
     })
     .await
-    .map_err(|details| MailErrorKind::UserActionError.with(details))
+    .map_err(ActionError::from)
     .into()
 }
 
@@ -79,7 +79,7 @@ pub struct WatchedContactList {
 pub async fn watch_contact_list(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> Result<WatchedContactList, ProtonMailError> {
+) -> Result<WatchedContactList, ActionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
@@ -89,13 +89,13 @@ pub async fn watch_contact_list(
 
         watch_channel_inner(&watcher, channel, callback);
 
-        Result::<_, RealMailErrorDetails>::Ok(WatchedContactList {
+        Result::<_, RealProtonMailError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
             handle: Arc::new(watcher),
         })
     })
     .await
-    .map_err(|details| MailErrorKind::UserActionError.with(details))
+    .map_err(ActionError::from)
 }
 
 /// Obtains dampening function.
