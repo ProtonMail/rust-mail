@@ -317,7 +317,9 @@ where
                 failed.push(key.clone());
             }
         }
-        Config::handle_failed(failed).await?;
+        if !failed.is_empty() {
+            Config::handle_failed(failed).await?;
+        }
         Ok(cache)
     }
 
