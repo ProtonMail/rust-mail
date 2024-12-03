@@ -1,4 +1,4 @@
-use crate::errors::SessionError;
+use crate::errors::UserSessionError;
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::MailUserSession;
@@ -17,7 +17,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, SessionError> {
+    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserSessionError> {
         let stash = self.ctx().user_stash().clone();
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
@@ -29,7 +29,7 @@ impl MailUserSession {
             )
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 
     /// Return the list of labels of type Label that can be applied to conversations or
@@ -37,7 +37,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, SessionError> {
+    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserSessionError> {
         let stash = self.ctx.user_stash().clone();
         uniffi_async(async move {
             let labels = RealLabel::find_by_kind(RealLabelType::Label, &stash).await?;
@@ -47,6 +47,6 @@ impl MailUserSession {
             )
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 }

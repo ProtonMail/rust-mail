@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::errors::SessionError;
+use crate::errors::UserSessionError;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::MailSettings as RealSettings;
@@ -31,7 +31,7 @@ pub struct SettingsWatcher {
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<SettingsWatcher, SessionError> {
+) -> Result<SettingsWatcher, UserSessionError> {
     let db = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
@@ -50,5 +50,5 @@ pub async fn watch_mail_settings(
         })
     })
     .await
-    .map_err(SessionError::from)
+    .map_err(UserSessionError::from)
 }

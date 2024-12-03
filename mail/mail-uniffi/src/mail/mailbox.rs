@@ -1,7 +1,7 @@
 pub mod attachments;
 
 use crate::core::datatypes::Id;
-use crate::errors::SessionError;
+use crate::errors::UserSessionError;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -26,12 +26,12 @@ pub struct Mailbox {
 /// Callback for operations that get scheduled in the background and return no result.
 #[uniffi::export(callback_interface)]
 pub trait MailboxBackgroundResult: Send + Sync {
-    fn on_background_result(&self, error: Option<SessionError>);
+    fn on_background_result(&self, error: Option<UserSessionError>);
 }
 
 const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
-export_typed_result!(NewMailboxResult, Arc<Mailbox>, SessionError);
+export_typed_result!(NewMailboxResult, Arc<Mailbox>, UserSessionError);
 
 /// Create a new mailbox for a given label id.
 #[uniffi::export]
@@ -45,7 +45,7 @@ pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResul
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
     })
     .await
-    .map_err(SessionError::from)
+    .map_err(UserSessionError::from)
     .into()
 }
 
@@ -71,7 +71,7 @@ pub async fn inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
         Mailbox::sync(mbox).await
     })
     .await
-    .map_err(SessionError::from)
+    .map_err(UserSessionError::from)
     .into()
 }
 
@@ -98,7 +98,7 @@ pub async fn all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
         Mailbox::sync(mbox).await
     })
     .await
-    .map_err(SessionError::from)
+    .map_err(UserSessionError::from)
     .into()
 }
 
@@ -121,13 +121,13 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn unread_count(&self) -> Result<u64, SessionError> {
+    pub async fn unread_count(&self) -> Result<u64, UserSessionError> {
         let mbox = self.mbox.clone();
         uniffi_async(
             async move { Result::<_, RealProtonMailError>::Ok(mbox.unread_count().await?) },
         )
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 
     /// Subscribe for updates to the number of unread items in this mailbox.
@@ -139,7 +139,7 @@ impl Mailbox {
     pub async fn watch_unread_count(
         &self,
         callback: Box<dyn LiveQueryCallback>,
-    ) -> Result<Arc<WatchHandle>, SessionError> {
+    ) -> Result<Arc<WatchHandle>, UserSessionError> {
         let label_id = self.mbox.label_id();
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
@@ -153,7 +153,7 @@ impl Mailbox {
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 }
 

@@ -4,7 +4,7 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::errors::{SessionError, VoidSessionResult};
+use crate::errors::{UserSessionError, VoidSessionResult};
 use crate::{core::datatypes::User, uniffi_async};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
@@ -61,7 +61,7 @@ impl MailUserSession {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
         .into()
     }
 }
@@ -82,7 +82,7 @@ impl MailUserSession {
     /// Any of the [`MailSessionError::Http`] possibilities could be returned if
     /// there is a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, SessionError> {
+    pub async fn fork(&self) -> Result<String, UserSessionError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.session()
@@ -91,7 +91,7 @@ impl MailUserSession {
                 .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
@@ -99,14 +99,14 @@ impl MailUserSession {
     /// # Errors
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
-    pub async fn user(&self) -> Result<User, SessionError> {
+    pub async fn user(&self) -> Result<User, UserSessionError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let user = ctx.user().await?;
             Result::<_, RealProtonMailError>::Ok(user.into())
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
     }
 }
 

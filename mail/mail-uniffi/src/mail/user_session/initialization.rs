@@ -1,4 +1,4 @@
-use crate::errors::{SessionError, VoidSessionResult};
+use crate::errors::{UserSessionError, VoidSessionResult};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -24,7 +24,7 @@ impl MailUserSession {
             Ok(())
         })
         .await
-        .map_err(SessionError::from)
+        .map_err(UserSessionError::from)
         .into()
     }
 }
