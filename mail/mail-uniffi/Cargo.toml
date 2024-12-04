@@ -10,6 +10,7 @@ crate-type = ["staticlib", "cdylib"]
 
 [dependencies]
 anyhow = { workspace = true }
+chrono = { workspace = true }
 flume = { workspace = true }
 itertools = { workspace = true }
 parking_lot = { workspace = true }
