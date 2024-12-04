@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
@@ -57,16 +58,11 @@ async fn test_tracker() {
     });
 
     let mut count = 0;
-    loop {
-        match receiver.recv_async().await {
-            Ok(change) => {
-                println!(">> {change:?}");
-                count += 1;
-                if count >= 3 {
-                    break;
-                }
-            }
-            Err(_) => break,
+    while let Ok(change) = receiver.recv_async().await {
+        println!(">> {change:?}");
+        count += 1;
+        if count >= 3 {
+            break;
         }
     }
 }

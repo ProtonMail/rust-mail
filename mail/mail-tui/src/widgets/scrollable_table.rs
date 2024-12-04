@@ -57,7 +57,7 @@ impl<'a> ScrollableTable<'a> {
     }
 }
 
-impl<'a> StatefulWidget for ScrollableTable<'a> {
+impl StatefulWidget for ScrollableTable<'_> {
     type State = ScrollableTableState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

@@ -301,6 +301,7 @@ mod basic_pagination {
 mod extended_pagination {
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn navigate_several_pages() {
         let db_dir = tempfile::tempdir().unwrap();

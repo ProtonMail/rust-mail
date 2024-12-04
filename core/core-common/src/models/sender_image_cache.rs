@@ -1,4 +1,4 @@
-use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResult};
+use crate::cache::{CacheConfig, CacheError, CacheInterface, CacheKey, CacheResult};
 use crate::datatypes::{LightOrDarkMode, LocalId};
 use crate::models::ModelExtension;
 use anyhow::anyhow;
@@ -335,10 +335,10 @@ impl CacheConfig for SenderImage {
 }
 
 impl CacheKey for SenderImage {
-    fn after_evict(&self, stash: &Stash) {
+    fn after_evict<I: CacheInterface>(&self, interface: I) {
         block_on(async {
             let _ = self
-                .delete(stash)
+                .delete(&interface.stash().unwrap())
                 .await
                 .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
         });

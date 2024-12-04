@@ -2355,7 +2355,7 @@ async fn test_conversation_label_partially() {
         .push(MY_LABEL_ID1.clone().into());
     state.conversations[0].labels.push(
         ApiConversationLabel {
-            id: MY_LABEL_ID1.clone().into(),
+            id: MY_LABEL_ID1.clone(),
             context_expiration_time: 0,
             context_num_attachments: 0,
             context_num_messages: 0,

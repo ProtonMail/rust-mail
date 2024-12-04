@@ -7,13 +7,12 @@ use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    filter_responses, AllBottomBarMessageActions, BottomBarActions, ConversationAction,
-    ConversationAvailableActions, GeneralActions, LabelAsAction, MovableSystemFolderAction,
-    MoveAction, MoveItemAction,
+    filter_responses, ConversationAction, ConversationAvailableActions, GeneralActions,
+    LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    MessageAddresses, MessageAttachmentInfos, MobileActions, SystemLabel, SystemLabelId,
+    MessageAddresses, MessageAttachmentInfos, SystemLabel, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -557,55 +556,6 @@ impl Conversation {
         Ok(())
     }
 
-    /// Get the available actions from bottom bar for given conversations
-    ///
-    /// # Parameters
-    ///
-    /// * `current_label_id`  - Id of the current mailbox.
-    /// * `conversations_ids` - List of the conversations IDs.
-    /// * `interface`         - The database interface.
-    ///
-    pub async fn all_available_bottom_bar_actions_for_conversations<A>(
-        current_label_id: LocalId,
-        conversation_ids: Vec<LocalId>,
-        interface: &A,
-    ) -> Result<AllBottomBarMessageActions, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let inbox = MovableSystemFolderAction::inbox(interface).await?;
-        let archive = MovableSystemFolderAction::archive(interface).await?;
-        let trash = MovableSystemFolderAction::trash(interface).await?;
-        let spam = MovableSystemFolderAction::spam(interface).await?;
-
-        let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
-        let conversations = Self::find_by_ids(conversation_ids.to_vec(), interface).await?;
-        let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
-            &current_label,
-            &conversations,
-            &bottom_bar_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        )?;
-        let hidden_bottom_bar_actions = Self::hidden_bottom_bar_actions(
-            current_label,
-            &conversations,
-            &visible_bottom_bar_actions,
-            &inbox,
-            &archive,
-            &trash,
-            &spam,
-        );
-
-        Ok(AllBottomBarMessageActions {
-            hidden_bottom_bar_actions,
-            visible_bottom_bar_actions,
-        })
-    }
-
     /// Find a group of Conversations by their IDs.
     ///
     /// # Parameters
@@ -627,71 +577,6 @@ impl Conversation {
         let (query, params) =
             find_in_query!("WHERE deleted = 0 AND local_id IN ({})", conversation_ids);
         Conversation::find(query, params, interface, None).await
-    }
-
-    /// Get actions to display in bottom_bar when selecting messages
-    fn visible_bottom_bar_actions(
-        current_label: &LabelId,
-        conversations: &[Self],
-        bottom_bar_actions: &[MobileActions],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Result<Vec<BottomBarActions>, AppError> {
-        let any_unread = conversations.iter().any(|c| c.num_unread > 0);
-        let all_starred = conversations.iter().all(|c| c.is_starred());
-
-        let mut result: Vec<_> = bottom_bar_actions
-            .iter()
-            .filter_map(|a| {
-                BottomBarActions::from_mobile_actions(
-                    a,
-                    any_unread,
-                    all_starred,
-                    current_label,
-                    inbox,
-                    archive,
-                    trash,
-                    spam,
-                )
-            })
-            .collect();
-        if result.len() > 5 {
-            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
-            result.truncate(5);
-        }
-        result.push(BottomBarActions::More);
-        Ok(result)
-    }
-
-    /// Get actions not displayed in bottom_bar when selecting messages
-    fn hidden_bottom_bar_actions(
-        current_label: LabelId,
-        conversations: &[Self],
-        visible_actions: &[BottomBarActions],
-        inbox: &MovableSystemFolderAction,
-        archive: &MovableSystemFolderAction,
-        trash: &MovableSystemFolderAction,
-        spam: &MovableSystemFolderAction,
-    ) -> Vec<BottomBarActions> {
-        let any_unread = conversations.iter().any(|m| m.num_unread > 0);
-        let any_read = conversations.iter().any(|m| m.num_unread < m.num_messages);
-        let any_starred = conversations.iter().any(|m| m.is_starred());
-        let any_unstarred = conversations.iter().any(|m| !m.is_starred());
-
-        BottomBarActions::hidden_bottom_bar_actions(
-            current_label,
-            any_unread,
-            any_read,
-            any_unstarred,
-            any_starred,
-            visible_actions,
-            inbox,
-            archive,
-            trash,
-            spam,
-        )
     }
 
     /// Create a new unknown conversation where we only know the `remote_id`.
@@ -3349,6 +3234,28 @@ impl Conversation {
             .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
             .cloned()
             .collect()
+    }
+
+    /// Queries `ConversationLabel` database and finds if there is a label with given `LocalId` in it.
+    pub async fn has_label<A>(
+        &self,
+        label_local_id: LocalId,
+        interface: &A,
+    ) -> Result<bool, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let local_conversation_id = self.id().unwrap();
+
+        // Find the first matching label
+        let label = ConversationLabel::find_first(
+            "WHERE local_conversation_id = ? AND local_label_id = ? AND deleted = 0",
+            params![local_conversation_id, label_local_id],
+            interface,
+        )
+        .await?;
+
+        Ok(label.is_some())
     }
 }
 

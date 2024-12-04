@@ -114,7 +114,7 @@ async fn delete_contacts() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(contact.deleted, false);
+    assert!(!contact.deleted);
 
     let queue = user_ctx.queue();
 
@@ -127,7 +127,7 @@ async fn delete_contacts() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(contact.deleted, true);
+    assert!(contact.deleted);
 
     let contact_list = Contact::contact_list(stash).await.unwrap();
     assert_eq!(contact_list.len(), 0);

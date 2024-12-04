@@ -367,7 +367,7 @@ impl Draft {
             return Err(Error::AddressNotFound(source_message.remote_address_id.clone()).into());
         };
 
-        let key = CacheMessageKey::from_message(&source_message, &tether);
+        let key = CacheMessageKey::from(&source_message);
         let Some(source_body_reader) =
             context.messages_cache().get_item(&key).inspect_err(|e| {
                 error!("Failed to get source body: {e}");

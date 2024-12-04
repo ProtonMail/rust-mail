@@ -1,3 +1,4 @@
+#![allow(clippy::ignored_unit_patterns)]
 mod common;
 
 use crate::common::DefaultError;
@@ -124,7 +125,7 @@ async fn cancel_causes_revert_with_dependees() {
     );
 
     // Cancel
-    let cancelled = queue.cancel_with_dependees(action_id1).await.unwrap();
+    let cancelled = queue.cancel(action_id1).await.unwrap();
     assert!(cancelled.contains(&action_id2));
     assert!(cancelled.contains(&action_id3));
 

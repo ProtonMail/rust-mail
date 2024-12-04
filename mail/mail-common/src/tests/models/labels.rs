@@ -1,3 +1,4 @@
+#![allow(clippy::module_inception)]
 #![allow(non_snake_case)]
 
 use super::*;

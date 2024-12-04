@@ -273,7 +273,7 @@ async fn data_source_sync_with_callback() {
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page_with_limit(&stash, &paginator, Some(3)).await;
+    check_page_with_limit(&paginator, Some(3)).await;
 
     // Check no new values are returned for the current page.
     assert!(!paginator.has_next_page().await);
@@ -346,11 +346,10 @@ async fn check_page<R: DataSource<Item = TestModel>>(
     stash: &Stash,
     paginator: &Paginator<TestModel, R>,
 ) {
-    check_page_with_limit(stash, paginator, None).await;
+    check_page_with_limit(paginator, None).await;
 }
 
 async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
     paginator: &Paginator<TestModel, R>,
     max_len: Option<usize>,
 ) {

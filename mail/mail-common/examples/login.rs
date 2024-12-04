@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use futures::TryFutureExt;
 use proton_api_core::services::proton::Config;
 use proton_core_common::db::account::SessionEncryptionKey;

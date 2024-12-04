@@ -16,9 +16,11 @@
 //!         - the returned value is stored in that file
 //!         - the path to this file is returned.
 
+use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
-use stash::stash::{Interface, Stash};
+use stash::stash::Stash;
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_file, set_permissions, File, OpenOptions, Permissions};
@@ -29,15 +31,35 @@ use std::marker::PhantomData;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::{error, warn};
+
+pub trait CacheInterface: Clone {
+    fn stash(&self) -> Option<Stash> {
+        None
+    }
+}
+
+impl CacheInterface for Stash {
+    fn stash(&self) -> Option<Stash> {
+        Some(self.clone())
+    }
+}
+
+impl CacheInterface for PathBuf {}
+
+impl<T: Clone> CacheInterface for Vec<T> {}
 
 /// Errors from `ProtonCache`
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum CacheError {
-    /// Error from `QuickCache`
+    /// Insert in cache failed for a key
     #[error("Insert in cache failed for key {0}")]
     InsertFailed(String),
+
+    #[error("Given Key don't exists")]
+    KeyDontExist,
 
     /// Extra metadata are needed for this operation
     #[error("Extra metadata are needed for this operation")]
@@ -73,8 +95,7 @@ pub enum WeightingStrategy {
 pub trait CacheConfig: Clone {
     /// Type of key
     type Key: CacheKey;
-    /// Type of the resource needed to get existing items.
-    type Interface: Interface;
+    type Interface: CacheInterface;
     type ExtraMetadata: Clone;
 
     /// Get existing items (used at creation).
@@ -108,7 +129,7 @@ pub trait CacheConfig: Clone {
 pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
     /// Callback executed after this key is evicted.
     #[allow(clippy::unused_async)]
-    fn after_evict(&self, _stash: &Stash) {}
+    fn after_evict<I: CacheInterface>(&self, _interface: I) {}
 }
 
 /// Metadata about one value, stored in memory
@@ -173,14 +194,15 @@ where
     Config: CacheConfig,
 {
     init: Config::Interface,
+    pinned: Arc<RwLock<HashSet<Config::Key>>>,
 }
 
 impl<Config> DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
-    fn new(init: Config::Interface) -> Self {
-        Self { init }
+    fn new(init: Config::Interface, pinned: Arc<RwLock<HashSet<Config::Key>>>) -> Self {
+        Self { init, pinned }
     }
 }
 
@@ -214,8 +236,12 @@ where
             if let Err(error) = remove_file(path) {
                 error!("Couldn't remove file for key {key:?}: {error:?}");
             }
-            key.after_evict(self.init.stash());
+            key.after_evict(self.init.clone());
         }
+    }
+
+    fn is_pinned(&self, key: &Config::Key, _val: &Metadata<Config::ExtraMetadata>) -> bool {
+        self.pinned.read().contains(key)
     }
 }
 
@@ -237,6 +263,9 @@ where
     /// Path to the root of the cache
     cache_buf: PathBuf,
     init: Config::Interface,
+
+    /// List of currently pinned items
+    pinned: Arc<RwLock<HashSet<Config::Key>>>,
 }
 
 impl<Config> ProtonCache<Config>
@@ -254,6 +283,7 @@ where
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
     fn _new(cache_buf: PathBuf, size: u32, init: Config::Interface) -> CacheResult<Self> {
+        let pinned = Arc::new(RwLock::new(HashSet::new()));
         // create in memory cache
         let cache = Cache::with_options(
             OptionsBuilder::new()
@@ -263,7 +293,7 @@ where
                 .map_err(|e| CacheError::QuickCache(e.into()))?,
             DefaultWeighter::new(),
             DefaultHashBuilder::default(),
-            DefaultLifecycle::new(init.clone()),
+            DefaultLifecycle::new(init.clone(), pinned.clone()),
         );
 
         // create file directory
@@ -277,6 +307,7 @@ where
             cache,
             cache_buf,
             init,
+            pinned,
         })
     }
 
@@ -295,17 +326,18 @@ where
     /// * Can't create data structure on disk
     ///
     pub async fn new(cache_buf: PathBuf, size: u32, init: Config::Interface) -> CacheResult<Self> {
-        let existing = Config::get_existing(init.clone()).await?;
         let cache = Self::_new(cache_buf, size, init.clone())?;
 
         let mut failed = vec![];
-        for key in existing {
+        for key in Config::get_existing(init.clone()).await? {
             let extra = Config::extra_for_key(&key);
             if !cache.add_existing_item(key.clone(), extra)? {
                 failed.push(key.clone());
             }
         }
-        Config::handle_failed(failed, init).await?;
+        if !failed.is_empty() {
+            Config::handle_failed(failed, init).await?;
+        }
         Ok(cache)
     }
 
@@ -493,7 +525,7 @@ where
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
             remove_file(path)?;
-            key.after_evict(self.init.stash());
+            key.after_evict(self.init.clone());
         }
         self.cache.remove(key);
         Ok(())
@@ -509,6 +541,31 @@ where
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
+    }
+
+    /// Ensure, the item corresponding to given key will not be evicted from cache until unlocked.
+    ///
+    /// Note: This doesn't prevent explicit remove.
+    ///
+    /// # params:
+    /// * `key`: key to the item to lock.
+    ///
+    pub fn lock_item(&mut self, key: Config::Key) -> CacheResult<()> {
+        if self.cache.peek(&key).is_some() {
+            self.pinned.write().insert(key);
+            Ok(())
+        } else {
+            Err(CacheError::KeyDontExist)
+        }
+    }
+
+    /// Unlock the given item.
+    ///
+    /// # params:
+    /// * `key`: key to the item to unlock.
+    ///
+    pub fn unlock_item(&mut self, key: &Config::Key) {
+        self.pinned.write().remove(key);
     }
 
     /// Get the path corresponding to a key using extra metadata

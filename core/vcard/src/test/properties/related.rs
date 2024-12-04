@@ -19,6 +19,7 @@ fn related_struct() {
     );
 }
 
+#[allow(clippy::too_many_lines)]
 #[test]
 fn related_property() {
     validate_related(&make_property("RELATED", Some("text"), None)).unwrap();

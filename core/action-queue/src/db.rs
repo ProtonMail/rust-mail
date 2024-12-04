@@ -281,7 +281,7 @@ const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
 struct MigrationV1 {}
 
 impl Migration for MigrationV1 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "action_queue_v1"
     }
 

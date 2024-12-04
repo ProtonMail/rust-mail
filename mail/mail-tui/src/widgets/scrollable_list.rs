@@ -87,7 +87,7 @@ impl<'a> ScrollableList<'a> {
     }
 }
 
-impl<'a> StatefulWidget for ScrollableList<'a> {
+impl StatefulWidget for ScrollableList<'_> {
     type State = ScrollableListState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

@@ -5,9 +5,8 @@ use crate::values::iana_token::{is_iana_token_value, IanaToken};
 use crate::values::x_name::{is_x_name_value, XName};
 use crate::ParameterType;
 
-/// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class
-/// characteristics of the associated property.
-
+// /// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class
+// /// characteristics of the associated property.
 // type-param-tel = "text" / "voice" / "fax" / "cell" / "video" / "pager" / "textphone" / iana-token / x-name
 pub(super) const TEL_VALUES: [&str; 7] = [
     "text",

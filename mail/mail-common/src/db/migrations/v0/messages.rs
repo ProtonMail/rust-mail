@@ -30,7 +30,6 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 flags INTEGER NOT NULL,
                 snooze_time INTEGER NOT NULL DEFAULT 0,
                 deleted INTEGER NOT NULL DEFAULT 0,
-                cached INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT messages_address_id
                     FOREIGN KEY (local_address_id)

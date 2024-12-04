@@ -79,9 +79,10 @@ async fn test_new_mailbox_sync_messages() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
-    let mut mail_settings = ApiMailSettings::default();
-    mail_settings.view_mode = ApiViewMode::Messages;
-    params.mail_settings = Some(mail_settings);
+    params.mail_settings = Some(ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    });
 
     let messages = vec![ApiMessageMetadata {
         id: ApiRemoteId::from("MyRemoteId"),
@@ -173,9 +174,11 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     // For view mode to conversations.
-    let mut mail_settings = ApiMailSettings::default();
-    mail_settings.view_mode = ApiViewMode::Conversations;
-    params.mail_settings = Some(mail_settings);
+
+    params.mail_settings = Some(ApiMailSettings {
+        view_mode: ApiViewMode::Conversations,
+        ..Default::default()
+    });
 
     let messages = vec![ApiMessageMetadata {
         id: ApiRemoteId::from("MyRemoteId"),

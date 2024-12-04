@@ -153,16 +153,18 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
 }
 
 fn mail_settings_with_signature() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        ..Default::default()
+    }
 }
 
 fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings.pm_signature = PmSignature::Enabled;
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        pm_signature: PmSignature::Enabled,
+        ..Default::default()
+    }
 }
 
 fn existing_message() -> Message {
@@ -212,7 +214,6 @@ fn existing_message() -> Message {
         to_list: Default::default(),
         unread: false,
         custom_labels: vec![],
-        cached: false,
         row_id: None,
     }
 }
@@ -274,7 +275,6 @@ fn inline_attachment() -> Attachment {
         filename: "image.jpeg".to_owned(),
         signature: None,
         size: 123,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,
@@ -301,7 +301,6 @@ fn normal_attachment() -> Attachment {
         filename: "doc.pdf".to_owned(),
         signature: None,
         size: 1024,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,

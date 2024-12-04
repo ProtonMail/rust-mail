@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};

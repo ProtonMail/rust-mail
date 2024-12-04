@@ -46,7 +46,7 @@ async fn test_migration_with_different_table_ids() {
 struct M1 {}
 
 impl Migration for M1 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "m1"
     }
     async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
@@ -58,7 +58,7 @@ impl Migration for M1 {
 struct M2 {}
 
 impl Migration for M2 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "m2"
     }
     async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {

@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fix
 
+- Conversations displayed as `read` with unread message in another mailbox now propose `mark as unread` action.
+
+## [0.22.2] - 2024-11-28
+
+### Fix
+
 - Cids with the format `<foo@bar>` no longer need angle brackets.
 
 ## [0.22.1] - 2024-11-26

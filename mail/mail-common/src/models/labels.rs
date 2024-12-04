@@ -258,15 +258,16 @@ impl Label {
     pub fn is_starred(&self) -> bool {
         self.remote_id
             .as_ref()
-            .map_or(false, |rid| *rid == LabelId::starred())
+            .is_some_and(|rid| *rid == LabelId::starred())
     }
 
     /// TODO: Document this function.
     pub fn is_movable_folder(&self) -> bool {
         self.label_type == LabelType::Folder
-            || self.remote_id.as_ref().map_or(false, |rid| {
-                LabelId::movable_sys_folder_list().contains(rid)
-            })
+            || self
+                .remote_id
+                .as_ref()
+                .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
     }
 
     /// Fetches all labels from the API and stores them in the database.
