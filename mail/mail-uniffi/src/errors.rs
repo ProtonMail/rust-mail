@@ -22,7 +22,7 @@ macro_rules! export_void_result {
     ($name: ident, $type:ty) => {
         #[allow(clippy::large_enum_variant)]
         #[allow(dead_code)]
-        #[derive(uniffi::Object)]
+        #[derive(uniffi::Enum)]
         pub enum $name {
             Ok,
             Error($type),
@@ -50,7 +50,7 @@ macro_rules! export_typed_result {
     ($name: ident, $ok_type: ty, $err_type: ty) => {
         #[allow(clippy::large_enum_variant)]
         #[allow(dead_code)]
-        #[derive(uniffi::Object)]
+        #[derive(uniffi::Enum)]
         pub enum $name {
             Ok($ok_type),
             Error($err_type),
