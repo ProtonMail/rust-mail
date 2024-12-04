@@ -33,14 +33,14 @@ struct TestConfig;
 impl CacheConfig for TestConfig {
     type Key = TestKey;
 
-    type Interface = Vec<TestKey>;
+    type Resource = Vec<TestKey>;
     type ExtraMetadata = ();
 
-    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
-        Ok(init)
+    async fn get_existing(resource: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(_failed: Vec<TestKey>, _interface: Self::Interface) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<TestKey>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 
@@ -57,13 +57,13 @@ struct TestWeightlessKey;
 
 impl CacheConfig for TestWeightlessKey {
     type Key = TestKey;
-    type Interface = Vec<TestKey>;
+    type Resource = Vec<TestKey>;
     type ExtraMetadata = ();
-    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
-        Ok(init)
+    async fn get_existing(resource: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(_failed: Vec<TestKey>, _interface: Self::Interface) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<TestKey>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 
@@ -100,16 +100,13 @@ impl PartialEq for TestExtraMetadata {
 impl CacheKey for TestExtraMetadata {}
 impl CacheConfig for TestExtraMetadata {
     type Key = TestExtraMetadata;
-    type Interface = Vec<TestExtraMetadata>;
+    type Resource = Vec<TestExtraMetadata>;
     type ExtraMetadata = u8;
-    async fn get_existing(init: Self::Interface) -> CacheResult<Vec<Self::Key>> {
-        Ok(init)
+    async fn get_existing(resource: Self::Resource) -> CacheResult<Vec<Self::Key>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(
-        _failed: Vec<Self::Key>,
-        _interface: Self::Interface,
-    ) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<Self::Key>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 

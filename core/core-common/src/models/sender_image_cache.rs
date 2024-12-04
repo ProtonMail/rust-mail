@@ -1,4 +1,4 @@
-use crate::cache::{CacheConfig, CacheError, CacheInterface, CacheKey, CacheResult};
+use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResource, CacheResult};
 use crate::datatypes::{LightOrDarkMode, LocalId};
 use crate::models::ModelExtension;
 use anyhow::anyhow;
@@ -301,7 +301,7 @@ impl From<&SenderImage> for GetImagesLogoOptions {
 
 impl CacheConfig for SenderImage {
     type Key = Self;
-    type Interface = Stash;
+    type Resource = Stash;
     type ExtraMetadata = SenderImageMetadata;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
@@ -335,10 +335,10 @@ impl CacheConfig for SenderImage {
 }
 
 impl CacheKey for SenderImage {
-    fn after_evict<I: CacheInterface>(&self, interface: I) {
+    fn after_evict<R: CacheResource>(&self, resource: R) {
         block_on(async {
             let _ = self
-                .delete(&interface.stash().unwrap())
+                .delete(&resource.stash().unwrap())
                 .await
                 .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
         });

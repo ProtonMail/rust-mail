@@ -47,7 +47,7 @@ impl Cache {
 pub struct CacheAttachmentConfig;
 impl CacheConfig for CacheAttachmentConfig {
     type Key = CacheAttachmentKey;
-    type Interface = PathBuf;
+    type Resource = PathBuf;
     type ExtraMetadata = ();
 
     async fn get_existing(root_path: PathBuf) -> CacheResult<Vec<Self::Key>> {
@@ -163,7 +163,7 @@ impl CacheKey for CacheAttachmentKey {}
 pub struct CacheMessageConfig;
 impl CacheConfig for CacheMessageConfig {
     type Key = CacheMessageKey;
-    type Interface = PathBuf;
+    type Resource = PathBuf;
     type ExtraMetadata = ();
 
     async fn get_existing(root_path: PathBuf) -> CacheResult<Vec<Self::Key>> {
