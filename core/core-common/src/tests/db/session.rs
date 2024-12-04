@@ -39,8 +39,7 @@ async fn new_test_account(stash: &Stash) -> Result<CoreAccount> {
         TfaStatus::None,
         PasswordMode::One,
     )
-    .with_stash(stash)
-    .with_save()
+    .with_save(stash)
     .await?;
 
     Ok(account)
@@ -95,8 +94,6 @@ async fn test_session_store_load() {
             .await
             .expect("failed to store session");
 
-        session.set_stash(&stash);
-
         let db_session = CoreSession::find_first(
             "WHERE account_id = ?",
             params![session.account_id.clone()],
@@ -144,7 +141,6 @@ async fn test_session_update() {
         session.refresh_token = EncryptedRefreshToken::new(&"acc".to_owned().into(), &key).unwrap();
         session.auth_scope = AuthScope::new(["baz", "qux"]);
         session.save_using(&tx).await.expect("failed to update");
-        session.set_stash(&stash);
 
         // Load the updated session from the database
         let db_session = CoreSession::find_first(
@@ -190,8 +186,6 @@ async fn test_session_delete_user_id() {
             .await
             .expect("failed to store session");
 
-        session.set_stash(&stash);
-
         tx.execute(
             "DELETE FROM core_sessions WHERE account_id =?",
             params![session.account_id.clone()],
@@ -232,8 +226,6 @@ async fn test_session_delete_session_id() {
             .save_using(&tx)
             .await
             .expect("failed to store session");
-
-        session.set_stash(&stash);
 
         tx.execute(
             "DELETE FROM core_sessions WHERE remote_id =?",

@@ -143,7 +143,6 @@
     clippy::unnecessary_safety_comment,
     clippy::unnecessary_safety_doc,
     clippy::unneeded_field_pattern,
-    clippy::unreachable,
     clippy::unseparated_literal_suffix,
     clippy::use_debug,
     clippy::verbose_file_reads

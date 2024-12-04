@@ -149,7 +149,6 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
         row_id: None,
-        stash: None,
     }
 }
 
@@ -216,7 +215,6 @@ fn existing_message() -> Message {
         unread: false,
         custom_labels: vec![],
         row_id: None,
-        stash: None,
     }
 }
 
@@ -229,7 +227,6 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
         parsed_headers: Default::default(),
         attachments: vec![inline_attachment(), normal_attachment()],
         row_id: None,
-        stash: None,
     }
 }
 
@@ -286,7 +283,6 @@ fn inline_attachment() -> Attachment {
         remote_message_id: None,
         is_auto_forwardee: false,
         sender: None,
-        stash: None,
         key_packets: None,
     }
 }
@@ -313,7 +309,6 @@ fn normal_attachment() -> Attachment {
         remote_message_id: None,
         is_auto_forwardee: false,
         sender: None,
-        stash: None,
         key_packets: None,
     }
 }

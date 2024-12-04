@@ -4,9 +4,11 @@ mod auth_store;
 pub mod cache;
 mod context;
 pub mod datatypes;
+#[allow(clippy::unused_async)]
 pub mod db;
 mod event_subscriber;
 pub mod events;
+#[allow(clippy::unused_async)]
 pub mod models;
 pub mod os;
 pub mod paginator;

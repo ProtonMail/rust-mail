@@ -148,11 +148,6 @@ pub struct RollbackItem {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl RollbackItem {
@@ -161,7 +156,6 @@ impl RollbackItem {
             remote_id,
             item_type,
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 
@@ -175,11 +169,7 @@ impl RollbackItem {
     /// When the query fails.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update a RollbackItem.
@@ -381,7 +371,6 @@ mod test_utils {
                 remote_id: label.remote_id.clone().map(RemoteId::from).unwrap(),
                 item_type: RollbackItemType::Label,
                 row_id: None,
-                stash: label.stash.clone(),
             }
         }
     }
@@ -398,7 +387,6 @@ mod test_utils {
                 remote_id: message.remote_id.clone().unwrap(),
                 item_type: RollbackItemType::Message,
                 row_id: None,
-                stash: message.stash.clone(),
             }
         }
     }
@@ -415,7 +403,6 @@ mod test_utils {
                 remote_id: conversation.remote_id.clone().unwrap(),
                 item_type: RollbackItemType::Conversation,
                 row_id: None,
-                stash: conversation.stash.clone(),
             }
         }
     }

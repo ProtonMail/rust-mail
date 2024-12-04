@@ -6,18 +6,19 @@ use crate::tests::common::new_core_test_connection;
 use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
 
 #[tokio::test]
 async fn test_full_contact() {
     let stash = new_core_test_connection().await;
-    let mut full_contact = create_test_full_contact(&stash);
-    full_contact.set_stash(&stash);
-    full_contact.save().await.expect("failed to create contact");
+    let mut full_contact = create_test_full_contact();
+    full_contact
+        .save_using(&stash)
+        .await
+        .expect("failed to create contact");
     let id = full_contact.row_id.expect("failed to get contact id");
     let local_id = full_contact.local_id.expect("failed to get contact id");
     full_contact
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to overwrite contact");
     let id_second = full_contact.row_id.expect("failed to get contact id");
@@ -29,7 +30,7 @@ async fn test_full_contact() {
         .expect("query contact with cards failed")
         .expect("expected to find contact");
     let cards = contact_with_cards
-        .cards()
+        .cards(&stash)
         .await
         .expect("Failed to query cards");
     assert_eq!(cards.len(), full_contact.cards.len());
@@ -39,17 +40,19 @@ async fn test_full_contact() {
 async fn test_partial_contact() {
     let stash = new_core_test_connection().await;
     let mut partial_contacts = create_test_partial_contacts();
-    let mut contact_emails = create_test_contact_emails(&stash);
+    let mut contact_emails = create_test_contact_emails();
     // Insert all partial contacts
     for contact in &mut partial_contacts {
-        contact.set_stash(&stash);
-        contact.save().await.expect("failed to create contact");
+        contact
+            .save_using(&stash)
+            .await
+            .expect("failed to create contact");
     }
     // Insert all contact mails
     for contact_email in &mut contact_emails {
         contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
         contact_email
-            .save()
+            .save_using(&stash)
             .await
             .expect("failed to create contact email");
     }
@@ -83,22 +86,28 @@ async fn test_partial_contact() {
         contact.remote_id,
         Some(RemoteId::from("a29olIjFv0rnXxBhSMw=="))
     );
-    assert_eq!(contact.emails().await.unwrap().len(), contact_emails.len());
+    assert_eq!(
+        contact.emails(&stash).await.unwrap().len(),
+        contact_emails.len()
+    );
 
     // Query specific contact.
     let mut contact_single = Contact::load(contact.local_id.unwrap(), &stash)
         .await
         .expect("failed to query contacts")
         .expect("expected to find contact");
-    contact_single.cards().await.expect("failed to query cards");
     contact_single
-        .emails()
+        .cards(&stash)
+        .await
+        .expect("failed to query cards");
+    contact_single
+        .emails(&stash)
         .await
         .expect("failed to query emails");
     assert_eq!(&contact_single, contact);
 }
 
-fn create_test_full_contact(stash: &Stash) -> Contact {
+fn create_test_full_contact() -> Contact {
     Contact {
         local_id: None,
         remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
@@ -107,7 +116,7 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
         size: 1443,
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,
-        contact_emails: create_test_contact_emails(stash),
+        contact_emails: create_test_contact_emails(),
         label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
         deleted: false,
         cards: vec![
@@ -119,7 +128,6 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
                 data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: None,
-                stash: Some(stash.clone()),
             },
             ContactCard {
                 local_id: None,
@@ -129,15 +137,13 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: None,
-                stash: Some(stash.clone()),
             }
         ],
         row_id: None,
-        stash: Some(stash.clone()),
     }
 }
 
-fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
+fn create_test_contact_emails() -> Vec<ContactEmail> {
     vec![
         ContactEmail {
             local_id: None,
@@ -154,7 +160,6 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
             last_used_time: 0,
             is_proton: true,
             row_id: None,
-            stash: Some(stash.clone()),
         },
         ContactEmail {
             local_id: None,
@@ -171,7 +176,6 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
             last_used_time: 0,
             is_proton: true,
             row_id: None,
-            stash: Some(stash.clone()),
         },
     ]
 }
@@ -190,6 +194,5 @@ fn create_test_partial_contacts() -> Vec<Contact> {
         cards: vec![],
         deleted: false,
         row_id: None,
-        stash: None,
     }]
 }

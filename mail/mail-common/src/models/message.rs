@@ -205,11 +205,6 @@ pub struct Message {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 impl Message {
     /// Label multiple messages.
@@ -938,11 +933,7 @@ impl Message {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a message to the database.
@@ -969,7 +960,6 @@ impl Message {
             if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
-                self.stash = existing.stash;
             }
         }
 
@@ -2410,7 +2400,6 @@ impl Message {
             },
             unread: value.unread,
             row_id: None,
-            stash: Some(interface.stash().to_owned()),
             custom_labels: vec![],
         })
     }
@@ -3016,11 +3005,6 @@ pub struct MessageLabel {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 /// A data source for a [`Paginator`] which syncs pages of [`Message`]s in
@@ -3241,7 +3225,6 @@ impl Default for Message {
             unread: Default::default(),
             custom_labels: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -3295,11 +3278,6 @@ pub struct MessageBodyMetadata {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl MessageBodyMetadata {
@@ -3316,11 +3294,7 @@ impl MessageBodyMetadata {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save or update the `MessageBodyMetadata` in the database.
@@ -3492,7 +3466,6 @@ impl MessageBodyMetadata {
                 },
                 attachments,
                 row_id: None,
-                stash: None,
             },
             api_message_body.body,
         )

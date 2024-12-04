@@ -201,20 +201,31 @@ impl UserContext {
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
-        Ok(extract_pinned_keys(pgp_provider, unlocked_user_keys, &mut contact, email).await?)
+        Ok(extract_pinned_keys(
+            pgp_provider,
+            db_interface,
+            unlocked_user_keys,
+            &mut contact,
+            email,
+        )
+        .await?)
     }
 }
 
 /// Helper function to extract pinned keys from a contact with cards.
-async fn extract_pinned_keys<Provider: PGPProviderSync>(
+async fn extract_pinned_keys<Provider: PGPProviderSync, DB>(
     pgp_provider: &Provider,
+    db_interface: &DB,
     unlocked_user_keys: &UnlockedUserKeys<Provider>,
     full_contact: &mut Contact,
     email: &str,
-) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError> {
+) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError>
+where
+    DB: Into<AgnosticInterface> + Interface,
+{
     // The pinned key information can be found in the signed v-card.
     let signed_card_opt = full_contact
-        .cards()
+        .cards(db_interface)
         .await?
         .iter()
         .find(|card| card.card_type == ContactCardType::Signed);

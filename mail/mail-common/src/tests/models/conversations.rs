@@ -985,9 +985,8 @@ async fn test_conversation_create_no_labels() {
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1007,9 +1006,8 @@ async fn test_conversation_has_messages_flag() {
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
 
@@ -1056,9 +1054,8 @@ async fn test_conversation_create_starred() {
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1069,12 +1066,10 @@ async fn test_conversation_create_starred() {
             .expect("failed to get conversation")
             .expect("should have value");
         let mut local_conversation = Conversation::from(conv.clone());
-        local_conversation.set_stash(&stash);
         local_conversation.row_id = Some(1);
         local_conversation.local_id = Some(1.into());
         local_conversation.labels[0].local_id = Some(1.into());
         local_conversation.labels[0].local_conversation_id = Some(1.into());
-        local_conversation.labels[0].set_stash(&stash);
         local_conversation.labels[0].row_id = Some(1);
         local_conversation.labels[0].local_label_id = db_conversation.labels[0].local_label_id;
 
@@ -1105,7 +1100,6 @@ async fn test_conversation_create_starred() {
             context_snooze_time: 0,
             deleted: false,
             row_id: None,
-            stash: Some(stash.clone()),
         }];
         local_conversation
             .save_using(&tx)
@@ -1123,9 +1117,8 @@ async fn test_conversation_create_starred() {
         .expect("failed to get conversation")
         .expect("should have value");
     local_conversation.labels = vec![];
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1186,11 +1179,9 @@ async fn test_conversation_create_with_labels() {
         context_snooze_time: 0,
         deleted: false,
         row_id: None,
-        stash: Some(stash.clone()),
     }];
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1219,9 +1210,8 @@ async fn test_conversation_create_with_attachment() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1273,9 +1263,8 @@ async fn test_conversation_create_with_attachment_and_label() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.set_stash(&stash);
     local_conversation
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1327,9 +1316,8 @@ async fn test_conversation_update() {
         }],
     );
     let mut local_conversation1 = Conversation::from(conv.clone());
-    local_conversation1.set_stash(&stash);
     local_conversation1
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to create conversation");
     let conv_update = test_conversation(
@@ -1367,7 +1355,6 @@ async fn test_conversation_update() {
             context_snooze_time: 0,
             deleted: false,
             row_id: None,
-            stash: Some(stash.clone()),
         },
         ConversationLabel {
             local_id: None,
@@ -1383,14 +1370,12 @@ async fn test_conversation_update() {
             context_snooze_time: 0,
             deleted: false,
             row_id: None,
-            stash: Some(stash.clone()),
         },
     ];
-    local_conversation2.set_stash(&stash);
     local_conversation2.local_id = local_conversation1.local_id;
     local_conversation2.row_id = local_conversation1.row_id;
     local_conversation2
-        .save()
+        .save_using(&stash)
         .await
         .expect("failed to update conversation");
     let id = local_conversation2.local_id.unwrap();
@@ -2173,7 +2158,7 @@ async fn test_conversation_mark_unread() {
         .expect("should have value");
 
     let messages = Message::find(
-        "WHERE local_conversation_id=? 
+        "WHERE local_conversation_id=?
                 AND unread=1",
         params![local_conv_id],
         tx.stash(),

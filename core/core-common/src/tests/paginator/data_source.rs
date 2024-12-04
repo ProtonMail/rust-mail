@@ -18,9 +18,6 @@ pub struct TestModel {
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
 }
 
 impl TestModel {
@@ -32,7 +29,6 @@ impl TestModel {
         if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], interface).await?
         {
             self.row_id = element.row_id;
-            self.set_stash(element.stash().unwrap());
         } else {
             <Self as Model>::save_using(self, interface).await?;
         }
@@ -65,7 +61,6 @@ impl TestDataSource {
             let mut value = TestModel {
                 id: i.into(),
                 row_id: None,
-                stash: None,
             };
             value.save_using(&tx).await?;
             result.push(value);
@@ -166,17 +161,17 @@ async fn data_source_sync() {
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [5..9] are available
     paginator.next_page().await.unwrap();
     check_range(&stash, 5_u32..10_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [10..14] are available
     paginator.next_page().await.unwrap();
     check_range(&stash, 10_u32..15_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [15..18] are available
     let values = paginator.next_page().await.unwrap();
@@ -212,7 +207,7 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 }
 
 #[tokio::test]
@@ -238,7 +233,7 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 }
 
 #[tokio::test]
@@ -266,19 +261,19 @@ async fn data_source_sync_with_callback() {
     .unwrap();
 
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page_with_limit(&stash, &paginator, Some(3)).await;
+    check_page_with_limit(&paginator, Some(3)).await;
 
     // Check no new values are returned for the current page.
     assert!(!paginator.has_next_page().await);
@@ -289,7 +284,6 @@ async fn data_source_sync_with_callback() {
     let mut new_value = TestModel {
         id: 19,
         row_id: None,
-        stash: Some(stash.clone()),
     };
     new_value.save_using(&stash).await.unwrap();
 
@@ -318,7 +312,6 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
     let iter = range.into_iter().map(|id| TestModel {
         id: u64::from(id),
         row_id: Some(u64::from(id)),
-        stash: Some(stash.clone()),
     });
 
     let expected = if let Some(max) = max_len {
@@ -349,15 +342,11 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
 }
 
 // Check the range of values is present in the current page.
-async fn check_page<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
-    paginator: &Paginator<TestModel, R>,
-) {
-    check_page_with_limit(stash, paginator, None).await;
+async fn check_page<R: DataSource<Item = TestModel>>(paginator: &Paginator<TestModel, R>) {
+    check_page_with_limit(paginator, None).await;
 }
 
 async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
     paginator: &Paginator<TestModel, R>,
     max_len: Option<usize>,
 ) {
@@ -367,7 +356,6 @@ async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
     let iter = (start..end).map(|id| TestModel {
         id: u64::from(id),
         row_id: Some(u64::from(id)),
-        stash: Some(stash.clone()),
     });
 
     let expected = if let Some(max) = max_len {

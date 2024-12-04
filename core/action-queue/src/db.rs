@@ -65,11 +65,6 @@ pub struct StoredAction {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl StoredAction {
@@ -93,7 +88,6 @@ impl StoredAction {
             state: serialized_state,
             version: T::VERSION,
             row_id: None,
-            stash: None,
         })
     }
 

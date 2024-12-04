@@ -1,5 +1,5 @@
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
-use stash::{params, stash::Stash};
+use stash::params;
 
 use crate::{
     datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, RemoteId},
@@ -11,7 +11,7 @@ use crate::{
 async fn count_test() {
     let stash = new_core_test_connection().await;
     for i in 0..10 {
-        let mut address = create_test_address(&stash, i);
+        let mut address = create_test_address(i);
         address
             .save_using(&stash)
             .await
@@ -31,7 +31,7 @@ async fn count_test() {
     );
 }
 
-fn create_test_address(stash: &Stash, id: usize) -> Address {
+fn create_test_address(id: usize) -> Address {
     Address {
         local_id: None,
         remote_id: Some(RemoteId::from(format!("address_id_{id}"))),
@@ -57,6 +57,5 @@ fn create_test_address(stash: &Stash, id: usize) -> Address {
             revision: 20,
         },
         row_id: None,
-        stash: Some(stash.clone()),
     }
 }

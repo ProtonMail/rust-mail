@@ -840,7 +840,6 @@ async fn test_create_message() {
         .await
         .unwrap()
         .unwrap();
-    expected.set_stash(&stash);
     resolve_local_ids(&tx, &mut expected).await;
     expected.local_id = Some(1.into());
     expected.row_id = Some(1_u64);
@@ -1064,7 +1063,10 @@ async fn test_update_message() {
         .map(|l| l.clone().into())
         .collect();
     db_message.flags = MessageFlags::from(metadata_updated.metadata.flags);
-    db_message.save().await.expect("failed to update message");
+    db_message
+        .save_using(&stash)
+        .await
+        .expect("failed to update message");
 
     let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
@@ -1073,7 +1075,6 @@ async fn test_update_message() {
     let (mut expected, _, _) = Message::from_api_data(metadata_updated, &stash)
         .await
         .unwrap();
-    expected.set_stash(&stash);
     resolve_local_ids(&tx, &mut expected).await;
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
@@ -1531,7 +1532,6 @@ async fn test_create_message_and_body() {
         .expect("failed to get message body")
         .expect("must have a value");
 
-    body_metadata.set_stash(tx.stash());
     assert_eq!(body_metadata, db_message_body);
 
     let expected = MessageBodyMetadata {
@@ -1544,7 +1544,6 @@ async fn test_create_message_and_body() {
         mime_type: message.body.mime_type.into(),
         attachments: vec![],
         row_id: Some(1),
-        stash: Some(stash.clone()),
     };
 
     assert_eq!(db_message_body, expected);
@@ -1621,7 +1620,6 @@ async fn test_update_message_and_body() {
         mime_type: MimeType::TextHtml,
         attachments: vec![],
         row_id: Some(1),
-        stash: Some(stash.clone()),
     };
 
     assert_eq!(db_message_body, expected);
@@ -2423,9 +2421,8 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
         vec![],
     )
     .into();
-    conversation.set_stash(tx.stash());
     conversation
-        .save()
+        .save_using(tx)
         .await
         .expect("failed to create conversation");
     conversation.local_id.unwrap().into()

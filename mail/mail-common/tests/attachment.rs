@@ -236,6 +236,5 @@ where
         image_width: None,
         image_height: None,
         row_id: None,
-        stash: None,
     }
 }

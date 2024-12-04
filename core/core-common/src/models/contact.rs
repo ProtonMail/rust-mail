@@ -79,11 +79,6 @@ pub struct Contact {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl Contact {
@@ -98,11 +93,7 @@ impl Contact {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a contact to the database.
@@ -147,17 +138,18 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the cards cannot be retrieved.
     ///
-    pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
-        let Some(stash) = self.stash() else {
-            return Err(StashError::NoStashAvailable);
-        };
+    pub async fn cards<A>(&mut self, interface: &A) -> Result<&Vec<ContactCard>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
-            stash,
+            interface,
             None,
         )
         .await?;
+
         Ok(&self.cards)
     }
 
@@ -170,14 +162,14 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the emails cannot be retrieved.
     ///
-    pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
-        let Some(stash) = self.stash() else {
-            return Err(StashError::NoStashAvailable);
-        };
+    pub async fn emails<A>(&mut self, interface: &A) -> Result<&Vec<ContactEmail>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
-            stash,
+            interface,
             None,
         )
         .await?;
@@ -208,7 +200,6 @@ impl Contact {
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
-            card.set_stash(interface.stash());
             card.save_using(interface).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
@@ -405,7 +396,7 @@ impl Contact {
         let mut contacts = Contact::find("WHERE deleted = 0", vec![], interface, None).await?;
 
         for contact in &mut contacts {
-            contact.emails().await?;
+            contact.emails(interface).await?;
         }
 
         Ok(GroupedContacts::from_contacts(contacts))
@@ -528,7 +519,6 @@ impl From<ApiContactBasic> for Contact {
             uid: value.uid.into(),
             deleted: false,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -550,7 +540,6 @@ impl Default for Contact {
             uid: RemoteId::from(String::default()),
             deleted: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -574,7 +563,6 @@ impl From<ApiContactFull> for Contact {
             uid: value.uid.into(),
             deleted: false,
             row_id: None,
-            stash: None,
         }
     }
 }

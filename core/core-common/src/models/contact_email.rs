@@ -5,7 +5,7 @@ use crate::models::{Contact, ModelExtension};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, StashError};
 
 /// Represents a contact's email.
 ///
@@ -78,11 +78,6 @@ pub struct ContactEmail {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl From<ApiContactEmail> for ContactEmail {
@@ -102,7 +97,6 @@ impl From<ApiContactEmail> for ContactEmail {
             last_used_time: value.last_used_time,
             name: value.name,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -126,7 +120,6 @@ impl Default for ContactEmail {
             last_used_time: Default::default(),
             name: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -143,11 +136,7 @@ impl ContactEmail {
     /// failed.
     ///
     pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
+        unreachable!()
     }
 
     /// Save a contact email to the database.

@@ -47,7 +47,7 @@ impl Cache {
 pub struct CacheAttachmentConfig;
 impl CacheConfig for CacheAttachmentConfig {
     type Key = CacheAttachmentKey;
-    type Init = PathBuf;
+    type Resource = PathBuf;
     type ExtraMetadata = ();
 
     async fn get_existing(root_path: PathBuf) -> CacheResult<Vec<Self::Key>> {
@@ -56,7 +56,7 @@ impl CacheConfig for CacheAttachmentConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
+    async fn handle_failed(failed: Vec<Self::Key>, _root_path: PathBuf) -> CacheResult<()> {
         error!("Couldn't load existing files({failed:?}), removing them");
         for key in failed {
             let file = Self::key_to_filename(&key, None)?;
@@ -163,7 +163,7 @@ impl CacheKey for CacheAttachmentKey {}
 pub struct CacheMessageConfig;
 impl CacheConfig for CacheMessageConfig {
     type Key = CacheMessageKey;
-    type Init = PathBuf;
+    type Resource = PathBuf;
     type ExtraMetadata = ();
 
     async fn get_existing(root_path: PathBuf) -> CacheResult<Vec<Self::Key>> {
@@ -172,7 +172,7 @@ impl CacheConfig for CacheMessageConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
+    async fn handle_failed(failed: Vec<Self::Key>, _root_path: PathBuf) -> CacheResult<()> {
         error!("Couldn't load existing files({failed:?}), removing them");
         for key in failed {
             let file = Self::key_to_filename(&key, None)?;

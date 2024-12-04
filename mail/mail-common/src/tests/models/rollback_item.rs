@@ -108,13 +108,11 @@ async fn test_store_and_delete_remote_items(
     let tx = stash.connection();
 
     for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
-        item.set_stash(&stash);
-        item.save().await.unwrap();
+        item.save_using(&tx).await.unwrap();
     }
 
     for item in input.iter_mut() {
-        item.set_stash(&stash);
-        item.save().await.unwrap();
+        item.save_using(&tx).await.unwrap();
     }
 
     let expected = expected.unwrap_or(input);
@@ -168,7 +166,7 @@ async fn conversations(tx: &Tether) -> Vec<Conversation> {
 
     items
         .into_iter()
-        .map(|item| conversation!(remote_id: Some(dbg!( item.remote_id )), stash: item.stash))
+        .map(|item| conversation!(remote_id: Some(item.remote_id)))
         .collect()
 }
 
@@ -187,7 +185,6 @@ async fn messages(
         .map(|item| {
             message!(
                 remote_id: Some(item.remote_id),
-                stash: item.stash,
                 local_address_id: address.local_id.unwrap(),
                 remote_address_id: address.remote_id.clone().unwrap(),
                 local_conversation_id,
@@ -206,8 +203,7 @@ async fn labels(tx: &Tether) -> Vec<Label> {
         .into_iter()
         .map(|item| {
             label!(
-                remote_id: Some(item.remote_id.into()),
-                stash: item.stash
+                remote_id: Some(item.remote_id.into())
             )
         })
         .collect()

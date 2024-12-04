@@ -19,6 +19,7 @@
 use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
+use stash::stash::Stash;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -32,6 +33,22 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, warn};
+
+pub trait CacheResource: Clone {
+    fn stash(&self) -> Option<Stash> {
+        None
+    }
+}
+
+impl CacheResource for Stash {
+    fn stash(&self) -> Option<Stash> {
+        Some(self.clone())
+    }
+}
+
+impl CacheResource for PathBuf {}
+
+impl<T: Clone> CacheResource for Vec<T> {}
 
 /// Errors from `ProtonCache`
 #[derive(Debug, thiserror::Error)]
@@ -78,15 +95,17 @@ pub enum WeightingStrategy {
 pub trait CacheConfig: Clone {
     /// Type of key
     type Key: CacheKey;
-    /// Type of the resource needed to get existing items.
-    type Init;
+    type Resource: CacheResource;
     type ExtraMetadata: Clone;
 
     /// Get existing items (used at creation).
-    fn get_existing(init: Self::Init) -> impl Future<Output = CacheResult<Vec<Self::Key>>>;
+    fn get_existing(resource: Self::Resource) -> impl Future<Output = CacheResult<Vec<Self::Key>>>;
 
     /// Handle items that should be there, but where not found (used at creation).
-    fn handle_failed(failed: Vec<Self::Key>) -> impl Future<Output = CacheResult<()>>;
+    fn handle_failed(
+        failed: Vec<Self::Key>,
+        resource: Self::Resource,
+    ) -> impl Future<Output = CacheResult<()>>;
 
     /// Get extra metadata corresponding to given key (used at creation).
     fn extra_for_key(_key: &Self::Key) -> Option<Self::ExtraMetadata> {
@@ -110,7 +129,7 @@ pub trait CacheConfig: Clone {
 pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
     /// Callback executed after this key is evicted.
     #[allow(clippy::unused_async)]
-    fn after_evict(&self) {}
+    fn after_evict<R: CacheResource>(&self, _resource: R) {}
 }
 
 /// Metadata about one value, stored in memory
@@ -175,18 +194,15 @@ where
     Config: CacheConfig,
 {
     pinned: Arc<RwLock<HashSet<Config::Key>>>,
-    phantom_data: PhantomData<Config>,
+    resource: Config::Resource,
 }
 
 impl<Config> DefaultLifecycle<Config>
 where
     Config: CacheConfig,
 {
-    fn new(pinned: Arc<RwLock<HashSet<Config::Key>>>) -> Self {
-        Self {
-            pinned,
-            phantom_data: PhantomData,
-        }
+    fn new(resource: Config::Resource, pinned: Arc<RwLock<HashSet<Config::Key>>>) -> Self {
+        Self { pinned, resource }
     }
 }
 
@@ -220,7 +236,7 @@ where
             if let Err(error) = remove_file(path) {
                 error!("Couldn't remove file for key {key:?}: {error:?}");
             }
-            key.after_evict();
+            key.after_evict(self.resource.clone());
         }
     }
 
@@ -246,6 +262,7 @@ where
     >,
     /// Path to the root of the cache
     cache_buf: PathBuf,
+    resource: Config::Resource,
 
     /// List of currently pinned items
     pinned: Arc<RwLock<HashSet<Config::Key>>>,
@@ -265,7 +282,7 @@ where
     /// # Errors
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
-    fn _new(cache_buf: PathBuf, size: u32) -> CacheResult<Self> {
+    fn _new(cache_buf: PathBuf, size: u32, resource: Config::Resource) -> CacheResult<Self> {
         let pinned = Arc::new(RwLock::new(HashSet::new()));
         // create in memory cache
         let cache = Cache::with_options(
@@ -276,7 +293,7 @@ where
                 .map_err(|e| CacheError::QuickCache(e.into()))?,
             DefaultWeighter::new(),
             DefaultHashBuilder::default(),
-            DefaultLifecycle::new(pinned.clone()),
+            DefaultLifecycle::new(resource.clone(), pinned.clone()),
         );
 
         // create file directory
@@ -289,6 +306,7 @@ where
         Ok(Self {
             cache,
             cache_buf,
+            resource,
             pinned,
         })
     }
@@ -307,18 +325,22 @@ where
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
     ///
-    pub async fn new(cache_buf: PathBuf, size: u32, init: Config::Init) -> CacheResult<Self> {
-        let cache = Self::_new(cache_buf, size)?;
+    pub async fn new(
+        cache_buf: PathBuf,
+        size: u32,
+        resource: Config::Resource,
+    ) -> CacheResult<Self> {
+        let cache = Self::_new(cache_buf, size, resource.clone())?;
 
         let mut failed = vec![];
-        for key in Config::get_existing(init).await? {
+        for key in Config::get_existing(resource.clone()).await? {
             let extra = Config::extra_for_key(&key);
             if !cache.add_existing_item(key.clone(), extra)? {
                 failed.push(key.clone());
             }
         }
         if !failed.is_empty() {
-            Config::handle_failed(failed).await?;
+            Config::handle_failed(failed, resource).await?;
         }
         Ok(cache)
     }
@@ -507,7 +529,7 @@ where
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
             remove_file(path)?;
-            key.after_evict();
+            key.after_evict(self.resource.clone());
         }
         self.cache.remove(key);
         Ok(())

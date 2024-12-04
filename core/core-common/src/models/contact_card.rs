@@ -2,7 +2,6 @@ use crate::datatypes::{LocalId, RemoteId};
 use proton_api_core::services::proton::response_data::ContactCard as ApiContactCard;
 use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
 use stash::macros::Model;
-use stash::stash::Stash;
 
 /// Represents a contact card.
 ///
@@ -46,11 +45,6 @@ pub struct ContactCard {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl DecryptableVerifiableCard for ContactCard {
@@ -81,7 +75,6 @@ impl From<ApiContactCard> for ContactCard {
             data: value.data,
             signature: value.signature,
             row_id: None,
-            stash: None,
         }
     }
 }

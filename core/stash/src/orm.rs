@@ -820,9 +820,6 @@ where
         perform_save(self, Some(&interface.clone().into())).await
     }
 
-    /// Gets a reference to the database-handling [`Stash`] for the record.
-    fn stash(&self) -> Option<&Stash>;
-
     /// Sets the record's unique primary ID field value.
     ///
     /// # Parameters
@@ -856,14 +853,6 @@ where
     /// * `id` - The row id to set for the record.
     ///
     fn set_row_id(&mut self, id: Option<u64>);
-
-    /// Sets the database-handling [`Stash`] for the record.
-    ///
-    /// # Parameters
-    ///
-    /// * `stash` - The [`Stash`] to set for the record.
-    ///
-    fn set_stash(&mut self, stash: &Stash);
 
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
@@ -1200,11 +1189,7 @@ pub async fn perform_save<M: Model>(
             let affected: usize = match interface {
                 Some(interface) => interface.execute(&query, field_values).await?,
                 None => {
-                    model
-                        .stash()
-                        .ok_or(StashError::NoStashAvailable)?
-                        .execute(&query, field_values)
-                        .await?
+                    unreachable!()
                 }
             };
             if affected == 0 {
@@ -1253,11 +1238,7 @@ pub async fn perform_save<M: Model>(
                         .await?
                 }
                 None => {
-                    model
-                        .stash()
-                        .ok_or(StashError::NoStashAvailable)?
-                        .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
-                        .await?
+                    unreachable!()
                 }
             };
             if let Some(row) = rows.into_iter().next() {
