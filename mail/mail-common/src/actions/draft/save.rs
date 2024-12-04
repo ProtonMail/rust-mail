@@ -161,7 +161,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 attachment_metadata.clone(),
             );
             conversation
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
@@ -181,7 +181,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
             action.update_message(&address, &mut message, attachment_metadata, body_len, time);
 
-            message.save_using(tether).await.inspect_err(|e| {
+            message.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e}");
             })?;
 
@@ -195,7 +195,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             body_metadata.attachments = attachments;
             body_metadata.mime_type = action.mime_type;
 
-            body_metadata.save_using(tether).await.inspect_err(|e| {
+            body_metadata.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e}");
             })?;
 
@@ -214,7 +214,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             );
             message.local_conversation_id = Some(conversation_id);
             message
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to save message: {e}"))?;
 
@@ -229,7 +229,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             };
 
             message_body_metadata
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e}"))?;
 
@@ -253,7 +253,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         })?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
-        metadata.save_using(tether).await.inspect_err(|e| {
+        metadata.save(tether).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e}");
         })?;
 
@@ -396,13 +396,13 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // we can save the metadata returned by the server.
         message_body_metadata.remote_message_id = message.remote_id.clone();
         message_body_metadata
-            .save_using(&tether)
+            .save(&tether)
             .await
             .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
 
         // Update conversation
         conversation
-            .save_using(&tether)
+            .save(&tether)
             .await
             .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
 
@@ -415,7 +415,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 })?;
         message.row_id = row_id;
         message.local_id = Some(message_id);
-        message.save_using(&tether).await.inspect_err(|e| {
+        message.save(&tether).await.inspect_err(|e| {
             error!("Failed to update the message: {e}");
         })?;
 
@@ -423,7 +423,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         new_message_body_metadata.local_message_id = Some(message_id);
         new_message_body_metadata.row_id = message_body_metadata.row_id;
         new_message_body_metadata
-            .save_using(&tether)
+            .save(&tether)
             .await
             .inspect_err(|e| {
                 error!("Failed to update message body metadata: {e}");

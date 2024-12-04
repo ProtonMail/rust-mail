@@ -404,9 +404,7 @@ async fn paginate_conversations_for_label_with_filter() {
     ];
 
     for mut conv in conversations {
-        conv.save_using(&tx)
-            .await
-            .expect("failed to create conversation");
+        conv.save(&tx).await.expect("failed to create conversation");
         Conversation::apply_label(mailbox_inbox.label_id(), vec![conv.local_id.unwrap()], &tx)
             .await
             .unwrap();
@@ -524,7 +522,7 @@ async fn paginate_messages_for_label_with_filter() {
     // Set up test data
     let address = create_address(&tx).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    conversation.save_using(&tx).await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     // Create 5 messages: 3 unread, 2 read
     let messages = vec![
@@ -540,7 +538,7 @@ async fn paginate_messages_for_label_with_filter() {
         msg.remote_address_id = address.remote_id.clone().unwrap();
         msg.local_conversation_id = conversation.local_id;
         msg.remote_conversation_id = conversation.remote_id.clone();
-        msg.save_using(&tx).await.expect("failed to create message");
+        msg.save(&tx).await.expect("failed to create message");
         Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
             .await
             .unwrap();
@@ -639,7 +637,7 @@ async fn paginate_search() {
     // Set up test data
     let address = create_address(&tx).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    conversation.save_using(&tx).await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     // Create 5 messages
     let messages = vec![
@@ -655,7 +653,7 @@ async fn paginate_search() {
         msg.remote_address_id = address.remote_id.clone().unwrap();
         msg.local_conversation_id = conversation.local_id;
         msg.remote_conversation_id = conversation.remote_id.clone();
-        msg.save_using(&tx).await.expect("failed to create message");
+        msg.save(&tx).await.expect("failed to create message");
         Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
             .await
             .unwrap();

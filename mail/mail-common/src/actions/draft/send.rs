@@ -83,7 +83,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         message.flags.set(MessageFlags::SENT, true);
-        message.save_using(tx).await.inspect_err(|e| {
+        message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag: {e}");
         })?;
 
@@ -120,7 +120,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         message.flags.set(MessageFlags::SENT, false);
-        message.save_using(tx).await.inspect_err(|e| {
+        message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag (revert): {e}");
         })?;
 
@@ -238,7 +238,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let tx = tether.transaction().await?;
         let mut conversation: Conversation = response.conversation.into();
         conversation
-            .save_using(&tx)
+            .save(&tx)
             .await
             .inspect_err(|err| error!("Failed to update conversation after send: {err}"))?;
 
@@ -249,11 +249,11 @@ impl proton_action_queue::action::Handler for SendHandler {
                 error!("Failed to convert message from API response: {e}");
             })?;
 
-        metadata.save_using(&tx).await.inspect_err(|e| {
+        metadata.save(&tx).await.inspect_err(|e| {
             error!("Failed to update message metadata after send: {e}");
         })?;
 
-        body_metadata.save_using(&tx).await.inspect_err(|e| {
+        body_metadata.save(&tx).await.inspect_err(|e| {
             error!("Failed to update message body metadata after send: {e}");
         })?;
 

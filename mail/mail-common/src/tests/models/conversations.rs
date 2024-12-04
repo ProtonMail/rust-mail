@@ -535,14 +535,14 @@ mod available_actions {
         } in test_case.conversations.clone()
         {
             conversation
-                .save_using(&tx)
+                .save(&tx)
                 .await
                 .expect("failed to create conversation");
 
             conversation_ids.push(conversation.local_id.unwrap());
 
             for mut label in labels {
-                label.save_using(&tx).await.expect("failed to create label");
+                label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![conversation.local_id.unwrap()];
@@ -886,10 +886,10 @@ mod available_move_to_actions {
         let fun_tx = || tx.clone();
 
         let mut settings = MailSettings::default();
-        settings.save_using(&tx).await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         for mut label in labels {
-            label.save_using(&tx).await.expect("failed to create label");
+            label.save(&tx).await.expect("failed to create label");
         }
 
         let mut conversation_ids = vec![];
@@ -900,14 +900,14 @@ mod available_move_to_actions {
         } in conversations
         {
             conversation
-                .save_using(&tx)
+                .save(&tx)
                 .await
                 .expect("failed to create conversation");
 
             conversation_ids.push(conversation.local_id.unwrap());
 
             for mut label in message_labels {
-                label.save_using(&tx).await.expect("failed to create label");
+                label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![conversation.local_id.unwrap()];
@@ -986,7 +986,7 @@ async fn test_conversation_create_no_labels() {
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1007,7 +1007,7 @@ async fn test_conversation_has_messages_flag() {
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
 
@@ -1049,13 +1049,13 @@ async fn test_conversation_create_starred() {
     stash.execute("DELETE FROM labels", vec![]).await.unwrap();
     create_address(&tx).await;
     create_labels(&tx).await;
-    test_starred_label().save_using(&tx).await.unwrap();
+    test_starred_label().save(&tx).await.unwrap();
 
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1102,7 +1102,7 @@ async fn test_conversation_create_starred() {
             row_id: None,
         }];
         local_conversation
-            .save_using(&tx)
+            .save(&tx)
             .await
             .expect("failed to update conversation");
 
@@ -1118,7 +1118,7 @@ async fn test_conversation_create_starred() {
         .expect("should have value");
     local_conversation.labels = vec![];
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1181,7 +1181,7 @@ async fn test_conversation_create_with_labels() {
         row_id: None,
     }];
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1211,7 +1211,7 @@ async fn test_conversation_create_with_attachment() {
     );
     let mut local_conversation = Conversation::from(conv.clone());
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1264,7 +1264,7 @@ async fn test_conversation_create_with_attachment_and_label() {
     );
     let mut local_conversation = Conversation::from(conv.clone());
     local_conversation
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
@@ -1317,7 +1317,7 @@ async fn test_conversation_update() {
     );
     let mut local_conversation1 = Conversation::from(conv.clone());
     local_conversation1
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create conversation");
     let conv_update = test_conversation(
@@ -1375,7 +1375,7 @@ async fn test_conversation_update() {
     local_conversation2.local_id = local_conversation1.local_id;
     local_conversation2.row_id = local_conversation1.row_id;
     local_conversation2
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to update conversation");
     let id = local_conversation2.local_id.unwrap();
@@ -2794,10 +2794,10 @@ async fn conversation_exclusive_location_on_save(
     let mut conversation = Conversation {
         ..Default::default()
     };
-    conversation.save_using(&tx).await.unwrap();
+    conversation.save(&tx).await.unwrap();
     let mut conversation_labels = Vec::with_capacity(labels.len());
     for mut label in labels {
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
         conversation_labels.push(ConversationLabel {
             remote_label_id: label.remote_id,
             ..Default::default()
@@ -2806,7 +2806,7 @@ async fn conversation_exclusive_location_on_save(
     conversation.labels = conversation_labels;
 
     // Action
-    conversation.save_using(&tx).await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     // Validation
     if let Some((is_system, expected)) = expected {

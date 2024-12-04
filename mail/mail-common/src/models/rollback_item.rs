@@ -31,7 +31,7 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// ## Parameters
 ///
 /// * `$item` - The type of the item to sync. This is a token which allows the macro to put proper typing.
-/// * `$class` - Implementation of the type which contains `save_using`.
+/// * `$class` - Implementation of the type which contains `save`.
 /// * `$stash` - The local database instance to use for syncing.
 /// * `$batch` - The number of items to sync in a single batch.
 /// * `$api_request` - The API request to make to get the items. It is expected to be a clousure
@@ -79,7 +79,7 @@ macro_rules! sync_any {
                 let tx = stash.transaction().await?;
 
                 for item in items.iter_mut() {
-                    let result = $class::save_using(item, &tx).await;
+                    let result = $class::save(item, &tx).await;
 
                     if let Err(err) = result {
                         error!(
@@ -168,20 +168,7 @@ impl RollbackItem {
     ///
     /// When the query fails.
     ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update a RollbackItem.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// When the query fails.
-    ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -195,7 +182,7 @@ impl RollbackItem {
             return Ok(());
         };
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Synchronize all rollback items with remote counterparts.
@@ -351,12 +338,12 @@ struct MessageAndBodyMetadata {
 }
 
 impl MessageAndBodyMetadata {
-    async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        self.message_metadata.save_using(interface).await?;
-        self.body_metadata.save_using(interface).await?;
+        self.message_metadata.save(interface).await?;
+        self.body_metadata.save(interface).await?;
         Ok(())
     }
 }

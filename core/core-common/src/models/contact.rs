@@ -87,20 +87,6 @@ impl Contact {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save a contact to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that existing conversations are updated.
-    ///
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
@@ -111,7 +97,7 @@ impl Contact {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -127,7 +113,7 @@ impl Contact {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
     /// Returns the associated cards for a contact.
     ///
@@ -200,7 +186,7 @@ impl Contact {
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
-            card.save_using(interface).await.map_err(|e| {
+            card.save(interface).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
             })?;
@@ -311,11 +297,11 @@ impl Contact {
             .await?;
 
         for mut contact in contacts {
-            contact.save_using(&tx).await?;
+            contact.save(&tx).await?;
         }
 
         for mut contact_email in contact_emails {
-            contact_email.save_using(&tx).await?;
+            contact_email.save(&tx).await?;
         }
 
         tx.commit().await?;
@@ -362,16 +348,13 @@ impl Contact {
                 .contact,
         );
 
-        contact_with_card
-            .save_using(interface)
-            .await
-            .map_err(|err| {
-                error!("Failed to sync full contact to db: {err}");
-                err
-            })?;
+        contact_with_card.save(interface).await.map_err(|err| {
+            error!("Failed to sync full contact to db: {err}");
+            err
+        })?;
 
         for email in &mut contact_with_card.contact_emails {
-            email.save_using(interface).await.map_err(|e| {
+            email.save(interface).await.map_err(|e| {
                 error!("Failed to update contact emails: {e}");
                 e
             })?;
@@ -420,7 +403,7 @@ impl Contact {
         A: Into<AgnosticInterface> + Interface,
     {
         self.deleted = true;
-        self.save_using(interface).await
+        self.save(interface).await
     }
 
     /// Marks a contact as undeleted.
@@ -432,7 +415,7 @@ impl Contact {
         A: Into<AgnosticInterface> + Interface,
     {
         self.deleted = false;
-        self.save_using(interface).await
+        self.save(interface).await
     }
 
     pub async fn delete_from_remote(

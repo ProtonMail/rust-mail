@@ -71,8 +71,8 @@ use stash::stash::{AgnosticInterface, Interface, StashError};
 /// will come in a followup patch.
 ///
 /// To ensure that we do not overwrite the [`Attachment`] data in the database
-/// *NEVER* use [`Model::save()`] or [`Model::save_using()`] but instead
-/// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
+/// *NEVER* use [`Model::save()`]  but instead
+/// *ALWAYS* use [`Attachment::save()`].
 ///
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
@@ -213,25 +213,8 @@ impl Attachment {
 
     /// Save or update the attachment in the database.
     ///
-    /// It's imperative to call this function rather than [`Model::save()`] to
-    /// make sure that we override the existing partial metadata rather than
-    /// create a new entry that will cause a conflict.
-    ///
-    /// There is currently no way to handle this in stash directly, so we have
-    /// to manually perform this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update the attachment in the database.
-    ///
     /// It's imperative to call this function rather than
-    /// [`Model::save_using()`] to make sure that we override the existing
+    /// [`Model::save()`] to make sure that we override the existing
     /// partial metadata rather than create a new entry that will cause a
     /// conflict.
     ///
@@ -247,7 +230,7 @@ impl Attachment {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -285,7 +268,7 @@ impl Attachment {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Fetch attachment content from the API.
@@ -379,7 +362,7 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        attachment.save_using(interface).await?;
+        attachment.save(interface).await?;
         *self = attachment;
         Ok(Some(()))
     }

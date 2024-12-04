@@ -56,7 +56,7 @@ async fn create_records(stash: &Stash) {
     let tx = stash.transaction().await.unwrap();
     for i in 1..=1000 {
         let mut test = TestModel::new(format!("Test model #{i}"), i);
-        test.save_using(&tx).await.unwrap();
+        test.save(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
 }

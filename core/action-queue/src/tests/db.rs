@@ -54,7 +54,7 @@ async fn action_store_and_retrieve() {
 
     conn.transaction().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
-    stored.save_using(&conn).await.unwrap();
+    stored.save(&conn).await.unwrap();
     let first_action_id = stored.id.unwrap();
     conn.commit().await.unwrap();
 
@@ -68,7 +68,7 @@ async fn action_store_and_retrieve() {
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
 
     conn.transaction().await.unwrap();
-    stored.save_using(&conn).await.unwrap();
+    stored.save(&conn).await.unwrap();
     let id = stored.id.unwrap();
     conn.commit().await.unwrap();
     let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();

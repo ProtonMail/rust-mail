@@ -382,7 +382,7 @@ pub trait ModelExtension: Model {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        self.save_using(interface).await?;
+        self.save(interface).await?;
         Ok(self)
     }
 }
@@ -474,20 +474,6 @@ impl Address {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!();
-    }
-
-    /// Save an address to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that existing conversations are updated.
-    ///
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
@@ -498,7 +484,7 @@ impl Address {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -509,7 +495,7 @@ impl Address {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Download and store user addresses into the database
@@ -533,7 +519,7 @@ impl Address {
 
         let tx = stash.transaction().await?;
         for mut address in addresses {
-            address.save_using(&tx).await?;
+            address.save(&tx).await?;
         }
         tx.commit().await?;
 
@@ -729,20 +715,6 @@ impl User {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save a user to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that existing conversations are updated.
-    ///
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
@@ -753,7 +725,7 @@ impl User {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -763,7 +735,7 @@ impl User {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Download and store user info and settings into the database
@@ -783,8 +755,8 @@ impl User {
         settings.remote_id.clone_from(&user.remote_id);
 
         let tx = stash.transaction().await?;
-        user.save_using(&tx).await?;
-        settings.save_using(&tx).await?;
+        user.save(&tx).await?;
+        settings.save(&tx).await?;
         tx.commit().await?;
 
         Ok(())
@@ -904,20 +876,6 @@ impl UserSettings {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!();
-    }
-
-    /// Save a user's settings to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that existing conversations are updated.
-    ///
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
@@ -928,7 +886,7 @@ impl UserSettings {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -938,7 +896,7 @@ impl UserSettings {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 }
 

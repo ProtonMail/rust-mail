@@ -12,13 +12,13 @@ async fn test_full_contact() {
     let stash = new_core_test_connection().await;
     let mut full_contact = create_test_full_contact();
     full_contact
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to create contact");
     let id = full_contact.row_id.expect("failed to get contact id");
     let local_id = full_contact.local_id.expect("failed to get contact id");
     full_contact
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to overwrite contact");
     let id_second = full_contact.row_id.expect("failed to get contact id");
@@ -44,7 +44,7 @@ async fn test_partial_contact() {
     // Insert all partial contacts
     for contact in &mut partial_contacts {
         contact
-            .save_using(&stash)
+            .save(&stash)
             .await
             .expect("failed to create contact");
     }
@@ -52,7 +52,7 @@ async fn test_partial_contact() {
     for contact_email in &mut contact_emails {
         contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
         contact_email
-            .save_using(&stash)
+            .save(&stash)
             .await
             .expect("failed to create contact email");
     }

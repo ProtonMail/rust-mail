@@ -281,10 +281,7 @@ async fn create_draft_reply_without_body_is_error() {
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    existing_message.save(user_ctx.user_stash()).await.unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -329,10 +326,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    existing_message.save(user_ctx.user_stash()).await.unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -380,7 +374,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .unwrap();
 
     // Save message.
-    message.save_using(user_ctx.user_stash()).await.unwrap();
+    message.save(user_ctx.user_stash()).await.unwrap();
 
     assert!(
         DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
@@ -492,10 +486,7 @@ async fn create_draft_reply_impl(
         Message::from_api_data(remote_existing_message.clone(), user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    existing_message.save(user_ctx.user_stash()).await.unwrap();
     let existing_message = existing_message;
 
     let expected_draft_params =

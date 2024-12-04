@@ -192,11 +192,11 @@ mod contact_list {
     ) {
         let stash = new_core_test_connection().await;
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        contact.save_using(&stash).await.unwrap();
+        contact.save(&stash).await.unwrap();
 
         for mut email in emails {
             email.remote_contact_id = contact.remote_id.clone();
-            email.save_using(&stash).await.unwrap();
+            email.save(&stash).await.unwrap();
         }
 
         let result = Contact::contact_list(&stash).await.unwrap();
@@ -213,14 +213,14 @@ mod contact_watcher {
     async fn test_contact_list_watcher() {
         let stash = new_core_test_connection().await;
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        contact.save_using(&stash).await.unwrap();
+        contact.save(&stash).await.unwrap();
         let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
         let stash_reciever = stash.subscribe().await.unwrap();
 
         // Rename contact
         let tx = stash.transaction().await.unwrap();
         contact.name = "Barbara Lox".to_string();
-        contact.save_using(&tx).await.unwrap();
+        contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
@@ -232,7 +232,7 @@ mod contact_watcher {
         // Soft delete contact
         let tx = stash.transaction().await.unwrap();
         contact.deleted = true;
-        contact.save_using(&tx).await.unwrap();
+        contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
@@ -245,7 +245,7 @@ mod contact_watcher {
         // Soft undelete contact
         let tx = stash.transaction().await.unwrap();
         contact.deleted = false;
-        contact.save_using(&tx).await.unwrap();
+        contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());

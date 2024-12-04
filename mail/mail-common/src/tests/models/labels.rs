@@ -22,7 +22,7 @@ async fn test_remote_label_add() {
     let tx = stash.connection();
     let labels = test_labels();
     for label in labels.clone() {
-        Label::from(label).save_using(&tx).await.unwrap();
+        Label::from(label).save(&tx).await.unwrap();
     }
     compare_remote_labels_with_local(&stash, labels).await;
 }
@@ -33,7 +33,7 @@ async fn test_remote_label_add_1_char_long_name() {
     let tx = stash.connection();
     let label = test_label(random_string(1).as_str());
 
-    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    Label::from(label.clone()).save(&tx).await.unwrap();
     compare_remote_label_with_local(&stash, label).await;
 }
 
@@ -43,7 +43,7 @@ async fn test_remote_label_add_100_char_long_name() {
     let tx = stash.connection();
     let label = test_label(random_string(100).as_str());
 
-    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    Label::from(label.clone()).save(&tx).await.unwrap();
     compare_remote_label_with_local(&stash, label).await;
 }
 
@@ -57,7 +57,7 @@ async fn test_remote_label_update() {
         .map(Label::from)
         .collect::<Vec<_>>();
     for label in &mut labels {
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     let mut remote_labels = test_labels();
@@ -92,10 +92,7 @@ async fn test_remote_label_update() {
     labels[3].display_order = 2;
 
     for label in &mut labels {
-        label
-            .save_using(&tx)
-            .await
-            .expect("failed to update labels");
+        label.save(&tx).await.expect("failed to update labels");
     }
 
     compare_remote_labels_with_local(&stash, remote_labels).await;
@@ -116,7 +113,7 @@ async fn test_delete_remote() {
                 .expect("parent label should exist")
                 .local_id;
         }
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     tx.execute(
@@ -157,7 +154,7 @@ async fn label_with_counts() {
     let unread_msg = 600_u64;
 
     let mut local_label = Label::from(label.clone());
-    local_label.save_using(&tx).await.unwrap();
+    local_label.save(&tx).await.unwrap();
     let local_id = local_label.local_id.unwrap();
 
     Label::create_or_update_conversation_counts(
@@ -225,10 +222,7 @@ async fn create_local_label() {
             unread_msg: 0,
             row_id: None,
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -265,10 +259,7 @@ async fn create_local_label_1_char_long_name() {
             unread_msg: 0,
             row_id: None,
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -305,10 +296,7 @@ async fn create_local_label_100_char_long_name() {
             unread_msg: 0,
             row_id: None,
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -349,10 +337,7 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_msg: 0,
             row_id: None,
         };
-        new_label1
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label1.save(&tx).await.expect("failed to create label");
         let mut new_label2 = Label {
             local_id: None,
             remote_id: Some(format!("Label-{:?}-02", t).into()),
@@ -375,10 +360,7 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_msg: 0,
             row_id: None,
         };
-        new_label2
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label2.save(&tx).await.expect("failed to create label");
         // TODO
         // assert_eq!(
         //     new_label1.display_order + 1,
@@ -415,10 +397,7 @@ async fn update_local_label() {
         unread_msg: 0,
         row_id: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
     let new_label2 = Label {
         local_id: None,
         remote_id: Some("MyOtherLabel".into()),
@@ -441,10 +420,7 @@ async fn update_local_label() {
         unread_msg: 0,
         row_id: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
 
     async fn compare_db_label(tx: &Tether, id: LocalId, f: impl FnOnce(&Label)) {
         let db_label = Label::load(id, tx)
@@ -455,20 +431,14 @@ async fn update_local_label() {
     }
 
     new_label.color = LabelColor::black();
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
+    new_label.save(&tx).await.expect("failed to save label");
     compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.color, LabelColor::black());
     })
     .await;
 
     new_label.name = "NewName".to_owned();
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
+    new_label.save(&tx).await.expect("failed to save label");
     compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.name, "NewName");
     })
@@ -476,10 +446,7 @@ async fn update_local_label() {
 
     new_label.remote_parent_id = new_label2.remote_id.clone();
     new_label.path = Some("MyLabel/NewName".into());
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
+    new_label.save(&tx).await.expect("failed to save label");
     compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.remote_parent_id, new_label2.remote_id);
         assert_eq!(l.path, Some("MyLabel/NewName".into()));
@@ -513,21 +480,18 @@ async fn test_mark_labels_as_initialized() {
         unread_msg: 0,
         row_id: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
     assert!(!new_label.initialized_conv);
     new_label.initialized_conv = true;
     new_label
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to mark label as initialized");
     assert!(new_label.initialized_conv);
     assert!(!new_label.initialized_msg);
     new_label.initialized_msg = true;
     new_label
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to mark label as initialized");
     assert!(new_label.initialized_msg);
@@ -553,7 +517,7 @@ async fn test_watch_label() {
     }
     .into();
 
-    label.save_using(&stash).await.unwrap();
+    label.save(&stash).await.unwrap();
 
     let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &stash)
         .await
@@ -563,7 +527,7 @@ async fn test_watch_label() {
     assert_eq!(db_label, label);
 
     label.display_order = 10;
-    label.save_using(&stash).await.unwrap();
+    label.save(&stash).await.unwrap();
 
     watcher.recv_async().await.unwrap();
 }

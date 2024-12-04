@@ -19,14 +19,14 @@ pub async fn handle_label_events(
             }
             Action::Create => {
                 if let Some(mut label) = label_event.label.clone() {
-                    label.save_using(tx).await?;
+                    label.save(tx).await?;
                 } else {
                     warn!("Received label create without label");
                 }
             }
             Action::Update | Action::UpdateFlags => {
                 if let Some(mut label) = label_event.label.clone() {
-                    label.save_using(tx).await?;
+                    label.save(tx).await?;
                 } else {
                     warn!("Received label update without label");
                 }

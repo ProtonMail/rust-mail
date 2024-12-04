@@ -33,10 +33,7 @@ pub struct TestDBStateMap {
 pub async fn prepare_db_state_core(tx: &Tether, env: &mut [Address]) {
     // create addresses
     for address in env.iter_mut() {
-        address
-            .save_using(tx)
-            .await
-            .expect("failed to create address");
+        address.save(tx).await.expect("failed to create address");
     }
 }
 
@@ -71,10 +68,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         let the_label = if let Some(ref l) = db_label {
             l
         } else {
-            label
-                .save_using(&stash)
-                .await
-                .expect("failed to create label");
+            label.save(&stash).await.expect("failed to create label");
             label
         };
         local_label_ids.push(the_label.local_id);
@@ -210,7 +204,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         let mut local_message_ids = vec![];
         for message in &mut env.messages {
             message
-                .save_using(&stash)
+                .save(&stash)
                 .await
                 .expect("failed to create message");
             local_message_ids.push(message.local_id);
@@ -332,7 +326,7 @@ pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, MessageCount> {
 pub async fn create_address(core_tx: &Tether) -> Address {
     let mut address = test_address();
     address
-        .save_using(core_tx)
+        .save(core_tx)
         .await
         .expect("failed to create address");
 

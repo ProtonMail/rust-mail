@@ -20,7 +20,7 @@ async fn test_core_store_and_load_user() {
             .transaction()
             .await
             .expect("failed to start transaction");
-        user.save_using(&tx).await.expect("failed to store user");
+        user.save(&tx).await.expect("failed to store user");
         let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
             .await
             .expect("failed to load user")
@@ -40,12 +40,10 @@ async fn test_core_user_space_updates() {
             .transaction()
             .await
             .expect("failed to start transaction");
-        user.save_using(&tx).await.expect("failed to store user");
+        user.save(&tx).await.expect("failed to store user");
 
         user.used_space = 912_314_142;
-        user.save_using(&tx)
-            .await
-            .expect("failed to update used space");
+        user.save(&tx).await.expect("failed to update used space");
 
         user.product_used_space = ProductUsedSpace {
             calendar: 234_235_235_235,
@@ -55,9 +53,7 @@ async fn test_core_user_space_updates() {
             pass: 1_234_857_671,
         };
 
-        user.save_using(&tx)
-            .await
-            .expect("failed to update used space");
+        user.save(&tx).await.expect("failed to update used space");
 
         let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
             .await
@@ -127,10 +123,7 @@ async fn test_core_store_and_load_user_settings() {
             .transaction()
             .await
             .expect("failed to start transaction");
-        settings
-            .save_using(&tx)
-            .await
-            .expect("failed to store settings");
+        settings.save(&tx).await.expect("failed to store settings");
         let db_settings = UserSettings::load(user_id.clone(), &tx)
             .await
             .expect("failed to load user")

@@ -143,7 +143,7 @@ where
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
             RollbackItem::new(remote_id.clone(), item_type)
-                .save_using(tx)
+                .save(tx)
                 .await?;
         }
 
@@ -302,7 +302,7 @@ where
     {
         for remote_id in &self.remote_ids {
             RollbackItem::new(remote_id.clone(), kind)
-                .save_using(interface)
+                .save(interface)
                 .await?;
         }
         Ok(())

@@ -930,7 +930,7 @@ async fn execute_action_local<T: Action>(
         Error::from(e)
     })?;
 
-    stored_action.save_using(&tx).await.map_err(|e| {
+    stored_action.save(&tx).await.map_err(|e| {
         error!("Failed to store action: {e}");
         e
     })?;

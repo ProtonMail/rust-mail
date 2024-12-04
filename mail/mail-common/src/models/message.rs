@@ -405,7 +405,7 @@ impl Message {
         for id in ids {
             if let Some(mut message) = Message::load(id, interface).await? {
                 message.unread = false;
-                message.save_using(interface).await?;
+                message.save(interface).await?;
             }
         }
         Ok(())
@@ -916,7 +916,7 @@ impl Message {
                 Message::move_messages(archive_id, source_label_id, local_ids.clone(), interface)
                     .await?;
             }
-            message.save_using(interface).await?
+            message.save(interface).await?
         }
         Ok(())
     }
@@ -924,21 +924,6 @@ impl Message {
     /// Save a message to the database.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that local ids are resolved before they can be written
-    /// to the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save a message to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
     /// ensure that local ids are resolved before they can be written
     /// to the database.
     ///
@@ -952,7 +937,7 @@ impl Message {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -972,13 +957,13 @@ impl Message {
                 } else {
                     // Create an unknown entry.
                     let mut conversation = Conversation::unknown(remote_conversation_id);
-                    conversation.save_using(interface).await?;
+                    conversation.save(interface).await?;
                     self.local_conversation_id = conversation.local_id;
                 }
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Given a vec of message metadatas tries to create them in the database
@@ -1005,7 +990,7 @@ impl Message {
 
         for metadata in metadata {
             let mut message = Message::from_api_metadata(metadata, interface).await?;
-            Self::save_using(&mut message, interface).await?;
+            Self::save(&mut message, interface).await?;
             ids.push(message);
         }
 
@@ -1095,7 +1080,7 @@ impl Message {
 
         for mut message in messages {
             message.deleted = true;
-            message.save_using(interface).await?;
+            message.save(interface).await?;
             messages_by_conversation
                 .entry(message.local_conversation_id)
                 .or_insert_with(Vec::new)
@@ -1178,7 +1163,7 @@ impl Message {
 
         for mut message in messages {
             message.deleted = false;
-            message.save_using(interface).await?;
+            message.save(interface).await?;
             messages_by_conversation
                 .entry(message.local_conversation_id)
                 .or_insert_with(Vec::new)
@@ -1416,7 +1401,7 @@ impl Message {
                     attachment.remote_address_id = Some(self.remote_address_id.clone());
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
-                    attachment.save_using(interface).await?;
+                    attachment.save(interface).await?;
 
                     let local_id = attachment.local_id.expect("Should be set");
 
@@ -1573,7 +1558,7 @@ impl Message {
 
         let tx = interface.transaction().await?;
         for mut addr in addrs {
-            addr.save_using(&tx).await?;
+            addr.save(&tx).await?;
         }
         tx.commit().await?;
 
@@ -1755,11 +1740,11 @@ impl Message {
                 .inspect_err(|e| {
                     error!("Failed to convert message from api: {e}");
                 })?;
-            message.save_using(interface).await.inspect_err(|e| {
+            message.save(interface).await.inspect_err(|e| {
                 error!("Failed to save message metadata: {e}");
             })?;
 
-            body_metadata.save_using(interface).await.inspect_err(|e| {
+            body_metadata.save(interface).await.inspect_err(|e| {
                 error!("Failed to save message body metadata: {e}");
             })?;
 
@@ -2216,7 +2201,7 @@ impl Message {
             .await?
             {
                 message.unread = !mark_read;
-                message.save_using(interface).await?;
+                message.save(interface).await?;
                 updated.push(IdPair {
                     local_message_id: message.local_id.unwrap(),
                     local_conversation_id: message.local_conversation_id.unwrap(),
@@ -2251,7 +2236,7 @@ impl Message {
                     label.unread_msg += 1;
                 }
 
-                label.save_using(interface).await?
+                label.save(interface).await?
             }
         }
 
@@ -2282,7 +2267,7 @@ impl Message {
                         label_ids.insert(conversation_label.local_label_id.unwrap());
                     }
                 }
-                conversation_label.save_using(interface).await?
+                conversation_label.save(interface).await?
             }
         }
 
@@ -2294,7 +2279,7 @@ impl Message {
                 } else {
                     label.unread_conv += 1;
                 }
-                label.save_using(interface).await?;
+                label.save(interface).await?;
             }
         }
 
@@ -2548,7 +2533,7 @@ impl Message {
                         conversation_label.context_size = stats.size;
                         conversation_label.context_num_messages = stats.count;
                         conversation_label.context_num_attachments = stats.num_attachments as u64;
-                        conversation_label.save_using(interface).await?;
+                        conversation_label.save(interface).await?;
                         (
                             conversation_label.context_num_unread,
                             conversation_label.context_num_messages,
@@ -2586,7 +2571,7 @@ impl Message {
             label.unread_msg -= unread_count;
             label.total_msg -= updated_count;
 
-            label.save_using(interface).await?;
+            label.save(interface).await?;
         }
 
         Ok(())
@@ -2903,7 +2888,7 @@ impl Message {
             if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                 label.total_msg -= stats.count;
                 label.unread_msg -= stats.unread_count;
-                label.save_using(interface).await?;
+                label.save(interface).await?;
             }
         }
 
@@ -2923,7 +2908,7 @@ impl Message {
             if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                 label.total_msg += stats.count;
                 label.unread_msg += stats.unread_count;
-                label.save_using(interface).await?;
+                label.save(interface).await?;
             }
         }
 
@@ -3184,7 +3169,7 @@ impl MessageDataSource {
     ) -> Result<Vec<Message>, StashError> {
         let tx = stash.transaction().await?;
         for record in &mut records {
-            Message::save_using(record, &tx).await?;
+            Message::save(record, &tx).await?;
         }
         tx.commit().await?;
         Ok(records)
@@ -3283,23 +3268,7 @@ pub struct MessageBodyMetadata {
 impl MessageBodyMetadata {
     /// Save or update the `MessageBodyMetadata` in the database.
     ///
-    /// It's imperative to call this function rather than [`Model::save()`] to make sure that the
-    /// `MessageBodyMetadata` and it's corresponding `Message` share the same `id`.
-    ///
-    /// There is currently no way to handle this in stash directly, so we have
-    /// to manually perform this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update the `MessageBodyMetadata` in the database.
-    ///
-    /// It's imperative to call this function rather than [`Model::save_using()`] to make sure that
+    /// It's imperative to call this function rather than [`Model::save()`] to make sure that
     /// the `MessageBodyMetadata` and it's corresponding `Message` share the same `id`.
     ///
     /// There is currently no way to handle this in stash directly, so we have
@@ -3314,7 +3283,7 @@ impl MessageBodyMetadata {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -3341,7 +3310,7 @@ impl MessageBodyMetadata {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Extends [`Model::load()`] to pre-load attachments.
@@ -3399,7 +3368,7 @@ impl MessageBodyMetadata {
             )
             .await?;
         for attachment in &mut self.attachments {
-            attachment.save_using(interface).await?;
+            attachment.save(interface).await?;
             interface
                 .execute(
                     "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",

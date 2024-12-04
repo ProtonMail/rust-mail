@@ -89,10 +89,7 @@ async fn test_session_store_load() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
+        session.save(&tx).await.expect("failed to store session");
 
         let db_session = CoreSession::find_first(
             "WHERE account_id = ?",
@@ -128,10 +125,7 @@ async fn test_session_update() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
+        session.save(&tx).await.expect("failed to store session");
 
         // Back up the original session
         let original_session = session.clone();
@@ -140,7 +134,7 @@ async fn test_session_update() {
         session.access_token = EncryptedAccessToken::new(&"acc".to_owned().into(), &key).unwrap();
         session.refresh_token = EncryptedRefreshToken::new(&"acc".to_owned().into(), &key).unwrap();
         session.auth_scope = AuthScope::new(["baz", "qux"]);
-        session.save_using(&tx).await.expect("failed to update");
+        session.save(&tx).await.expect("failed to update");
 
         // Load the updated session from the database
         let db_session = CoreSession::find_first(
@@ -181,10 +175,7 @@ async fn test_session_delete_user_id() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
+        session.save(&tx).await.expect("failed to store session");
 
         tx.execute(
             "DELETE FROM core_sessions WHERE account_id =?",
@@ -222,10 +213,7 @@ async fn test_session_delete_session_id() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
+        session.save(&tx).await.expect("failed to store session");
 
         tx.execute(
             "DELETE FROM core_sessions WHERE remote_id =?",

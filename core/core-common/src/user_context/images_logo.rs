@@ -59,7 +59,7 @@ impl UserContext {
 
         // generate local_id if not exist
         if key.local_id.is_none() {
-            key.save_using(interface).await?;
+            key.save(interface).await?;
         }
 
         let result = self

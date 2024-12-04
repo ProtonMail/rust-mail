@@ -138,15 +138,15 @@ impl AuthStore {
             let name_or_addr = auth.name_or_addr.clone();
 
             CoreAccount::new(user_id, name_or_addr, tfa_mode, mbp_mode)
-                .save_using(&tx)
+                .save(&tx)
                 .await?;
         }
 
         // Load or create the session.
         if let Some(session) = CoreSession::find_by_id(session_id.clone(), &tx).await? {
-            session.with_auth(&auth, &key)?.save_using(&tx).await?;
+            session.with_auth(&auth, &key)?.save(&tx).await?;
         } else {
-            CoreSession::new(auth, &key)?.save_using(&tx).await?;
+            CoreSession::new(auth, &key)?.save(&tx).await?;
         }
 
         // Set the user ID if it's not already set.
@@ -182,11 +182,11 @@ impl AuthStore {
         };
 
         for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
-            session.with_key_secret(&sec, &key)?.save_using(&tx).await?;
+            session.with_key_secret(&sec, &key)?.save(&tx).await?;
         }
 
         if !account.is_ready {
-            account.with_ready().save_using(&tx).await?;
+            account.with_ready().save(&tx).await?;
         }
 
         tx.commit().await?;
@@ -211,7 +211,7 @@ impl AuthStore {
 
         account
             .with_info(username, display_name, primary_addr)
-            .save_using(&self.stash)
+            .save(&self.stash)
             .await?;
 
         Ok(())

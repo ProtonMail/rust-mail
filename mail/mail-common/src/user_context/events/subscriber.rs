@@ -72,7 +72,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                 if let Some(mail_settings) = event.mail_settings.as_mut() {
                     debug!("Handling mail settings");
-                    mail_settings.save_using(&tx).await?;
+                    mail_settings.save(&tx).await?;
                 }
             }
             tx.commit().await

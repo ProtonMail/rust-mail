@@ -80,7 +80,7 @@ impl DraftMetadata {
             row_id: None,
         };
 
-        metadata.save_using(interface).await?;
+        metadata.save(interface).await?;
 
         Ok(metadata)
     }
@@ -108,7 +108,7 @@ impl DraftMetadata {
             row_id: None,
         };
 
-        metadata.save_using(interface).await?;
+        metadata.save(interface).await?;
 
         Ok(metadata)
     }
