@@ -161,17 +161,17 @@ async fn data_source_sync() {
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [5..9] are available
     paginator.next_page().await.unwrap();
     check_range(&stash, 5_u32..10_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [10..14] are available
     paginator.next_page().await.unwrap();
     check_range(&stash, 10_u32..15_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     // Check element [15..18] are available
     let values = paginator.next_page().await.unwrap();
@@ -207,7 +207,7 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 }
 
 #[tokio::test]
@@ -233,7 +233,7 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
 
     // Check first page is downloaded
     check_range(&stash, 0_u32..5_u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 }
 
 #[tokio::test]
@@ -261,15 +261,15 @@ async fn data_source_sync_with_callback() {
     .unwrap();
 
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    check_page(&paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
@@ -342,10 +342,7 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
 }
 
 // Check the range of values is present in the current page.
-async fn check_page<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
-    paginator: &Paginator<TestModel, R>,
-) {
+async fn check_page<R: DataSource<Item = TestModel>>(paginator: &Paginator<TestModel, R>) {
     check_page_with_limit(paginator, None).await;
 }
 
