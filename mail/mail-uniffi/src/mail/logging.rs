@@ -13,7 +13,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
         .with_target(false)
         .with_ansi(false)
         .with_filter(if debug {
-            app_tracing_env_filter_debug()
+            app_tracing_env_filter_trace()
         } else {
             app_tracing_env_filter_default()
         });
@@ -25,23 +25,35 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
     // TODO: once stash statistics can be disabled, remove stash=error
     EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
-        .parse_lossy(
-            "info,proton_mail_uniffi=debug,proton_sqlite3=debug,\
-                    proton_core_common=debug,proton_mail_common=debug,\
-                    proton_event_loop=debug,proton_api_core=debug,\
-                    proton_action_queue=trace,proton_api_mail=debug,\
-                    stash=error",
+        .parse(
+            "info,\
+            proton_mail_uniffi=debug,\
+            proton_sqlite3=debug,\
+            proton_core_common=debug,\
+            proton_mail_common=debug,\
+            proton_event_loop=debug,\
+            proton_api_core=debug,\
+            proton_action_queue=trace,\
+            proton_api_mail=debug,\
+            stash=error",
         )
+        .expect("bad log directives")
 }
 
-pub fn app_tracing_env_filter_debug() -> EnvFilter {
+pub fn app_tracing_env_filter_trace() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
-        .parse_lossy(
-            "info,proton_mail_uniffi=debug,proton_sqlite3=trace,\
-                    proton_core_common=trace,proton_mail_common=trace,\
-                    proton_event_loop=trace,proton_api_core=trace,\
-                    proton_action_queue=trace,proton_api_mail=trace,\
-                    stash=trace",
+        .parse(
+            "info,\
+            proton_mail_uniffi=trace,\
+            proton_sqlite3=trace,\
+            proton_core_common=trace,\
+            proton_mail_common=trace,\
+            proton_event_loop=trace,\
+            proton_api_core=trace,\
+            proton_action_queue=trace,\
+            proton_api_mail=trace,\
+            stash=trace",
         )
+        .expect("bad log directives")
 }
