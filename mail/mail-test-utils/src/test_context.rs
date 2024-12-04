@@ -21,7 +21,7 @@ use wiremock::{Mock, Request};
 #[allow(dead_code)]
 pub struct MailTestContext {
     pub core_test_context: Arc<TestContext>,
-    pub mail_context: MailContext,
+    pub mail_context: Arc<MailContext>,
     pub mock_web_server: Arc<MockServer>,
     tmp_dir: TempDir,
     core_account: CoreAccount,
@@ -32,7 +32,7 @@ impl BaseTestContext for MailTestContext {}
 
 impl MailTestContext {
     #[must_use]
-    pub fn context(&self) -> &MailContext {
+    pub fn context(&self) -> &Arc<MailContext> {
         &self.mail_context
     }
 

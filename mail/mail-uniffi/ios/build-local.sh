@@ -14,5 +14,5 @@ rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi ./mail/mail-uniffi/u
 
 CRATE_VERSION=$(cargo pkgid --manifest-path=./mail/mail-uniffi/Cargo.toml | cut -d "@" -f2)
 
-cp -r $TMP_DIR/$CRATE_VERSION/* $IOS_REPO_ROOT/localPackages/proton_app_uniffi/
+cp -r $TMP_DIR/$CRATE_VERSION/* $IOS_REPO_ROOT/ProtonPackages/proton_app_uniffi/
 

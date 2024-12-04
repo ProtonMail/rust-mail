@@ -45,6 +45,7 @@ tempdir = { workspace = true }
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 proton-core-test-utils = { workspace = true }
+clap = { workspace = true }
 
 [lints]
 workspace = true

@@ -68,6 +68,7 @@ async fn main() {
     let ctx = MailContext::new(
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
+        tmp_dir.path().join("core_cache"),
         tmp_dir.path().join("mail_cache"),
         50 * 1204 * 1024,
         Arc::new(keychain),

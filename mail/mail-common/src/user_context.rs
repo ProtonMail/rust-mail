@@ -35,7 +35,7 @@ use tracing::error;
 
 pub struct MailUserContext {
     this: Weak<Self>,
-    mail_context: MailContext,
+    mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
     event_loop: EventLoop,
     action_queue: Queue,
@@ -43,8 +43,9 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    pub async fn new(
-        mail_context: MailContext,
+    /// Create a new user context.
+    pub(crate) async fn new(
+        mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
