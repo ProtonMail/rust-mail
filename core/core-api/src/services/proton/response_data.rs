@@ -396,6 +396,17 @@ pub struct ApiErrorInfo {
     pub details: Option<JsonValue>,
 }
 
+impl ApiErrorInfo {
+    /// Parse the error from json data.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the format is not valid or expected json.
+    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+}
+
 /// Represents partial contact information returned by the API.
 ///
 /// The partial contact information does not contain the contact emails and the

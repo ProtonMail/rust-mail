@@ -4,7 +4,7 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension};
 use crate::{CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
-use proton_api_core::services::proton::common::API_SUCCESS_CODE;
+use proton_api_core::consts::General;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
@@ -453,7 +453,7 @@ impl Contact {
         Ok(response
             .responses
             .iter()
-            .filter(|r| r.response.code != API_SUCCESS_CODE)
+            .filter(|r| r.response.code != General::NoError as u32)
             .map(|r| r.id.clone().into())
             .collect())
     }
