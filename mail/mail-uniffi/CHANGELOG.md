@@ -8,27 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.23.0] - 2024-11-28
+
+### Changed
+
+  - `MailUserSession` can now be created multiple times for a logged in session.
+  - `MailUserSession` will fail with an error if you attempt to log in if an existing session is
+    active.
+
 ### Fix
 
-- Conversations displayed as `read` with unread message in another mailbox now propose `mark as unread` action.
+  - Conversations displayed as `read` with unread message in another mailbox now propose `mark as unread` action.
 
 ## [0.22.2] - 2024-11-28
 
 ### Fix
 
-- Cids with the format `<foo@bar>` no longer need angle brackets.
+  -  Cids with the format `<foo@bar>` no longer need angle brackets.
 
 ## [0.22.1] - 2024-11-26
 
 ### Changed
 
-- `get_embedded_attachment` now triggers errors on unknown CIDs
+  - `get_embedded_attachment` now triggers errors on unknown CIDs
 
 ## [0.22.0] - 2024-11-26
 
 ### Added
 
- - `Draft::send` to send drafts
+  - `Draft::send` to send drafts
 
 ### Fix
 
