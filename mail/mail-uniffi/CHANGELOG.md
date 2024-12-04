@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+- Conversations displayed as `read` with unread message in another mailbox now propose `mark as unread` action.
+
 ## [0.22.2] - 2024-11-28
 
 ### Fix

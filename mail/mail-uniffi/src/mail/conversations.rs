@@ -253,7 +253,7 @@ pub async fn all_available_bottom_bar_actions_for_conversations(
     conversation_ids: Vec<Id>,
 ) -> MailboxResult<AllBottomBarMessageActions> {
     uniffi_async(async move {
-        let actions = RealConversation::all_available_bottom_bar_actions_for_conversations(
+        let actions = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             mailbox.label_id().into(),
             conversation_ids.into_iter().map_into().collect(),
             mailbox.stash(),
