@@ -723,18 +723,16 @@ where
     ///
     fn row_id(&self) -> Option<u64>;
 
-    /// Saves a record to the database.
+    /// Saves a record to the database, using a specific connection.
     ///
     /// This function saves a single record to the database by its unique ID. It
     /// is a convenience method for calling [`Stash::execute()`] and passing in
     /// the data.
     ///
-    /// There are two prerequisites for calling this function:
+    /// There are one prerequisite for calling this function:
     ///
     ///   1. The record must have a unique ID. This needs to have been set on
     ///      the record instance, or an error will occur.
-    ///   2. The [`Stash`] must be set on the record instance. This is necessary
-    ///      to know where to save the record to.
     ///
     /// # Logic
     ///
@@ -781,43 +779,11 @@ where
     /// * [`StashError::NoRowIdReturned`]
     /// * [`StashError::NoRowsUpdated`]
     ///
-    /// # See also
-    ///
-    /// * [`Model::save_using()`]
-    ///
-    async fn save(&mut self) -> Result<(), StashError> {
-        perform_save(self, None).await
-    }
-
-    /// Saves a record to the database, using a specific connection.
-    ///
-    /// This function saves a single record to the database by its unique ID,
-    /// using a specific [`Tether`], i.e. connection. It is functionally
-    /// equivalent to [`save()`](Model::save()), but allows the query to be run
-    /// against an existing connection rather than using a new one.
-    ///
-    /// For full usage details, see [`save()`](Model::save()).
-    ///
-    /// Note that the [`Tether`] used will not be stored.
-    ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for saving the record.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::save()`]
-    ///
-    async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        perform_save(self, Some(&interface.clone().into())).await
+        perform_save(self, &interface.clone().into()).await
     }
 
     /// Sets the record's unique primary ID field value.
@@ -1119,8 +1085,8 @@ where
 ///
 /// This function saves a single record to the database by its unique ID, either
 /// ad-hoc or using a specific [`Tether`], i.e. connection. It is the internal
-/// function that actually does the saving for the public interface methods
-/// [`save()`](Model::save()) and [`save_using()`](Model::save_using()).
+/// function that actually does the saving for the public interface method
+/// [`save()`](Model::save())
 ///
 /// For full usage details, see [`save()`](Model::save()).
 ///
@@ -1137,12 +1103,11 @@ where
 /// # See also
 ///
 /// * [`Model::save()`]
-/// * [`Model::save_using()`]
 ///
 #[allow(clippy::too_many_lines)]
 pub async fn perform_save<M: Model>(
     model: &mut M,
-    interface: Option<&AgnosticInterface>,
+    interface: &AgnosticInterface,
 ) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.
@@ -1186,12 +1151,8 @@ pub async fn perform_save<M: Model>(
                 .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
                 .collect();
             #[allow(clippy::shadow_reuse)]
-            let affected: usize = match interface {
-                Some(interface) => interface.execute(&query, field_values).await?,
-                None => {
-                    unreachable!()
-                }
-            };
+            let affected: usize = interface.execute(&query, field_values).await?;
+
             if affected == 0 {
                 return Err(StashError::NoRowsUpdated);
             }
@@ -1231,16 +1192,9 @@ pub async fn perform_save<M: Model>(
             );
             let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
             #[allow(clippy::shadow_reuse)]
-            let rows = match interface {
-                Some(interface) => {
-                    interface
-                        .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
-                        .await?
-                }
-                None => {
-                    unreachable!()
-                }
-            };
+            let rows = interface
+                .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
+                .await?;
             if let Some(row) = rows.into_iter().next() {
                 model.set_id_value(row.id);
                 model.set_row_id(Some(row.rowid));

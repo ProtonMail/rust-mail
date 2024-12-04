@@ -383,18 +383,18 @@ mod message {
             },
             ..Default::default()
         });
-        settings.save_using(&stash).await.unwrap();
+        settings.save(&stash).await.unwrap();
 
         let address = create_address(&stash.connection()).await;
 
         let mut conversation = Conversation::default();
-        conversation.save_using(&stash).await.unwrap();
+        conversation.save(&stash).await.unwrap();
 
         let mut messages = test_case.items.clone();
         for message in &mut messages {
             message.local_address_id = address.local_id.unwrap();
             message.local_conversation_id = conversation.local_id;
-            message.save_using(&stash).await.unwrap();
+            message.save(&stash).await.unwrap();
         }
         let current_local = test_case
             .current_local
@@ -803,11 +803,11 @@ mod conversation {
             },
             ..Default::default()
         });
-        settings.save_using(&stash).await.unwrap();
+        settings.save(&stash).await.unwrap();
 
         let mut conversations = test_case.items.clone();
         for conversation in &mut conversations {
-            conversation.save_using(&stash).await.unwrap();
+            conversation.save(&stash).await.unwrap();
         }
         let current_local = test_case
             .current_local

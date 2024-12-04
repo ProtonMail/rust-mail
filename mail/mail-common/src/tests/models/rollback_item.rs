@@ -108,11 +108,11 @@ async fn test_store_and_delete_remote_items(
     let tx = stash.connection();
 
     for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
-        item.save_using(&tx).await.unwrap();
+        item.save(&tx).await.unwrap();
     }
 
     for item in input.iter_mut() {
-        item.save_using(&tx).await.unwrap();
+        item.save(&tx).await.unwrap();
     }
 
     let expected = expected.unwrap_or(input);
@@ -141,7 +141,7 @@ async fn setup_database(tx: &Tether) {
     let mut remote_conversation_id = None;
 
     for conversation in conversations.iter_mut() {
-        conversation.save_using(tx).await.unwrap();
+        conversation.save(tx).await.unwrap();
         local_conversation_id = conversation.local_id;
         remote_conversation_id = conversation.remote_id.clone();
     }
@@ -149,13 +149,13 @@ async fn setup_database(tx: &Tether) {
     let mut labels = labels(tx).await;
 
     for label in labels.iter_mut() {
-        label.save_using(tx).await.unwrap();
+        label.save(tx).await.unwrap();
     }
 
     let mut messages = messages(local_conversation_id, remote_conversation_id, tx).await;
 
     for message in messages.iter_mut() {
-        message.save_using(tx).await.unwrap();
+        message.save(tx).await.unwrap();
     }
 }
 

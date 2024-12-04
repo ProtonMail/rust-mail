@@ -608,23 +608,9 @@ impl Conversation {
         }
     }
 
-    /// Save a conversation to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
     /// Save a message to the database.
     ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
     /// # Parameters
@@ -637,7 +623,7 @@ impl Conversation {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -648,7 +634,7 @@ impl Conversation {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Label multiple conversations.
@@ -748,10 +734,10 @@ impl Conversation {
                             conversation_label.context_time.max(new_label.context_time);
                     }
 
-                    new_label.save_using(interface).await?;
+                    new_label.save(interface).await?;
 
                     label.total_conv += 1;
-                    label.save_using(interface).await?;
+                    label.save(interface).await?;
                 }
             }
         }
@@ -810,7 +796,7 @@ impl Conversation {
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
-            Self::save_using(&mut conv, interface).await?;
+            Self::save(&mut conv, interface).await?;
             ids.push(conv.local_id.unwrap());
         }
 
@@ -888,7 +874,7 @@ impl Conversation {
             conversation.num_messages = 0;
             conversation.num_attachments = 0;
             conversation.size = 0;
-            conversation.save_using(interface).await?;
+            conversation.save(interface).await?;
 
             let mut messages = Message::find(
                 formatdoc! {"
@@ -902,7 +888,7 @@ impl Conversation {
 
             for message in &mut messages {
                 message.deleted = true;
-                message.save_using(interface).await?
+                message.save(interface).await?
             }
 
             if !messages.is_empty() {
@@ -960,10 +946,10 @@ impl Conversation {
                 label.unread_conv -= 1;
             }
 
-            label.save_using(interface).await?;
+            label.save(interface).await?;
 
             conv_label.deleted = true;
-            conv_label.save_using(interface).await?;
+            conv_label.save(interface).await?;
         }
 
         Ok(())
@@ -1015,7 +1001,7 @@ impl Conversation {
 
             for message in &mut messages {
                 message.deleted = true;
-                message.save_using(interface).await?
+                message.save(interface).await?
             }
 
             if !messages.is_empty() {
@@ -1078,10 +1064,10 @@ impl Conversation {
                 label.unread_conv -= 1;
             }
 
-            label.save_using(interface).await?;
+            label.save(interface).await?;
 
             conv_label.deleted = true;
-            conv_label.save_using(interface).await?;
+            conv_label.save(interface).await?;
         }
 
         Ok(())
@@ -1172,7 +1158,7 @@ impl Conversation {
                 attachment_count += message.num_attachments as u64;
                 size += message.size;
 
-                message.save_using(interface).await?
+                message.save(interface).await?
             }
 
             conversation.deleted = false;
@@ -1181,7 +1167,7 @@ impl Conversation {
             conversation.num_attachments += attachment_count;
             conversation.size += size;
 
-            conversation.save_using(interface).await?;
+            conversation.save(interface).await?;
 
             if !messages.is_empty() {
                 let stats = Message::update_message_counters_after_soft_undelete(
@@ -1238,10 +1224,10 @@ impl Conversation {
                 label.unread_conv += 1;
             }
 
-            label.save_using(interface).await?;
+            label.save(interface).await?;
 
             conv_label.deleted = false;
-            conv_label.save_using(interface).await?;
+            conv_label.save(interface).await?;
         }
 
         Ok(())
@@ -1290,7 +1276,7 @@ impl Conversation {
 
             for message in &mut messages {
                 message.deleted = false;
-                message.save_using(interface).await?
+                message.save(interface).await?
             }
 
             if !messages.is_empty() {
@@ -1352,10 +1338,10 @@ impl Conversation {
                 label.unread_conv += 1;
             }
 
-            label.save_using(interface).await?;
+            label.save(interface).await?;
 
             conv_label.deleted = false;
-            conv_label.save_using(interface).await?;
+            conv_label.save(interface).await?;
         }
 
         Ok(())
@@ -1397,7 +1383,7 @@ impl Conversation {
             self.size = self.size.saturating_sub(stats.size);
         }
 
-        self.save_using(interface).await?;
+        self.save(interface).await?;
 
         Ok(())
     }
@@ -1427,7 +1413,7 @@ impl Conversation {
             self.num_attachments += stats.attachment_count;
             self.size += stats.size;
             self.deleted = false;
-            self.save_using(interface).await?;
+            self.save(interface).await?;
         }
 
         Ok(())
@@ -1701,7 +1687,7 @@ impl Conversation {
 
                     attachment.local_conversation_id = self.local_id;
                     attachment.remote_conversation_id = self.remote_id.clone();
-                    attachment.save_using(interface).await?;
+                    attachment.save(interface).await?;
 
                     let local_id = attachment.local_id.expect("Should be set");
 
@@ -1759,7 +1745,7 @@ impl Conversation {
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save_using(interface).await?
+            label.save(interface).await?
         }
 
         // If exclusive location is not set, we try to calculate it now.
@@ -1806,7 +1792,7 @@ impl Conversation {
 
             // Update conversation unread count.
             conversation.num_unread = 0;
-            conversation.save_using(interface).await?;
+            conversation.save(interface).await?;
 
             // Update conversation labels unread stats.
             let conversation_labels = ConversationLabel::find(
@@ -1829,13 +1815,13 @@ impl Conversation {
                 }
 
                 conversation_label.context_num_unread = 0;
-                conversation_label.save_using(interface).await?
+                conversation_label.save(interface).await?
             }
 
             for (label_id, count) in &mut label_counts {
                 if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                     label.unread_conv -= *count;
-                    label.save_using(interface).await?
+                    label.save(interface).await?
                 }
 
                 // reset for messages.
@@ -1854,7 +1840,7 @@ impl Conversation {
             for mut message in messages {
                 let local_message_id = message.local_id.unwrap();
                 message.unread = false;
-                message.save_using(interface).await?;
+                message.save(interface).await?;
 
                 let label_ids = interface.query_values::<_, LocalId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![local_message_id]).await?;
                 for label_id in label_ids {
@@ -1873,7 +1859,7 @@ impl Conversation {
             for (label_id, count) in &mut label_counts {
                 if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                     label.unread_msg -= *count;
-                    label.save_using(interface).await?
+                    label.save(interface).await?
                 }
             }
         }
@@ -1960,15 +1946,15 @@ impl Conversation {
                     .await?;
                     for mut conv_label in conv_labels {
                         conv_label.context_num_unread += 1;
-                        conv_label.save_using(tether).await?;
+                        conv_label.save(tether).await?;
                     }
 
                     conversation.num_unread += 1;
-                    conversation.save_using(tether).await?;
+                    conversation.save(tether).await?;
 
                     if let Some(mut label) = Label::find_by_id(local_label_id, tether).await? {
                         label.unread_conv += 1;
-                        label.save_using(tether).await?;
+                        label.save(tether).await?;
                     }
                 }
                 continue;
@@ -1977,7 +1963,7 @@ impl Conversation {
             // Update the message
 
             message.unread = true;
-            message.save_using(tether).await?;
+            message.save(tether).await?;
 
             // Update the label counts
 
@@ -2001,7 +1987,7 @@ impl Conversation {
                         label.unread_conv += 1;
                     }
 
-                    label.save_using(tether).await?;
+                    label.save(tether).await?;
                 }
 
                 if let Some(mut conv_label) = ConversationLabel::find_first(
@@ -2012,13 +1998,13 @@ impl Conversation {
                 .await?
                 {
                     conv_label.context_num_unread += 1;
-                    conv_label.save_using(tether).await?;
+                    conv_label.save(tether).await?;
                 }
             }
 
             // update conversations
             conversation.num_unread += 1;
-            conversation.save_using(tether).await?;
+            conversation.save(tether).await?;
         }
         Ok(())
     }
@@ -2139,7 +2125,7 @@ impl Conversation {
             }
         }
 
-        label.save_using(interface).await?;
+        label.save(interface).await?;
         Ok(())
     }
 
@@ -2976,7 +2962,7 @@ impl Conversation {
             }
         };
 
-        conversation_label.save_using(interface).await?;
+        conversation_label.save(interface).await?;
 
         // Update message label counts.
         let Some(mut label) = Label::find_by_id(local_label_id, interface).await? else {
@@ -2993,7 +2979,7 @@ impl Conversation {
         label.total_conv += should_increment_count as u64;
         label.unread_conv += should_increment_unread as u64;
 
-        label.save_using(interface).await?;
+        label.save(interface).await?;
 
         Ok(())
     }
@@ -3053,7 +3039,7 @@ impl Conversation {
             new_conversation.row_id = conversation.row_id;
             new_conversation.has_messages = true;
 
-            new_conversation.save_using(&tx).await.map_err(|e| {
+            new_conversation.save(&tx).await.map_err(|e| {
                 error!("Failed to write conversation: {e}");
                 e
             })?;
@@ -3433,25 +3419,7 @@ impl ConversationLabel {
     /// Returns error if the local conversation id is not set, the remote
     /// label_id is not set, the local label can not be found or the query
     /// failed.
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update a Conversation Label.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// The current stash database does not allow us to resolve conflicts on
-    /// other unique keys so we have to do this ourselves.
-    /// If [`Model::save_using()`] is used directly it will bypass this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
-    /// failed.
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -3489,7 +3457,7 @@ impl ConversationLabel {
             self.row_id = label.row_id;
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// Adjust the stats of the conversation label when
@@ -3519,7 +3487,7 @@ impl ConversationLabel {
                 .context_num_attachments
                 .saturating_sub(stats.attachment_count);
             self.context_size = self.context_size.saturating_sub(stats.size);
-            self.save_using(interface).await?;
+            self.save(interface).await?;
         }
 
         Ok(())
@@ -3550,7 +3518,7 @@ impl ConversationLabel {
             self.context_num_unread += stats.unread_count;
             self.context_num_attachments += stats.attachment_count;
             self.context_size += stats.size;
-            self.save_using(interface).await?;
+            self.save(interface).await?;
         }
 
         Ok(())
@@ -3589,7 +3557,7 @@ impl ConversationLabel {
                     remote_id: Some(metadata.conversation_id.clone().into()),
                     ..Default::default()
                 };
-                conversation.save_using(interface).await?;
+                conversation.save(interface).await?;
                 conversation.local_id.expect("Should be set")
             };
             for label_id in metadata.label_ids.clone() {
@@ -3618,13 +3586,13 @@ impl ConversationLabel {
 
                 if let Some(mut conversation_label) = conversation_label {
                     conversation_label += counters;
-                    conversation_label.save_using(interface).await?
+                    conversation_label.save(interface).await?
                 } else {
                     let mut conversation_label = ConversationLabel::from(counters);
                     conversation_label.local_conversation_id = Some(conversation_id);
                     conversation_label.remote_label_id = Some(label_id);
                     conversation_label.local_label_id = Some(local_label_id);
-                    conversation_label.save_using(interface).await?
+                    conversation_label.save(interface).await?
                 }
             }
         }
@@ -4006,7 +3974,7 @@ impl ConversationDataSource {
     ) -> Result<Vec<Conversation>, StashError> {
         let tx = stash.transaction().await?;
         for record in &mut records {
-            Conversation::save_using(record, &tx).await?;
+            Conversation::save(record, &tx).await?;
         }
         tx.commit().await?;
         Ok(records)

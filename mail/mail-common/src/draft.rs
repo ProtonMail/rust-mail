@@ -212,7 +212,7 @@ impl Draft {
                 row_id: None,
             };
             metadata
-                .save_using(&tether)
+                .save(&tether)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e}"))?;
             metadata.id.unwrap()

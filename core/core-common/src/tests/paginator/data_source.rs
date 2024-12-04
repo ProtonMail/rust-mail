@@ -21,8 +21,8 @@ pub struct TestModel {
 }
 
 impl TestModel {
-    /// Override `save_using` for create or ignore
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    /// Override `save` for create or ignore
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -30,7 +30,7 @@ impl TestModel {
         {
             self.row_id = element.row_id;
         } else {
-            <Self as Model>::save_using(self, interface).await?;
+            <Self as Model>::save(self, interface).await?;
         }
 
         Ok(())
@@ -62,7 +62,7 @@ impl TestDataSource {
                 id: i.into(),
                 row_id: None,
             };
-            value.save_using(&tx).await?;
+            value.save(&tx).await?;
             result.push(value);
         }
         tx.commit().await?;
@@ -285,7 +285,7 @@ async fn data_source_sync_with_callback() {
         id: 19,
         row_id: None,
     };
-    new_value.save_using(&stash).await.unwrap();
+    new_value.save(&stash).await.unwrap();
 
     drop(paginator);
     drop(stash);

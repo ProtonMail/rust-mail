@@ -358,15 +358,12 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     };
     let on_save_impl = if has_on_save {
         quote! {
-            async fn save(&mut self) -> Result<(), stash::stash::StashError> {
-                unreachable!()
-            }
-            async fn save_using<A>(&mut self, interface: &A) -> Result<(), stash::stash::StashError>
+            async fn save<A>(&mut self, interface: &A) -> Result<(), stash::stash::StashError>
             where
                 A: Into<stash::stash::AgnosticInterface> + stash::stash::Interface,
             {
                 let interface = interface.clone().into();
-                stash::orm::perform_save(self, Some(&interface)).await?;
+                stash::orm::perform_save(self, &interface).await?;
                 self.on_save(&interface).await
             }
         }

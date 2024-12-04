@@ -128,7 +128,7 @@ async fn load_attachment_content_first_time() {
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
-    attachment.save_using(user_ctx.user_stash()).await.unwrap();
+    attachment.save(user_ctx.user_stash()).await.unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())

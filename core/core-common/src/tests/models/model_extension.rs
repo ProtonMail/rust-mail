@@ -13,7 +13,7 @@ async fn count_test() {
     for i in 0..10 {
         let mut address = create_test_address(i);
         address
-            .save_using(&stash)
+            .save(&stash)
             .await
             .expect("failed to create address");
 

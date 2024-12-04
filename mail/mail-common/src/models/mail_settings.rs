@@ -227,7 +227,7 @@ impl MailSettings {
         debug!("Storing labels into database");
 
         let tx = stash.transaction().await?;
-        settings.save_using(&tx).await?;
+        settings.save(&tx).await?;
         tx.commit().await?;
         Ok(())
     }

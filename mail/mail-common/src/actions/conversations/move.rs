@@ -88,7 +88,7 @@ impl ActionHandler for Handler {
 
         for remote_id in &action.0.remote_target_ids {
             RollbackItem::new(remote_id.clone(), RollbackItemType::Conversation)
-                .save_using(tx)
+                .save(tx)
                 .await?;
         }
 

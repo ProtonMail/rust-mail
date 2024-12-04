@@ -216,7 +216,7 @@ impl Mailbox {
                     label.initialized_msg = true;
                 }
             }
-            label.save_using(ctx.user_stash()).await.map_err(|e| {
+            label.save(ctx.user_stash()).await.map_err(|e| {
                 error!("Failed to mark label as initialized: {e}");
                 MailContextError::Stash(e)
             })?;

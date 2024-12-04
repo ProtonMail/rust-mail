@@ -129,21 +129,7 @@ impl Label {
     /// Returns error if the local conversation id is not set, the remote
     /// label_id is not set, the local label can not be found or the query
     /// failed.
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update a Label.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
-    /// failed.
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -157,7 +143,7 @@ impl Label {
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, interface).await
     }
 
     /// TODO: Document this function.
@@ -304,7 +290,7 @@ impl Label {
                 }
                 Ok(labels) => {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
-                        label.save_using(&tx).await?;
+                        label.save(&tx).await?;
                     }
                 }
             }
@@ -344,7 +330,7 @@ impl Label {
         debug!("Storing labels into database");
         let tx = interface.transaction().await?;
         for mut label in labels {
-            Self::save_using(&mut label, &tx).await?;
+            Self::save(&mut label, &tx).await?;
         }
         tx.commit().await?;
 

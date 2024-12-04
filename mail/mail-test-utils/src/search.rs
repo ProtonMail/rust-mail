@@ -263,7 +263,7 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
 pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
-        label.save_using(tx).await.expect("failed to create labels");
+        label.save(tx).await.expect("failed to create labels");
         assert!(
             Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), tx.stash())
                 .await
@@ -283,7 +283,7 @@ pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
 pub async fn create_address(core_tx: &Tether) -> Address {
     let mut address = test_address();
     address
-        .save_using(core_tx)
+        .save(core_tx)
         .await
         .expect("failed to create address");
 

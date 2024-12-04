@@ -89,7 +89,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         label.expanded = action.expand;
 
-        label.save_using(tx).await?;
+        label.save(tx).await?;
 
         Ok(())
     }
@@ -113,7 +113,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         if let Some(remote_id) = action.remote_id.clone() {
             RollbackItem::new(remote_id.into(), RollbackItemType::Label)
-                .save_using(tx)
+                .save(tx)
                 .await?;
         }
 

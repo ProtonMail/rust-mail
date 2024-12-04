@@ -199,21 +199,8 @@ impl SenderImage {
     ///
     /// Returns error if a database request fail.
     ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        unreachable!()
-    }
-
-    /// Save or update a `SenderImage`.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to ensure that the
-    /// information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if a database request fail.
-    ///
     #[allow(clippy::missing_panics_doc)]
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -222,7 +209,7 @@ impl SenderImage {
         let mut values = Self::find(query, params, &transaction, None).await?;
 
         match values.len() {
-            0 => <Self as Model>::save_using(self, &transaction).await?,
+            0 => <Self as Model>::save(self, &transaction).await?,
             1 => {
                 let value = values.get_mut(0).expect("One item present").clone();
                 self.local_id = value.local_id;

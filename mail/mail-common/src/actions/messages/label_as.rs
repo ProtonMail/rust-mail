@@ -147,7 +147,7 @@ impl Handler {
         if let Some(location) = original_locations {
             message.exclusive_location = location;
         }
-        message.save_using(interface).await?;
+        message.save(interface).await?;
 
         Ok(())
     }

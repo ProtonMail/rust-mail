@@ -230,7 +230,7 @@ mod available_actions {
         let address = create_address(&tx).await;
         let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
 
-        conversation.save_using(&tx).await.unwrap();
+        conversation.save(&tx).await.unwrap();
 
         for MessageWithLabels {
             mut message,
@@ -242,15 +242,12 @@ mod available_actions {
             message.local_conversation_id = conversation.local_id;
             message.remote_conversation_id = conversation.remote_id.clone();
 
-            message
-                .save_using(&tx)
-                .await
-                .expect("failed to create message");
+            message.save(&tx).await.expect("failed to create message");
 
             message_ids.push(message.local_id.unwrap());
 
             for mut label in labels {
-                label.save_using(&tx).await.expect("failed to create label");
+                label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![message.local_id.unwrap()];
@@ -381,10 +378,10 @@ mod available_label_as_actions {
         let tx = stash.connection();
         let address = create_address(&tx).await;
         let mut conversation = conversation!(remote_id: rid!("conversation"));
-        conversation.save_using(&tx).await.unwrap();
+        conversation.save(&tx).await.unwrap();
 
         for mut label in labels {
-            label.save_using(&tx).await.expect("failed to create label");
+            label.save(&tx).await.expect("failed to create label");
         }
 
         let mut message_ids = vec![];
@@ -399,15 +396,12 @@ mod available_label_as_actions {
             message.local_conversation_id = conversation.local_id;
             message.remote_conversation_id = conversation.remote_id.clone();
 
-            message
-                .save_using(&tx)
-                .await
-                .expect("failed to create message");
+            message.save(&tx).await.expect("failed to create message");
 
             message_ids.push(message.local_id.unwrap());
 
             for mut label in message_labels {
-                label.save_using(&tx).await.expect("failed to create label");
+                label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![message.local_id.unwrap()];
@@ -753,15 +747,15 @@ mod available_move_to_actions {
         let fun_tx = || tx.clone();
         let address = create_address(&tx).await;
         let mut conversation = conversation!(remote_id: rid!("conversation"));
-        conversation.save_using(&tx).await.unwrap();
+        conversation.save(&tx).await.unwrap();
 
         let mut settings = MailSettings::default();
-        settings.save_using(&tx).await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         let mut message_ids = vec![];
 
         for mut label in labels {
-            label.save_using(&tx).await.expect("failed to create label");
+            label.save(&tx).await.expect("failed to create label");
         }
 
         for MessageWithLabels {
@@ -774,15 +768,12 @@ mod available_move_to_actions {
             message.local_conversation_id = conversation.local_id;
             message.remote_conversation_id = conversation.remote_id.clone();
 
-            message
-                .save_using(&tx)
-                .await
-                .expect("failed to create message");
+            message.save(&tx).await.expect("failed to create message");
 
             message_ids.push(message.local_id.unwrap());
 
             for mut label in message_labels {
-                label.save_using(&tx).await.expect("failed to create label");
+                label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![message.local_id.unwrap()];
@@ -902,7 +893,7 @@ async fn test_create_message_without_synced_conversation() {
     .into();
 
     conversation
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to create conversation");
 
@@ -1029,7 +1020,7 @@ async fn test_update_message() {
     stash.execute("DELETE FROM labels", vec![]).await.unwrap();
     test_create_message_dependencies_core(&tx).await;
     let _conv_id = test_create_message_dependencies(&tx).await;
-    test_starred_label().save_using(&tx).await.unwrap();
+    test_starred_label().save(&tx).await.unwrap();
     let message = test_message_with_metadata(vec![MY_LABEL_ID1.clone()], vec![]);
     let mut metadata_updated = test_message_with_metadata(
         vec![MY_LABEL_ID2.clone(), LabelId::starred().clone().into()],
@@ -1064,7 +1055,7 @@ async fn test_update_message() {
         .collect();
     db_message.flags = MessageFlags::from(metadata_updated.metadata.flags);
     db_message
-        .save_using(&stash)
+        .save(&stash)
         .await
         .expect("failed to update message");
 
@@ -1333,7 +1324,7 @@ pub async fn test_delete_local_message_does_not_change_conv_unread_count() {
         .unwrap();
     message.deleted = true;
     message
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to mark local message as deleted");
     let local_label_id = state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
@@ -1440,7 +1431,7 @@ pub async fn test_undelete_local_message() {
                 .expect("must have a value");
             message.deleted = true;
             message
-                .save_using(&tx)
+                .save(&tx)
                 .await
                 .expect("failed to mark local message as deleted");
         }
@@ -1451,7 +1442,7 @@ pub async fn test_undelete_local_message() {
                 .expect("must have a value");
             message.deleted = false;
             message
-                .save_using(&tx)
+                .save(&tx)
                 .await
                 .expect("failed to mark local message as deleted");
         }
@@ -1509,12 +1500,9 @@ async fn test_create_message_and_body() {
     };
     let (mut metadata, mut body_metadata, _) =
         Message::from_api_data(message.clone(), &tx).await.unwrap();
-    metadata
-        .save_using(&tx)
-        .await
-        .expect("failed to create message");
+    metadata.save(&tx).await.expect("failed to create message");
     body_metadata
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to store message body metadata in db");
     let db_message = Message::load(metadata.local_id.unwrap(), &tx)
@@ -1572,13 +1560,10 @@ async fn test_update_message_and_body() {
 
     let (mut metadata, mut body_metadata, _) =
         Message::from_api_data(message.clone(), &tx).await.unwrap();
-    metadata
-        .save_using(&tx)
-        .await
-        .expect("failed to create message");
+    metadata.save(&tx).await.expect("failed to create message");
 
     body_metadata
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to store message body metadata in db");
     let id = metadata.local_id.unwrap();
@@ -1601,7 +1586,7 @@ async fn test_update_message_and_body() {
         header: "new header".to_string(),
         ..body_metadata
     }
-    .save_using(&tx)
+    .save(&tx)
     .await
     .unwrap();
 
@@ -1674,11 +1659,8 @@ async fn test_create_message_and_body_with_attachments() {
     let (mut metadata, mut body_metadata, _) =
         Message::from_api_data(message.clone(), &tx).await.unwrap();
 
-    metadata
-        .save_using(&tx)
-        .await
-        .expect("failed to create message");
-    body_metadata.save_using(&tx).await.unwrap();
+    metadata.save(&tx).await.expect("failed to create message");
+    body_metadata.save(&tx).await.unwrap();
 
     let id = metadata.local_id.unwrap();
 
@@ -2309,7 +2291,7 @@ async fn exclusive_location_from_api_metadata(
     test_create_message_dependencies_core(&tx).await;
 
     for label in &mut labels {
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     let label_ids = labels.iter().map(|l| l.remote_id.clone().unwrap().into());
@@ -2359,13 +2341,13 @@ async fn message_exclusive_location_on_save(
     let tx = stash.connection();
 
     let mut address = test_address();
-    address.save_using(&tx).await.unwrap();
+    address.save(&tx).await.unwrap();
 
     let mut conversation = Conversation::default();
-    conversation.save_using(&tx).await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     for label in &mut labels {
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     let mut message = Message {
@@ -2379,7 +2361,7 @@ async fn message_exclusive_location_on_save(
     };
 
     // Action
-    message.save_using(&tx).await.unwrap();
+    message.save(&tx).await.unwrap();
 
     // Validation
     if let Some((is_system, expected)) = expected {
@@ -2422,7 +2404,7 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
     )
     .into();
     conversation
-        .save_using(tx)
+        .save(tx)
         .await
         .expect("failed to create conversation");
     conversation.local_id.unwrap().into()
