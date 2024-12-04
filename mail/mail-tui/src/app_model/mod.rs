@@ -96,10 +96,12 @@ impl AppModel {
 
         let user_db_path = cache_dir.join("users");
         let mail_cache_dir = cache_dir.join("mail");
+        let core_cache_dir = cache_dir.join("core");
 
         std::fs::create_dir_all(&cache_dir)?;
         std::fs::create_dir_all(&data_dir)?;
         std::fs::create_dir_all(&mail_cache_dir)?;
+        std::fs::create_dir_all(&core_cache_dir)?;
         std::fs::create_dir_all(&user_db_path)?;
 
         let log_file = cache_dir.join("app.log");
@@ -112,6 +114,7 @@ impl AppModel {
             let context = MailContext::new(
                 data_dir,
                 user_db_path,
+                core_cache_dir,
                 mail_cache_dir,
                 100 * 1024 * 1024,
                 Arc::new(keychain),
@@ -123,7 +126,7 @@ impl AppModel {
 
             let sessions_model = session_select::Model::new(&context).await?;
             Ok(Self {
-                context: Arc::new(context),
+                context,
                 state: AppState::SessionSelect(sessions_model),
                 popup: None,
                 bg_progress: None,

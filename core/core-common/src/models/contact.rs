@@ -1,7 +1,7 @@
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
-use crate::{CoreContextError, CoreContextResult};
+use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
@@ -357,7 +357,9 @@ impl Contact {
         let remote_id = local_id
             .counterpart::<Contact, _>(interface)
             .await?
-            .ok_or_else(|| CoreContextError::MissingRemoteId(local_id))?;
+            .ok_or_else(|| {
+                CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
+            })?;
 
         let mut contact_with_card = Contact::from(
             api.get_contact(remote_id.clone().into())

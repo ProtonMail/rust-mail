@@ -1,9 +1,10 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
+
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{LocalId, RemoteId};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
-use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::db::migrations::migrate_account_db;
 use crate::db::ChangeReceiver;
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError};
@@ -15,17 +16,19 @@ use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Config as ApiConfig;
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::Session as ApiCoreSession;
+use proton_api_core::session::{Session as ApiCoreSession, Session};
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio::task::JoinError;
-use tracing::{debug, error, info, Level};
+use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -43,8 +46,6 @@ pub enum CoreContextError {
     DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
-    #[error("RemoteId not present for local_id: {0}")]
-    MissingRemoteId(LocalId),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
@@ -53,6 +54,8 @@ pub enum CoreContextError {
     CacheError(#[from] CacheError),
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
+    #[error("Attempting to create more than one context for the user with id {0}")]
+    DuplicateContext(RemoteId),
     #[error("{0}")]
     Other(AnyhowError),
 }
@@ -89,6 +92,8 @@ pub enum ContactError {
     FullContactNotFound(String),
     #[error("Validation: {0}")]
     Validation(#[from] VcardValidationError),
+    #[error("Contact {0} does not have remote id")]
+    ContactDoesNotHaveRemoteId(LocalId),
 }
 
 /// Represents the state of an account.
@@ -191,6 +196,9 @@ pub struct Context {
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     api: Proton,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
+    active_user_contexts: Mutex<HashMap<RemoteId, Weak<UserContext>>>,
+    cache_path: PathBuf,
+    sender_image_cache_size: u32,
 }
 
 impl Context {
@@ -206,10 +214,13 @@ impl Context {
     /// * `initializers`: List of user database initializers that should be called.
     /// * `client`: Instance of the http client.
     /// * `network_callback`: Callback to be notified of network status changes.
+    /// * `cache_path`: Cache path for cached data.
+    /// * `sender_image_cache_size`: Maximum size of the sender image cache.
     ///
     /// # Errors
     /// Returns an error if the context failed to initialize correctly.
     ///
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
@@ -217,6 +228,8 @@ impl Context {
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
+        cache_path: impl Into<PathBuf>,
+        sender_image_cache_size: u32,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
@@ -240,6 +253,9 @@ impl Context {
             user_db_initializers: initializers,
             network_callback,
             api,
+            active_user_contexts: Mutex::new(HashMap::new()),
+            cache_path: cache_path.into(),
+            sender_image_cache_size,
         }))
     }
 
@@ -508,12 +524,10 @@ impl Context {
     ///
     /// Returns an error if the flow is not in the logged in state or if the user
     /// context could not be created.
-    #[tracing::instrument(level=Level::DEBUG, skip(self, flow, cache_path, cache_size))]
+    #[tracing::instrument(level=Level::DEBUG, skip(self, flow))]
     pub async fn user_context_from_login_flow(
         &self,
         flow: &Flow,
-        cache_path: PathBuf,
-        cache_size: u32,
     ) -> CoreContextResult<Arc<UserContext>> {
         if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
@@ -522,11 +536,8 @@ impl Context {
         let user_id: RemoteId = flow.user_id()?.to_owned().into();
         let session_id: RemoteId = flow.session_id()?.to_owned().into();
         let session = flow.session().to_owned();
-        let stash = self.new_user_db_pool(&user_id).await?;
 
-        Ok(Arc::new(
-            UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await?,
-        ))
+        self.new_user_context(user_id, session, session_id).await
     }
 
     /// Get a user context from an existing session.
@@ -538,8 +549,6 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
-        cache_path: PathBuf,
-        cache_size: u32,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -559,11 +568,8 @@ impl Context {
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
         let session = self.new_api_session(Some(session)).await?;
-        let stash = self.new_user_db_pool(&user_id).await?;
 
-        Ok(Arc::new(
-            UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await?,
-        ))
+        self.new_user_context(user_id, session, session_id).await
     }
 
     /// Logs out all sessions of an account without deleting the account's data.
@@ -641,20 +647,8 @@ impl Context {
         SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
     }
 
-    async fn new_user_db_pool(&self, user_id: &RemoteId) -> Result<Stash, MigratorError> {
-        let user_db_path = get_user_db_path(&self.user_db_path, user_id);
-        let stash = Stash::get_instance(&user_db_path)?;
-        debug!("initializing core database");
-        // initialize core db
-        migrate_account_db(&stash).await?;
-        migrate_core_db(&stash).await?;
-        debug!("initializing user ");
-        // initialize user db
-        for initializer in &self.user_db_initializers {
-            initializer.initialize(&stash)?;
-        }
-
-        Ok(stash)
+    fn user_db_path(&self, user_id: &RemoteId) -> PathBuf {
+        get_user_db_path(&self.user_db_path, user_id)
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
@@ -693,6 +687,64 @@ impl Context {
         } else {
             None
         }
+    }
+
+    /// Create a new instance of a use context.
+    ///
+    /// If the user context for a given user is still active, return
+    /// the existing user context rather than creating a new one.
+    ///
+    /// If we detect that an existing context is active for a user
+    /// but the session ids do not match we return an error.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the user context failed to initialize or
+    /// if we detect that we are trying to create duplicate contexts with
+    /// different session id.
+    async fn new_user_context(
+        &self,
+        user_id: RemoteId,
+        session: Session,
+        session_id: RemoteId,
+    ) -> Result<Arc<UserContext>, CoreContextError> {
+        let mut active_contexts = self.active_user_contexts.lock().await;
+
+        // clean up any context that may have been dropped.
+        active_contexts.retain(|_, value| value.strong_count() != 0);
+
+        if let Some(context) = active_contexts.get(&user_id) {
+            if let Some(upgraded) = context.upgrade() {
+                // If we are attempting to maintain uniqueness we can't
+                // return the same context with different sessions
+                // as this is not compatible.
+                if session_id != *upgraded.session_id() {
+                    return Err(CoreContextError::DuplicateContext(user_id));
+                }
+
+                return Ok(upgraded);
+            }
+        }
+
+        // context is not register or it is no longer active.
+        let db_path = self.user_db_path(&user_id);
+
+        let cache_path = self.cache_path.join(user_id.as_str());
+
+        let context = UserContext::new(
+            session,
+            &db_path,
+            &self.user_db_initializers,
+            user_id.clone(),
+            session_id,
+            cache_path,
+            self.sender_image_cache_size,
+        )
+        .await?;
+
+        active_contexts.insert(user_id, Arc::downgrade(&context));
+
+        Ok(context)
     }
 }
 

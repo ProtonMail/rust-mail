@@ -102,6 +102,7 @@ impl From<MailContextError> for UserLoginFlowError {
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(_) => Self::Unexpected(Unexpected::Internal),
+            MailContextError::DuplicateContext(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

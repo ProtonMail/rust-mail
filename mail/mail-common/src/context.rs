@@ -13,14 +13,17 @@ use proton_core_common::db::ChangeReceiver;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
+    UserContext,
 };
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use tokio::sync::Mutex;
 use tokio::task::JoinError;
 
 /// Errors that may occur while interacting with a MailContext.
@@ -62,6 +65,8 @@ pub enum MailContextError {
     ContactError(#[from] ContactError),
     #[error("Draft: {0}")]
     Draft(#[from] draft::Error),
+    #[error("Attempting to create more than one context for the user with id {0}")]
+    DuplicateContext(RemoteId),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -91,7 +96,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Stash(err) => MailContextError::Stash(err),
             CoreContextError::CacheError(err) => MailContextError::CacheError(err),
             CoreContextError::ContactError(err) => MailContextError::ContactError(err),
-            _ => todo!(),
+            CoreContextError::DuplicateContext(user_id) => Self::DuplicateContext(user_id),
         }
     }
 }
@@ -111,24 +116,33 @@ impl From<JoinError> for MailContextError {
         Self::Other(anyhow::Error::new(value))
     }
 }
-#[derive(Clone)]
 pub struct MailContext {
     core_context: Arc<Context>,
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
     pub(crate) mail_cache_size: u32,
+    active_user_contexts: Mutex<HashMap<RemoteId, Weak<MailUserContext>>>,
 }
 
 impl MailContext {
+    /// Create a new mail context.
+    ///
+    /// Note this function currently also creates a core context.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the context creation failed.
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
+        core_cache_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
         mail_cache_size: u32,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> Result<Self, MailContextError> {
+    ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
         let core_context = Context::new(
@@ -138,14 +152,17 @@ impl MailContext {
             initializers,
             api_config,
             network_callback,
+            core_cache_path,
+            mail_cache_size,
         )
         .await?;
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
             mail_cache_size,
-        })
+            active_user_contexts: Mutex::new(HashMap::new()),
+        }))
     }
 
     /// Creates MailContext instance based on provided core Context.
@@ -153,12 +170,13 @@ impl MailContext {
         core_context: Arc<Context>,
         mail_cache_path: PathBuf,
         mail_cache_size: u32,
-    ) -> Result<Self, MailContextError> {
-        Ok(Self {
+    ) -> Result<Arc<Self>, MailContextError> {
+        Ok(Arc::new(Self {
             core_context,
             mail_cache_path,
             mail_cache_size,
-        })
+            active_user_contexts: Mutex::new(HashMap::new()),
+        }))
     }
 
     /// Begin a login flow.
@@ -209,18 +227,14 @@ impl MailContext {
     /// Returns error if the flow is in an invalid state or there was an issue initializing
     /// the user database.
     pub async fn user_context_from_login_flow(
-        &self,
+        self: &Arc<Self>,
         login_flow: &Flow,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_login_flow(
-                login_flow,
-                self.mail_cache_path.clone(),
-                self.mail_cache_size,
-            )
+            .user_context_from_login_flow(login_flow)
             .await?;
-        MailUserContext::new(self.clone(), ctx).await
+        Arc::clone(self).new_user_context(ctx).await
     }
 
     /// Create a new context from an existing session.
@@ -228,14 +242,11 @@ impl MailContext {
     /// # Errors
     /// Returns error if we failed to decrypt the user session or access the user database.
     pub async fn user_context_from_session(
-        &self,
+        self: &Arc<Self>,
         session: &CoreSession,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self
-            .core_context
-            .user_context_from_session(session, self.mail_cache_path.clone(), self.mail_cache_size)
-            .await?;
-        MailUserContext::new(self.clone(), ctx).await
+        let ctx = self.core_context.user_context_from_session(session).await?;
+        Arc::clone(self).new_user_context(ctx).await
     }
 
     /// Get all available accounts.
@@ -441,6 +452,36 @@ impl MailContext {
     /// Get the connection to the session database.
     pub fn session_stash(&self) -> &Stash {
         self.core_context.stash()
+    }
+
+    /// Create a new user context or return an existing one.
+    async fn new_user_context(
+        self: Arc<Self>,
+        core_context: Arc<UserContext>,
+    ) -> Result<Arc<MailUserContext>, MailContextError> {
+        let mut active_contexts = self.active_user_contexts.lock().await;
+
+        active_contexts.retain(|_, ctx| ctx.strong_count() != 0);
+
+        if let Some(existing) = active_contexts.get(core_context.user_id()) {
+            if let Some(upgraded) = existing.upgrade() {
+                // This should be handled by the core context creating,
+                // but if for some reason it slips through the cracks,
+                // catch it again.
+                if upgraded.session_id() != core_context.session_id() {
+                    return Err(MailContextError::DuplicateContext(
+                        core_context.user_id().clone(),
+                    ));
+                }
+                return Ok(upgraded);
+            }
+        }
+
+        let ctx = MailUserContext::new(self.clone(), core_context).await?;
+
+        active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
+
+        Ok(ctx)
     }
 }
 

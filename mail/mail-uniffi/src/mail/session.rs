@@ -17,6 +17,7 @@ use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use proton_core_common::db::ChangeReceiver;
 use proton_core_common::ContactError;
@@ -40,7 +41,7 @@ use tracing::debug;
 ///
 #[derive(uniffi::Object)]
 pub struct MailSession {
-    ctx: MailContext,
+    ctx: Arc<MailContext>,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -82,6 +83,8 @@ pub enum MailSessionError {
     ContactError(#[from] ContactError),
     #[error("Draft: {0}")]
     Draft(#[from] draft::Error),
+    #[error("Attempting to create more than one context for the user with id {0}")]
+    DuplicateContext(RemoteId),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -146,13 +149,16 @@ impl MailSession {
 
             let session_path = PathBuf::from(params.session_dir);
             let user_path = PathBuf::from(params.user_dir);
-            let mail_cache_path = PathBuf::from(params.mail_cache_dir);
+            let cache_path = PathBuf::from(params.mail_cache_dir);
+            let mail_cache_path = cache_path.join("mail-cache");
+            let core_cache_path = cache_path.join("core-cache");
 
             // create directories.
             debug!("Creating directories");
             std::fs::create_dir_all(&session_path)?;
             std::fs::create_dir_all(&user_path)?;
             std::fs::create_dir_all(&mail_cache_path)?;
+            std::fs::create_dir_all(&core_cache_path)?;
 
             // Generate session key;
             debug!("Checking keychain");
@@ -176,6 +182,7 @@ impl MailSession {
             let mail_ctx = MailContext::new(
                 session_path,
                 user_path,
+                core_cache_path,
                 mail_cache_path,
                 params.mail_cache_size,
                 Arc::from(FFIKeyChain::from(key_chain)),
@@ -662,6 +669,7 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::ContactError(e) => Self::ContactError(e),
             MailContextError::Other(err) => Self::Other(err),
             MailContextError::Draft(err) => Self::Draft(err),
+            MailContextError::DuplicateContext(id) => Self::DuplicateContext(id),
         }
     }
 }

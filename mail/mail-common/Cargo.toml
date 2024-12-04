@@ -39,7 +39,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap = { workspace = true }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
 insta = { workspace = true }

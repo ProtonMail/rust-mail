@@ -199,6 +199,8 @@ impl TestContext {
             all_initializers,
             api_config.clone(),
             None,
+            tmp_dir.path().join("core-cache"),
+            4 * 1024 * 1024,
         )
         .await
         .expect("failed to create core context");
@@ -261,13 +263,8 @@ impl TestContext {
     ///
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
-        let cache_path = self.tmp_dir.path().join("image_cache");
         self.context
-            .user_context_from_session(
-                &self.core_session,
-                cache_path,
-                100_000, // ~100kB
-            )
+            .user_context_from_session(&self.core_session)
             .await
             .expect("failed to create user context")
     }
