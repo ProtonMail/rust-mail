@@ -10,12 +10,15 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    filter_responses, AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction,
+    filter_responses, ActionError, AllBottomBarMessageActions, BottomBarActions,
+    MovableSystemFolderAction,
 };
 use crate::models::*;
 use crate::{find_in_query, Mailbox};
 use indoc::{formatdoc, indoc};
-use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, Queue};
+use proton_action_queue::queue::{
+    ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue,
+};
 use stash::exports::SqliteError;
 use std::collections::HashSet;
 
@@ -223,7 +226,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
         queue.apply_action(action).await
     }
@@ -243,11 +246,11 @@ impl Message {
     pub async fn action_star(
         queue: &Queue,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await
-            .map_err(|e| ActionError::Queue(e.into()))?
+            .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
         queue.apply_action(action).await
@@ -267,7 +270,7 @@ impl Message {
     pub async fn action_unstar(
         queue: &Queue,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await?
@@ -292,7 +295,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
         queue.apply_action(action).await
     }
@@ -313,9 +316,13 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Read>, ActionError<Read>> {
+    ) -> Result<ActionOutput<Read>, QueueActionError<Read>> {
         let action = Read::new(label_id, message_ids);
-        queue.apply_action(action).await
+        match queue.apply_action(action).await {
+            Ok(result) => Ok(result),
+            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+            Err(other) => Err(other),
+        }
     }
 
     /// Mark multiple messages as unread.
@@ -335,9 +342,13 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Unread>, ActionError<Unread>> {
+    ) -> Result<ActionOutput<Unread>, QueueActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
-        queue.apply_action(action).await
+        match queue.apply_action(action).await {
+            Ok(result) => Ok(result),
+            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+            Err(other) => Err(other),
+        }
     }
 
     /// Mark multiple messages as read.
@@ -356,7 +367,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
         queue.apply_action(action).await
     }
@@ -379,7 +390,7 @@ impl Message {
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Move>, ActionError<Move>> {
+    ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
         queue.apply_action(action).await
     }

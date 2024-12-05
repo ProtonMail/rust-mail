@@ -348,6 +348,20 @@ pub struct ActionOutput<T: Action> {
     pub remote: ActionRemoteOutput<T::RemoteOutput>,
 }
 
+impl<T> Default for ActionOutput<T>
+where
+    T: Action,
+    T::LocalOutput: Default,
+    T::RemoteOutput: Default,
+{
+    fn default() -> Self {
+        Self {
+            local: T::LocalOutput::default(),
+            remote: ActionRemoteOutput::Executed(T::RemoteOutput::default()),
+        }
+    }
+}
+
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
 /// [`Queue::queue_action_with_metadata`].
 ///

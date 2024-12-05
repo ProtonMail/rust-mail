@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+  - Marking read (or unread) already read (or unread) messages or conversations is now no-op.
+
 ## [0.23.0] - 2024-11-28
 
 ### Changed

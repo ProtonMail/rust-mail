@@ -126,6 +126,37 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate new mock expectations for marking conversations as unread.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`    - The list of conversation IDs to label.
+    /// * `failed` - The list of conversation IDs for which we want to
+    ///              simulate failure.
+    ///
+    pub async fn mock_mark_conversation_unread(
+        &self,
+        ids: Vec<ApiRemoteId>,
+        failed: Vec<ApiRemoteId>,
+    ) {
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        let request = PutConversationsReadRequest { ids: ids.clone() };
+        let resp = PutConversationsReadResponse {
+            responses: build_conv_responses(&ids, failed),
+        };
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/conversations/unread"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate new mock expectations for retrieving a `conversation` and associated `messages`'s
     /// metadata.
     ///
