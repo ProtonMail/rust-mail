@@ -13,11 +13,11 @@ use crate::widgets::{
     AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalId;
-use proton_mail_common::datatypes::{ContextualConversation, MimeType};
-use proton_mail_common::decrypted_message::DecryptedMessageBody;
+use proton_mail_common::datatypes::ContextualConversation;
+use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{
     Label, MailSettings, Message as MailMessage, MessageDataSource, PaginatorFilter,
@@ -190,7 +190,7 @@ impl MessagesState {
         ))
     }
 
-    pub fn open_message_body(&mut self, _: &MailContext, mbox: &Mailbox) -> Command<Messages> {
+    pub fn open_message_body(&mut self, mbox: &Mailbox) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
             return Command::None;
@@ -199,23 +199,31 @@ impl MessagesState {
         let mbox = mbox.clone();
         self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
 
-        Command::task(async move {
-            let decrypted =
-                match MailMessage::message_body(&mbox.user_context(), metadata.local_id.unwrap())
+        Command::task(async {
+            #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
+            let c: anyhow::Result<_> = (|| async move {
+                let decrypted =
+                    MailMessage::message_body(&mbox.user_context(), metadata.local_id.unwrap())
+                        .await
+                        .context("Failed to get message body")?;
+                let html = decrypted
+                    .transformed(
+                        &mbox.user_context(),
+                        proton_mail_common::decrypted_message::RemoteContent::Default,
+                        BlockQuote::default(),
+                    )
                     .await
-                {
-                    Ok(m) => m,
-                    Err(e) => {
-                        let e = anyhow!("Failed to get message body {e}");
-                        tracing::error!("{e}");
-                        return Command::message(e.into());
-                    }
-                };
+                    .context("Failed to transform html")?;
+                let html = html_to_text(&html.body)?;
+                Ok(Box::new(DecryptedMessage::new(
+                    metadata,
+                    decrypted,
+                    Some(html),
+                )))
+            })()
+            .await;
 
-            let result = process_message(&decrypted)
-                .map(|m| Box::new(DecryptedMessage::new(metadata, decrypted, m)));
-
-            Command::message(MessageMessage::OpenMessageBodyResult(result).into())
+            Command::message(MessageMessage::OpenMessageBodyResult(c).into())
         })
     }
 
@@ -367,7 +375,7 @@ impl StateHandler for MessagesState {
 
     fn update(
         &mut self,
-        ctx: &MailContext,
+        _: &MailContext,
         message: Message,
         mbox: &Mailbox,
         _: &Arc<MailSettings>,
@@ -378,7 +386,7 @@ impl StateHandler for MessagesState {
 
         match message {
             MessageMessage::OpenMessageBody => {
-                return self.open_message_body(ctx, mbox);
+                return self.open_message_body(mbox);
             }
             MessageMessage::OpenMessageBodyResult(r) => {
                 self.display_message(r);
@@ -558,18 +566,8 @@ impl DecryptedMessage {
     }
 }
 
-pub(super) fn process_message(message: &DecryptedMessageBody) -> anyhow::Result<Option<String>> {
-    match message.metadata.mime_type {
-        MimeType::TextPlain => Ok(None),
-        MimeType::TextHtml => html_to_text(&message.body).map(Some),
-        _ => Err(anyhow!(
-            "Unsupported mime type: {:?}",
-            message.metadata.mime_type
-        )),
-    }
-}
-
 fn html_to_text(message: &str) -> anyhow::Result<String> {
+    // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
     let config = html2text::config::plain();
     config
