@@ -15,6 +15,7 @@ use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use std::error::Error;
+use std::fs::read_to_string;
 use std::path::Path;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
@@ -358,10 +359,8 @@ impl AppStateHandler for AppState {
 }
 
 fn app_tracing_env_filter() -> EnvFilter {
-    EnvFilter::builder()
-        .with_default_directive(LevelFilter::TRACE.into())
-        .parse(
-            "info,\
+    let directives = read_to_string("log_directives").unwrap_or_else(|_| {
+        "info,\
         proton_mail_tui=debug,\
         proton_api_core=debug,\
         proton_mail_db=trace,\
@@ -370,8 +369,12 @@ fn app_tracing_env_filter() -> EnvFilter {
         proton_core_common=trace,\
         proton_mail_common=trace,\
         proton_event_loop=trace,\
-        proton_action_queue=trace",
-        )
+        proton_action_queue=trace"
+            .to_owned()
+    });
+    EnvFilter::builder()
+        .with_default_directive(LevelFilter::TRACE.into())
+        .parse(directives)
         .expect("Error parsing tracing directives")
 }
 
