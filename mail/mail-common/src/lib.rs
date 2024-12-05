@@ -89,7 +89,7 @@ pub enum AppError {
     LocalIdNotFound(String, RemoteId),
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalId),
-    #[error("The cid {0} does not exist. The available ones are:\n {1}")]
+    #[error("The cid {0} does not exist. The available ones are: [{1}]")]
     UnknownCid(String, String),
     #[error("Message with ID {0} has no remote ID")]
     MessageHasNoRemoteId(LocalId),

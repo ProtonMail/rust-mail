@@ -54,6 +54,8 @@ pub enum MailboxError {
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
+    #[error("Error: {0}")]
+    Other(#[from] anyhow::Error),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
@@ -72,17 +74,6 @@ pub struct Mailbox {
     label_id: LocalId,
     view_mode: ViewMode,
 }
-
-// TODO: Work out why this isn't used
-// pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
-//     fn on_background_result(&self, result: MailboxResult<T>);
-// }
-//
-// impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> for F {
-//     fn on_background_result(&self, result: MailboxResult<T>) {
-//         (self)(result);
-//     }
-// }
 
 impl Mailbox {
     pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {

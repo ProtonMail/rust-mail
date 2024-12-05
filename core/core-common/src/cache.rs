@@ -16,6 +16,7 @@
 //!         - the returned value is stored in that file
 //!         - the path to this file is returned.
 
+use anyhow::Context;
 use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
@@ -26,7 +27,7 @@ use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_file, set_permissions, File, OpenOptions, Permissions};
 use std::future::Future;
 use std::hash::Hash;
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::marker::PhantomData;
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -67,7 +68,7 @@ pub enum CacheError {
 
     /// Error from IO
     #[error("IO Error: {0}")]
-    IO(#[from] std::io::Error),
+    IO(anyhow::Error),
 
     /// Error from `QuickCache`
     #[error("QuickCache Error: {0}")]
@@ -303,10 +304,14 @@ where
         );
 
         // create file directory
-        create_dir_all(cache_buf.clone())?;
-        // ToDo: ET-296 Do windows counterpart
+        create_dir_all(&cache_buf)
+            .with_context(|| format!("could not create dir {cache_buf:?}"))
+            .map_err(CacheError::IO)?;
+        // TODO: ET-296 Do windows counterpart
         if cfg!(unix) {
-            set_permissions(cache_buf.clone(), Permissions::from_mode(0o700))?;
+            set_permissions(&cache_buf, Permissions::from_mode(0o700))
+                .with_context(|| format!("could not set permissions for {cache_buf:?}"))
+                .map_err(CacheError::IO)?;
         }
 
         Ok(Self {
@@ -440,7 +445,11 @@ where
     pub fn get_item(&self, key: &Config::Key) -> CacheResult<Option<impl Read>> {
         self.cache
             .get(key)
-            .map(|m| File::open(m.file_path).map_err(CacheError::IO))
+            .map(|m| {
+                File::open(&m.file_path)
+                    .with_context(|| format!("could not open file {:?} for {key:?}", &m.file_path))
+                    .map_err(CacheError::IO)
+            })
             .transpose()
     }
 
@@ -476,6 +485,7 @@ where
     pub async fn get_path_or_insert(
         &self,
         key: &Config::Key,
+        // TODO: use an `impl AsyncFnOnce` instead https://github.com/rust-lang/rust/pull/132706
         with: impl Future<Output = CacheResult<Vec<u8>>>,
     ) -> CacheResult<PathBuf> {
         match self.cache.get_value_or_guard_async(key).await {
@@ -534,7 +544,9 @@ where
         // Eviction is not called in this case
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
-            remove_file(path)?;
+            remove_file(&path)
+                .with_context(|| format!("could not remove file {path:?} for {key:?}"))
+                .map_err(CacheError::IO)?;
             key.after_evict(self.resource.clone());
         }
         self.cache.remove(key);
@@ -603,22 +615,27 @@ where
         extra: Option<&Config::ExtraMetadata>,
     ) -> CacheResult<Metadata<Config::ExtraMetadata>> {
         let file_path = self.path_from_key(key, extra)?;
-        // ToDo: ET-296 Do windows counterpart
-        let mut file = if cfg!(unix) {
-            OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .mode(0o600)
-                .open(file_path.clone())?
-        } else {
-            File::create(file_path.clone())?
-        };
-        file.write_all(value)?;
-        Ok(Metadata {
-            file_path,
-            size: file.metadata()?.len(),
-            extra: extra.cloned(),
-        })
+        // Poor's man try block
+        (|| {
+            // TODO: ET-296 Do windows counterpart
+            let mut file = if cfg!(unix) {
+                OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .mode(0o600)
+                    .open(&file_path)?
+            } else {
+                File::create(&file_path)?
+            };
+            file.write_all(value)?;
+            Ok::<_, io::Error>(Metadata {
+                file_path: file_path.clone(),
+                size: file.metadata()?.len(),
+                extra: extra.cloned(),
+            })
+        })()
+        .with_context(|| format!("could not create file {file_path:?} for key {key:?}"))
+        .map_err(CacheError::IO)
     }
 }
