@@ -4,6 +4,10 @@ A text based interface for all the Proton Mail rust crates. It's mostly intended
 for testing, but will eventually be able to cover all the mail features that we
 are currently developing.
 
+## Logging
+
+You can set up custom [logging directives](https://docs.rs/tracing-subscriber/0.3.18/tracing_subscriber/filter/struct.EnvFilter.html) by creating a `log_directives` file.
+
 ## Architecture
 
 The setup is using [`ratatui`](https://ratatui.rs/) to render in the terminal
