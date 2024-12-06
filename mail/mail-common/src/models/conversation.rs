@@ -7,8 +7,8 @@ use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    filter_responses, ConversationAction, ConversationAvailableActions, GeneralActions,
-    LabelAsAction, MoveAction, MoveItemAction,
+    filter_responses, ActionError, ConversationAction, ConversationAvailableActions,
+    GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
@@ -21,7 +21,7 @@ use crate::{actions::conversations::Delete, AppError};
 use anyhow::{anyhow, Context};
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
+use proton_action_queue::queue::{ActionError as QueueActionError, ActionOutput, Queue};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Proton;
@@ -175,7 +175,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, conversation_ids);
         queue.apply_action(action).await
     }
@@ -194,11 +194,11 @@ impl Conversation {
     pub async fn action_star(
         queue: &proton_action_queue::queue::Queue,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await
-            .map_err(|e| ActionError::Queue(e.into()))?
+            .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, conversation_ids.into_iter().map_into());
         queue.apply_action(action).await
@@ -218,7 +218,7 @@ impl Conversation {
     pub async fn action_unstar(
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await?
@@ -243,7 +243,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
         queue.apply_action(action).await
     }
@@ -265,9 +265,13 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<MarkRead>, ActionError<MarkRead>> {
+    ) -> Result<ActionOutput<MarkRead>, QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        match queue.apply_action(action).await {
+            Ok(result) => Ok(result),
+            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+            Err(other) => Err(other),
+        }
     }
 
     /// Mark multiple conversations as unread.
@@ -286,9 +290,13 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<MarkUnread>, ActionError<MarkUnread>> {
+    ) -> Result<ActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        match queue.apply_action(action).await {
+            Ok(result) => Ok(result),
+            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+            Err(other) => Err(other),
+        }
     }
 
     /// Mark multiple conversations as read.
@@ -307,7 +315,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.apply_action(action).await
     }
@@ -330,7 +338,7 @@ impl Conversation {
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
-    ) -> Result<ActionOutput<Move>, ActionError<Move>> {
+    ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
         queue.apply_action(action).await
     }
@@ -351,7 +359,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: impl IntoIterator<Item = LocalId>,
-    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.apply_action(action).await
     }

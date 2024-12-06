@@ -1,12 +1,13 @@
 use crate::test_context::MailTestContext;
+use itertools::Itertools;
 use proton_api_core::services::proton::common::{RemoteId as ApiRemoteId, RemoteId};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::requests::{
-    PostCreateDraftRequest, PutMessagesLabelRequest, PutMessagesUnlabelRequest,
-    PutUpdateDraftRequest,
+    PostCreateDraftRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    PutMessagesUnlabelRequest, PutMessagesUnreadRequest, PutUpdateDraftRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, Message as ApiMessage, MessageMetadata, MimeType,
@@ -112,6 +113,71 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesUnreadResponse { responses: vec![] }),
             )
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for marking messages as read.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// messages.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - The list of message IDs to mark read.
+    /// * `failed_ids`  - The list of message IDs for which we want to
+    ///                   simulate failure.
+    ///
+    pub async fn mock_put_messages_read(
+        &self,
+        message_ids: Vec<ApiRemoteId>,
+        failed_ids: Vec<ApiRemoteId>,
+    ) {
+        let message_ids = message_ids.into_iter().collect_vec();
+        let request = PutMessagesReadRequest {
+            ids: message_ids.clone(),
+        };
+        let resp = PutMessagesReadResponse {
+            responses: build_message_responses(&message_ids, failed_ids),
+        };
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/read"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for marking messages as unread.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// messages.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - The list of message IDs to mark unread.
+    /// * `failed_ids`  - The list of message IDs for which we want to
+    ///                   simulate failure.
+    pub async fn mock_put_messages_unread(
+        &self,
+        message_ids: Vec<ApiRemoteId>,
+        failed_ids: Vec<ApiRemoteId>,
+    ) {
+        let message_ids = message_ids.into_iter().collect_vec();
+        let request = PutMessagesUnreadRequest {
+            ids: message_ids.clone(),
+        };
+        let resp = PutMessagesUnreadResponse {
+            responses: build_message_responses(&message_ids, failed_ids),
+        };
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/unread"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
             .mount(self.mock_server())
             .await;
     }
