@@ -8,7 +8,7 @@ use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessa
 use crate::app_model::watcher::WatchHandle;
 use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
-use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
+use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
     AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
@@ -502,9 +502,9 @@ impl DecryptedMessage {
 
         let date = date_from_timestamp(metadata.time);
         let sender = format_sender(&metadata.sender);
-        let to_list = format_senders(&metadata.to_list);
-        let cc_list = format_senders(&metadata.cc_list);
-        let bcc_list = format_senders(&metadata.bcc_list);
+        let to_list = format_recipients(&metadata.to_list);
+        let cc_list = format_recipients(&metadata.cc_list);
+        let bcc_list = format_recipients(&metadata.bcc_list);
         let label_list = metadata
             .custom_labels
             .iter()

@@ -4,8 +4,8 @@ use super::*;
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
-    Disposition as ApiDisposition, MessageAddress as ApiMessageAddress,
-    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
+    MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
 use proton_core_common::models::Address;
@@ -86,7 +86,7 @@ fn test_attachment() -> ApiAttachment {
         key_packets: RealKeyPackets::from("key_packets"),
         signature: Some(RealAttachmentSignature::from("signature")),
         enc_signature: Some(RealAttachmentEncryptedSignature::from("enc_signature")),
-        sender: Some(ApiMessageAddress {
+        sender: Some(ApiMessageSender {
             address: "fooo".to_owned(),
             name: "fooo".to_owned(),
             is_proton: false,

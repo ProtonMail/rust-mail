@@ -5,7 +5,8 @@ use proton_core_common::datatypes::{
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_mail_common::datatypes::{
-    ConversationCount, MessageAddress, MessageAddresses, MessageCount,
+    ConversationCount, MessageCount, MessageRecipient, MessageRecipients, MessageSender,
+    MessageSenders,
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
@@ -116,7 +117,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
     }
 
     #[allow(clippy::items_after_statements)]
-    fn extend_addresses(addresses: &mut MessageAddresses, new_addresses: &[MessageAddress]) {
+    fn extend_senders(addresses: &mut MessageSenders, new_addresses: &[MessageSender]) {
         for addr in new_addresses {
             if !addresses
                 .value
@@ -124,6 +125,19 @@ pub async fn prepare_and_patch_db_state_and_skip(
                 .any(|a| a.address == *addr.address)
             {
                 addresses.value.push(addr.clone());
+            }
+        }
+    }
+
+    #[allow(clippy::items_after_statements)]
+    fn extend_recipients(recipients: &mut MessageRecipients, new_recipients: &[MessageRecipient]) {
+        for addr in new_recipients {
+            if !recipients
+                .value
+                .iter_mut()
+                .any(|a| a.address == *addr.address)
+            {
+                recipients.value.push(addr.clone());
             }
         }
     }
@@ -149,9 +163,9 @@ pub async fn prepare_and_patch_db_state_and_skip(
         if message.unread {
             conv.num_unread += 1;
         }
-        extend_addresses(&mut conv.senders, &[message.sender.clone()]);
-        extend_addresses(&mut conv.recipients, &message.to_list.value);
-        extend_addresses(&mut conv.recipients, &message.cc_list.value);
+        extend_senders(&mut conv.senders, &[message.sender.clone()]);
+        extend_recipients(&mut conv.recipients, &message.to_list.value);
+        extend_recipients(&mut conv.recipients, &message.cc_list.value);
 
         for label_id in &message.label_ids {
             let conv_label = find_conversation_label(conv, label_id);

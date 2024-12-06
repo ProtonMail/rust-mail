@@ -3,8 +3,8 @@
 use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
-    attachment, ContextualConversation, ConversationCount, LabelColor, LabelType, MessageAddress,
-    MessageFlags, MovableSystemFolder, SystemLabel, SystemLabelId,
+    attachment, ContextualConversation, ConversationCount, LabelColor, LabelType, MessageFlags,
+    MessageSender, MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
 use lazy_static::lazy_static;
@@ -280,7 +280,7 @@ mod first_unread_message {
         Message {
             local_id: Some(id),
             unread,
-            sender: MessageAddress {
+            sender: MessageSender {
                 address: String::new(),
                 bimi_selector: None,
                 display_sender_image: false,

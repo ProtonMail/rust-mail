@@ -1,7 +1,8 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, MessageAddress, MessageAddresses, MimeType,
+    AttachmentMetadata, Disposition, MessageRecipient, MessageRecipients, MessageSender,
+    MessageSenders, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::{Draft, Error, ReplyMode};
@@ -453,8 +454,8 @@ impl Save {
             local_address_id: address.local_id.unwrap(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
-            cc_list: to_message_addresses(&self.cc_list),
-            bcc_list: to_message_addresses(&self.bcc_list),
+            cc_list: to_message_recipients(&self.cc_list),
+            bcc_list: to_message_recipients(&self.bcc_list),
             deleted: false,
             exclusive_location: None,
             expiration_time: 0,
@@ -467,7 +468,7 @@ impl Save {
             num_attachments: num_attachments.try_into().unwrap_or_default(),
             display_order,
             reply_tos: Default::default(),
-            sender: MessageAddress {
+            sender: MessageSender {
                 address: address.email.clone(),
                 bimi_selector: None,
                 display_sender_image: false,
@@ -479,7 +480,7 @@ impl Save {
             snooze_time: 0,
             subject: self.subject.clone(),
             time,
-            to_list: to_message_addresses(&self.to_list),
+            to_list: to_message_recipients(&self.to_list),
             unread: false,
             custom_labels: vec![],
             row_id: None,
@@ -498,11 +499,11 @@ impl Save {
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
-        message.to_list = to_message_addresses(&self.to_list);
-        message.cc_list = to_message_addresses(&self.cc_list);
-        message.bcc_list = to_message_addresses(&self.bcc_list);
+        message.to_list = to_message_recipients(&self.to_list);
+        message.cc_list = to_message_recipients(&self.cc_list);
+        message.bcc_list = to_message_recipients(&self.bcc_list);
         message.num_attachments = num_attachments.try_into().unwrap_or_default();
-        message.sender = MessageAddress {
+        message.sender = MessageSender {
             address: address.email.clone(),
             bimi_selector: None,
             display_sender_image: false,
@@ -537,7 +538,13 @@ impl Save {
             num_unread: 0,
             display_order,
             recipients: Default::default(),
-            senders: to_message_addresses(std::iter::once(&address.email)),
+            senders: MessageSenders {
+                value: vec![MessageSender {
+                    address: address.email.clone(),
+                    is_proton: true,
+                    ..Default::default()
+                }],
+            },
             size: body_len,
             subject: self.subject.clone(),
             is_known: false,
@@ -559,19 +566,17 @@ impl Save {
     }
 }
 
-fn to_message_addresses<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageAddresses {
-    MessageAddresses {
+fn to_message_recipients<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageRecipients {
+    MessageRecipients {
         value: addresses
             .into_iter()
             .map(|email| {
                 //TODO(ET-1416): Resolve contact info.
-                MessageAddress {
+                MessageRecipient {
                     address: email.clone(),
-                    bimi_selector: None,
-                    display_sender_image: false,
                     is_proton: false,
-                    is_simple_login: false,
                     name: String::new(),
+                    group: None,
                 }
             })
             .collect(),

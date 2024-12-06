@@ -8,9 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `MessageAddress` type has been split into `MessageSender`, `MessageRecipient`
+     and `MessageReplyTo` types as they were incorrectly mapped.
+     - This affect the `Conversation` and `Message` types.
+  - `avatar_information_from_message_address` has been split into
+    - `avatar_information_from_message_sender`
+    - `avatar_information_from_message_recipient`
+  - `avatar_information_from_message_addresses` has been split into
+    - `avatar_information_from_message_senderes`
+    - `avatar_information_from_message_recipients`
+
 ### Fix
 
   - Marking read (or unread) already read (or unread) messages or conversations is now no-op.
+
 
 ## [0.23.0] - 2024-11-28
 

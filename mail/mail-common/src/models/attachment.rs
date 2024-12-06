@@ -1,6 +1,6 @@
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, MessageAddress,
+    KeyPackets, MessageSender,
 };
 use crate::models::*;
 use crate::AppError;
@@ -141,7 +141,7 @@ pub struct Attachment {
 
     /// Sender of the attachment if received from an external address.
     #[DbField]
-    pub sender: Option<MessageAddress>,
+    pub sender: Option<MessageSender>,
 
     /// TODO: Document this field.
     #[DbField]

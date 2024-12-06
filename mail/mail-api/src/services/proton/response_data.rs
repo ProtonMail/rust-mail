@@ -331,7 +331,7 @@ pub struct Attachment {
     pub name: String,
 
     /// TODO: Document this field.
-    pub sender: Option<MessageAddress>,
+    pub sender: Option<MessageSender>,
 
     /// See [`AttachmentSignature`]
     pub signature: Option<AttachmentSignature>,
@@ -442,12 +442,12 @@ pub struct Conversation {
     /// TODO: Document this field.
     #[serde(default)]
     #[serde_as(deserialize_as = "DefaultOnNull")]
-    pub recipients: Vec<MessageAddress>,
+    pub recipients: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
     #[serde(default)]
     #[serde_as(deserialize_as = "DefaultOnNull")]
-    pub senders: Vec<MessageAddress>,
+    pub senders: Vec<MessageSender>,
 
     /// TODO: Document this field.
     pub size: u64,
@@ -1148,11 +1148,11 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "BCCList", default)]
-    pub bcc_list: Vec<MessageAddress>,
+    pub bcc_list: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
     #[serde(rename = "CCList", default)]
-    pub cc_list: Vec<MessageAddress>,
+    pub cc_list: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
     pub expiration_time: u64,
@@ -1188,11 +1188,11 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(default)]
-    pub reply_tos: Vec<MessageAddress>,
+    pub reply_tos: Vec<MessageReplyTo>,
 
     /// TODO: Document this field.
     #[serde(default)]
-    pub sender: MessageAddress,
+    pub sender: MessageSender,
 
     /// TODO: Document this field.
     pub size: u64,
@@ -1209,7 +1209,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(default)]
-    pub to_list: Vec<MessageAddress>,
+    pub to_list: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
@@ -1236,7 +1236,7 @@ impl Default for MessageMetadata {
             num_attachments: 0,
             order: 0,
             reply_tos: Vec::default(),
-            sender: MessageAddress::default(),
+            sender: MessageSender::default(),
             size: 0,
             snooze_time: 0,
             subject: String::default(),
@@ -1252,7 +1252,7 @@ impl Default for MessageMetadata {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct MessageAddress {
+pub struct MessageSender {
     /// TODO: Document this field.
     // TODO: Proper email parsing
     pub address: String,
@@ -1276,6 +1276,39 @@ pub struct MessageAddress {
     pub is_simple_login: bool,
 
     /// TODO: Document this field.
+    pub name: String,
+}
+
+/// Recipient of a message.
+#[serde_as]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MessageRecipient {
+    /// Email of the recipient
+    pub address: String,
+
+    /// Whether the recipient is a proton address.
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
+    pub is_proton: bool,
+
+    /// Display name of the recipient,empty if none.
+    pub name: String,
+
+    /// Name of the address group this recipient belongs too.
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct MessageReplyTo {
+    /// Email of the recipient
+    pub address: String,
+    /// Display name of the recipient,empty if none.
     pub name: String,
 }
 

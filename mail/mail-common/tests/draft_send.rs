@@ -8,7 +8,7 @@ use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel, MessageAddress, MessageFlags,
+    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
@@ -43,13 +43,11 @@ async fn basic_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     let mut message = message_body_test_message_simple();
-    message.metadata.to_list.push(MessageAddress {
+    message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".to_string(),
-        bimi_selector: None,
-        display_sender_image: false,
         is_proton: false,
-        is_simple_login: false,
         name: "".to_string(),
+        group: None,
     });
     let mut sent_message = message.clone();
     message.metadata.label_ids.push(LabelId::drafts().into());

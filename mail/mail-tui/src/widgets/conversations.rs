@@ -1,3 +1,4 @@
+use crate::widgets::utils::format_senders;
 use crate::widgets::{utils, AsTable};
 use proton_mail_common::datatypes::ContextualConversation;
 use ratatui::layout::Constraint;
@@ -11,18 +12,7 @@ impl AsTable for Vec<ContextualConversation> {
             let date = utils::date_from_timestamp(conv.time);
             let num_attachments = conv.attachments_metadata.len();
             let num_labels = conv.custom_labels.len();
-            let senders = {
-                if conv.senders.value.len() == 1 {
-                    utils::sender_name(&conv.senders.value[0]).to_string()
-                } else {
-                    conv.senders
-                        .value
-                        .iter()
-                        .map(|s| utils::sender_name(s).to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                }
-            };
+            let senders = format_senders(&conv.senders);
 
             let num_messages = if conv.num_messages == 0 {
                 String::new()

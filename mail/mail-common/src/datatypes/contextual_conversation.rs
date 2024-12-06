@@ -1,6 +1,7 @@
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
-    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageAddresses, MobileActions,
+    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageRecipients,
+    MessageSenders, MobileActions,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
@@ -72,10 +73,10 @@ pub struct ContextualConversation {
     pub total_unread: u64,
 
     /// Address of the recipients of the messages contained within.
-    pub recipients: MessageAddresses,
+    pub recipients: MessageRecipients,
 
     /// Address of all the senders in the messages.
-    pub senders: MessageAddresses,
+    pub senders: MessageSenders,
 
     /// Total size of all the messages.
     pub size: u64,

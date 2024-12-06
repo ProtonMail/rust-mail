@@ -73,10 +73,12 @@ use proton_mail_common::datatypes::{
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelColor as RealLabelColor,
     LabelDescription as RealLabelDescription, LabelType as RealLabelType,
-    MessageAddress as RealMessageAddress, MessageAttachment as RealMessageAttachment,
+    MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
-    MessageCount as RealMessageCount, MessageFlags as RealMessageFlags, MimeType as RealMimeType,
+    MessageCount as RealMessageCount, MessageFlags as RealMessageFlags,
+    MessageRecipient as RealMessageRecipient, MessageReplyTo as RealMessageReplyTo,
+    MessageSender as RealMessageSender, MimeType as RealMimeType,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
     PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
@@ -958,10 +960,10 @@ pub struct Conversation {
     pub display_order: u64,
 
     /// All recipients from messages in this conversation.
-    pub recipients: Vec<MessageAddress>,
+    pub recipients: Vec<MessageRecipient>,
 
     /// All senders from messages in this conversation.
-    pub senders: Vec<MessageAddress>,
+    pub senders: Vec<MessageSender>,
 
     /// Total size of all the messages in this conversation.
     pub size: u64,
@@ -978,7 +980,7 @@ pub struct Conversation {
 
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
-        let avatar = RealMessageAddress::avatar_info(&value.senders.value);
+        let avatar = RealMessageSender::avatar_info(&value.senders.value);
         Self {
             id: value.local_id.into(),
             attachments_metadata: value
@@ -1000,13 +1002,13 @@ impl From<ContextualConversation> for Conversation {
                 .recipients
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageRecipient::from)
                 .collect(),
             senders: value
                 .senders
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageSender::from)
                 .collect(),
             size: value.size,
             is_starred: value.is_starred,
@@ -1541,10 +1543,10 @@ pub struct Message {
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
-    pub bcc_list: Vec<MessageAddress>,
+    pub bcc_list: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
-    pub cc_list: Vec<MessageAddress>,
+    pub cc_list: Vec<MessageRecipient>,
 
     /// Exclusive location of the [`Message`] (e.g. Inbox, Archive, Outbox
     /// etc.).
@@ -1572,10 +1574,10 @@ pub struct Message {
     pub display_order: u64,
 
     /// TODO: Document this field.
-    pub reply_tos: Vec<MessageAddress>,
+    pub reply_tos: Vec<MessageReplyTo>,
 
     /// TODO: Document this field.
-    pub sender: MessageAddress,
+    pub sender: MessageSender,
 
     /// TODO: Document this field.
     pub size: u64,
@@ -1590,7 +1592,7 @@ pub struct Message {
     pub time: u64,
 
     /// TODO: Document this field.
-    pub to_list: Vec<MessageAddress>,
+    pub to_list: Vec<MessageRecipient>,
 
     /// TODO: Document this field.
     pub unread: bool,
@@ -1622,13 +1624,13 @@ impl From<RealMessage> for Message {
                 .bcc_list
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageRecipient::from)
                 .collect(),
             cc_list: value
                 .cc_list
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageRecipient::from)
                 .collect(),
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
@@ -1642,7 +1644,7 @@ impl From<RealMessage> for Message {
                 .reply_tos
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageReplyTo::from)
                 .collect(),
             sender: value.sender.into(),
             size: value.size,
@@ -1653,7 +1655,7 @@ impl From<RealMessage> for Message {
                 .to_list
                 .value
                 .into_iter()
-                .map(MessageAddress::from)
+                .map(MessageRecipient::from)
                 .collect(),
             unread: value.unread,
             custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
@@ -1663,32 +1665,31 @@ impl From<RealMessage> for Message {
     }
 }
 
-/// TODO: Document this struct.
+/// Message sender information.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAddress {
-    /// TODO: Document this field.
-    // TODO: Proper email parsing
+pub struct MessageSender {
+    /// Recipient email address.
     pub address: String,
 
     /// TODO: Document this field.
     pub bimi_selector: Option<String>,
 
-    /// TODO: Document this field.
+    /// Whether to display the sender image.
     pub display_sender_image: bool,
 
-    /// TODO: Document this field.
+    /// Whether the address is a proton address.
     pub is_proton: bool,
 
-    /// TODO: Document this field.
+    /// Whether address originated from simple login alias.
     pub is_simple_login: bool,
 
-    /// TODO: Document this field.
+    /// Recipient display name.
     pub name: String,
 }
 
-impl From<MessageAddress> for RealMessageAddress {
-    fn from(value: MessageAddress) -> Self {
-        RealMessageAddress {
+impl From<MessageSender> for RealMessageSender {
+    fn from(value: MessageSender) -> Self {
+        RealMessageSender {
             address: value.address,
             bimi_selector: value.bimi_selector,
             display_sender_image: value.display_sender_image,
@@ -1699,14 +1700,71 @@ impl From<MessageAddress> for RealMessageAddress {
     }
 }
 
-impl From<RealMessageAddress> for MessageAddress {
-    fn from(value: RealMessageAddress) -> Self {
-        MessageAddress {
+impl From<RealMessageSender> for MessageSender {
+    fn from(value: RealMessageSender) -> Self {
+        MessageSender {
             address: value.address,
             bimi_selector: value.bimi_selector,
             display_sender_image: value.display_sender_image,
             is_proton: value.is_proton,
             is_simple_login: value.is_simple_login,
+            name: value.name,
+        }
+    }
+}
+
+/// Message recipient information.
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct MessageRecipient {
+    /// Email of the recipient
+    pub address: String,
+
+    /// Whether the recipient is a proton address.
+    pub is_proton: bool,
+
+    /// Display name of the recipient,empty if none.
+    pub name: String,
+
+    /// Name of the address group this recipient belongs too.
+    pub group: Option<String>,
+}
+
+impl From<RealMessageRecipient> for MessageRecipient {
+    fn from(value: RealMessageRecipient) -> Self {
+        Self {
+            address: value.address,
+            is_proton: value.is_proton,
+            name: value.name,
+            group: value.group,
+        }
+    }
+}
+
+impl From<MessageRecipient> for RealMessageRecipient {
+    fn from(value: MessageRecipient) -> Self {
+        Self {
+            address: value.address,
+            is_proton: value.is_proton,
+            name: value.name,
+            group: value.group,
+        }
+    }
+}
+
+/// Message Reply-to component.
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct MessageReplyTo {
+    /// Email of the recipient
+    pub address: String,
+
+    /// Display name of the recipient,empty if none.
+    pub name: String,
+}
+
+impl From<RealMessageReplyTo> for MessageReplyTo {
+    fn from(value: RealMessageReplyTo) -> Self {
+        Self {
+            address: value.address,
             name: value.name,
         }
     }

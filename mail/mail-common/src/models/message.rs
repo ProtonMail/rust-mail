@@ -27,8 +27,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LabelType, MessageAddress, MessageAddresses, MessageCount, MessageFlags, MimeType,
-    MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
+    LabelType, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos, MessageSender,
+    MimeType, MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -111,11 +111,11 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub cc_list: MessageAddresses,
+    pub cc_list: MessageRecipients,
 
     /// TODO: Document this field.
     #[DbField]
-    pub bcc_list: MessageAddresses,
+    pub bcc_list: MessageRecipients,
 
     /// Whether or not this message has been soft deleted. This means that this message
     /// should no longer be displayed.
@@ -169,11 +169,11 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub reply_tos: MessageAddresses,
+    pub reply_tos: MessageReplyTos,
 
     /// TODO: Document this field.
     #[DbField]
-    pub sender: MessageAddress,
+    pub sender: MessageSender,
 
     /// TODO: Document this field.
     #[DbField]
@@ -193,7 +193,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub to_list: MessageAddresses,
+    pub to_list: MessageRecipients,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2366,10 +2366,10 @@ impl Message {
                 .into_iter()
                 .map(AttachmentMetadata::from)
                 .collect(),
-            bcc_list: MessageAddresses {
+            bcc_list: MessageRecipients {
                 value: value.bcc_list.into_iter().map(|v| v.into()).collect(),
             },
-            cc_list: MessageAddresses {
+            cc_list: MessageRecipients {
                 value: value.cc_list.into_iter().map(|v| v.into()).collect(),
             },
             deleted: false,
@@ -2383,7 +2383,7 @@ impl Message {
             exclusive_location,
             label_ids,
             num_attachments: value.num_attachments,
-            reply_tos: MessageAddresses {
+            reply_tos: MessageReplyTos {
                 value: value.reply_tos.into_iter().map(|v| v.into()).collect(),
             },
             sender: value.sender.into(),
@@ -2391,7 +2391,7 @@ impl Message {
             snooze_time: value.snooze_time,
             subject: value.subject,
             time: value.time,
-            to_list: MessageAddresses {
+            to_list: MessageRecipients {
                 value: value.to_list.into_iter().map(|v| v.into()).collect(),
             },
             unread: value.unread,
