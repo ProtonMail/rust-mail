@@ -233,11 +233,9 @@
         "ToList": [
           {
             "Address": "foo@protonmail.dev",
-            "BimiSelector": null,
-            "DisplaySenderImage": 0,
             "IsProton": 1,
-            "IsSimpleLogin": 0,
-            "Name": "Joe"
+            "Name": "Joe",
+            "Group": "string"
           }
         ],
         "Unread": 1

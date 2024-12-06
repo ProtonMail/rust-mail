@@ -7,7 +7,7 @@ use crate::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_mail_common::datatypes::{
-    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
+    attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 
@@ -38,7 +38,7 @@ static CONV1_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
     remote_id: Some(new_message_id(0)),
     subject: "Message subject".to_owned(),
     sender: "bar@bar.com".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
     time: 100,
@@ -54,7 +54,7 @@ static CONV1_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
     display_order: 1,
     subject: "FW: Message subject".to_owned(),
     sender: "foo@bar.com".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["omega@bar.com".into()],
     },
     time: 200,
@@ -69,7 +69,7 @@ static CONV1_MSG3: LazyLock<Message> = LazyLock::new(|| Message {
     display_order: 1,
     subject: "RE: FW: Message subject".to_owned(),
     sender: "omega@bar.com".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
     time: 400,
@@ -83,7 +83,7 @@ static CONV1_MSG4: LazyLock<Message> = LazyLock::new(|| Message {
     remote_id: Some(new_message_id(10)),
     subject: "FW: Message subject".to_owned(),
     sender: "bar@bar.com".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
     time: 450,
@@ -103,10 +103,10 @@ static CONV2_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
     label_ids: vec![MY_LABEL_ID2.clone().into()],
     subject: "Test".to_owned(),
     sender: "sponge.bob@square.pants".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["patrick@start.fish".into()],
     },
-    cc_list: MessageAddresses {
+    cc_list: MessageRecipients {
         value: vec!["venture@bros.com".into()],
     },
     time: 300,
@@ -120,7 +120,7 @@ static CONV2_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
     label_ids: vec![MY_LABEL_ID2.clone().into()],
     subject: "RE: Test".to_owned(),
     sender: "venture@bros.com".into(),
-    to_list: MessageAddresses {
+    to_list: MessageRecipients {
         value: vec!["sponge.bob@square.pants".into()],
     },
     time: 800,

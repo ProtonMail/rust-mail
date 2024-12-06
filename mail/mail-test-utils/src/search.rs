@@ -7,7 +7,8 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    Label as ApiLabel, MessageAddress as ApiMessageAddress, MessageMetadata,
+    Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
+    MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::datatypes::{
@@ -363,18 +364,18 @@ pub fn test_conversation(
         id: MY_CONVERSATION_ID.clone(),
         order: 50,
         subject: "Hello World".to_owned(),
-        senders: vec![ApiMessageAddress {
+        senders: vec![ApiMessageSender {
             address: "hello@world.com".to_owned(),
             name: "HelloWorld".to_owned(),
             ..Default::default()
         }],
         recipients: vec![
-            ApiMessageAddress {
+            ApiMessageRecipient {
                 address: "foo@bar.com".to_owned(),
                 name: "Foo".to_owned(),
                 ..Default::default()
             },
-            ApiMessageAddress {
+            ApiMessageRecipient {
                 address: "Bar@bar.com".to_owned(),
                 name: "bar".to_owned(),
                 ..Default::default()

@@ -18,10 +18,10 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
-    Disposition as ApiDisposition, Message as ApiMessage, MessageAddress as ApiMessageAddress,
+    Disposition as ApiDisposition, Message as ApiMessage,
     MessageAttachment as ApiMessageAttachment,
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
-    MimeType as ApiMimeType,
+    MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::attachment::KeyPackets;
@@ -2422,7 +2422,7 @@ fn test_message_metadata(
         label_ids: label_ids.into_iter().collect(),
         external_id: None,
         subject: "Hello ".to_owned(),
-        sender: ApiMessageAddress {
+        sender: ApiMessageSender {
             address: "hello@world.com".to_owned(),
             name: "hello".to_owned(),
             is_proton: Default::default(),
@@ -2468,7 +2468,7 @@ fn test_message_with_metadata(
             label_ids: label_ids.into_iter().collect(),
             external_id: None,
             subject: "Hello ".to_owned(),
-            sender: ApiMessageAddress {
+            sender: ApiMessageSender {
                 address: "hello@world.com".to_owned(),
                 name: "hello".to_owned(),
                 is_proton: Default::default(),

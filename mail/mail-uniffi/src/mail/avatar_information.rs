@@ -1,7 +1,8 @@
 use crate::core::datatypes::AvatarInformation;
-use crate::mail::datatypes::MessageAddress;
+use crate::mail::datatypes::{MessageRecipient, MessageSender};
 use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
-use proton_mail_common::datatypes::MessageAddress as RealMessageAddress;
+use proton_mail_common::datatypes::MessageRecipient as RealMessageRecipient;
+use proton_mail_common::datatypes::MessageSender as RealMessageSender;
 
 /// Creates an [`AvatarInformation`] by taking then display name and email address
 /// and uses these to determine the text and color the avatar should be.
@@ -17,18 +18,36 @@ pub fn avatar_information_from_name_and_email(
 
 /// Creates an [`AvatarInformation`] struct using the details of the first [`MessageAddress`] in the provided slice.
 #[uniffi::export]
-pub fn avatar_information_from_message_addresses(
-    address_list: &[MessageAddress],
+pub fn avatar_information_from_message_senders(
+    address_list: &[MessageSender],
 ) -> AvatarInformation {
-    let addresses: Vec<RealMessageAddress> = address_list
+    let addresses: Vec<RealMessageSender> = address_list
         .iter()
-        .map(|addr| RealMessageAddress::from(addr.clone()))
+        .map(|addr| RealMessageSender::from(addr.clone()))
         .collect();
-    RealMessageAddress::avatar_info(&addresses).into()
+    RealMessageSender::avatar_info(&addresses).into()
 }
 
 /// Creates an [`AvatarInformation`] struct using a [`MessageAddress`].
 #[uniffi::export]
-pub fn avatar_information_from_message_address(address: &MessageAddress) -> AvatarInformation {
-    RealAvatarInformation::from(RealMessageAddress::from(address.clone())).into()
+pub fn avatar_information_from_message_sender(address: &MessageSender) -> AvatarInformation {
+    RealAvatarInformation::from(RealMessageSender::from(address.clone())).into()
+}
+
+/// Creates an [`AvatarInformation`] struct using the details of the first [`MessageAddress`] in the provided slice.
+#[uniffi::export]
+pub fn avatar_information_from_message_recipients(
+    address_list: &[MessageRecipient],
+) -> AvatarInformation {
+    let addresses: Vec<RealMessageRecipient> = address_list
+        .iter()
+        .map(|addr| RealMessageRecipient::from(addr.clone()))
+        .collect();
+    RealMessageRecipient::avatar_info(&addresses).into()
+}
+
+/// Creates an [`AvatarInformation`] struct using a [`MessageAddress`].
+#[uniffi::export]
+pub fn avatar_information_from_message_recipient(address: &MessageRecipient) -> AvatarInformation {
+    RealAvatarInformation::from(RealMessageRecipient::from(address.clone())).into()
 }

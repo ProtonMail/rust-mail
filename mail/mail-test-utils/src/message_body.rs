@@ -9,9 +9,9 @@ use proton_api_core::services::proton::response_data::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_api_mail::services::proton::response_data::{
-    MailSettings as ApiMailSettings, Message as ApiMessage, MessageAddress,
-    MessageBody as ApiMessageBody, MessageFlags as ApiMessageFlags,
-    MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
+    MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
+    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::LabelId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
@@ -187,7 +187,7 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             label_ids: vec![LabelId::inbox().into()],
             external_id: None,
             subject: "Mail with test body".to_owned(),
-            sender: MessageAddress::default(),
+            sender: ApiMessageSender::default(),
             to_list: vec![],
             cc_list: vec![],
             bcc_list: vec![],
@@ -234,7 +234,7 @@ pub fn message_body_test_message_mime() -> ApiMessage {
             num_attachments: 0,
             order: 3629,
             reply_tos: vec![],
-            sender: MessageAddress::default(),
+            sender: ApiMessageSender::default(),
             size: 2334,
             snooze_time: 0,
             subject: "Messsage with two attachments".to_string(),

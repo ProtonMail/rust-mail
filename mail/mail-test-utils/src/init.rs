@@ -21,8 +21,8 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
-    MessageAddress as ApiMessageAddress, MessageButtons, MessageCount as ApiMessageCount,
-    MessageMetadata as ApiMessageMetadata, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
+    MessageButtons, MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
+    MessageSender as ApiMessageSender, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
     SwipeAction, ViewLayout, ViewMode,
 };
 
@@ -155,7 +155,7 @@ impl Params {
                 id: ApiRemoteId::from("myconv"),
                 order: 0,
                 subject: "Hello".to_owned(),
-                senders: vec![ApiMessageAddress {
+                senders: vec![ApiMessageSender {
                     address: "jsmith@test.com".to_owned(),
                     name: "John Smith".to_owned(),
                     is_proton: true,

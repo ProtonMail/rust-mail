@@ -8,8 +8,8 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::{AttachmentMetadata, MessageFlags};
 use proton_api_mail::services::proton::response_data::{
-    Disposition, Message as ApiMessage, MessageAddress as ApiMessageAddress, MessageAttachment,
-    MessageAttachmentHeaders,
+    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
+    MessageRecipient as ApiMessageRecipient,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
@@ -152,7 +152,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.to_list = new_to_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })
@@ -160,7 +160,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.cc_list = new_cc_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })
@@ -168,7 +168,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.bcc_list = new_bcc_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })

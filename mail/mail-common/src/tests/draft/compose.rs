@@ -1,6 +1,6 @@
 pub use super::*;
 use crate::datatypes::attachment;
-use crate::datatypes::{Disposition, MessageAddress, MessageAddresses};
+use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::compose::DEFAULT_SUBJECT;
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
@@ -176,14 +176,12 @@ fn existing_message() -> Message {
         local_address_id: local_address_id(),
         remote_address_id: remote_address_id(),
         attachments_metadata: vec![],
-        cc_list: MessageAddresses {
-            value: vec![MessageAddress {
+        cc_list: MessageRecipients {
+            value: vec![MessageRecipient {
                 address: "cc_contact_1@pm.me".to_string(),
-                bimi_selector: None,
-                display_sender_image: true,
                 is_proton: false,
-                is_simple_login: true,
                 name: "CC Contact".to_string(),
+                group: None,
             }],
         },
         bcc_list: Default::default(),
@@ -199,7 +197,7 @@ fn existing_message() -> Message {
         num_attachments: 0,
         display_order: 0,
         reply_tos: Default::default(),
-        sender: MessageAddress {
+        sender: MessageSender {
             address: "sender@void.org".to_owned(),
             bimi_selector: None,
             display_sender_image: false,

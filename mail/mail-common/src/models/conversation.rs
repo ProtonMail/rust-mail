@@ -12,7 +12,7 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    MessageAddresses, MessageAttachmentInfos, SystemLabel, SystemLabelId,
+    MessageAttachmentInfos, MessageRecipients, MessageSenders, SystemLabel, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -116,11 +116,11 @@ pub struct Conversation {
 
     #[DbField]
     /// TODO: Document this field.
-    pub recipients: MessageAddresses,
+    pub recipients: MessageRecipients,
 
     #[DbField]
     /// TODO: Document this field.
-    pub senders: MessageAddresses,
+    pub senders: MessageSenders,
 
     /// TODO: Document this field.
     #[DbField]
@@ -3279,10 +3279,10 @@ impl From<ApiConversation> for Conversation {
             num_messages: value.num_messages,
             num_unread: value.num_unread,
             display_order: value.order,
-            recipients: MessageAddresses {
+            recipients: MessageRecipients {
                 value: value.recipients.into_iter().map(|v| v.into()).collect(),
             },
-            senders: MessageAddresses {
+            senders: MessageSenders {
                 value: value.senders.into_iter().map(|v| v.into()).collect(),
             },
             custom_labels: vec![],
