@@ -9,7 +9,7 @@ use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use std::sync::Weak;
 use tracing::{debug, error, Level};
 
@@ -139,7 +139,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
 }
 
 async fn handle_contact_event(
-    tx: &Tether,
+    tx: &Bond,
     contact_events: &mut [ContactEvent],
 ) -> Result<(), StashError> {
     for event in contact_events {
@@ -170,7 +170,7 @@ async fn handle_contact_event(
 }
 
 async fn handle_contact_email_event(
-    tx: &Tether,
+    tx: &Bond,
     contact_email_events: &mut [ContactEmailEvent],
 ) -> Result<(), StashError> {
     for event in contact_email_events {

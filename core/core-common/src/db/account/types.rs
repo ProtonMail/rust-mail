@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
 use stash::{params, sql_using_serde};
 use std::ops::Deref;
 use std::string::FromUtf8Error;
@@ -159,15 +159,12 @@ impl CoreAccount {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), interface).await? {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), bond).await? {
             self.row_id = existing.row_id;
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 }
 

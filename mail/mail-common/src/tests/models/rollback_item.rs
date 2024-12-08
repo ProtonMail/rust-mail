@@ -12,7 +12,7 @@ use proton_core_common::{datatypes::LocalId, models::ModelExtension};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{
     api_conversation, api_label, api_message, api_message_meta, conversation, label, message,
-    search::create_address,
+    utils::create_address,
 };
 use test_case::test_case;
 #[allow(unused_imports)]
@@ -105,7 +105,7 @@ async fn test_store_and_delete_remote_items(
 ) {
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
 
     for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
         item.save(&tx).await.unwrap();
@@ -114,6 +114,7 @@ async fn test_store_and_delete_remote_items(
     for item in input.iter_mut() {
         item.save(&tx).await.unwrap();
     }
+    tx.commit().await.unwrap();
 
     let expected = expected.unwrap_or(input);
     let actual = RollbackItem::all(&stash, None).await.unwrap();
@@ -121,7 +122,8 @@ async fn test_store_and_delete_remote_items(
     assert_eq!(expected, actual);
 
     // * RollbackItem is correctly synced *
-    setup_database(&tx).await;
+    setup_database(&stash).await;
+
     let (_mock, api) = start_server(&stash).await;
 
     RollbackItem::sync_all(&api, &stash, 2).await.unwrap();
@@ -135,31 +137,37 @@ async fn test_store_and_delete_remote_items(
     RollbackItem::sync_all(&api, &stash, None).await.unwrap();
 }
 
-async fn setup_database(tx: &Tether) {
-    let mut conversations = conversations(tx).await;
+async fn setup_database(stash: &Stash) {
+    let mut conversations = conversations(stash).await;
     let mut local_conversation_id = None;
     let mut remote_conversation_id = None;
 
+    let tx = stash.transaction().await.unwrap();
     for conversation in conversations.iter_mut() {
-        conversation.save(tx).await.unwrap();
+        conversation.save(&tx).await.unwrap();
         local_conversation_id = conversation.local_id;
         remote_conversation_id = conversation.remote_id.clone();
     }
+    tx.commit().await.unwrap();
 
-    let mut labels = labels(tx).await;
+    let mut labels = labels(stash).await;
 
+    let tx = stash.transaction().await.unwrap();
     for label in labels.iter_mut() {
-        label.save(tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
+    tx.commit().await.unwrap();
 
-    let mut messages = messages(local_conversation_id, remote_conversation_id, tx).await;
+    let mut messages = messages(local_conversation_id, remote_conversation_id, stash).await;
 
+    let tx = stash.transaction().await.unwrap();
     for message in messages.iter_mut() {
-        message.save(tx).await.unwrap();
+        message.save(&tx).await.unwrap();
     }
+    tx.commit().await.unwrap();
 }
 
-async fn conversations(tx: &Tether) -> Vec<Conversation> {
+async fn conversations(tx: &Stash) -> Vec<Conversation> {
     let items = RollbackItem::find_by_kind(RollbackItemType::Conversation, tx)
         .await
         .unwrap();
@@ -173,7 +181,7 @@ async fn conversations(tx: &Tether) -> Vec<Conversation> {
 async fn messages(
     local_conversation_id: Option<LocalId>,
     remote_conversation_id: Option<RemoteId>,
-    tx: &Tether,
+    tx: &Stash,
 ) -> Vec<Message> {
     let items = RollbackItem::find_by_kind(RollbackItemType::Message, tx)
         .await
@@ -194,7 +202,7 @@ async fn messages(
         .collect()
 }
 
-async fn labels(tx: &Tether) -> Vec<Label> {
+async fn labels(tx: &Stash) -> Vec<Label> {
     let items = RollbackItem::find_by_kind(RollbackItemType::Label, tx)
         .await
         .unwrap();

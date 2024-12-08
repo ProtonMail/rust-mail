@@ -16,7 +16,7 @@ use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, StashError, Tether};
+use stash::stash::{Bond, StashError};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use tracing::error;
@@ -116,7 +116,7 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
         if self.target_ids.is_empty() {
             return Err(ActionError::NoInput);
         }
@@ -139,7 +139,7 @@ where
     async fn mark_rollback(
         &self,
         item_type: RollbackItemType,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
             RollbackItem::new(remote_id.clone(), item_type)
@@ -213,7 +213,7 @@ where
     /// # Errors
     ///
     /// * if some id can not be resolved
-    async fn resolve_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
         self.remote_destination_label_id =
             Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
         self.remote_target_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
@@ -275,7 +275,7 @@ where
     }
 
     /// Resolve all local ids into the remote counterpart.
-    async fn resolve_remote_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+    async fn resolve_remote_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
         self.remote_ids = LocalId::counterparts::<T, _>(self.local_ids.clone(), tx).await?;
         self.remote_all_label_ids =
             LocalId::counterparts::<Label, _>(self.local_all_label_ids.clone(), tx).await?;
@@ -292,17 +292,10 @@ where
         Ok(())
     }
 
-    async fn mark_rollback<A>(
-        &self,
-        kind: RollbackItemType,
-        interface: &A,
-    ) -> Result<(), ActionError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    async fn mark_rollback(&self, kind: RollbackItemType, bond: &Bond) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
             RollbackItem::new(remote_id.clone(), kind)
-                .save(interface)
+                .save(bond)
                 .await?;
         }
         Ok(())

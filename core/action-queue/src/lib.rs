@@ -23,7 +23,7 @@
 //! use serde::{Deserialize, Serialize};
 //! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, Metadata, Priority, Type};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
-//! use stash::stash::{Stash, Tether};
+//! use stash::stash::{Stash, Bond};
 //!
 //! #[derive(Serialize, Deserialize)]
 //! struct MyAction {
@@ -63,11 +63,11 @@
 //!     type Action = MyAction;
 //!     type Context = ();
 //!
-//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!

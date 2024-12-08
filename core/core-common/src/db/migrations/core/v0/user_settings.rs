@@ -1,7 +1,7 @@
 use futures::executor::block_on;
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
-pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
     block_on(async {
         tx.execute(
             r"

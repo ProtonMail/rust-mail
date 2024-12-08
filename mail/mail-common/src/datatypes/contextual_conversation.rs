@@ -13,7 +13,7 @@ use proton_core_common::models::ModelExtension;
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use tracing::warn;
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
@@ -189,27 +189,25 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(interface,api))]
-    pub async fn conversation_and_messages<A, PM>(
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
+    pub async fn conversation_and_messages<PM>(
         local_conversation_id: LocalId,
         local_label_id: LocalId,
-        interface: &A,
+        stash: &Stash,
         api: &PM,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError>
     where
         PM: ProtonMail,
-        A: Into<AgnosticInterface> + Interface,
     {
-        let label = Label::find_by_id(local_label_id, interface)
+        let label = Label::find_by_id(local_label_id, stash)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        Conversation::sync_conversation_messages(local_conversation_id, interface, api).await?;
-        let Some(conversation) =
-            Self::load(local_conversation_id, local_label_id, interface).await?
+        Conversation::sync_conversation_messages(local_conversation_id, stash, api).await?;
+        let Some(conversation) = Self::load(local_conversation_id, local_label_id, stash).await?
         else {
             return Ok(None);
         };
-        let messages = Message::in_conversation(local_conversation_id, interface, None).await?;
+        let messages = Message::in_conversation(local_conversation_id, stash, None).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 

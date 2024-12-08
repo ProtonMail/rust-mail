@@ -35,13 +35,16 @@ impl EventLoop {
         store: &dyn Store,
         provider: &dyn Provider<T>,
     ) -> Result<(), EventLoopError> {
-        if let Some(e) = store.load().map_err(EventLoopError::StoreRead)? {
+        if let Some(e) = store.load().await.map_err(EventLoopError::StoreRead)? {
             debug!("Last event id = {e}");
         } else {
             debug!("No event id in event store, retrieving latest");
             let event_id = provider.get_latest_event_id().await?;
             debug!("Last event id = {event_id}");
-            store.store(event_id).map_err(EventLoopError::StoreWrite)?;
+            store
+                .store(event_id)
+                .await
+                .map_err(EventLoopError::StoreWrite)?;
         }
         Ok(())
     }
@@ -57,7 +60,7 @@ impl EventLoop {
         provider: &dyn Provider<T>,
         subscribers: &[Box<dyn Subscriber<T>>],
     ) -> Result<(), EventLoopError> {
-        let Some(last_event_id) = store.load().map_err(EventLoopError::StoreRead)? else {
+        let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
             let e = anyhow!("No EventId in store");
             error!("{e}");
             return Err(EventLoopError::StoreRead(e));
@@ -102,7 +105,7 @@ impl EventLoop {
             .event_id()
             .clone();
 
-        if let Err(e) = store.store(new_event_id.clone().into()) {
+        if let Err(e) = store.store(new_event_id.clone().into()).await {
             error!("Failed to store new event id: {e}");
             return Err(EventLoopError::StoreWrite(e));
         }

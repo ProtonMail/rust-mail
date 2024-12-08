@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
-use stash::stash::Interface;
 use std::sync::Weak;
 use tracing::{debug, error};
 
@@ -75,7 +74,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     mail_settings.save(&tx).await?;
                 }
             }
-            tx.commit().await
+            tx.commit().await.map(|_| ())
         }
         .map_err(|e| {
             let e = anyhow!("Failed to apply changes: {e}");

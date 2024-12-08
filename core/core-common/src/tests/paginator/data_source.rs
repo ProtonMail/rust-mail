@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::ops::Range;
@@ -22,15 +22,11 @@ pub struct TestModel {
 
 impl TestModel {
     /// Override `save` for create or ignore
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], interface).await?
-        {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], bond).await? {
             self.row_id = element.row_id;
         } else {
-            <Self as Model>::save(self, interface).await?;
+            <Self as Model>::save(self, bond).await?;
         }
 
         Ok(())
@@ -285,7 +281,9 @@ async fn data_source_sync_with_callback() {
         id: 19,
         row_id: None,
     };
-    new_value.save(&stash).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    new_value.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     drop(paginator);
     drop(stash);

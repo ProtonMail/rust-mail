@@ -1,13 +1,10 @@
 use crate::events::LabelEvent;
 use proton_core_common::events::Action;
 use stash::params;
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 use tracing::warn;
 
-pub async fn handle_label_events(
-    tx: &Tether,
-    label_events: &[LabelEvent],
-) -> Result<(), StashError> {
+pub async fn handle_label_events(tx: &Bond, label_events: &[LabelEvent]) -> Result<(), StashError> {
     for label_event in label_events {
         match label_event.action {
             Action::Delete => {

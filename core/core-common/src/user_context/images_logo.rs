@@ -4,7 +4,7 @@ use crate::models::sender_image_cache::{ReceivedFormat, SenderImage, SenderImage
 use crate::{CoreContextResult, UserContext};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::{Bond, Stash};
 use std::path::PathBuf;
 
 impl UserContext {
@@ -36,18 +36,15 @@ impl UserContext {
     ///
     /// # Panics
     /// If cache metadata are unset
-    pub async fn image_for_sender<A>(
+    pub async fn image_for_sender(
         &self,
         address: &str,
         bimi_selector: Option<&str>,
         format: Option<String>,
         mode: Option<LightOrDarkMode>,
         size: Option<u32>,
-        interface: &A,
-    ) -> CoreContextResult<Option<PathBuf>>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        stash: &Stash,
+    ) -> CoreContextResult<Option<PathBuf>> {
         let mut key = SenderImage {
             address: Some(address.to_owned()),
             bimi_selector: bimi_selector.map(ToOwned::to_owned),
@@ -58,14 +55,16 @@ impl UserContext {
         };
 
         // generate local_id if not exist
+        let tx = stash.transaction().await?;
         if key.local_id.is_none() {
-            key.save(interface).await?;
+            key.save(&tx).await?;
         }
 
         let result = self
             .images_logo_cache
-            .get_path_or_insert_with_extra(&key, self.get_images_logo(key.clone(), interface))
+            .get_path_or_insert_with_extra(&key, self.get_images_logo(key.clone(), &tx))
             .await?;
+        tx.commit().await?;
 
         let metadata = self
             .images_logo_cache
@@ -80,14 +79,11 @@ impl UserContext {
     }
 
     /// Get the logo corresponding to the given key
-    async fn get_images_logo<A>(
+    async fn get_images_logo(
         &self,
         mut key: SenderImage,
-        interface: &A,
-    ) -> CacheResult<(Vec<u8>, SenderImageMetadata)>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> CacheResult<(Vec<u8>, SenderImageMetadata)> {
         let image = self
             .session()
             .api()
@@ -100,7 +96,7 @@ impl UserContext {
             received_format,
             is_empty: image.is_empty(),
         };
-        key.set_metadata(&metadata, interface)
+        key.set_metadata(&metadata, bond)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))?;
         Ok((image, metadata))

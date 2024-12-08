@@ -8,7 +8,7 @@ mod tests;
 use futures::executor::block_on;
 use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use thiserror::Error;
 use tracing::debug;
 
@@ -26,7 +26,7 @@ pub trait Migration {
     /// # Errors
     ///
     /// Returns error if the migration failed to run.
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError>;
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError>;
 }
 
 /// Possible errors that may occur during a migration.
@@ -115,7 +115,7 @@ fn version_from_migration_list<M: Migration>(m: &[M]) -> usize {
     m.len()
 }
 async fn get_current_table_version(
-    tx: &Tether,
+    tx: &Bond,
     table_name: &str,
 ) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) AS value FROM sqlite_master WHERE `type`='table' AND name= ?";
@@ -134,7 +134,7 @@ const VERSION_TABLE_FIELD_VERSION: &str = "version";
 
 const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-async fn read_current_table_version(tx: &Tether, id: &str) -> Result<usize, StashError> {
+async fn read_current_table_version(tx: &Bond, id: &str) -> Result<usize, StashError> {
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} AS value FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
@@ -158,7 +158,7 @@ async fn read_current_table_version(tx: &Tether, id: &str) -> Result<usize, Stas
     Ok(version as usize)
 }
 
-async fn create_version_table(tx: &Tether) -> Result<(), StashError> {
+async fn create_version_table(tx: &Bond) -> Result<(), StashError> {
     let query = format!(
         "CREATE TABLE {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID} TEXT UNIQUE NOT NULL PRIMARY KEY, \
 {VERSION_TABLE_FIELD_VERSION} INTEGER NOT NULL)"
@@ -167,11 +167,7 @@ async fn create_version_table(tx: &Tether) -> Result<(), StashError> {
     Ok(())
 }
 
-async fn set_version_table_version(
-    tx: &Tether,
-    id: &str,
-    version: usize,
-) -> Result<(), StashError> {
+async fn set_version_table_version(tx: &Bond, id: &str, version: usize) -> Result<(), StashError> {
     let query = format!("INSERT INTO {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
 ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION}=excluded.{VERSION_TABLE_FIELD_VERSION}");
     tx.execute(query, params![id.to_owned(), version]).await?;
@@ -179,7 +175,7 @@ ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION
 }
 
 async fn run_migrations<M: Migration>(
-    tx: &Tether,
+    tx: &Bond,
     table_name: &str,
     current_version: usize,
     migrations: &[M],

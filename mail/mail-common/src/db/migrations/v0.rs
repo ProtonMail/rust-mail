@@ -7,7 +7,7 @@ mod messages;
 mod rollback_actions;
 mod settings;
 
-use stash::stash::{StashError, Tether};
+use stash::stash::{Bond, StashError};
 use tracing::debug_span;
 
 pub struct MigrationV0 {}
@@ -17,7 +17,7 @@ impl proton_sqlite3::Migration for MigrationV0 {
         "proton_mail_db_v0"
     }
 
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         let span = debug_span!("labels");
         let entered = span.enter();
         labels::create_labels_tables(tx).await?;

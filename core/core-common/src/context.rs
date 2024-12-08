@@ -447,12 +447,14 @@ impl Context {
     ///
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
-        CoreAccount::find_by_id(user_id, &self.stash)
+        let mut account = CoreAccount::find_by_id(user_id, &self.stash)
             .await?
             .ok_or(CoreContextError::Other(anyhow!("account not found")))?
-            .with_primary_now()
-            .save(&self.stash)
-            .await?;
+            .with_primary_now();
+
+        let tx = self.stash.transaction().await?;
+        account.save(&tx).await?;
+        tx.commit().await?;
 
         Ok(())
     }

@@ -1,8 +1,8 @@
 use futures::executor::block_on;
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
 #[allow(clippy::too_many_lines)]
-pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
     block_on(async {
         tx.execute(
             r"

@@ -3,7 +3,6 @@ use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::MailUserContext;
 use anyhow::anyhow;
 use async_trait::async_trait;
-use futures::executor::block_on;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
@@ -22,16 +21,19 @@ use tracing::error;
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
+#[async_trait]
 impl Store for MailUserContext {
-    fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
+    async fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
+        dbg!("Acquiring connection");
         let conn = self.user_context.stash();
-        match block_on(async {
+        dbg!("Executing query");
+        match {
             conn.query_value::<_, String>(
                 "SELECT value FROM event_id_store WHERE id = ?1",
                 params![MAIL_EVENT_TYPE_ID],
             )
             .await
-        })
+        }
         .map(ApiRemoteId::from)
         {
             Ok(value) => Ok(Some(value)),
@@ -49,20 +51,22 @@ impl Store for MailUserContext {
         }
     }
 
-    fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
-        let conn = self.user_context.stash();
-        block_on(async {
-            conn.execute(
+    async fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
+        {
+            let tx = self.user_context.stash().transaction().await?;
+            tx.execute(
                 "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
                 params![MAIL_EVENT_TYPE_ID, RemoteId::from(id)],
             )
-            .await
-            .map_err(|e| {
-                error!("Failed to store event id in db:{e}");
-                anyhow!("Failed to store event id {e}")
-            })
+            .await?;
+            tx.commit().await?;
+
+            Ok(())
+        }
+        .map_err(|e: StashError| {
+            error!("Failed to store event id in db:{e}");
+            anyhow!("Failed to store event id {e}")
         })
-        .map(|_| ())
     }
 }
 

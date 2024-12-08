@@ -5,7 +5,7 @@ use crate::models::{Contact, ModelExtension};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
 /// Represents a contact's email.
 ///
@@ -140,23 +140,18 @@ impl ContactEmail {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
         }
 
         if let Some(contact_remote_id) = self.remote_contact_id.clone() {
-            self.local_contact_id = contact_remote_id
-                .counterpart::<Contact, _>(interface)
-                .await?;
+            self.local_contact_id = contact_remote_id.counterpart::<Contact, _>(bond).await?;
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 }

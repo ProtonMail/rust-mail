@@ -11,7 +11,7 @@ use proton_api_core::auth::{
 };
 use secrecy::{ExposeSecret, SecretVec};
 use stash::orm::Model;
-use stash::stash::{Interface, Stash};
+use stash::stash::Stash;
 use std::ops::Deref;
 use std::sync::Arc;
 use tracing::error;
@@ -209,10 +209,12 @@ impl AuthStore {
             return Err(format!("failed to set account info: missing {user_id}"))?;
         };
 
+        let tx = self.stash.transaction().await?;
         account
             .with_info(username, display_name, primary_addr)
-            .save(&self.stash)
+            .save(&tx)
             .await?;
+        tx.commit().await?;
 
         Ok(())
     }

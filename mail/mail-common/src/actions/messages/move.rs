@@ -9,7 +9,7 @@ use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 /// Action which applies a label to messages.
@@ -55,7 +55,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
@@ -74,7 +74,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::move_messages(
             action.0.destination_label_id,

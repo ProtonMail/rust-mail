@@ -9,7 +9,7 @@ use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 /// Action which marks messages as read.
@@ -48,7 +48,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Message does not exist) for message already read
         let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
@@ -67,7 +67,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_unread(action.0.target_ids.clone(), tx).await?;
         action

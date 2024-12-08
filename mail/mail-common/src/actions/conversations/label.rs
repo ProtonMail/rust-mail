@@ -7,7 +7,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 /// Action which applies a label to conversations.
@@ -45,7 +45,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
@@ -57,7 +57,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         action

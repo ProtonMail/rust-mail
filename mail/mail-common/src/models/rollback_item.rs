@@ -13,7 +13,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::RemoteId;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError, Tether};
+use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
 use stash::{macros::Model, stash::Stash};
 use tokio::sync::Mutex;
 use tracing::{debug, error};
@@ -168,21 +168,18 @@ impl RollbackItem {
     ///
     /// When the query fails.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         let None = RollbackItem::find_first(
             "WHERE remote_id=? AND item_type=?",
             params![self.remote_id.clone(), self.item_type],
-            interface,
+            bond,
         )
         .await?
         else {
             return Ok(());
         };
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Synchronize all rollback items with remote counterparts.
@@ -314,17 +311,16 @@ impl RollbackItem {
     async fn delete_by_rid_and_kind(
         remote_id: Option<RemoteId>,
         kind: RollbackItemType,
-        tether: &Tether,
+        bond: &Bond,
     ) -> Result<(), StashError> {
-        tether
-            .execute(
-                format!(
-                    "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
-                    Self::table_name()
-                ),
-                params![remote_id, kind],
-            )
-            .await?;
+        bond.execute(
+            format!(
+                "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
+                Self::table_name()
+            ),
+            params![remote_id, kind],
+        )
+        .await?;
 
         Ok(())
     }
@@ -338,12 +334,9 @@ struct MessageAndBodyMetadata {
 }
 
 impl MessageAndBodyMetadata {
-    async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        self.message_metadata.save(interface).await?;
-        self.body_metadata.save(interface).await?;
+    async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        self.message_metadata.save(bond).await?;
+        self.body_metadata.save(bond).await?;
         Ok(())
     }
 }

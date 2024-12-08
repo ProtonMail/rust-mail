@@ -24,6 +24,7 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -122,7 +123,7 @@ async fn basic_send_check() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let mut draft = Draft::empty(&tether).await.unwrap();
+    let mut draft = Draft::empty(tether.stash()).await.unwrap();
     draft.to_list.push("foo@bar.com".into());
     draft.save(user_ctx.queue()).await.unwrap();
 

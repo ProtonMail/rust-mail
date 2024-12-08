@@ -2,7 +2,6 @@
 
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_test_utils::db::new_test_connection;
-use stash::stash::Interface;
 
 #[tokio::test]
 async fn test_event_id_store_get_set() {

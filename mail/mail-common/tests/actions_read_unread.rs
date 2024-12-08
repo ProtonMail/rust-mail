@@ -140,7 +140,9 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .unwrap()
         .unwrap();
     inbox.unread_conv = inbox.total_conv;
-    inbox.save(stash).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    inbox.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     let conversation_ids = RemoteId::counterparts::<Conversation, _>(to_mark, stash)
         .await
@@ -203,7 +205,9 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .unwrap()
         .unwrap();
     inbox.unread_conv = inbox.total_conv;
-    inbox.save(stash).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    inbox.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     let conversation_ids = RemoteId::counterparts::<Conversation, _>(to_mark, stash)
         .await

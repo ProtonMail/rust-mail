@@ -26,16 +26,22 @@ async fn load_sending_preferences() {
         .expect("Failed to get mail settings")
         .unwrap();
 
+    let tx = user_ctx
+        .user_stash()
+        .transaction()
+        .await
+        .expect("Failed to begin transaction");
     let recipient_preferences = user_ctx
         .recipient_send_preferences(
             &pgp_provider,
-            user_ctx.user_stash(),
+            &tx,
             recipient_email,
             mail_settings.crypto_mail_settings(),
             Default::default(),
         )
         .await
         .expect("Failed to extract send preferences");
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert!(recipient_preferences.encrypt);
     assert!(recipient_preferences.sign);
@@ -65,16 +71,22 @@ async fn load_sending_preferences_for_self() {
         .expect("Failed to get mail settings")
         .unwrap();
 
+    let tx = user_ctx
+        .user_stash()
+        .transaction()
+        .await
+        .expect("Failed to begin transaction");
     let recipient_preferences = user_ctx
         .recipient_send_preferences(
             &pgp_provider,
-            user_ctx.user_context().stash(),
+            &tx,
             self_address,
             mail_settings.crypto_mail_settings(),
             Default::default(),
         )
         .await
         .expect("Failed to extract send preferences");
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert!(recipient_preferences.encrypt);
     assert!(recipient_preferences.sign);

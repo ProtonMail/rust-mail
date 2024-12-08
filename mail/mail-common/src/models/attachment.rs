@@ -24,7 +24,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
 
 /// Represents a mail attachment.
 ///
@@ -230,14 +230,11 @@ impl Attachment {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if self.local_id.is_none() {
             if let Some(remote_id) = self.remote_id.clone() {
                 if let Some(existing) =
-                    Self::find_first("WHERE remote_id=?", params![remote_id], interface).await?
+                    Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
                 {
                     self.local_id = existing.local_id;
                     self.row_id = existing.row_id;
@@ -246,29 +243,25 @@ impl Attachment {
         }
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id = remote_address_id
-                    .counterpart::<Address, _>(interface)
-                    .await?;
+                self.local_address_id = remote_address_id.counterpart::<Address, _>(bond).await?;
             }
         }
 
         if self.local_message_id.is_none() {
             if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id = remote_message_id
-                    .counterpart::<Message, _>(interface)
-                    .await?;
+                self.local_message_id = remote_message_id.counterpart::<Message, _>(bond).await?;
             }
         }
 
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 self.local_conversation_id = remote_conversation_id
-                    .counterpart::<Conversation, _>(interface)
+                    .counterpart::<Conversation, _>(bond)
                     .await?;
             }
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Fetch attachment content from the API.
@@ -348,7 +341,7 @@ impl Attachment {
     pub async fn sync_complete_metadata<PM: ProtonMail>(
         &mut self,
         api: &PM,
-        interface: &AgnosticInterface,
+        stash: &Stash,
     ) -> Result<Option<()>, AppError> {
         let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
             remote_id
@@ -362,7 +355,9 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        attachment.save(interface).await?;
+        let tx = stash.transaction().await?;
+        attachment.save(&tx).await?;
+        tx.commit().await?;
         *self = attachment;
         Ok(Some(()))
     }

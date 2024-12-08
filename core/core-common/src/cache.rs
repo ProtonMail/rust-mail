@@ -19,7 +19,7 @@
 use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
-use stash::stash::Stash;
+use stash::stash::{Stash, StashError};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -76,6 +76,12 @@ pub enum CacheError {
     /// Error return by a callback
     #[error("Callback Error: {0}")]
     Callback(anyhow::Error),
+}
+
+impl From<StashError> for CacheError {
+    fn from(error: StashError) -> Self {
+        Self::Callback(error.into())
+    }
 }
 
 #[allow(clippy::module_name_repetitions)]

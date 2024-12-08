@@ -192,12 +192,14 @@ mod contact_list {
     ) {
         let stash = new_core_test_connection().await;
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        contact.save(&stash).await.unwrap();
+        let tx = stash.transaction().await.unwrap();
+        contact.save(&tx).await.unwrap();
 
         for mut email in emails {
             email.remote_contact_id = contact.remote_id.clone();
-            email.save(&stash).await.unwrap();
+            email.save(&tx).await.unwrap();
         }
+        tx.commit().await.expect("commit failed");
 
         let result = Contact::contact_list(&stash).await.unwrap();
         assert_eq!(result, expected);
@@ -213,7 +215,9 @@ mod contact_watcher {
     async fn test_contact_list_watcher() {
         let stash = new_core_test_connection().await;
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        contact.save(&stash).await.unwrap();
+        let tx = stash.transaction().await.unwrap();
+        contact.save(&tx).await.unwrap();
+        tx.commit().await.unwrap();
         let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
         let stash_reciever = stash.subscribe().await.unwrap();
 

@@ -10,7 +10,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
-use stash::stash::{Interface, Tether};
+use stash::stash::{AgnosticInterface, Interface};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default, Clone, Debug)]
@@ -31,45 +31,55 @@ pub struct TestDBStateMap {
 }
 
 /// # Panics
-pub async fn prepare_db_state_core(tx: &Tether, env: &mut [Address]) {
+pub async fn prepare_db_state_core<A>(interface: &A, env: &mut [Address])
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     // create addresses
+    let tx = interface.stash().transaction().await.unwrap();
     for address in env.iter_mut() {
-        address.save(tx).await.expect("failed to create address");
+        address.save(&tx).await.unwrap();
     }
+    tx.commit().await.expect("failed to commit transaction");
 }
 
-pub async fn prepare_and_patch_db_state(
-    tx: &Tether,
+pub async fn prepare_and_patch_db_state<A>(
+    interface: &A,
     env: TestDBState,
-) -> (TestDBState, TestDBStateMap) {
-    prepare_and_patch_db_state_and_skip(tx, env, false).await
+) -> (TestDBState, TestDBStateMap)
+where
+    A: Into<AgnosticInterface> + Interface,
+{
+    prepare_and_patch_db_state_and_skip(interface, env, false).await
 }
 
 /// # Panics
 #[allow(clippy::too_many_lines)]
-pub async fn prepare_and_patch_db_state_and_skip(
-    tx: &Tether,
+pub async fn prepare_and_patch_db_state_and_skip<A>(
+    interface: &A,
     mut env: TestDBState,
     skip_messages: bool,
-) -> (TestDBState, TestDBStateMap) {
+) -> (TestDBState, TestDBStateMap)
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     let mut result = TestDBStateMap {
         ..Default::default()
     };
-    let stash = tx.stash().clone();
-
+    let tx = interface.stash().transaction().await.unwrap();
     // create labels
     let mut local_label_ids = vec![];
     for label in &mut env.labels {
         let db_label = Label::find_by_id(
             RemoteId::from(label.remote_id.clone().expect("No remote id in label")),
-            &stash,
+            &tx,
         )
         .await
         .expect("failed to find label");
         let the_label = if let Some(ref l) = db_label {
             l
         } else {
-            label.save(&stash).await.expect("failed to create label");
+            label.save(&tx).await.expect("failed to create label");
             label
         };
         local_label_ids.push(the_label.local_id);
@@ -96,7 +106,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
             },
         );
     }
-
+    tx.commit().await.expect("failed to commit transaction");
     // update conversation labels with message data
     #[allow(clippy::items_after_statements)]
     fn find_conversation<'a>(list: &'a mut [Conversation], id: &RemoteId) -> &'a mut Conversation {
@@ -190,9 +200,10 @@ pub async fn prepare_and_patch_db_state_and_skip(
         conv.expiration_time = conv.expiration_time.max(message.expiration_time);
     }
 
+    let tx = interface.stash().transaction().await.unwrap();
     // create conversations
     let local_conversation_ids =
-        Conversation::create_or_update_conversations(env.conversations.clone(), &stash)
+        Conversation::create_or_update_conversations(env.conversations.clone(), &tx)
             .await
             .expect("failed to create conversations");
     for (idx, conversation) in env.conversations.iter().enumerate() {
@@ -217,10 +228,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
     if !skip_messages {
         let mut local_message_ids = vec![];
         for message in &mut env.messages {
-            message
-                .save(&stash)
-                .await
-                .expect("failed to create message");
+            message.save(&tx).await.expect("failed to create message");
             local_message_ids.push(message.local_id);
             result.messages.insert(
                 message.remote_id.clone().unwrap(),
@@ -240,18 +248,19 @@ pub async fn prepare_and_patch_db_state_and_skip(
     // create conversation_counts
     Label::create_or_update_conversation_counts(
         result.conversation_counts.values().cloned().collect(),
-        &stash,
+        &tx,
     )
     .await
     .expect("failed to create conversation counts");
     if !skip_messages {
         Label::create_or_update_message_counts(
             result.message_counts.values().cloned().collect(),
-            &stash,
+            &tx,
         )
         .await
         .expect("failed to create message counts");
     }
+    tx.commit().await.expect("failed to commit transaction");
 
     (env, result)
 }
@@ -296,9 +305,12 @@ pub fn message_counts_for_conversation(
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, ConversationCount> {
+pub async fn conv_counts_as_map<A>(interface: &A) -> BTreeMap<LocalId, ConversationCount>
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     BTreeMap::from_iter(
-        Label::all(tx.stash(), None)
+        Label::all(interface, None)
             .await
             .unwrap()
             .into_iter()
@@ -317,9 +329,12 @@ pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, ConversationCo
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, MessageCount> {
+pub async fn msg_counts_as_map<A>(interface: &A) -> BTreeMap<LocalId, MessageCount>
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     BTreeMap::from_iter(
-        Label::all(tx.stash(), None)
+        Label::all(interface, None)
             .await
             .unwrap()
             .into_iter()
@@ -337,12 +352,14 @@ pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, MessageCount> {
 }
 
 /// # Panics
-pub async fn create_address(core_tx: &Tether) -> Address {
+pub async fn create_address<A>(interface: &A) -> Address
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     let mut address = test_address();
-    address
-        .save(core_tx)
-        .await
-        .expect("failed to create address");
+    let tx = interface.stash().transaction().await.unwrap();
+    address.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     address
 }

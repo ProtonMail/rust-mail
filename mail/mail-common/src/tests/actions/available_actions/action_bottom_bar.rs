@@ -374,7 +374,7 @@ mod message {
     async fn bottom_bar_actions(test_case: &TestCase<Message>) {
         // Setup
         let stash = new_test_connection().await;
-
+        let address = create_address(&stash).await;
         let mut settings = MailSettings::get_or_default(&stash).await;
         settings.mobile_settings = Some(MobileSettings {
             message_toolbar: MobileSetting {
@@ -383,19 +383,19 @@ mod message {
             },
             ..Default::default()
         });
-        settings.save(&stash).await.unwrap();
-
-        let address = create_address(&stash.connection()).await;
+        let tx = stash.transaction().await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         let mut conversation = Conversation::default();
-        conversation.save(&stash).await.unwrap();
+        conversation.save(&tx).await.unwrap();
 
         let mut messages = test_case.items.clone();
         for message in &mut messages {
             message.local_address_id = address.local_id.unwrap();
             message.local_conversation_id = conversation.local_id;
-            message.save(&stash).await.unwrap();
+            message.save(&tx).await.unwrap();
         }
+        tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
             .counterpart::<Label, _>(&stash)
@@ -803,12 +803,14 @@ mod conversation {
             },
             ..Default::default()
         });
-        settings.save(&stash).await.unwrap();
+        let tx = stash.transaction().await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         let mut conversations = test_case.items.clone();
         for conversation in &mut conversations {
-            conversation.save(&stash).await.unwrap();
+            conversation.save(&tx).await.unwrap();
         }
+        tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
             .counterpart::<Label, _>(&stash)

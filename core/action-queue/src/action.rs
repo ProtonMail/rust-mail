@@ -6,7 +6,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -222,7 +222,7 @@ pub trait Handler: Default + 'static + Send + Sync {
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>,
     > + Send;
@@ -240,7 +240,7 @@ pub trait Handler: Default + 'static + Send + Sync {
         &self,
         context: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
 
     /// Apply the `action` on the server.

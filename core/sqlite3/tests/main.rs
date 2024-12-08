@@ -63,7 +63,7 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                 conn.query::<_, Person2>("SELECT person.id, person.name, person.data , person_map.data2 FROM person JOIN person_map ON person.id=person_map.person", vec![]).await?;
             }
             1 => {
-                conn.transaction().await?;
+                let conn = conn.clone().transaction().await?;
                 let mut nums: Vec<u8> = (1..20).collect();
                 nums.shuffle(&mut rng);
                 let me = Person {

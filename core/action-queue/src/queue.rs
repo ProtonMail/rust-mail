@@ -14,7 +14,7 @@ use futures::FutureExt;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -698,7 +698,7 @@ pub(crate) trait QueuedAction: Send {
     fn cancel<'a>(
         &'a mut self,
         shared: &'a Shared,
-        tx: &'a Tether,
+        tx: &'a Bond,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
@@ -739,7 +739,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn cancel<'a>(
         &'a mut self,
         shared: &'a Shared,
-        tx: &'a Tether,
+        tx: &'a Bond,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
@@ -966,13 +966,11 @@ async fn execute_action_remote<T: Action>(
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
     let result = handler.apply_remote(context, action, &shared.stash).await;
-
     let tether = shared.stash.connection();
-
-    tether.transaction().await?;
+    let bond = tether.transaction().await?;
     let result = match result {
         Ok(result) => {
-            StoredAction::delete(&tether, id).await?;
+            StoredAction::delete(&bond, id).await?;
 
             Ok(ActionRemoteOutput::Executed(result))
         }
@@ -983,31 +981,33 @@ async fn execute_action_remote<T: Action>(
                 return Ok(ActionRemoteOutput::Queued(id));
             }
             debug!("Reverting self and dependees");
-            if let Err(e) = cancel_action_with_dependees(shared, &tether, id).await {
+            if let Err(e) = cancel_action_with_dependees(shared, &bond, id).await {
                 error!("Failed to cancel action and depeendees: {e}");
             }
 
             Err(ActionError::Action(e))
         }
     };
-    tether.commit().await?;
+    bond.commit().await?;
     result
 }
 
 /// Cancel
 async fn cancel_action_with_dependees(
     shared: &Shared,
-    tx: &Tether,
+    bond: &Bond,
     action_id: Id,
 ) -> QueuedResult<Vec<Id>> {
     let mut remaining_actions = vec![action_id];
     let mut sorter = TopologicalSort::<Id>::new();
     let mut cancelled_actions = Vec::new();
     while let Some(action_id) = remaining_actions.pop() {
-        let dependees = StoredAction::dependees(tx, action_id).await.map_err(|e| {
-            error!("Failed to load action dependees: {e}");
-            e
-        })?;
+        let dependees = StoredAction::dependees(bond, action_id)
+            .await
+            .map_err(|e| {
+                error!("Failed to load action dependees: {e}");
+                e
+            })?;
         debug!("Action {action_id} has {:?} as dependees", dependees);
         remaining_actions.extend(dependees.iter().copied());
         for id in dependees {
@@ -1018,26 +1018,26 @@ async fn cancel_action_with_dependees(
     if sorter.is_empty() {
         // This means that the current action has no dependency chain
         // we should only revert this action.
-        let Some(action) = StoredAction::load(action_id, tx).await? else {
+        let Some(action) = StoredAction::load(action_id, bond).await? else {
             return Err(QueuedError::ActionNotFound(action_id));
         };
 
         let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-        decoded.cancel(shared, tx, metadata).await?;
+        decoded.cancel(shared, bond, metadata).await?;
 
         cancelled_actions.push(action_id);
     } else {
         debug!("Reverting {} dependent actions", sorter.len());
         // Cancel all actions in reversed order
         while let Some(current_action_id) = sorter.pop() {
-            let Some(action) = StoredAction::load(current_action_id, tx).await? else {
+            let Some(action) = StoredAction::load(current_action_id, bond).await? else {
                 return Err(QueuedError::ActionNotFound(current_action_id));
             };
 
             let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-            decoded.cancel(shared, tx, metadata).await?;
+            decoded.cancel(shared, bond, metadata).await?;
 
             cancelled_actions.push(current_action_id);
         }

@@ -13,7 +13,7 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{AgnosticInterface, Interface, Notification, Stash, StashError};
+use crate::stash::{AgnosticInterface, Bond, Interface, Notification, Stash, StashError};
 use core::any::Any;
 use core::error::Error;
 use core::fmt::{Debug, Display};
@@ -779,11 +779,8 @@ where
     /// * [`StashError::NoRowIdReturned`]
     /// * [`StashError::NoRowsUpdated`]
     ///
-    async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        perform_save(self, &interface.clone().into()).await
+    async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        perform_save(self, bond).await
     }
 
     /// Sets the record's unique primary ID field value.
@@ -1105,10 +1102,7 @@ where
 /// * [`Model::save()`]
 ///
 #[allow(clippy::too_many_lines)]
-pub async fn perform_save<M: Model>(
-    model: &mut M,
-    interface: &AgnosticInterface,
-) -> Result<(), StashError> {
+pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.
     let (fields, values) = if M::id_is_autoincrementing() {
@@ -1151,7 +1145,7 @@ pub async fn perform_save<M: Model>(
                 .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
                 .collect();
             #[allow(clippy::shadow_reuse)]
-            let affected: usize = interface.execute(&query, field_values).await?;
+            let affected: usize = bond.execute(&query, field_values).await?;
 
             if affected == 0 {
                 return Err(StashError::NoRowsUpdated);
@@ -1192,7 +1186,7 @@ pub async fn perform_save<M: Model>(
             );
             let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
             #[allow(clippy::shadow_reuse)]
-            let rows = interface
+            let rows = bond
                 .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
                 .await?;
             if let Some(row) = rows.into_iter().next() {
