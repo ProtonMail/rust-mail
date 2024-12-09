@@ -11,14 +11,14 @@ use proton_api_core::auth::{
 };
 use secrecy::{ExposeSecret, SecretVec};
 use stash::orm::Model;
-use stash::stash::Stash;
+use stash::stash::{Stash, Tether};
 use std::ops::Deref;
 use std::sync::Arc;
 use tracing::error;
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
-    stash: Stash,
+    tether: Tether,
     key_chain: Arc<dyn KeyChain>,
     user_id: Option<RemoteId>,
     session_id: Option<RemoteId>,
@@ -26,13 +26,14 @@ pub struct AuthStore {
 
 impl AuthStore {
     pub fn new(
-        stash: Stash,
+        stash: &Stash,
         key_chain: Arc<dyn KeyChain>,
         user_id: Option<RemoteId>,
         session_id: Option<RemoteId>,
     ) -> Self {
+        let tether = stash.connection();
         Self {
-            stash,
+            tether,
             key_chain,
             user_id,
             session_id,
@@ -56,7 +57,7 @@ impl AuthStore {
         let key = self.encryption_key()?;
 
         let Some(account) = (if let Some(id) = &self.user_id {
-            CoreAccount::find_by_id(id.to_owned(), &self.stash).await?
+            CoreAccount::find_by_id(id.to_owned(), &self.tether).await?
         } else {
             None
         }) else {
@@ -64,7 +65,7 @@ impl AuthStore {
         };
 
         let Some(session) = (if let Some(id) = &self.session_id {
-            CoreSession::find_by_id(id.to_owned(), &self.stash).await?
+            CoreSession::find_by_id(id.to_owned(), &self.tether).await?
         } else {
             None
         }) else {
@@ -88,7 +89,7 @@ impl AuthStore {
         let key = self.encryption_key()?;
 
         let Some(session) = (if let Some(id) = &self.session_id {
-            CoreSession::find_by_id(id.to_owned(), &self.stash).await?
+            CoreSession::find_by_id(id.to_owned(), &self.tether).await?
         } else {
             None
         }) else {
@@ -109,7 +110,7 @@ impl AuthStore {
             return Ok(None);
         };
 
-        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
+        let Some(account) = CoreAccount::find_by_id(user_id, &self.tether).await? else {
             return Ok(None);
         };
 
@@ -130,7 +131,7 @@ impl AuthStore {
         let mbp_mode = PasswordMode::from(auth.password_mode);
 
         // We write twice, so do it in a transaction.
-        let tx = self.stash.transaction().await?;
+        let tx = self.tether.transaction().await?;
 
         // Load or create the account.
         if (CoreAccount::find_by_id(user_id.clone(), &tx).await?).is_none() {
@@ -169,8 +170,8 @@ impl AuthStore {
     }
 
     async fn set_user_secrets(&mut self, data: UserSecrets) -> Result<(), StoreError> {
-        let tx = self.stash.transaction().await?;
         let key = self.encryption_key()?;
+        let tx = self.tether.transaction().await?;
         let sec = data.key_secret;
 
         let Some(user_id) = self.user_id.clone() else {
@@ -205,11 +206,11 @@ impl AuthStore {
             return Err("failed to set account info: no user ID")?;
         };
 
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.tether).await? else {
             return Err(format!("failed to set account info: missing {user_id}"))?;
         };
 
-        let tx = self.stash.transaction().await?;
+        let tx = self.tether.transaction().await?;
         account
             .with_info(username, display_name, primary_addr)
             .save(&tx)
@@ -222,7 +223,9 @@ impl AuthStore {
     async fn clear(&mut self) -> Result<(), StoreError> {
         // Clear the session if it exists.
         if let Some(id) = &self.session_id {
-            CoreSession::delete_by_remote_id(id.to_owned(), &self.stash).await?;
+            let tx = self.tether.transaction().await?;
+            CoreSession::delete_by_remote_id(id.to_owned(), &tx).await?;
+            tx.commit().await?;
         }
 
         // Clear the user and session IDs.

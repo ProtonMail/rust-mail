@@ -36,7 +36,8 @@ impl MailUserContext {
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
     ) -> MailContextResult<Option<PathBuf>> {
-        let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), self.user_stash())
+        let tether = self.user_stash().connection();
+        let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &tether)
             .await?
             .unwrap_or_default();
 

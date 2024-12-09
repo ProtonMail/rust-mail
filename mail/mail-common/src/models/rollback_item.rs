@@ -13,7 +13,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::RemoteId;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
+use stash::stash::{Bond, StashError, Tether};
 use stash::{macros::Model, stash::Stash};
 use tokio::sync::Mutex;
 use tracing::{debug, error};
@@ -44,11 +44,12 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// As sync_all method. This is only a helper macro to reduce code duplication.
 ///
 macro_rules! sync_any {
-    ($item:tt, $class:tt, $stash:expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
-        let stash = $stash;
-        let items = Self::find_by_kind(RollbackItemType::$item, stash).await?;
+    ($item:tt, $class:tt, $tether:expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
+        let tether = $tether;
+        let items = Self::find_by_kind(RollbackItemType::$item, tether).await?;
         let batch = $batch.into().unwrap_or(items.len() + 1);
         let chunked_remote_ids = items.into_iter().map(|item| item.remote_id).chunks(batch);
+        let stash = tether.stash();
 
         stream::iter(&chunked_remote_ids)
             .then(|remote_ids| async {
@@ -76,7 +77,8 @@ macro_rules! sync_any {
                 Ok(items.into_inner())
             })
             .try_for_each(|mut items| async move {
-                let tx = stash.transaction().await?;
+                let mut tether = stash.connection();
+                let tx = tether.transaction().await?;
 
                 for item in items.iter_mut() {
                     let result = $class::save(item, &tx).await;
@@ -168,7 +170,7 @@ impl RollbackItem {
     ///
     /// When the query fails.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let None = RollbackItem::find_first(
             "WHERE remote_id=? AND item_type=?",
             params![self.remote_id.clone(), self.item_type],
@@ -206,9 +208,10 @@ impl RollbackItem {
         I: Into<Option<usize>> + Copy,
         PM: ProtonMail,
     {
-        Self::sync_labels(api, stash, batch).await?;
-        Self::sync_messages(api, stash, batch).await?;
-        Self::sync_conversations(api, stash, batch).await?;
+        let tether = stash.connection();
+        Self::sync_labels(api, &tether, batch).await?;
+        Self::sync_messages(api, &tether, batch).await?;
+        Self::sync_conversations(api, &tether, batch).await?;
 
         Ok(())
     }
@@ -219,14 +222,14 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_labels<I, PM>(api: &PM, stash: &Stash, batch: I) -> Result<(), AppError>
+    pub async fn sync_labels<I, PM>(api: &PM, tether: &Tether, batch: I) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
         use proton_api_mail::services::proton::responses::GetLabelsResponse;
 
-        sync_any!(Label, Label, stash, batch => |remote_id| async {
+        sync_any!(Label, Label, tether, batch => |remote_id| async {
             api.get_labels_by_ids(vec![remote_id.into()]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
@@ -239,16 +242,16 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_messages<I, PM>(api: &PM, stash: &Stash, batch: I) -> Result<(), AppError>
+    pub async fn sync_messages<I, PM>(api: &PM, tether: &Tether, batch: I) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Message, MessageAndBodyMetadata, stash, batch => |remote_id| async {
+        sync_any!(Message, MessageAndBodyMetadata, tether, batch => |remote_id| async {
             api.get_message(remote_id.into()).await
         } => |api_message: GetMessageResponse| async {
             let remote_id = api_message.message.metadata.id.clone().into();
-            let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, stash).await?;
+            let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, tether).await?;
             Result::<_, AppError>::Ok(Some(MessageAndBodyMetadata{message_metadata: metadata,body_metadata,remote_id:Some(remote_id)}))
         })
     }
@@ -261,14 +264,14 @@ impl RollbackItem {
     ///
     pub async fn sync_conversations<I, PM>(
         api: &PM,
-        stash: &Stash,
+        tether: &Tether,
         batch: I,
     ) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Conversation, Conversation, stash, batch => |remote_id| async {
+        sync_any!(Conversation, Conversation, tether, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
                 ids: Some(vec![remote_id.into()]),
                 ..Default::default()
@@ -289,11 +292,11 @@ impl RollbackItem {
     ///
     /// This method will return an error if the database operation fails.
     ///
-    async fn find_by_kind<I: Into<AgnosticInterface> + Interface>(
+    async fn find_by_kind(
         kind: RollbackItemType,
-        interface: &I,
+        tether: &Tether,
     ) -> Result<Vec<RollbackItem>, StashError> {
-        RollbackItem::find("WHERE item_type = ?", params![kind], interface, None).await
+        RollbackItem::find("WHERE item_type = ?", params![kind], tether, None).await
     }
 
     /// This helper method is used to delete rollback item of a specific kind & remote_id.
@@ -311,7 +314,7 @@ impl RollbackItem {
     async fn delete_by_rid_and_kind(
         remote_id: Option<RemoteId>,
         kind: RollbackItemType,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         bond.execute(
             format!(
@@ -334,7 +337,7 @@ struct MessageAndBodyMetadata {
 }
 
 impl MessageAndBodyMetadata {
-    async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.message_metadata.save(bond).await?;
         self.body_metadata.save(bond).await?;
         Ok(())

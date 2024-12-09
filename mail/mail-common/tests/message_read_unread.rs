@@ -104,9 +104,9 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -146,7 +146,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let message_ids = RemoteId::counterparts::<Message, _>(to_mark, stash)
+    let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
         .await
         .unwrap();
     Message::action_mark_read(user_ctx.queue(), inbox.local_id.unwrap(), message_ids)
@@ -154,7 +154,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
         .unwrap();
 
     // Validation
-    let messages = Message::find("WHERE unread = ?", params![true], stash, None)
+    let messages = Message::find("WHERE unread = ?", params![true], &tether, None)
         .await
         .unwrap();
     assert_eq!(messages.len(), expected_unread);
@@ -170,9 +170,9 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -211,7 +211,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let message_ids = RemoteId::counterparts::<Message, _>(to_mark, stash)
+    let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
         .await
         .unwrap();
     Message::action_mark_unread(user_ctx.queue(), inbox.local_id.unwrap(), message_ids)
@@ -219,7 +219,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
         .unwrap();
 
     // Validation
-    let messages = Message::find("WHERE unread = ?", params![true], stash, None)
+    let messages = Message::find("WHERE unread = ?", params![true], &tether, None)
         .await
         .unwrap();
     assert_eq!(messages.len(), expected_unread);

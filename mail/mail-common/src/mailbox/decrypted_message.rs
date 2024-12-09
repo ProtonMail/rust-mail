@@ -103,7 +103,8 @@ impl DecryptedMessageBody {
         remote_content: RemoteContent,
         block_quote: BlockQuote,
     ) -> Result<BodyOutput, MailboxError> {
-        let mail_settings = MailSettings::get_or_default(ctx.user_stash()).await;
+        let tether = ctx.user_stash().connection();
+        let mail_settings = MailSettings::get_or_default(&tether).await;
         let user_session_id = ctx.user_id();
         let BodyOutput {
             body,

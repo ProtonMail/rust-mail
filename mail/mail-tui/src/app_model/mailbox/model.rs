@@ -66,12 +66,11 @@ pub struct Model {
 impl Model {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
         let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
-        let label = Label::find_by_id(mailbox.label_id(), ctx.user_stash())
+        let tether = ctx.user_stash().connection();
+        let label = Label::find_by_id(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
-        let mail_settings = MailSettings::get(ctx.user_stash())
-            .await?
-            .unwrap_or_default();
+        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         Ok(Self {
             ctx,
             mailbox,
@@ -102,12 +101,8 @@ impl Model {
         Command::batch([
             self.init_background_worker(),
             Command::task(async {
-                let label = match Label::find_by_id(
-                    mbox.label_id(),
-                    mbox.user_context().user_stash(),
-                )
-                .await
-                {
+                let tether = mbox.user_context().user_stash().connection();
+                let label = match Label::find_by_id(mbox.label_id(), &tether).await {
                     Ok(l) => {
                         if let Some(l) = l {
                             l
@@ -139,7 +134,8 @@ impl Model {
         let ctx = self.mailbox.user_context();
         let label_id = self.label.local_id.unwrap();
         Command::task(async move {
-            match Label::watch(label_id, ctx.user_stash()).await {
+            let tether = ctx.user_stash().connection();
+            match Label::watch(label_id, &tether).await {
                 Ok(receiver) => {
                     if let Some((label, receiver)) = receiver {
                         let (watcher, background_command) =

@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
-use stash::stash::{Interface, Stash};
+use stash::stash::Stash;
 use tokio::spawn as spawn_async;
 
 #[derive(Clone, Debug, Deserialize, Model, PartialEq, Serialize)]
@@ -22,17 +22,17 @@ async fn test_tracker() {
     let dir = tempdir::TempDir::new("sqlite3_test").expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
     let stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
+    let conn = stash.connection();
 
-    stash
-        .execute(
-            "CREATE TABLE foo (id INTEGER PRIMARY KEY AUTOINCREMENT, bar INTEGER)",
-            vec![],
-        )
-        .await
-        .expect("failed to create table");
+    conn.execute(
+        "CREATE TABLE foo (id INTEGER PRIMARY KEY AUTOINCREMENT, bar INTEGER)",
+        vec![],
+    )
+    .await
+    .expect("failed to create table");
 
     let (sender, receiver) = flume::unbounded::<ResultsetChange<Foo, u64>>();
-    let results = Foo::find(String::new(), vec![], &stash, Some(sender))
+    let results = Foo::find(String::new(), vec![], &conn, Some(sender))
         .await
         .expect("Failed to run query");
     println!(">> {results:?}");
@@ -40,8 +40,9 @@ async fn test_tracker() {
     let mut join_handles = Vec::new();
     for _ in 0..3 {
         let stash_clone = stash.clone();
+        let conn_clone = stash_clone.connection();
         let h = spawn_async(async move {
-            stash_clone
+            conn_clone
                 .execute("INSERT INTO foo VALUES (null, 10)", vec![])
                 .await
                 .expect("failed tx");

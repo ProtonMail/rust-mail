@@ -117,21 +117,22 @@ impl Mailbox {
     /// Sync attachment metadata
     async fn sync_attachment(&self, attachment_id: LocalId) -> MailboxResult<Attachment> {
         let user_context = self.user_context();
-        let mut attachment = Attachment::load(attachment_id, user_context.user_stash())
+        let mut conn = user_context.user_stash().connection();
+        let mut attachment = Attachment::load(attachment_id, &conn)
             .await
             .inspect_err(|e| error!("Failed to load attachment({attachment_id}) from DB: {e})"))?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(user_context.session().api(), self.stash())
+                .sync_complete_metadata(user_context.session().api(), &mut conn)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id}) metadata: {e})")
                 })
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.
-            attachment = Attachment::load(attachment_id, user_context.user_stash())
+            attachment = Attachment::load(attachment_id, &conn)
                 .await?
                 .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         }

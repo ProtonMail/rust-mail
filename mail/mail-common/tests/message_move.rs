@@ -35,7 +35,7 @@ async fn move_between_folders() {
     // * create a message in one of those folders
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
     let source_label_id = LabelId::from("source");
     let source_label = test_label(&source_label_id, ApiLabelType::Folder, "source");
@@ -65,22 +65,22 @@ async fn move_between_folders() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let mut source = Label::find_first("WHERE remote_id = ?", params!["source"], stash)
+    let mut source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
         .await
         .unwrap()
         .unwrap();
     source.total_conv = 1;
     source.total_msg = 1;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     source.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], stash)
+    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&source_label_id));
 
     // Action:
@@ -97,7 +97,7 @@ async fn move_between_folders() {
     // Validation:
     // * the message is in the second folder
     // * the message is not in the first folder
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -113,7 +113,7 @@ async fn move_from_label_does_not_unlabel() {
     // * create a message in one of those label
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     let source_label_id = LabelId::from("source");
     let source_label = test_label(&source_label_id, ApiLabelType::Label, "source");
@@ -143,17 +143,17 @@ async fn move_from_label_does_not_unlabel() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let source = Label::find_first("WHERE remote_id = ?", params!["source"], stash)
+    let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], stash)
+    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&source_label_id));
     assert_eq!(message.custom_labels.len(), 1);
     assert_eq!(message.custom_labels[0].name, "source");
@@ -172,7 +172,7 @@ async fn move_from_label_does_not_unlabel() {
     // Validation:
     // * the message is in the second label
     // * the message is still in the first label
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -190,13 +190,13 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // * the message is unread
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
-    let trash = Label::find_first("WHERE remote_id = ?", params![LabelId::trash()], stash)
+    let trash = Label::find_first("WHERE remote_id = ?", params![LabelId::trash()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -234,7 +234,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
     assert!(message.unread);
 
@@ -252,7 +252,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // Validation:
     // * the message only have `all_mail` label
     // * the message is marked as read
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -269,9 +269,9 @@ async fn move_into_spam_remove_labels() {
     // * add the label to the message
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
-    let spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], stash)
+    let spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -309,12 +309,12 @@ async fn move_into_spam_remove_labels() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let custom = Label::find_first("WHERE remote_id = ?", params!["custom"], stash)
+    let custom = Label::find_first("WHERE remote_id = ?", params!["custom"], &tether)
         .await
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
 
     // Action:
@@ -330,7 +330,7 @@ async fn move_into_spam_remove_labels() {
 
     // Validation:
     // * the message only have `all_mail` label
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -345,19 +345,19 @@ async fn move_out_of_spam_set_almost_all_mail() {
     // * the message doesn't have `almost_all_mail` label
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
-    let mut spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], stash)
+    let mut spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
         .await
         .unwrap()
         .unwrap();
     spam.total_conv = 1;
     spam.total_msg = 1;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     spam.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -383,7 +383,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert_eq!(message.label_ids.len(), 1);
     assert_eq!(message.label_ids[0].clone().into_inner().into_inner(), "4");
 
@@ -400,7 +400,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
 
     // Validation:
     // * the message have `almost_all_mail` label
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");

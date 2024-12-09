@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
+use stash::stash::{Bond, StashError, Tether};
 use stash::{params, sql_using_serde};
 use std::ops::Deref;
 use std::string::FromUtf8Error;
@@ -98,10 +98,8 @@ impl CoreAccount {
     /// # Errors
     ///
     /// Returns error if the retrieval fails.
-    pub async fn by_primary_at(
-        interface: &(impl Into<AgnosticInterface> + Interface),
-    ) -> Result<Vec<Self>, StashError> {
-        Self::find("ORDER BY primary_at DESC", vec![], interface, None).await
+    pub async fn by_primary_at(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find("ORDER BY primary_at DESC", vec![], tether, None).await
     }
 
     /// Update the user info of the account.
@@ -159,7 +157,7 @@ impl CoreAccount {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(existing) = Self::find_by_id(self.remote_id.clone(), bond).await? {
             self.row_id = existing.row_id;
         }
@@ -211,10 +209,10 @@ impl CoreSession {
     /// Returns error if we fail to retrieve the sessions from the db.
     pub async fn find_by_user_id(
         user_id: RemoteId,
-        interface: &(impl Into<AgnosticInterface> + Interface),
+        tether: &Tether,
         queue: Option<ChangeSender<Self>>,
     ) -> Result<Vec<Self>, StashError> {
-        Self::find("WHERE account_id = ?", params![user_id], interface, queue).await
+        Self::find("WHERE account_id = ?", params![user_id], tether, queue).await
     }
 
     /// Create a new session for the given account.

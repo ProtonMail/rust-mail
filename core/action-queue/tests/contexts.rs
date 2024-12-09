@@ -77,7 +77,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         Ok(<Self::Action as Action>::LocalOutput::default())
     }
@@ -86,7 +86,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
     }

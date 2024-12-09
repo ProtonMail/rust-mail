@@ -1,7 +1,7 @@
 use indoc::indoc;
-use stash::stash::{Bond, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
-pub async fn create_message_tables(tx: &Bond) -> Result<(), StashError> {
+pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE messages(

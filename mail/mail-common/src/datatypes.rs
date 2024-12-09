@@ -48,6 +48,7 @@ pub(crate) mod system_label;
 pub use contextual_conversation::*;
 pub use exclusive_location::ExclusiveLocation;
 pub use rollback_item_type::RollbackItemType;
+use stash::stash::Tether;
 pub use system_folder::MovableSystemFolder;
 pub use system_label::SystemLabel;
 
@@ -82,7 +83,6 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
-use stash::stash::{AgnosticInterface, Interface};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -1668,11 +1668,10 @@ pub enum MobileActions {
 
 impl MobileActions {
     /// Compute the actions to be seen in the bottom bar
-    pub(crate) async fn bottom_bar_actions<A>(interface: &A) -> Result<Vec<MobileActions>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let settings = MailSettings::get_or_default(interface).await;
+    pub(crate) async fn bottom_bar_actions(
+        tether: &Tether,
+    ) -> Result<Vec<MobileActions>, AppError> {
+        let settings = MailSettings::get_or_default(tether).await;
 
         if let Some(mobile_settings) = settings.mobile_settings {
             if mobile_settings.message_toolbar.is_custom {

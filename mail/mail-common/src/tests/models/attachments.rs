@@ -21,13 +21,15 @@ async fn test_attachment_create_without_metadata() {
     // Simulates an attachment's full info being stored without having any previous
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
-    let (_, _, _) = create_attachment_dependencies(&conn, None).await.unwrap();
+    let mut conn = stash.connection();
+    let (_, _, _) = create_attachment_dependencies(&mut conn, None)
+        .await
+        .unwrap();
     let api_attachment = test_attachment();
     let mut attachment = Attachment::from(api_attachment.clone());
     let tx = conn.transaction().await.unwrap();
     attachment.save(&tx).await.unwrap();
-    let conn = tx.commit().await.unwrap();
+    tx.commit().await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = Attachment::from(api_attachment);
@@ -48,7 +50,7 @@ async fn test_attachment_create_with_metadata() {
     // Simulates an attachment's full info being stored with an existing
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let api_attachment = test_attachment();
     let metadata = ApiAttachmentMetadata {
         id: api_attachment.id.clone(),
@@ -57,11 +59,11 @@ async fn test_attachment_create_with_metadata() {
         mime_type: api_attachment.mime_type.clone(),
         disposition: api_attachment.disposition,
     };
-    let (_, _, _) = create_attachment_dependencies(&conn, Some(metadata))
+    let (_, _, _) = create_attachment_dependencies(&mut conn, Some(metadata))
         .await
         .unwrap();
 
-    let db_attachment = Attachment::load(1.into(), &stash).await.unwrap().unwrap();
+    let db_attachment = Attachment::load(1.into(), &conn).await.unwrap().unwrap();
     assert!(!db_attachment.has_complete_metadata());
 
     let mut attachment = Attachment::from(api_attachment.clone());
@@ -73,7 +75,7 @@ async fn test_attachment_create_with_metadata() {
     let mut expected = attachment.clone();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
-    let db_attachment = Attachment::load(local_id.unwrap(), &stash)
+    let db_attachment = Attachment::load(local_id.unwrap(), &conn)
         .await
         .unwrap()
         .unwrap();
@@ -114,15 +116,12 @@ fn message_id() -> RemoteId {
     RemoteId::from("msg")
 }
 
-async fn create_attachment_dependencies<A>(
-    interface: &A,
+async fn create_attachment_dependencies(
+    tether: &mut Tether,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(RemoteId, LocalId, LocalId), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+) -> Result<(RemoteId, LocalId, LocalId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
-    let tx = interface.stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
 
     Address {
         local_id: None,

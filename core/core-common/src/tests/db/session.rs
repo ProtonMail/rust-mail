@@ -9,7 +9,7 @@ use proton_api_core::auth::{AuthSession, AuthState, UserKeySecret};
 use secrecy::SecretString;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash};
+use stash::stash::{Stash, Tether};
 use std::io::stdout;
 use tracing::subscriber::set_global_default;
 use tracing::Level;
@@ -32,8 +32,8 @@ async fn new_test_connection() -> Stash {
     stash
 }
 
-async fn new_test_account(stash: &Stash) -> Result<CoreAccount> {
-    let tx = stash.transaction().await?;
+async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
+    let tx = tether.transaction().await?;
     let account = CoreAccount::new(
         RemoteId::from("user_id"),
         String::from("name_or_addr"),
@@ -79,14 +79,14 @@ fn test_encryption() {
 #[tokio::test]
 async fn test_session_store_load() {
     let key = SessionEncryptionKey::random();
-    let stash = new_test_connection().await;
-    let account = new_test_account(&stash).await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
     let mut session = CoreSession::new(auth, &key).unwrap();
 
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");
@@ -112,8 +112,8 @@ async fn test_session_store_load() {
 #[tokio::test]
 async fn test_session_update() {
     let key = SessionEncryptionKey::random();
-    let stash = new_test_connection().await;
-    let account = new_test_account(&stash).await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
     let mut session = CoreSession::new(auth, &key)
@@ -122,7 +122,7 @@ async fn test_session_update() {
         .unwrap();
 
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");
@@ -166,13 +166,13 @@ async fn test_session_update() {
 #[tokio::test]
 async fn test_session_delete_user_id() {
     let key = SessionEncryptionKey::random();
-    let stash = new_test_connection().await;
-    let account = new_test_account(&stash).await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
     let mut session = CoreSession::new(auth, &key).unwrap();
 
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");
@@ -203,14 +203,14 @@ async fn test_session_delete_user_id() {
 #[tokio::test]
 async fn test_session_delete_session_id() {
     let key = SessionEncryptionKey::random();
-    let stash = new_test_connection().await;
-    let account = new_test_account(&stash).await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
     let mut session = CoreSession::new(auth, &key).unwrap();
 
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");

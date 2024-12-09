@@ -105,7 +105,8 @@ async fn test_store_and_delete_remote_items(
 ) {
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = stash.connection();
+    let tx = tether.transaction().await.unwrap();
 
     for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
         item.save(&tx).await.unwrap();
@@ -117,19 +118,19 @@ async fn test_store_and_delete_remote_items(
     tx.commit().await.unwrap();
 
     let expected = expected.unwrap_or(input);
-    let actual = RollbackItem::all(&stash, None).await.unwrap();
+    let actual = RollbackItem::all(&tether, None).await.unwrap();
 
     assert_eq!(expected, actual);
 
     // * RollbackItem is correctly synced *
-    setup_database(&stash).await;
+    setup_database(&mut tether).await;
 
-    let (_mock, api) = start_server(&stash).await;
+    let (_mock, api) = start_server(&tether).await;
 
     RollbackItem::sync_all(&api, &stash, 2).await.unwrap();
 
     // * RollbackItems are correctly deleted during sync *
-    let actual = RollbackItem::all(&stash, None).await.unwrap();
+    let actual = RollbackItem::all(&tether, None).await.unwrap();
 
     assert_eq!(actual.len(), 0);
 
@@ -137,12 +138,12 @@ async fn test_store_and_delete_remote_items(
     RollbackItem::sync_all(&api, &stash, None).await.unwrap();
 }
 
-async fn setup_database(stash: &Stash) {
-    let mut conversations = conversations(stash).await;
+async fn setup_database(tether: &mut Tether) {
+    let mut conversations = conversations(tether).await;
     let mut local_conversation_id = None;
     let mut remote_conversation_id = None;
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for conversation in conversations.iter_mut() {
         conversation.save(&tx).await.unwrap();
         local_conversation_id = conversation.local_id;
@@ -150,25 +151,25 @@ async fn setup_database(stash: &Stash) {
     }
     tx.commit().await.unwrap();
 
-    let mut labels = labels(stash).await;
+    let mut labels = labels(tether).await;
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for label in labels.iter_mut() {
         label.save(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
 
-    let mut messages = messages(local_conversation_id, remote_conversation_id, stash).await;
+    let mut messages = messages(local_conversation_id, remote_conversation_id, tether).await;
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for message in messages.iter_mut() {
         message.save(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
 }
 
-async fn conversations(tx: &Stash) -> Vec<Conversation> {
-    let items = RollbackItem::find_by_kind(RollbackItemType::Conversation, tx)
+async fn conversations(tether: &Tether) -> Vec<Conversation> {
+    let items = RollbackItem::find_by_kind(RollbackItemType::Conversation, tether)
         .await
         .unwrap();
 
@@ -181,12 +182,12 @@ async fn conversations(tx: &Stash) -> Vec<Conversation> {
 async fn messages(
     local_conversation_id: Option<LocalId>,
     remote_conversation_id: Option<RemoteId>,
-    tx: &Stash,
+    tether: &mut Tether,
 ) -> Vec<Message> {
-    let items = RollbackItem::find_by_kind(RollbackItemType::Message, tx)
+    let items = RollbackItem::find_by_kind(RollbackItemType::Message, tether)
         .await
         .unwrap();
-    let address = create_address(tx).await;
+    let address = create_address(tether).await;
 
     items
         .into_iter()
@@ -202,8 +203,8 @@ async fn messages(
         .collect()
 }
 
-async fn labels(tx: &Stash) -> Vec<Label> {
-    let items = RollbackItem::find_by_kind(RollbackItemType::Label, tx)
+async fn labels(tether: &Tether) -> Vec<Label> {
+    let items = RollbackItem::find_by_kind(RollbackItemType::Label, tether)
         .await
         .unwrap();
 
@@ -217,7 +218,7 @@ async fn labels(tx: &Stash) -> Vec<Label> {
         .collect()
 }
 
-async fn start_server(stash: &Stash) -> (MockServer, Proton) {
+async fn start_server(tether: &Tether) -> (MockServer, Proton) {
     let mock_server = MockServer::start().await;
     let api_config = Config {
         base_url: format!("{}/api/", mock_server.uri()),
@@ -233,13 +234,13 @@ async fn start_server(stash: &Stash) -> (MockServer, Proton) {
     ];
 
     for kind in kinds {
-        let items = RollbackItem::find_by_kind(kind, stash).await.unwrap();
+        let items = RollbackItem::find_by_kind(kind, tether).await.unwrap();
 
         for item in items {
             dbg!(&item);
             match item.item_type {
                 RollbackItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
-                RollbackItemType::Message => mock_get_message(&mock_server, &item, stash).await,
+                RollbackItemType::Message => mock_get_message(&mock_server, &item, tether).await,
                 RollbackItemType::Label => mock_label(&mock_server, &item).await,
             }
         }
@@ -267,9 +268,9 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
         .await;
 }
 
-async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, stash: &Stash) {
+async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether: &Tether) {
     let remote_id = &item.remote_id;
-    let db_message = Message::find_by_id(remote_id.clone(), stash)
+    let db_message = Message::find_by_id(remote_id.clone(), tether)
         .await
         .unwrap()
         .unwrap();

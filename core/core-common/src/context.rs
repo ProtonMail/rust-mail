@@ -20,7 +20,7 @@ use proton_api_core::session::{Session as ApiCoreSession, Session};
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::stash::{Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -191,7 +191,7 @@ pub struct Context {
     this: Weak<Self>,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
-    stash: Stash,
+    tether: Tether,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     api: Proton,
@@ -249,7 +249,7 @@ impl Context {
             network_connected: AtomicBool::new(true),
             user_db_path,
             key_chain,
-            stash,
+            tether: stash.connection(),
             user_db_initializers: initializers,
             network_callback,
             api,
@@ -269,7 +269,7 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
-        Ok(CoreAccount::all(&self.stash, None).await?)
+        Ok(CoreAccount::all(&self.tether, None).await?)
     }
 
     /// Watch the accounts for changes.
@@ -288,7 +288,7 @@ impl Context {
     ) -> CoreContextResult<(Vec<CoreAccount>, ChangeReceiver<CoreAccount>)> {
         let (tx, rx) = flume::unbounded();
 
-        let res = CoreAccount::all(&self.stash, Some(tx)).await?;
+        let res = CoreAccount::all(&self.tether, Some(tx)).await?;
 
         Ok((res, rx))
     }
@@ -303,7 +303,7 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
-        Ok(CoreSession::all(&self.stash, None).await?)
+        Ok(CoreSession::all(&self.tether, None).await?)
     }
 
     /// Watch the API sessions for changes.
@@ -322,7 +322,7 @@ impl Context {
     ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
         let (tx, rx) = flume::unbounded();
 
-        let res = CoreSession::all(&self.stash, Some(tx)).await?;
+        let res = CoreSession::all(&self.tether, Some(tx)).await?;
 
         Ok((res, rx))
     }
@@ -338,7 +338,7 @@ impl Context {
         &self,
         user_id: RemoteId,
     ) -> CoreContextResult<Vec<CoreSession>> {
-        Ok(CoreSession::find_by_user_id(user_id, &self.stash, None).await?)
+        Ok(CoreSession::find_by_user_id(user_id, &self.tether, None).await?)
     }
 
     /// Watch an account's API sessions for changes.
@@ -354,7 +354,7 @@ impl Context {
     ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
         let (tx, rx) = flume::unbounded();
 
-        let res = CoreSession::find_by_user_id(user_id, &self.stash, Some(tx)).await?;
+        let res = CoreSession::find_by_user_id(user_id, &self.tether, Some(tx)).await?;
 
         Ok((res, rx))
     }
@@ -368,7 +368,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_account(&self, user_id: RemoteId) -> CoreContextResult<Option<CoreAccount>> {
-        Ok(CoreAccount::find_by_id(user_id, &self.stash).await?)
+        Ok(CoreAccount::find_by_id(user_id, &self.tether).await?)
     }
 
     /// Get the login state of an account.
@@ -380,11 +380,11 @@ impl Context {
         &self,
         user_id: RemoteId,
     ) -> CoreContextResult<Option<CoreAccountState>> {
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.tether).await? else {
             return Ok(None);
         };
 
-        let state = CoreSession::find_by_user_id(user_id, &self.stash, None)
+        let state = CoreSession::find_by_user_id(user_id, &self.tether, None)
             .map_ok(|s| CoreAccountState::of(&account, &s))
             .await?;
 
@@ -403,7 +403,7 @@ impl Context {
         &self,
         session_id: RemoteId,
     ) -> CoreContextResult<Option<CoreSession>> {
-        Ok(CoreSession::find_by_id(session_id, &self.stash).await?)
+        Ok(CoreSession::find_by_id(session_id, &self.tether).await?)
     }
 
     /// Get the login state of a session.
@@ -415,7 +415,7 @@ impl Context {
         &self,
         session_id: RemoteId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
-        let Some(session) = CoreSession::find_by_id(session_id, &self.stash).await? else {
+        let Some(session) = CoreSession::find_by_id(session_id, &self.tether).await? else {
             return Ok(None);
         };
 
@@ -428,7 +428,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
-        for account in CoreAccount::by_primary_at(&self.stash).await? {
+        for account in CoreAccount::by_primary_at(&self.tether).await? {
             let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
                 continue;
             };
@@ -447,12 +447,13 @@ impl Context {
     ///
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
-        let mut account = CoreAccount::find_by_id(user_id, &self.stash)
+        let mut account = CoreAccount::find_by_id(user_id, &self.tether)
             .await?
             .ok_or(CoreContextError::Other(anyhow!("account not found")))?
             .with_primary_now();
 
-        let tx = self.stash.transaction().await?;
+        let mut conn = self.tether.new();
+        let tx = conn.transaction().await?;
         account.save(&tx).await?;
         tx.commit().await?;
 
@@ -491,11 +492,11 @@ impl Context {
         user_id: RemoteId,
         session_id: RemoteId,
     ) -> CoreContextResult<Flow> {
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.tether).await? else {
             return Err(CoreContextError::Other(anyhow!("account not found")));
         };
 
-        let Some(session) = CoreSession::find_by_id(session_id.clone(), &self.stash).await? else {
+        let Some(session) = CoreSession::find_by_id(session_id.clone(), &self.tether).await? else {
             return Err(CoreContextError::Other(anyhow!("session not found")));
         };
 
@@ -618,9 +619,12 @@ impl Context {
 
         // TODO(ET-231): User cache paths.
 
-        CoreAccount::delete_by_remote_id(user_id, &self.stash)
+        let mut conn = self.tether.new();
+        let tx = conn.transaction().await?;
+        CoreAccount::delete_by_remote_id(user_id, &tx)
             .inspect_err(|e| error!("Failed to delete account from db: {e}"))
             .await?;
+        tx.commit().await?;
 
         Ok(())
     }
@@ -660,7 +664,7 @@ impl Context {
     ) -> CoreContextResult<ApiCoreSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
-        let stash = self.stash.clone();
+        let stash = self.stash();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(stash, keychain, user_id, session_id);
         let config = self.api.config().to_owned();
@@ -677,7 +681,7 @@ impl Context {
 
     /// Get the stash in use
     pub fn stash(&self) -> &Stash {
-        &self.stash
+        self.tether.stash()
     }
 
     /// Find the user's database file.

@@ -21,9 +21,9 @@ use velcro::{hash_map, hash_set};
 async fn action_label_as_without_archive() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
-    let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -82,7 +82,7 @@ async fn action_label_as_without_archive() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
@@ -103,13 +103,25 @@ async fn action_label_as_without_archive() {
     label3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation1 = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let conversation1 = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(conversation1.labels.is_empty());
-    let conversation2 = Conversation::load(2.into(), stash).await.unwrap().unwrap();
+    let conversation2 = Conversation::load(2.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation2.labels.len(), 2);
-    let conversation3 = Conversation::load(3.into(), stash).await.unwrap().unwrap();
+    let conversation3 = Conversation::load(3.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation3.labels.len(), 2);
-    let conversation4 = Conversation::load(4.into(), stash).await.unwrap().unwrap();
+    let conversation4 = Conversation::load(4.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation4.labels.len(), 3);
 
     // Action
@@ -130,7 +142,10 @@ async fn action_label_as_without_archive() {
     .unwrap();
 
     // Validation
-    let conversation1 = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let conversation1 = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation1.labels.len(), 1);
     let ids: HashSet<_> = conversation1
         .labels
@@ -138,7 +153,10 @@ async fn action_label_as_without_archive() {
         .map(|l| l.local_label_id.unwrap())
         .collect();
     assert_eq!(ids, hash_set![label1.local_id.unwrap()]);
-    let conversation2 = Conversation::load(2.into(), stash).await.unwrap().unwrap();
+    let conversation2 = Conversation::load(2.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation2.labels.len(), 2);
     let ids: HashSet<_> = conversation2
         .labels
@@ -149,7 +167,10 @@ async fn action_label_as_without_archive() {
         ids,
         hash_set![label1.local_id.unwrap(), label2.local_id.unwrap(),]
     );
-    let conversation3 = Conversation::load(3.into(), stash).await.unwrap().unwrap();
+    let conversation3 = Conversation::load(3.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation3.labels.len(), 1);
     let ids: HashSet<_> = conversation3
         .labels
@@ -157,7 +178,10 @@ async fn action_label_as_without_archive() {
         .map(|l| l.local_label_id.unwrap())
         .collect();
     assert_eq!(ids, hash_set![label1.local_id.unwrap(),]);
-    let conversation4 = Conversation::load(4.into(), stash).await.unwrap().unwrap();
+    let conversation4 = Conversation::load(4.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation4.labels.len(), 2);
     let ids: HashSet<_> = conversation4
         .labels
@@ -169,17 +193,17 @@ async fn action_label_as_without_archive() {
         hash_set![label1.local_id.unwrap(), label2.local_id.unwrap(),]
     );
 
-    let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], stash)
+    let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(label1.total_conv, 4);
-    let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], stash)
+    let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(label2.total_conv, 2);
-    let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], stash)
+    let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -190,9 +214,9 @@ async fn action_label_as_without_archive() {
 async fn action_label_as_with_archive() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
-    let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -245,7 +269,7 @@ async fn action_label_as_with_archive() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
@@ -266,9 +290,15 @@ async fn action_label_as_with_archive() {
     label3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation1 = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let conversation1 = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert!(conversation1.labels.is_empty());
-    let conversation2 = Conversation::load(2.into(), stash).await.unwrap().unwrap();
+    let conversation2 = Conversation::load(2.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation2.labels.len(), 3);
 
     // Action
@@ -288,12 +318,15 @@ async fn action_label_as_with_archive() {
 
     // Validation
     let archive_id = LabelId::archive()
-        .counterpart::<Label, _>(stash)
+        .counterpart::<Label>(&tether)
         .await
         .unwrap()
         .unwrap();
 
-    let conversation1 = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let conversation1 = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation1.labels.len(), 2);
     let ids: HashSet<_> = conversation1
         .labels
@@ -308,7 +341,10 @@ async fn action_label_as_with_archive() {
             local_id: archive_id,
         })
     );
-    let conversation2 = Conversation::load(2.into(), stash).await.unwrap().unwrap();
+    let conversation2 = Conversation::load(2.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(conversation2.labels.len(), 3);
     let ids: HashSet<_> = conversation2
         .labels

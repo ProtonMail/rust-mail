@@ -455,140 +455,6 @@ impl Deref for AgnosticConnection<'_> {
     }
 }
 
-/// A dual-nature connection wrapper.
-///
-/// This enum allows transparent handling of a [`Stash`] or [`Tether`], for
-/// cases where something simply needs to be used, has likely been passed in,
-/// and it doesn't particularly matter which it is. This approach means that
-/// both can be accepted and used, plus their core/shared functionality can be
-/// used in the same way, but also the enum can be destructured to use one or
-/// other specifically if needed. This gives full functionality but also ease of
-/// use.
-///
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(clippy::exhaustive_enums)]
-pub enum AgnosticInterface {
-    /// A [`Stash`] instance.
-    Stash(Stash),
-
-    /// A [`Tether`] instance.
-    Tether(Tether),
-
-    /// A [`Bond`] instance.
-    Bond(Bond),
-}
-
-impl From<Stash> for AgnosticInterface {
-    fn from(stash: Stash) -> Self {
-        Self::Stash(stash)
-    }
-}
-
-impl From<&Stash> for AgnosticInterface {
-    fn from(stash: &Stash) -> Self {
-        Self::Stash(stash.clone())
-    }
-}
-
-impl From<Tether> for AgnosticInterface {
-    fn from(tether: Tether) -> Self {
-        Self::Tether(tether)
-    }
-}
-
-impl From<&Tether> for AgnosticInterface {
-    fn from(tether: &Tether) -> Self {
-        Self::Tether(tether.clone())
-    }
-}
-
-impl From<Bond> for AgnosticInterface {
-    fn from(bond: Bond) -> Self {
-        Self::Bond(bond)
-    }
-}
-
-impl From<&Bond> for AgnosticInterface {
-    fn from(bond: &Bond) -> Self {
-        Self::Bond(bond.clone())
-    }
-}
-
-impl Interface for AgnosticInterface {
-    async fn execute<Q: Into<String> + Send>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<usize, StashError> {
-        match *self {
-            Self::Stash(ref stash) => stash.execute(query, params).await,
-            Self::Tether(ref tether) => tether.execute(query, params).await,
-            Self::Bond(ref bond) => bond.execute(query, params).await,
-        }
-    }
-
-    fn has_active_transaction(&self) -> bool {
-        match *self {
-            Self::Stash(ref stash) => stash.has_active_transaction(),
-            Self::Tether(ref tether) => tether.has_active_transaction(),
-            Self::Bond(ref bond) => bond.has_active_transaction(),
-        }
-    }
-
-    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        match *self {
-            Self::Stash(ref stash) => stash.load(id).await,
-            Self::Tether(ref tether) => tether.load(id).await,
-            Self::Bond(ref bond) => bond.load(id).await,
-        }
-    }
-
-    async fn query<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>,
-    {
-        match *self {
-            Self::Stash(ref stash) => stash.query(query, params).await,
-            Self::Tether(ref tether) => tether.query(query, params).await,
-            Self::Bond(ref bond) => bond.query(query, params).await,
-        }
-    }
-
-    async fn query_values<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
-    {
-        match *self {
-            Self::Stash(ref stash) => stash.query_values(query, params).await,
-            Self::Tether(ref tether) => tether.query_values(query, params).await,
-            Self::Bond(ref bond) => bond.query_values(query, params).await,
-        }
-    }
-
-    fn stash(&self) -> &Stash {
-        match *self {
-            Self::Stash(ref stash) => stash,
-            Self::Tether(ref tether) => tether.stash(),
-            Self::Bond(ref bond) => bond.stash(),
-        }
-    }
-}
-
 /// The types of database operation that can be performed by the background
 /// worker.
 ///
@@ -1394,6 +1260,98 @@ impl Stash {
         Ok(stash)
     }
 
+    /// Runs a query and returns any rows of data emitted.
+    ///
+    /// This function prepares a query and executes it on the database, and
+    /// returns the resulting rows of data as a collection of instances of the
+    /// specified `T` type, where `T` is any concrete type implementing the
+    /// [`DbRecord`] trait. The requirement to formalise the return type
+    /// streamlines the process of handling the results.
+    ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
+    /// # Read vs write
+    ///
+    /// Although this function is *designed* for read queries, this is implied
+    /// and a convenience, and it is entirely possible to use it for write
+    /// queries as well. The number of rows returned will be zero for write
+    /// queries. Any semantic difference between read and write queries is left
+    /// to the caller to decide, and does not result in any difference in
+    /// handling by this module. The [`rusqlite`] library will handle the
+    /// distinction as necessary.
+    ///
+    /// # Deserialisation
+    ///
+    /// Note that it is possible to deserialise the results into other types
+    /// too, and indeed serialise types into queries, but those use cases are
+    /// unlikely to be needed, or at least not common, and so are not provided
+    /// by this module. No interface is currently provided to achieve this.
+    ///
+    /// # Transactions, and connection context
+    ///
+    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
+    /// [`AgnosticInterface`].
+    ///
+    ///   - If run against a [`Stash`] instance, the query will be executed
+    ///     against a new database connection created specifically for its use.
+    ///     For once-off, unrelated queries this is fine, but when using
+    ///     transactions it is critical to run all related queries against the
+    ///     same connection, in which case use [`Tether::execute()`].
+    ///
+    ///   - If run against a [`Tether`] instance, the query will be executed in
+    ///     context to that instance, against the associated database
+    ///     connection.
+    ///
+    /// # Mechanism
+    ///
+    /// To be technically accurate, this function does not actually execute the
+    /// query, but provides an interface to do so. It adds the query to the
+    /// database operations queue, where it will be picked up and processed by
+    /// the background worker, and the result returned.
+    ///
+    /// # Parameters
+    ///
+    /// * `query`  - The query to execute.
+    /// * `params` - The parameters to pass to the query.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
+    ///     converting from [`Rows`] to `T`.
+    ///   - [`DowncastError`](StashError::DowncastError) - Problem downcasting
+    ///     from [`Any`](std::any::Any) to `T`.
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`PreparationError`](StashError::PreparationError) - Problem
+    ///     preparing the query.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::execute()`]
+    /// * [`params!`](crate::utils::params)
+    ///
+    pub(crate) async fn query<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: DbRecord + Send + 'static,
+        DbRecords: FromIterator<Box<T>>,
+    {
+        perform_query(self.clone(), query, params, None).await
+    }
+
     /// Gets a connection from the pool.
     ///
     /// This function gets a connection from the pool. The connection context is
@@ -1443,43 +1401,6 @@ impl Stash {
             start_time: Arc::new(Instant::now()),
             stash: self.clone(),
         }
-    }
-
-    /// Starts a new transaction.
-    ///
-    /// This function starts a new transaction. All queries executed within the transaction must be
-    /// executed against the same connection, which is why a new connection is
-    /// created for the transaction when using a [`Stash`], to ensure this.
-    ///
-    /// Note that under the current design, transactions are not nestable, and
-    /// each transaction must be carried out on its own, independent connection.
-    /// It is possible to reuse a connection for multiple transactions, but only
-    /// one transaction can be active at a time on a given connection.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
-    ///     A new transaction cannot be started because one is already active on
-    ///     this connection.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
-    ///     the transaction.
-    ///
-    /// # See also
-    ///
-    /// * [`Stash::connection()`]
-    ///
-    pub async fn transaction(&self) -> Result<Bond, StashError> {
-        let tether = self.connection();
-
-        tether.transaction().await
     }
 
     /// Factory method that uses the registry.
@@ -1590,57 +1511,6 @@ impl Stash {
 }
 
 impl Eq for Stash {}
-
-impl Interface for Stash {
-    async fn execute<Q: Into<String> + Send>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<usize, StashError> {
-        perform_execute(self.clone(), query, params, None).await
-    }
-
-    fn has_active_transaction(&self) -> bool {
-        false
-    }
-
-    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        perform_load(id, &self.into()).await
-    }
-
-    async fn query<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>,
-    {
-        perform_query(self.clone(), query, params, None).await
-    }
-
-    async fn query_values<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
-    {
-        perform_value_query(self.clone(), query, params, None).await
-    }
-
-    fn stash(&self) -> &Stash {
-        self
-    }
-}
 
 impl PartialEq for Stash {
     fn eq(&self, other: &Self) -> bool {
@@ -1888,6 +1758,323 @@ pub struct Tether {
 }
 
 impl Tether {
+    /// Runs a query and returns the affected row count.
+    ///
+    /// This function prepares a query and executes it on the database, and then
+    /// indicates whether it was successful, returning the number of affected
+    /// rows. It does not return any rows of data that the query may have
+    /// emitted, and is designed for situations where no data is expected, such
+    /// as `INSERT`, `UPDATE`, or `DELETE` queries.
+    ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
+    /// # Read vs write
+    ///
+    /// Although this function is *designed* for write queries, this is implied
+    /// and a convenience, and it is entirely possible to use it for read
+    /// queries as well — but that would usually be of little benefit. The
+    /// number of rows affected will be zero for read queries. Any semantic
+    /// difference between read and write queries is left to the caller to
+    /// decide, and does not result in any difference in handling by this
+    /// module. The [`rusqlite`] library will handle the distinction as
+    /// necessary.
+    ///
+    /// # Transactions, and connection context
+    ///
+    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
+    /// [`AgnosticInterface`].
+    ///
+    ///   - If run against a [`Stash`] instance, the query will be executed
+    ///     against a new database connection created specifically for its use.
+    ///     For once-off, unrelated queries this is fine, but when using
+    ///     transactions it is critical to run all related queries against the
+    ///     same connection, in which case use [`Tether::execute()`].
+    ///
+    ///   - If run against a [`Tether`] instance, the query will be executed in
+    ///     context to that instance, against the associated database
+    ///     connection.
+    ///
+    /// # Mechanism
+    ///
+    /// To be technically accurate, this function does not actually execute the
+    /// query, but provides an interface to do so. It adds the query to the
+    /// database operations queue, where it will be picked up and processed by
+    /// the background worker, and the result returned.
+    ///
+    /// # Parameters
+    ///
+    /// * `query`  - The query to execute.
+    /// * `params` - The parameters to pass to the query.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///
+    /// Note that, unlike the [`query()`][Tether::query()] method, no
+    /// distinction is made between execution and preparation errors.
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::query()`]
+    /// * [`params!`](crate::utils::params)
+    ///
+    pub async fn execute<Q: Into<String> + Send>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<usize, StashError> {
+        perform_execute(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
+    }
+
+    /// Loads a record from the database by ID.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`Model`] trait.
+    ///
+    /// For full usage details, see [`Model::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The ID of the record to load.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::load()`]
+    ///
+    pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        I: ToSql + Send + 'static,
+    {
+        perform_load(id, self).await
+    }
+
+    /// Runs a query and returns any rows of data emitted.
+    ///
+    /// This function prepares a query and executes it on the database, and
+    /// returns the resulting rows of data as a collection of instances of the
+    /// specified `T` type, where `T` is any concrete type implementing the
+    /// [`DbRecord`] trait. The requirement to formalise the return type
+    /// streamlines the process of handling the results.
+    ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
+    /// # Read vs write
+    ///
+    /// Although this function is *designed* for read queries, this is implied
+    /// and a convenience, and it is entirely possible to use it for write
+    /// queries as well. The number of rows returned will be zero for write
+    /// queries. Any semantic difference between read and write queries is left
+    /// to the caller to decide, and does not result in any difference in
+    /// handling by this module. The [`rusqlite`] library will handle the
+    /// distinction as necessary.
+    ///
+    /// # Deserialisation
+    ///
+    /// Note that it is possible to deserialise the results into other types
+    /// too, and indeed serialise types into queries, but those use cases are
+    /// unlikely to be needed, or at least not common, and so are not provided
+    /// by this module. No interface is currently provided to achieve this.
+    ///
+    /// # Transactions, and connection context
+    ///
+    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
+    /// [`AgnosticInterface`].
+    ///
+    ///   - If run against a [`Stash`] instance, the query will be executed
+    ///     against a new database connection created specifically for its use.
+    ///     For once-off, unrelated queries this is fine, but when using
+    ///     transactions it is critical to run all related queries against the
+    ///     same connection, in which case use [`Tether::execute()`].
+    ///
+    ///   - If run against a [`Tether`] instance, the query will be executed in
+    ///     context to that instance, against the associated database
+    ///     connection.
+    ///
+    /// # Mechanism
+    ///
+    /// To be technically accurate, this function does not actually execute the
+    /// query, but provides an interface to do so. It adds the query to the
+    /// database operations queue, where it will be picked up and processed by
+    /// the background worker, and the result returned.
+    ///
+    /// # Parameters
+    ///
+    /// * `query`  - The query to execute.
+    /// * `params` - The parameters to pass to the query.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
+    ///     converting from [`Rows`] to `T`.
+    ///   - [`DowncastError`](StashError::DowncastError) - Problem downcasting
+    ///     from [`Any`](std::any::Any) to `T`.
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`PreparationError`](StashError::PreparationError) - Problem
+    ///     preparing the query.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::execute()`]
+    /// * [`params!`](crate::utils::params)
+    ///
+    pub async fn query<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: DbRecord + Send + 'static,
+        DbRecords: FromIterator<Box<T>>,
+    {
+        perform_query(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
+    }
+
+    /// Utility function to return rows of a singular type.
+    ///
+    /// This function is similar in nature to [`Interface::query()`] but it
+    /// returns values that implement [`FromSql`] and [`ToSql`] rather
+    /// than [`DbRecord`]. This is functionally equivalent to writing the
+    /// following snippet:
+    ///
+    /// ```skip
+    ///  #[derive(DbRecord, Debug,Eq,PartialEq)
+    ///  struct RecordValue<T:FromSql> {
+    ///     #[DbField]
+    ///     value:T
+    ///  }
+    ///
+    ///  let values:Vec<RecordValue<T>> = interface.query(
+    ///         "SELECT number AS value FROM table",
+    ///         vec![]).await.unwrap();
+    /// ```
+    ///
+    /// # Query structure
+    ///
+    /// This utility function requires all the queries to return only one value
+    /// named `value` or the conversion will not be successful.
+    ///
+    /// # Errors
+    ///
+    /// See [`Interface::query`] for more information.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use stash::params;
+    /// use stash::stash::{AgnosticInterface, Interface};
+    ///
+    /// async fn value_query(interface:&AgnosticInterface) {
+    ///     let values:Vec<f64> = interface.query_values(
+    ///         "SELECT number AS value FROM table",
+    ///         vec![]).await.unwrap();
+    /// }
+    /// ```
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::query`]
+    ///
+    pub async fn query_values<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
+    {
+        perform_value_query(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
+    }
+
+    /// Get underlying stash instance.
+    ///
+    #[must_use]
+    pub const fn stash(&self) -> &Stash {
+        &self.stash
+    }
+
+    /// Utility function to return a single row of a singular type.
+    ///
+    /// This function is similar in nature to [`Interface::query_values()`] but
+    /// it returns only one value.
+    ///
+    /// # Errors
+    ///
+    /// If no rows are returned, this function returns
+    /// [`SqliteError::QueryReturnedNoRows`].
+    ///
+    /// See [`Interface::query_values()`] for more information.
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::query_values()`]
+    ///
+    pub async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<T, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
+    {
+        let mut values = self.query_values::<Q, T>(query, params).await?;
+        if values.is_empty() {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        }
+
+        if values.len() > 1 {
+            return Err(StashError::Custom("Query returned multiple rows".into()));
+        }
+
+        Ok(values.swap_remove(0))
+    }
+
     /// Starts a new transaction.
     ///
     /// This function starts a new transaction. All queries executed within the transaction must be
@@ -1918,7 +2105,7 @@ impl Tether {
     ///
     /// * [`Stash::connection()`]
     ///
-    pub async fn transaction(self) -> Result<Bond, StashError> {
+    pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
             &self.stash,
@@ -1935,17 +2122,22 @@ impl Tether {
 
         Ok(Bond::new(self))
     }
-}
 
-impl Clone for Tether {
-    fn clone(&self) -> Self {
-        let _old_total = self.handle.fetch_add(1, Ordering::SeqCst);
-        Self {
-            handle: Arc::clone(&self.handle),
-            queue: self.queue.clone(),
-            start_time: Arc::clone(&self.start_time),
-            stash: self.stash.clone(),
-        }
+    /// A way to obtain new [`Tether`] instances for performing transactions
+    /// in non mutable context.
+    ///
+    #[must_use]
+    pub fn new(&self) -> Self {
+        self.stash.connection()
+    }
+
+    /// Wrap self in an Arc.
+    ///
+    /// This is useful for passing read-only Tether to other threads.
+    ///
+    #[must_use]
+    pub fn arc(self) -> Arc<Self> {
+        Arc::new(self)
     }
 }
 
@@ -1989,86 +2181,17 @@ impl Drop for Tether {
     }
 }
 
-impl Eq for Tether {}
-
-impl Interface for Tether {
-    async fn execute<Q: Into<String> + Send>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<usize, StashError> {
-        perform_execute(
-            self.stash.clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
-    }
-
-    fn has_active_transaction(&self) -> bool {
-        self.stash
-            .stats
-            .lock()
-            .active_transactions
-            .contains_key(&(Arc::downgrade(&self.handle).as_ptr() as usize))
-    }
-
-    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        perform_load(id, &self.into()).await
-    }
-
-    async fn query<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>,
-    {
-        perform_query(
-            self.stash.clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
-    }
-
-    async fn query_values<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
-    {
-        perform_value_query(
-            self.stash.clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
-    }
-
-    fn stash(&self) -> &Stash {
-        &self.stash
-    }
-}
-
-impl PartialEq for Tether {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.handle, &other.handle)
-    }
-}
+// impl Clone for Tether {
+//     fn clone(&self) -> Self {
+//         let _old_total = self.handle.fetch_add(1, Ordering::SeqCst);
+//         Self {
+//             handle: Arc::clone(&self.handle),
+//             queue: self.queue.clone(),
+//             start_time: Arc::clone(&self.start_time),
+//             stash: self.stash.clone(),
+//         }
+//     }
+// }
 
 /// Database transaction context.
 ///
@@ -2095,17 +2218,23 @@ impl PartialEq for Tether {
 ///
 /// * [`Tether`]
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Bond {
+#[derive(Debug)]
+pub struct Bond<'tether> {
     /// The associated [`Tether`] instance.
-    tether: Tether,
+    tether: &'tether mut Tether,
+
+    /// The property to indicate if the transaction is finalized.
+    finalized: bool,
 }
 
-impl Bond {
+impl<'tether> Bond<'tether> {
     /// Create new instance of the Bond.
     ///
-    const fn new(tether: Tether) -> Self {
-        Self { tether }
+    fn new(tether: &'tether mut Tether) -> Self {
+        Self {
+            tether,
+            finalized: false,
+        }
     }
 
     /// Commits a transaction.
@@ -2127,7 +2256,8 @@ impl Bond {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem
     ///     committing the transaction.
     ///
-    pub async fn commit(self) -> Result<Tether, StashError> {
+    pub async fn commit(mut self) -> Result<(), StashError> {
+        self.finalized = true;
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
             &self.tether.stash,
@@ -2142,7 +2272,8 @@ impl Bond {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(self.tether)
+
+        Ok(())
     }
 
     /// Rolls back a transaction.
@@ -2165,7 +2296,8 @@ impl Bond {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    pub async fn rollback(self) -> Result<Tether, StashError> {
+    pub async fn rollback(mut self) -> Result<(), StashError> {
+        self.finalized = true;
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command::new(
             &self.tether.stash,
@@ -2180,76 +2312,36 @@ impl Bond {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(self.tether)
+
+        Ok(())
     }
 }
 
-impl Interface for Bond {
-    async fn execute<Q: Into<String> + Send>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<usize, StashError> {
-        perform_execute(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.tether.handle)),
-        )
-        .await
-    }
+impl Deref for Bond<'_> {
+    type Target = Tether;
 
-    fn has_active_transaction(&self) -> bool {
-        true
+    fn deref(&self) -> &Self::Target {
+        self.tether
     }
+}
 
-    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        perform_load(id, &self.tether.clone().into()).await
-    }
+impl Drop for Bond<'_> {
+    fn drop(&mut self) {
+        if self.finalized {
+            return;
+        }
 
-    async fn query<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>,
-    {
-        perform_query(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.tether.handle)),
-        )
-        .await
-    }
-
-    async fn query_values<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
-    {
-        perform_value_query(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.tether.handle)),
-        )
-        .await
-    }
-
-    fn stash(&self) -> &Stash {
-        &self.tether.stash
+        if self
+            .queue
+            .send(Operation::RollbackTransaction(Command::new(
+                &self.tether.stash,
+                None,
+                Some(Arc::clone(&self.tether.handle)),
+            )))
+            .is_err()
+        {
+            error!("Failed to send RollbackTransaction operation to tethered queue on transaction drop");
+        }
     }
 }
 
@@ -3399,323 +3491,6 @@ impl Worker {
             ),
         }
     }
-}
-
-/// Presentation of functionality shared by both [`Stash`] and [`Tether`].
-///
-/// This trait specifies functionality that is provided by both the [`Stash`]
-/// and [`Tether`] types. Both of these types, plus the [`AgnosticInterface`]
-/// type, implement this trait, and so the key aspects common to both [`Stash`]
-/// instances (which are not themselves connections) and [`Tether`] instances
-/// (which represent active or potentially-active connections) can be used in
-/// unified fashion.
-///
-#[allow(async_fn_in_trait)]
-pub trait Interface: Clone + Send + Sync {
-    /// Runs a query and returns the affected row count.
-    ///
-    /// This function prepares a query and executes it on the database, and then
-    /// indicates whether it was successful, returning the number of affected
-    /// rows. It does not return any rows of data that the query may have
-    /// emitted, and is designed for situations where no data is expected, such
-    /// as `INSERT`, `UPDATE`, or `DELETE` queries.
-    ///
-    /// Note that the [`params!`](crate::utils::params) macro is available to
-    /// help shorten the syntax for passing in the query parameters.
-    ///
-    /// # Read vs write
-    ///
-    /// Although this function is *designed* for write queries, this is implied
-    /// and a convenience, and it is entirely possible to use it for read
-    /// queries as well — but that would usually be of little benefit. The
-    /// number of rows affected will be zero for read queries. Any semantic
-    /// difference between read and write queries is left to the caller to
-    /// decide, and does not result in any difference in handling by this
-    /// module. The [`rusqlite`] library will handle the distinction as
-    /// necessary.
-    ///
-    /// # Transactions, and connection context
-    ///
-    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
-    /// [`AgnosticInterface`].
-    ///
-    ///   - If run against a [`Stash`] instance, the query will be executed
-    ///     against a new database connection created specifically for its use.
-    ///     For once-off, unrelated queries this is fine, but when using
-    ///     transactions it is critical to run all related queries against the
-    ///     same connection, in which case use [`Tether::execute()`].
-    ///
-    ///   - If run against a [`Tether`] instance, the query will be executed in
-    ///     context to that instance, against the associated database
-    ///     connection.
-    ///
-    /// # Mechanism
-    ///
-    /// To be technically accurate, this function does not actually execute the
-    /// query, but provides an interface to do so. It adds the query to the
-    /// database operations queue, where it will be picked up and processed by
-    /// the background worker, and the result returned.
-    ///
-    /// # Parameters
-    ///
-    /// * `query`  - The query to execute.
-    /// * `params` - The parameters to pass to the query.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// Note that, unlike the [`query()`][Tether::query()] method, no
-    /// distinction is made between execution and preparation errors.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::query()`]
-    /// * [`params!`](crate::utils::params)
-    ///
-    async fn execute<Q: Into<String> + Send>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<usize, StashError>;
-
-    /// Indicates whether a [`Tether`] has an active transaction.
-    ///
-    /// If a transaction has been started, this will be `true`. Before a
-    /// transaction is started, or after a transaction is committed or rolled
-    /// back, it will be `false`.
-    ///
-    /// Note that transactions are specific to connections, i.e. to [`Tether`]s,
-    /// and this will only indicate the transaction status on this connection,
-    /// not globally. Therefore, if run on a [`Stash`], this will always return
-    /// `false`.
-    ///
-    #[must_use]
-    fn has_active_transaction(&self) -> bool;
-
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`Model`] trait.
-    ///
-    /// For full usage details, see [`Model::load()`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID of the record to load.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::load()`]
-    ///
-    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static;
-
-    /// Runs a query and returns any rows of data emitted.
-    ///
-    /// This function prepares a query and executes it on the database, and
-    /// returns the resulting rows of data as a collection of instances of the
-    /// specified `T` type, where `T` is any concrete type implementing the
-    /// [`DbRecord`] trait. The requirement to formalise the return type
-    /// streamlines the process of handling the results.
-    ///
-    /// Note that the [`params!`](crate::utils::params) macro is available to
-    /// help shorten the syntax for passing in the query parameters.
-    ///
-    /// # Read vs write
-    ///
-    /// Although this function is *designed* for read queries, this is implied
-    /// and a convenience, and it is entirely possible to use it for write
-    /// queries as well. The number of rows returned will be zero for write
-    /// queries. Any semantic difference between read and write queries is left
-    /// to the caller to decide, and does not result in any difference in
-    /// handling by this module. The [`rusqlite`] library will handle the
-    /// distinction as necessary.
-    ///
-    /// # Deserialisation
-    ///
-    /// Note that it is possible to deserialise the results into other types
-    /// too, and indeed serialise types into queries, but those use cases are
-    /// unlikely to be needed, or at least not common, and so are not provided
-    /// by this module. No interface is currently provided to achieve this.
-    ///
-    /// # Transactions, and connection context
-    ///
-    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
-    /// [`AgnosticInterface`].
-    ///
-    ///   - If run against a [`Stash`] instance, the query will be executed
-    ///     against a new database connection created specifically for its use.
-    ///     For once-off, unrelated queries this is fine, but when using
-    ///     transactions it is critical to run all related queries against the
-    ///     same connection, in which case use [`Tether::execute()`].
-    ///
-    ///   - If run against a [`Tether`] instance, the query will be executed in
-    ///     context to that instance, against the associated database
-    ///     connection.
-    ///
-    /// # Mechanism
-    ///
-    /// To be technically accurate, this function does not actually execute the
-    /// query, but provides an interface to do so. It adds the query to the
-    /// database operations queue, where it will be picked up and processed by
-    /// the background worker, and the result returned.
-    ///
-    /// # Parameters
-    ///
-    /// * `query`  - The query to execute.
-    /// * `params` - The parameters to pass to the query.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
-    ///     converting from [`Rows`] to `T`.
-    ///   - [`DowncastError`](StashError::DowncastError) - Problem downcasting
-    ///     from [`Any`](std::any::Any) to `T`.
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`PreparationError`](StashError::PreparationError) - Problem
-    ///     preparing the query.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::execute()`]
-    /// * [`params!`](crate::utils::params)
-    ///
-    async fn query<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: DbRecord + Send + 'static,
-        DbRecords: FromIterator<Box<T>>;
-
-    /// Utility function to return rows of a singular type.
-    ///
-    /// This function is similar in nature to [`Interface::query()`] but it
-    /// returns values that implement [`FromSql`] and [`ToSql`] rather
-    /// than [`DbRecord`]. This is functionally equivalent to writing the
-    /// following snippet:
-    ///
-    /// ```skip
-    ///  #[derive(DbRecord, Debug,Eq,PartialEq)
-    ///  struct RecordValue<T:FromSql> {
-    ///     #[DbField]
-    ///     value:T
-    ///  }
-    ///
-    ///  let values:Vec<RecordValue<T>> = interface.query(
-    ///         "SELECT number AS value FROM table",
-    ///         vec![]).await.unwrap();
-    /// ```
-    ///
-    /// # Query structure
-    ///
-    /// This utility function requires all the queries to return only one value
-    /// named `value` or the conversion will not be successful.
-    ///
-    /// # Errors
-    ///
-    /// See [`Interface::query`] for more information.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use stash::params;
-    /// use stash::stash::{AgnosticInterface, Interface};
-    ///
-    /// async fn value_query(interface:&AgnosticInterface) {
-    ///     let values:Vec<f64> = interface.query_values(
-    ///         "SELECT number AS value FROM table",
-    ///         vec![]).await.unwrap();
-    /// }
-    /// ```
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::query`]
-    ///
-    async fn query_values<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<Vec<T>, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static;
-
-    /// Utility function to return a single row of a singular type.
-    ///
-    /// This function is similar in nature to [`Interface::query_values()`] but
-    /// it returns only one value.
-    ///
-    /// # Errors
-    ///
-    /// If no rows are returned, this function returns
-    /// [`SqliteError::QueryReturnedNoRows`].
-    ///
-    /// See [`Interface::query_values()`] for more information.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::query_values()`]
-    ///
-    async fn query_value<Q, T>(
-        &self,
-        query: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Result<T, StashError>
-    where
-        Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
-    {
-        let mut values = self.query_values::<Q, T>(query, params).await?;
-        if values.is_empty() {
-            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-        }
-
-        if values.len() > 1 {
-            return Err(StashError::Custom("Query returned multiple rows".into()));
-        }
-
-        Ok(values.swap_remove(0))
-    }
-
-    /// Get the associated [`Stash`].
-    ///
-    /// This is a convenience function, which only has actual utility when run
-    /// on a [`Tether`]. If run against a [`Stash`] then it will always return
-    /// itself, but having this function available on both is useful so as not
-    /// not have to disambiguate an [`AgnosticInterface`].
-    ///
-    #[must_use]
-    fn stash(&self) -> &Stash;
 }
 
 /// Logic for carrying out an operation on the database.

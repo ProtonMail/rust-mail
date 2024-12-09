@@ -1,6 +1,6 @@
-use stash::stash::{Bond, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
-pub async fn create_settings_table(tx: &Bond) -> Result<(), StashError> {
+pub async fn create_settings_table(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE mail_settings (

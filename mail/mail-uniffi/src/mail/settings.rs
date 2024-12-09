@@ -11,9 +11,10 @@ use super::{datatypes::MailSettings, MailSessionError, MailUserSession};
 #[uniffi::export]
 pub async fn mail_settings(ctx: &MailUserSession) -> MailSettings {
     let stash = ctx.ctx().user_stash().clone();
-    uniffi_async::<_, JoinError, _>(
-        async move { Ok(RealSettings::get_or_default(&stash).await.into()) },
-    )
+    uniffi_async::<_, JoinError, _>(async move {
+        let tether = stash.connection();
+        Ok(RealSettings::get_or_default(&tether).await.into())
+    })
     .await
     .unwrap_or(MailSettings::default())
 }
@@ -30,10 +31,11 @@ pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, MailSessionError> {
-    let db = ctx.ctx().user_stash().clone();
+    let stash = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
-        let settings = RealSettings::find("", vec![], &db, Some(tx))
+        let tether = stash.connection();
+        let settings = RealSettings::find("", vec![], &tether, Some(tx))
             .await?
             .first()
             .cloned()

@@ -145,7 +145,7 @@ use indoc::formatdoc;
 use proton_sqlite3::rusqlite::hooks::Action;
 use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
 use stash::orm::{perform_find, Model, ResultsetChange};
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::spawn;
@@ -205,7 +205,7 @@ pub trait DataSource: Send + Sync {
     /// # Params
     ///
     /// * `stash` - Database connection.
-    fn total(&self, stash: &Stash) -> impl Future<Output = Result<usize, Self::Error>> + Send;
+    fn total(&self, tether: &Tether) -> impl Future<Output = Result<usize, Self::Error>> + Send;
 
     /// Sync the first page of this source.
     ///
@@ -218,7 +218,7 @@ pub trait DataSource: Send + Sync {
     fn sync_first_page(
         &self,
         page_size: NonZeroU32,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
 
     /// Sync the page after a given element.
@@ -240,7 +240,7 @@ pub trait DataSource: Send + Sync {
         cursor_index: u32,
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
 }
 
@@ -275,7 +275,7 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// The [`Stash`] instance used for database operations. This is not used
     /// for the initial query (that uses whatever was supplied), but is required
     /// for subsequent queries and for live updates.
-    stash: Stash,
+    tether: Tether,
 
     /// The [`DataSource`] from where pagination data will be synced
     /// from.
@@ -348,10 +348,10 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     /// See [`Model::find()`].
     ///
-    pub async fn new<Q, A>(
+    pub async fn new<Q>(
         query_logic: Q,
         params: Vec<Param>,
-        interface: &A,
+        stash: &Stash,
         page_size: NonZeroU32,
         remote: R,
         local_first: bool,
@@ -359,9 +359,9 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ) -> Result<Self, R::Error>
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
         R: DataSource,
     {
+        let tether = stash.connection();
         let paginator = Self {
             shared: Arc::new(Mutex::new(Shared {
                 cursor_index: 0,
@@ -372,15 +372,22 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             page_size,
             params,
             query_logic: query_logic.into(),
-            stash: interface.stash().clone(),
+            tether,
             remote: Arc::new(remote),
         };
 
-        paginator.initialize(interface, local_first).await?;
+        paginator.initialize(local_first).await?;
 
         paginator.start_update_listener(queue);
 
         Ok(paginator)
+    }
+
+    /// Returns tether to database.
+    ///
+    #[must_use]
+    pub fn tether(&self) -> &Tether {
+        &self.tether
     }
 
     /// Initializes the paginator by fetching the initial set of records.
@@ -402,16 +409,13 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///                   `local_first` is always `true`.
     ///
     #[allow(clippy::cast_possible_truncation)]
-    async fn initialize<A>(&self, interface: &A, _local_first: bool) -> Result<(), R::Error>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let total = self.remote.total(&self.stash).await?;
+    async fn initialize(&self, _local_first: bool) -> Result<(), R::Error> {
+        let total = self.remote.total(&self.tether).await?;
 
         let mut initial_records = T::find(
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
-            &interface.clone().into(),
+            &self.tether,
             None,
         )
         .await?;
@@ -425,9 +429,10 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             || (initial_records.len() < self.page_size.get() as usize
                 && initial_records.len() < total)
         {
+            let mut tether = self.tether.new();
             initial_records = self
                 .remote
-                .sync_first_page(self.page_size, &self.stash)
+                .sync_first_page(self.page_size, &mut tether)
                 .await?;
         }
 
@@ -439,7 +444,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
     /// Starts the update listener to handle live updates.
     fn start_update_listener(&self, sender: Option<QueueSender<ResultsetChange<T, T::IdType>>>) {
-        let stash = self.stash.clone();
+        let stash = self.tether.stash().clone();
         let query_logic = self.query_logic.clone();
         let params = self.params.clone();
         let shared_cloned = Arc::clone(&self.shared);
@@ -556,6 +561,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         stash: &Stash,
         sender: Option<&flume::Sender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<(), StashError> {
+        let tether = stash.connection();
         match *change {
             ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
                 // Re-run the query to check if the cursor position needs to change. This
@@ -569,7 +575,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                         NonZeroU32::new(1).unwrap(),
                     ),
                     convert_params(&params),
-                    &stash.clone().into(),
+                    &tether,
                     None,
                 )
                 .await?
@@ -607,7 +613,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                                         NonZeroU32::new(1).unwrap(),
                                     ),
                                     convert_params(&params),
-                                    &stash.clone().into(),
+                                    &tether,
                                     None,
                                 )
                                 .await?
@@ -629,7 +635,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                     }
                 }
 
-                match remote.total(stash).await {
+                match remote.total(&tether).await {
                     Ok(v) => {
                         if let Ok(v) = v.try_into() {
                             shared.row_count = v;
@@ -691,7 +697,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         T::find(
             paging_query(&self.query_logic, cursor_index, self.page_size),
             convert_params(&self.params),
-            &self.stash,
+            self.tether(),
             None,
         )
         .await
@@ -711,10 +717,10 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let mut shared = self.shared.lock().await;
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
         let current_page = self.page_at(shared.cursor_index).await?;
-
+        let mut tether = self.tether.new();
         let sync_elements = self
             .remote
-            .sync_page_after(next_index, self.page_size, current_page, &self.stash)
+            .sync_page_after(next_index, self.page_size, current_page, &mut tether)
             .await?;
 
         for element in sync_elements {
@@ -726,7 +732,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         if let Some(element) = T::find(
             paging_query(&self.query_logic, next_index, NonZeroU32::new(1).unwrap()),
             convert_params(&self.params),
-            &self.stash,
+            &self.tether,
             None,
         )
         .await?
@@ -784,7 +790,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 .unwrap(),
             ),
             convert_params(&self.params),
-            &self.stash.clone(),
+            &self.tether,
             None,
         )
         .await

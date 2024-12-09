@@ -12,7 +12,7 @@ use proton_mail_test_utils::test_context::MailTestContext;
 async fn contact_list() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
     let mut params = TestParams::default_basic();
 
     params.contacts = vec![ApiContactBasic {
@@ -46,7 +46,7 @@ async fn contact_list() {
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let contact_list = Contact::contact_list(stash).await.unwrap();
+    let contact_list = Contact::contact_list(&tether).await.unwrap();
 
     assert_eq!(contact_list.len(), 1);
     assert_eq!(
@@ -73,7 +73,7 @@ async fn contact_list() {
 async fn delete_contacts() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
     let mut params = TestParams::default_basic();
 
     params.contacts = vec![ApiContactBasic {
@@ -109,7 +109,7 @@ async fn delete_contacts() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let contact = Contact::find_by_id(RemoteId::from("123"), stash)
+    let contact = Contact::find_by_id(RemoteId::from("123"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -122,13 +122,13 @@ async fn delete_contacts() {
         .await
         .unwrap();
 
-    let contact = Contact::find_by_id(RemoteId::from("123"), stash)
+    let contact = Contact::find_by_id(RemoteId::from("123"), &tether)
         .await
         .unwrap()
         .unwrap();
 
     assert!(contact.deleted);
 
-    let contact_list = Contact::contact_list(stash).await.unwrap();
+    let contact_list = Contact::contact_list(&tether).await.unwrap();
     assert_eq!(contact_list.len(), 0);
 }

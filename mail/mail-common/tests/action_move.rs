@@ -74,14 +74,14 @@ async fn test_move_between_folders() {
     // Sync the mailbox
     mailbox_inbox.sync(10).await.unwrap();
 
+    let tether = user_ctx.user_stash().connection();
     // Get the conversation id
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(!has_conversation(&mailbox_folder, local_conv_id).await);
 
     // submit action
@@ -181,15 +181,14 @@ async fn test_move_from_label_does_not_unlabel() {
 
     // Sync the mailbox
     mailbox_inbox.sync(10).await.unwrap();
-
+    let tether = user_ctx.user_stash().connection();
     // Get the conversation id
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
 
     // submit action
@@ -291,14 +290,13 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
-
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(has_conversation(&mailbox_all_mail, local_conv_id).await);
     assert!(!has_conversation(&mailbox_trash, local_conv_id).await);
     assert!(has_conversation(&mailbox_label, local_conv_id).await);
@@ -419,14 +417,13 @@ async fn test_move_into_spam_remove_labels() {
 
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
-
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(!has_conversation(&mailbox_spam, local_conv_id).await);
     assert!(has_conversation(&mailbox_label, local_conv_id).await);
     assert!(has_conversation(&mailbox_all_mail, local_conv_id).await);
@@ -506,14 +503,13 @@ async fn move_out_of_trash_set_almost_all_mail() {
         .sync(10)
         .await
         .expect("failed to sync");
-
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(!has_conversation(&mailbox_almost_all_mail, local_conv_id).await);
 
@@ -589,14 +585,13 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
         .sync(10)
         .await
         .expect("failed to sync");
-
-    let local_conv_id =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap()
-            .local_id
-            .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let local_conv_id = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(!has_conversation(&mailbox_almost_all_mail, local_conv_id).await);
 
@@ -630,9 +625,8 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
 }
 
 async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalId) -> bool {
-    let conversations = Conversation::find_first("", vec![], mailbox.user_context().user_stash())
-        .await
-        .unwrap();
+    let tether = mailbox.stash().connection();
+    let conversations = Conversation::find_first("", vec![], &tether).await.unwrap();
     conversations
         .iter()
         .any(|c| c.local_id.unwrap() == local_conversation_id)

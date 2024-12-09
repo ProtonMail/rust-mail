@@ -46,7 +46,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
         Message::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
@@ -57,7 +57,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         action
@@ -97,8 +97,9 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("Unlabel messages failed for: {failed_ids:?} ");
 
-            let tx = stash.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
+            let mut conn = stash.connection();
+            let tx = conn.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
 
             Message::apply_label(action.0.label_id, local_ids, &tx)
                 .await

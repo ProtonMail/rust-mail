@@ -373,9 +373,9 @@ mod message {
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Message>) {
         // Setup
-        let stash = new_test_connection().await;
-        let address = create_address(&stash).await;
-        let mut settings = MailSettings::get_or_default(&stash).await;
+        let mut tether = new_test_connection().await.connection();
+        let address = create_address(&mut tether).await;
+        let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {
             message_toolbar: MobileSetting {
                 actions: test_case.toolbar_actions.clone(),
@@ -383,7 +383,7 @@ mod message {
             },
             ..Default::default()
         });
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         settings.save(&tx).await.unwrap();
 
         let mut conversation = Conversation::default();
@@ -398,7 +398,7 @@ mod message {
         tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
-            .counterpart::<Label, _>(&stash)
+            .counterpart::<Label>(&tether)
             .await
             .unwrap()
             .unwrap();
@@ -407,7 +407,7 @@ mod message {
         let result = Message::all_available_bottom_bar_actions_for_messages(
             current_local,
             messages.iter().map(|m| m.local_id.unwrap()).collect(),
-            &stash,
+            &tether,
         )
         .await
         .unwrap();
@@ -793,9 +793,9 @@ mod conversation {
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Conversation>) {
         // Setup
-        let stash = new_test_connection().await;
+        let mut tether = new_test_connection().await.connection();
 
-        let mut settings = MailSettings::get_or_default(&stash).await;
+        let mut settings = MailSettings::get_or_default(&tether).await;
         settings.mobile_settings = Some(MobileSettings {
             message_toolbar: MobileSetting {
                 actions: test_case.toolbar_actions.clone(),
@@ -803,7 +803,7 @@ mod conversation {
             },
             ..Default::default()
         });
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         settings.save(&tx).await.unwrap();
 
         let mut conversations = test_case.items.clone();
@@ -813,7 +813,7 @@ mod conversation {
         tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
-            .counterpart::<Label, _>(&stash)
+            .counterpart::<Label>(&tether)
             .await
             .unwrap()
             .unwrap();
@@ -822,7 +822,7 @@ mod conversation {
         let result = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             current_local,
             conversations.iter().map(|m| m.local_id.unwrap()).collect(),
-            &stash,
+            &tether,
         )
         .await
         .unwrap();

@@ -25,9 +25,10 @@ pub struct MoveItemPopup {
 impl MoveItemPopup {
     pub async fn new(ctx: &MailUserContext, item: Item) -> MailContextResult<Self> {
         //TODO: improve
-        let mut folders = Label::find_by_kind(LabelType::Folder, ctx.user_stash()).await?;
+        let tether = ctx.user_stash().connection();
+        let mut folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
         folders.retain(Label::is_movable_folder);
-        let mut system = Label::find_by_kind(LabelType::System, ctx.user_stash()).await?;
+        let mut system = Label::find_by_kind(LabelType::System, &tether).await?;
         system.retain(Label::is_movable_folder);
         folders.extend(system);
         Ok(Self {
@@ -92,14 +93,15 @@ pub struct LabelItemPopup {
 impl LabelItemPopup {
     pub async fn new(ctx: &MailUserContext, item: Item) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
+        let tether = stash.connection();
         let labels = match item {
             Item::Conversation(local_id) => {
-                Conversation::available_label_as_actions(vec![local_id], stash).await?
+                Conversation::available_label_as_actions(vec![local_id], &tether).await?
             }
             Item::Message(local_id) => {
                 proton_mail_common::models::Message::available_label_as_actions(
                     vec![local_id],
-                    stash,
+                    &tether,
                 )
                 .await?
             }

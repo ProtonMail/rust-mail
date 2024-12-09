@@ -14,7 +14,7 @@ use futures::FutureExt;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -306,12 +306,16 @@ pub struct Queue {
 
 /// Internal shared data used by the [`Queue`] and [`BackgroundWorker`].
 pub(crate) struct Shared {
-    stash: Stash,
+    tether: Tether,
     factory: RwLock<Factory>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
 }
 
 impl Shared {
+    fn stash(&self) -> &Stash {
+        self.tether.stash()
+    }
+
     fn resolve_execution_context<T: Action>(
         &self,
     ) -> std::result::Result<Arc<T::Context>, ContextError> {
@@ -388,11 +392,12 @@ impl Queue {
     ///
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
-        db::create_tables(&stash).await?;
+        let mut tether = stash.connection();
+        db::create_tables(&mut tether).await?;
         let default_context = Arc::new(());
         let default_context_downgraded = Arc::downgrade(&default_context);
         let shared = Arc::new(Shared {
-            stash,
+            tether,
             factory: RwLock::new(factory),
             execution_contexts: RwLock::new(HashMap::new()),
         });
@@ -434,7 +439,13 @@ impl Queue {
     /// Return the database associated with the queue.
     #[must_use]
     pub fn stash(&self) -> &Stash {
-        &self.shared.stash
+        self.shared.stash()
+    }
+
+    /// Return the database connection associated with the queue.
+    #[must_use]
+    pub fn tether(&self) -> &Tether {
+        &self.shared.tether
     }
 
     /// Queue an `action` for execution at a later time.
@@ -472,7 +483,7 @@ impl Queue {
             .map_err(|e| ActionError::Queue(e.into()))?;
 
         let (local_output, id) = execute_action_local(
-            &self.shared.stash,
+            &self.shared,
             context.as_ref(),
             &handler,
             &mut action,
@@ -544,7 +555,7 @@ impl Queue {
             let output = async {
                 // 1) Apply local action and store in the queue
                 let (local_output, id) = execute_action_local(
-                    &shared.stash,
+                    &shared,
                     context.as_ref(),
                     &handler,
                     &mut action,
@@ -634,8 +645,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn queued_actions_count(&self) -> Result<u64> {
-        let tether = self.shared.stash.connection();
-        Ok(StoredAction::pending_count(&tether).await?)
+        Ok(StoredAction::pending_count(&self.shared.tether).await?)
     }
 
     /// Check whether the action with `action_id` is present in the queue.
@@ -644,8 +654,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn contains(&self, action_id: Id) -> Result<bool> {
-        let tether = self.shared.stash.connection();
-        Ok(StoredAction::contains(&tether, action_id).await?)
+        Ok(StoredAction::contains(&self.shared.tether, action_id).await?)
     }
 
     /// Retrieve the metadata associated `action_id` in the queue.
@@ -654,8 +663,7 @@ impl Queue {
     ///
     /// Returns error if the db query failed.
     pub async fn action(&self, action_id: Id) -> Result<Option<QueuedMetadata>> {
-        let tether = self.shared.stash.connection();
-        let stored_action = StoredAction::load(action_id, &tether).await?;
+        let stored_action = StoredAction::load(action_id, &self.shared.tether).await?;
         Ok(stored_action.map(QueuedMetadata::from))
     }
 
@@ -682,8 +690,7 @@ impl Queue {
     pub(crate) async fn next_action(
         &self,
     ) -> std::result::Result<Option<StoredAction>, StashError> {
-        let tether = self.shared.stash.connection();
-        StoredAction::next(&tether).await
+        StoredAction::next(&self.shared.tether).await
     }
 }
 
@@ -895,12 +902,12 @@ impl BackgroundWorker {
     }
 
     async fn next_action(&self) -> std::result::Result<Option<StoredAction>, StashError> {
-        let tether = self.shared.stash.connection();
-        StoredAction::next(&tether).await
+        StoredAction::next(&self.shared.tether).await
     }
     /// See [`Queue::delete()`] for more details.
-    async fn delete(&self, action_id: Id) -> QueuedResult<()> {
-        let tx = self.shared.stash.transaction().await?;
+    async fn delete(&mut self, action_id: Id) -> QueuedResult<()> {
+        let mut conn = self.shared.tether.new();
+        let tx = conn.transaction().await?;
         StoredAction::delete(&tx, action_id).await?;
         tx.commit().await?;
         Ok(())
@@ -909,7 +916,8 @@ impl BackgroundWorker {
     /// See [`Queue::cancel()`] for more details.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
-        let tx = self.shared.stash.transaction().await?;
+        let mut conn = self.shared.tether.new();
+        let tx = conn.transaction().await?;
         let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
         tx.commit().await?;
         Ok(cancelled_actions)
@@ -923,13 +931,14 @@ impl BackgroundWorker {
 
 /// Shared snippet to execute actions locally.
 async fn execute_action_local<T: Action>(
-    stash: &Stash,
+    shared: &Shared,
     context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
     metadata: Metadata,
 ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
-    let tx = stash.transaction().await?;
+    let mut tether = shared.tether.new();
+    let tx = tether.transaction().await?;
 
     let local_output = handler
         .apply_local(context, action, &tx)
@@ -965,8 +974,8 @@ async fn execute_action_remote<T: Action>(
     debug!("Applying action on remote");
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
-    let result = handler.apply_remote(context, action, &shared.stash).await;
-    let tether = shared.stash.connection();
+    let result = handler.apply_remote(context, action, shared.stash()).await;
+    let mut tether = shared.tether.new();
     let bond = tether.transaction().await?;
     let result = match result {
         Ok(result) => {
@@ -995,7 +1004,7 @@ async fn execute_action_remote<T: Action>(
 /// Cancel
 async fn cancel_action_with_dependees(
     shared: &Shared,
-    bond: &Bond,
+    bond: &Bond<'_>,
     action_id: Id,
 ) -> QueuedResult<Vec<Id>> {
     let mut remaining_actions = vec![action_id];

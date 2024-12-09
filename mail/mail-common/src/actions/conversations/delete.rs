@@ -46,7 +46,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
@@ -59,7 +59,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::mark_undeleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         action
@@ -96,9 +96,9 @@ impl proton_action_queue::action::Handler for Handler {
 
         if !failed_ids.is_empty() {
             error!("Delete operation failed for: {:?}", failed_ids);
-            let tx = stash.transaction().await?;
-            let local_ids =
-                RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
+            let mut conn = stash.connection();
+            let tx = conn.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
 
             Conversation::remove_label(action.0.label_id, local_ids, &tx)
                 .await

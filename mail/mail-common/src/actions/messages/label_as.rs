@@ -11,7 +11,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash};
+use stash::stash::{Bond, Stash, Tether};
 use std::collections::HashSet;
 use tracing::{error, warn};
 
@@ -41,20 +41,17 @@ impl LabelAs {
     }
 
     /// Memorize the data before applying LabelAs action so we can revert modifications later
-    async fn memorize_original_data<A>(&mut self, interface: &A) -> Result<(), ActionError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
+    async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), ActionError> {
+        let all_labels = Label::find_by_kind(LabelType::Label, tether).await?;
         self.data.local_all_label_ids = all_labels
             .iter()
             .map(|l| l.local_id.expect("Should be set"))
             .collect();
 
-        self.save_modifications(interface).await?;
+        self.save_modifications(tether).await?;
 
         for message_id in &self.data.local_ids {
-            let Some(message) = Message::load(*message_id, interface).await? else {
+            let Some(message) = Message::load(*message_id, tether).await? else {
                 warn!("While memorizing labels, could not find message with id: {message_id:?}");
                 continue;
             };
@@ -67,16 +64,13 @@ impl LabelAs {
     }
 
     /// Keep track of labels added/removed
-    async fn save_modifications<A>(&mut self, interface: &A) -> Result<(), ActionError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    async fn save_modifications(&mut self, tether: &Tether) -> Result<(), ActionError> {
         let selected = HashSet::from_iter(self.data.local_selected_label_ids.iter().cloned());
         let partial =
             HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
         for message_id in &self.data.local_ids {
-            if let Some(message) = Message::load(*message_id, interface).await? {
-                let labels = message.all_message_labels(interface).await?;
+            if let Some(message) = Message::load(*message_id, tether).await? {
+                let labels = message.all_message_labels(tether).await?;
                 let labels = labels
                     .iter()
                     .filter(|l| l.label_type == LabelType::Label)
@@ -115,7 +109,7 @@ impl Handler {
         added_labels: HashSet<LocalId>,
         removed_labels: HashSet<LocalId>,
         original_locations: Option<Option<ExclusiveLocation>>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let Some(mut message) = Message::load(*message_id, bond).await? else {
             warn!("While reverting locally, could not find message with local_id: {message_id:?}");
@@ -129,12 +123,11 @@ impl Handler {
             .collect_vec();
         let current_labels: HashSet<_> = HashSet::from_iter(current_labels.into_iter());
         let removed_labels =
-            LocalId::counterparts::<Label, _>(Vec::from_iter(removed_labels.into_iter()), bond)
+            LocalId::counterparts::<Label>(Vec::from_iter(removed_labels.into_iter()), bond)
                 .await?;
         let removed_labels = HashSet::from_iter(removed_labels.into_iter());
         let added_labels =
-            LocalId::counterparts::<Label, _>(Vec::from_iter(added_labels.into_iter()), bond)
-                .await?;
+            LocalId::counterparts::<Label>(Vec::from_iter(added_labels.into_iter()), bond).await?;
         let added_labels = HashSet::from_iter(added_labels.into_iter());
         let new_labels = &(&current_labels - &removed_labels) | &added_labels;
         message.label_ids = new_labels.into_iter().map_into().collect();
@@ -156,7 +149,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.memorize_original_data(tx).await?;
         action.data.resolve_remote_ids(tx).await?;
@@ -179,7 +172,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::undo_label_as(
             action.data.local_ids.clone(),
@@ -208,19 +201,20 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let session = ctx.session();
         let api = session.api();
+        let mut tether = stash.connection();
 
         let failed_ids = Message::remote_relabel(
             session,
             &action.data.added_labels,
             &action.data.removed_labels,
-            stash,
+            &tether,
         )
         .await?;
 
         if !failed_ids.is_empty() {
             error!("LabelAs message operation failed for messages: {failed_ids:?}");
-            let failed_ids = RemoteId::counterparts::<Message, _>(failed_ids, stash).await?;
-            let tx = stash.transaction().await?;
+            let failed_ids = RemoteId::counterparts::<Message>(failed_ids, &tether).await?;
+            let tx = tether.transaction().await?;
             for message_id in &failed_ids {
                 Self::revert_one_locally(
                     message_id,
@@ -259,20 +253,19 @@ impl ActionHandler for Handler {
             if !failed_ids.is_empty() {
                 error!("Archive messages operation failed for : {failed_ids:?}");
 
-                let tx = stash.transaction().await?;
+                let tx = tether.transaction().await?;
                 let archive_id =
-                    RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), &tx)
+                    RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), &tx)
                         .await?
                         .expect("Archive label must have a RemoteId");
-                let local_ids =
-                    RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
+                let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
                 Message::move_messages(archive_id, action.data.source_label_id, local_ids, &tx)
                     .await?;
                 tx.commit().await?;
             }
         }
 
-        if let Some(source_label) = Label::load(action.data.source_label_id, stash).await? {
+        if let Some(source_label) = Label::load(action.data.source_label_id, &tether).await? {
             Ok(source_label.total_msg == 0)
         } else {
             warn!(

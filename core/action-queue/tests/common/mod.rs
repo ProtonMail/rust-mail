@@ -3,7 +3,7 @@ use proton_action_queue::action::{Action, Error, Factory};
 use proton_action_queue::queue::Queue;
 use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::{Bond, Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether};
 
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
@@ -19,7 +19,8 @@ pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
 
 pub async fn new_stash() -> Stash {
     let stash = Stash::new(None).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let mut conn = stash.connection();
+    let tx = conn.transaction().await.unwrap();
     tx.ext_create_table().await.unwrap();
     tx.commit().await.unwrap();
     stash
@@ -72,7 +73,7 @@ impl TestReadExtension for Tether {
     }
 }
 
-impl TestReadExtension for Bond {
+impl TestReadExtension for Bond<'_> {
     async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
         match self
             .query_value::<_, u32>(
@@ -96,7 +97,7 @@ impl TestReadExtension for Bond {
     }
 }
 
-impl TestWriteExtension for Bond {
+impl TestWriteExtension for Bond<'_> {
     async fn ext_create_table(&self) -> Result<(), StashError> {
         self.execute(
             "CREATE TABLE ext (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",

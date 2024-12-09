@@ -90,7 +90,8 @@ async fn main() {
         .await
         .unwrap();
 
-    let label = Label::find_by_id::<RemoteId, _>(LabelId::inbox().into(), user_ctx.user_stash())
+    let tether = user_ctx.user_stash().connection();
+    let label = Label::find_by_id::<RemoteId>(LabelId::inbox().into(), &tether)
         .await
         .unwrap()
         .unwrap();

@@ -15,7 +15,7 @@ use proton_event_loop::subscriber::Subscriber;
 use proton_event_loop::EventLoopError;
 use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::{Interface, StashError};
+use stash::stash::StashError;
 use std::sync::Weak;
 use tracing::error;
 
@@ -25,14 +25,15 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 impl Store for MailUserContext {
     async fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
         dbg!("Acquiring connection");
-        let conn = self.user_context.stash();
+        let tether = self.user_context.stash().connection();
         dbg!("Executing query");
         match {
-            conn.query_value::<_, String>(
-                "SELECT value FROM event_id_store WHERE id = ?1",
-                params![MAIL_EVENT_TYPE_ID],
-            )
-            .await
+            tether
+                .query_value::<_, String>(
+                    "SELECT value FROM event_id_store WHERE id = ?1",
+                    params![MAIL_EVENT_TYPE_ID],
+                )
+                .await
         }
         .map(ApiRemoteId::from)
         {
@@ -53,7 +54,8 @@ impl Store for MailUserContext {
 
     async fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
         {
-            let tx = self.user_context.stash().transaction().await?;
+            let mut tether = self.user_context.stash().connection();
+            let tx = tether.transaction().await?;
             tx.execute(
                 "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
                 params![MAIL_EVENT_TYPE_ID, RemoteId::from(id)],

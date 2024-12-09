@@ -1,9 +1,9 @@
 use crate::datatypes::SystemLabelId;
 use proton_core_common::datatypes::LabelId;
 use stash::params;
-use stash::stash::{Bond, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
-pub async fn create_labels_tables(tx: &Bond) -> Result<(), StashError> {
+pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     // Local version for manipulation.
     tx.execute(
         r#"

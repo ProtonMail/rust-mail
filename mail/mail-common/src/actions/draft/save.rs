@@ -18,7 +18,7 @@ use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError};
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -116,7 +116,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Bond,
+        tether: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_id = local_draft_label_id(tether).await?;
 
@@ -272,7 +272,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         _: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Bond,
+        tether: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // If create failed we need to wipe all new local resources so
         // they don't show up. Maybe keep them deleted until the remote
@@ -307,7 +307,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let session = ctx.session();
-        let tether = stash.connection();
+        let mut tether = stash.connection();
 
         let message_id = action.message_id.expect("Should be set");
         let conversation_id = action.conversation_id.expect("Should be set");
@@ -335,7 +335,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
             let Some(remote_id) = parent_id
-                .counterpart::<Message, _>(&tether)
+                .counterpart::<Message>(&tether)
                 .await
                 .inspect_err(|e| error!("Failed to resolve remote parent id: {e}"))?
             else {
@@ -554,7 +554,7 @@ impl Save {
         }
     }
 
-    async fn attachments(&self, tether: &Bond) -> Result<Vec<Attachment>, StashError> {
+    async fn attachments(&self, tether: &Bond<'_>) -> Result<Vec<Attachment>, StashError> {
         Attachment::find_by_ids(self.attachments.iter().cloned(), tether).await
     }
     fn attachment_metadata(attachments: &[Attachment]) -> Vec<AttachmentMetadata> {

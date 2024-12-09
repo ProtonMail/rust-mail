@@ -113,13 +113,14 @@ pub async fn available_actions_for_conversations(
 ) -> Result<ConversationAvailableActions, MailboxError> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
-        let view = RealLabel::load(view, mailbox.stash())
+        let tether = mailbox.stash().connection();
+        let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealConversation::available_actions(
             view,
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?;
 
@@ -146,9 +147,10 @@ pub async fn available_label_as_actions_for_conversations(
     ids: Vec<Id>,
 ) -> MailboxResult<Vec<LabelAsAction>> {
     uniffi_async(async move {
+        let tether = mailbox.stash().connection();
         let actions = RealConversation::available_label_as_actions(
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?
         .into_iter()
@@ -182,10 +184,10 @@ pub async fn watch_available_label_as_actions_for_conversations(
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
-
+        let tether = mailbox.stash().connection();
         let actions = RealConversation::watch_available_label_as_actions(
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
             tx,
         )
         .await?
@@ -218,13 +220,14 @@ pub async fn available_move_to_actions_for_conversations(
 ) -> MailboxResult<Vec<MoveAction>> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
-        let view = RealLabel::load(view, mailbox.stash())
+        let tether = mailbox.stash().connection();
+        let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealConversation::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?
         .into_iter()
@@ -253,10 +256,11 @@ pub async fn all_available_bottom_bar_actions_for_conversations(
     conversation_ids: Vec<Id>,
 ) -> MailboxResult<AllBottomBarMessageActions> {
     uniffi_async(async move {
+        let tether = mailbox.stash().connection();
         let actions = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             mailbox.label_id().into(),
             conversation_ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?
         .into();
@@ -340,8 +344,9 @@ pub async fn conversations_for_label(
 ) -> Result<Vec<Conversation>, MailboxError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         Ok(
-            ContextualConversation::in_label(RealLocalId::from(label_id), &stash)
+            ContextualConversation::in_label(RealLocalId::from(label_id), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -375,7 +380,8 @@ pub async fn load_conversation(
 ) -> Result<Option<Conversation>, MailboxError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        let Some(conversation) = RealConversation::load(id.into(), &stash).await? else {
+        let tether = stash.connection();
+        let Some(conversation) = RealConversation::load(id.into(), &tether).await? else {
             return Ok(None);
         };
 
@@ -579,10 +585,11 @@ pub async fn search_for_conversations(
 ) -> Result<Vec<Conversation>, MailSessionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let mut tether = stash.connection();
         Ok(RealConversation::search(
-            options.into_api_options(&stash).await?,
+            options.into_api_options(&tether).await?,
             session.ctx().session().api(),
-            &stash,
+            &mut tether,
         )
         .await?
         .into_iter()
@@ -694,11 +701,10 @@ pub async fn watch_conversation(
             return Ok(None);
         };
 
-        let receiver = ContextualConversation::watch_conversation_and_messages(
-            RealLocalId::from(id),
-            mailbox.stash(),
-        )
-        .await?;
+        let tether = mailbox.stash().connection();
+        let receiver =
+            ContextualConversation::watch_conversation_and_messages(RealLocalId::from(id), &tether)
+                .await?;
 
         let watcher = watch_channel(receiver, callback).await;
 
@@ -746,11 +752,9 @@ pub async fn watch_conversations_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
     uniffi_async(async move {
-        let (conversations, receiver) = ContextualConversation::watch_in_label(
-            RealLocalId::from(label_id),
-            session.user_stash(),
-        )
-        .await?;
+        let tether = session.user_stash().connection();
+        let (conversations, receiver) =
+            ContextualConversation::watch_in_label(RealLocalId::from(label_id), &tether).await?;
         let watcher = watch_channel(receiver, callback).await;
         Ok(WatchedConversations {
             conversations: conversations.into_iter().map(Into::into).collect(),
@@ -826,7 +830,8 @@ pub async fn watch_available_move_to_actions(
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
-        real_watch_available_move_to_actions(tx, mailbox.stash()).await?;
+        let tether = mailbox.stash().connection();
+        real_watch_available_move_to_actions(tx, &tether).await?;
         Ok(handle)
     })
     .await
