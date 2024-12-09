@@ -52,7 +52,9 @@ async fn test_mail_settings_store_read() {
         hide_sender_images: Default::default(),
         row_id: None,
     };
-    settings.save(&stash.connection()).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    settings.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let db_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &stash)
         .await
         .unwrap()

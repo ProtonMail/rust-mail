@@ -372,7 +372,6 @@ async fn paginate_conversations_for_label_with_filter() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
@@ -403,6 +402,7 @@ async fn paginate_conversations_for_label_with_filter() {
         conversation!(num_unread: 3, remote_id: Some("conv5".into())),
     ];
 
+    let tx = stash.transaction().await.unwrap();
     for mut conv in conversations {
         conv.save(&tx).await.expect("failed to create conversation");
         Conversation::apply_label(mailbox_inbox.label_id(), vec![conv.local_id.unwrap()], &tx)
@@ -423,6 +423,7 @@ async fn paginate_conversations_for_label_with_filter() {
         .await
         .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
@@ -497,7 +498,6 @@ async fn paginate_messages_for_label_with_filter() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
@@ -520,8 +520,9 @@ async fn paginate_messages_for_label_with_filter() {
         .await;
 
     // Set up test data
-    let address = create_address(&tx).await;
+    let address = create_address(stash).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
+    let tx = stash.transaction().await.unwrap();
     conversation.save(&tx).await.unwrap();
 
     // Create 5 messages: 3 unread, 2 read
@@ -543,6 +544,7 @@ async fn paginate_messages_for_label_with_filter() {
             .await
             .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
@@ -612,7 +614,6 @@ async fn paginate_search() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
@@ -635,8 +636,9 @@ async fn paginate_search() {
         .await;
 
     // Set up test data
-    let address = create_address(&tx).await;
+    let address = create_address(stash).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
+    let tx = stash.transaction().await.unwrap();
     conversation.save(&tx).await.unwrap();
 
     // Create 5 messages
@@ -658,6 +660,7 @@ async fn paginate_search() {
             .await
             .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with search term "foo"
     let options = PaginatorSearchOptions {

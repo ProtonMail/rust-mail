@@ -124,7 +124,7 @@ impl Mailbox {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(user_context.session().api(), &self.stash().clone().into())
+                .sync_complete_metadata(user_context.session().api(), self.stash())
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id}) metadata: {e})")

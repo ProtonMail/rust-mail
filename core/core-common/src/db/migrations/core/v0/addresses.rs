@@ -1,7 +1,7 @@
 use futures::executor::block_on;
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
-pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
     block_on(async {
         tx.execute(
             r"
@@ -46,12 +46,12 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 is_active INTEGER NOT NULL,
                 flags INTEGER,
                 address_forwarding_id TEXT,
-                
+
                 CONSTRAINT address_keys_id
                     FOREIGN KEY (address_id)
                     REFERENCES addresses (local_id)
                     ON DELETE CASCADE,
-                
+
                 CONSTRAINT address_keys_forwarding_id
                     FOREIGN KEY (address_forwarding_id)
                     REFERENCES addresses (local_id)

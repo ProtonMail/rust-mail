@@ -285,7 +285,7 @@ pub async fn conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, MailboxError> {
-    let conn = mailbox.stash().connection();
+    let conn = mailbox.stash().clone();
     let session = mailbox.mbox().user_context().session().clone();
     uniffi_async(async move {
         Ok(ContextualConversation::conversation_and_messages(

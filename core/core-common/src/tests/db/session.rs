@@ -33,14 +33,16 @@ async fn new_test_connection() -> Stash {
 }
 
 async fn new_test_account(stash: &Stash) -> Result<CoreAccount> {
+    let tx = stash.transaction().await?;
     let account = CoreAccount::new(
         RemoteId::from("user_id"),
         String::from("name_or_addr"),
         TfaStatus::None,
         PasswordMode::One,
     )
-    .with_save(stash)
+    .with_save(&tx)
     .await?;
+    tx.commit().await?;
 
     Ok(account)
 }

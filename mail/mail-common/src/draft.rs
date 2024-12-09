@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 pub mod compose;
@@ -193,7 +193,6 @@ impl Draft {
             })?;
 
         let tether = context.user_stash().connection();
-
         let metadata_id = if let Some(metadata) =
             DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
                 .await
@@ -202,6 +201,7 @@ impl Draft {
             debug!("Found existing metadata with id {}", metadata.id.unwrap());
             metadata.id.unwrap()
         } else {
+            let tx = tether.transaction().await?;
             debug!("No metadata found, creating new entry");
             let mut metadata = DraftMetadata {
                 id: None,
@@ -212,9 +212,10 @@ impl Draft {
                 row_id: None,
             };
             metadata
-                .save(&tether)
+                .save(&tx)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e}"))?;
+            tx.commit().await?;
             metadata.id.unwrap()
         };
 
@@ -253,34 +254,28 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(interface))]
-    pub async fn empty<A>(interface: &A) -> Result<Self, MailContextError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(stash))]
+    pub async fn empty(stash: &Stash) -> Result<Self, MailContextError> {
+        let conn = stash.connection();
         // Default address should have display_order 0
-        let addresses = Address::find(
-            "ORDER BY display_order ASC LIMIT 1",
-            vec![],
-            interface,
-            None,
-        )
-        .await
-        .inspect_err(|e| {
-            error!("Failed to load addresses: {e}");
-        })?;
+        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &conn, None)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to load addresses: {e}");
+            })?;
 
         if addresses.is_empty() {
             error!("No addresses found for current user");
             return Err(Error::UserHasNoAddresses.into());
         }
 
-        let mail_settings = MailSettings::get(interface).await?.unwrap_or_default();
+        let mail_settings = MailSettings::get(&conn).await?.unwrap_or_default();
         let address = &addresses[0];
-
-        let metadata = DraftMetadata::empty(interface)
+        let tx = conn.transaction().await?;
+        let metadata = DraftMetadata::empty(&tx)
             .await
             .inspect_err(|e| error!("Failed to create new empty draft metadata: {e}"))?;
+        tx.commit().await?;
 
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
@@ -384,15 +379,16 @@ impl Draft {
             .body;
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
-
+        let tx = tether.transaction().await?;
         let metadata = DraftMetadata::reply(
             reply_mode,
             source_message.local_id.unwrap(),
             source_message.local_conversation_id.unwrap(),
-            &tether,
+            &tx,
         )
         .await
         .inspect_err(|e| error!("Failed to create new reply draft metadata: {e}"))?;
+        tx.commit().await?;
 
         Ok(Self::new_draft_reply(
             metadata.id.unwrap(),

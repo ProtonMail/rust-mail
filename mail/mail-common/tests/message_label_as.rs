@@ -110,27 +110,29 @@ async fn label_as_without_archive() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], stash)
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
         .unwrap();
     label1.total_msg = 2;
     label1.total_conv = 1;
-    label1.save(stash).await.unwrap();
-    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], stash)
+    label1.save(&tx).await.unwrap();
+    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
     label2.total_msg = 2;
     label2.total_conv = 1;
-    label2.save(stash).await.unwrap();
-    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], stash)
+    label2.save(&tx).await.unwrap();
+    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
     label3.total_msg = 3;
     label3.total_conv = 1;
-    label3.save(stash).await.unwrap();
+    label3.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let message1 = Message::load(1.into(), stash).await.unwrap().unwrap();
     assert!(message1.label_ids.is_empty());
     assert!(message1.custom_labels.is_empty());
@@ -270,27 +272,29 @@ async fn label_as_with_archive() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], stash)
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
         .unwrap();
     label1.total_msg = 1;
     label1.total_conv = 1;
-    label1.save(stash).await.unwrap();
-    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], stash)
+    label1.save(&tx).await.unwrap();
+    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
     label2.total_msg = 1;
     label2.total_conv = 1;
-    label2.save(stash).await.unwrap();
-    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], stash)
+    label2.save(&tx).await.unwrap();
+    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
     label3.total_msg = 1;
     label3.total_conv = 1;
-    label3.save(stash).await.unwrap();
+    label3.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     let message1 = Message::load(1.into(), stash).await.unwrap().unwrap();
     assert!(message1.label_ids.is_empty());

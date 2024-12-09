@@ -4,7 +4,7 @@ use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
@@ -46,7 +46,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 
@@ -66,7 +66,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 

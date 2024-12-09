@@ -8,7 +8,7 @@ use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 /// Action which marks messages as deleted.
@@ -46,7 +46,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
         Message::mark_deleted(action.0.target_ids.clone(), tx).await?;
@@ -57,7 +57,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_undeleted(action.0.target_ids.clone(), tx).await?;
         action

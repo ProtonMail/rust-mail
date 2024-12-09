@@ -20,7 +20,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -129,13 +129,10 @@ impl Label {
     /// Returns error if the local conversation id is not set, the remote
     /// label_id is not set, the local label can not be found or the query
     /// failed.
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(label) =
-                Label::find_first("WHERE remote_id=?", params![remote_id], interface).await?
+                Label::find_first("WHERE remote_id=?", params![remote_id], bond).await?
             {
                 self.local_parent_id = label.local_parent_id;
                 self.local_id = label.local_id;
@@ -143,7 +140,7 @@ impl Label {
             }
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// TODO: Document this function.
@@ -179,18 +176,14 @@ impl Label {
             .into())
     }
 
-    pub async fn create_or_update_conversation_counts<A>(
+    pub async fn create_or_update_conversation_counts(
         counts: Vec<ConversationCount>,
-        interface: &A,
-    ) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> Result<(), StashError> {
         for count in counts {
-            interface
-                .execute(
-                    formatdoc!(
-                        r"
+            bond.execute(
+                formatdoc!(
+                    r"
                     UPDATE
                         labels
                     SET
@@ -199,26 +192,22 @@ impl Label {
                     WHERE
                         remote_id = ?
                     "
-                    ),
-                    params![count.total, count.unread, count.label_id],
-                )
-                .await?;
+                ),
+                params![count.total, count.unread, count.label_id],
+            )
+            .await?;
         }
         Ok(())
     }
 
-    pub async fn create_or_update_message_counts<A>(
+    pub async fn create_or_update_message_counts(
         counts: Vec<MessageCount>,
-        interface: &A,
-    ) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> Result<(), StashError> {
         for count in counts {
-            interface
-                .execute(
-                    formatdoc!(
-                        r"
+            bond.execute(
+                formatdoc!(
+                    r"
                     UPDATE
                         labels
                     SET
@@ -227,10 +216,10 @@ impl Label {
                     WHERE
                         remote_id = ?
                     "
-                    ),
-                    params![count.total, count.unread, count.label_id],
-                )
-                .await?;
+                ),
+                params![count.total, count.unread, count.label_id],
+            )
+            .await?;
         }
         Ok(())
     }
@@ -268,10 +257,7 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels<PM: ProtonMail, A>(api: &PM, interface: &A) -> Result<(), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn sync_labels<PM: ProtonMail>(api: &PM, stash: &Stash) -> Result<(), AppError> {
         let label_requests =
             futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
                 debug!("Fetching labels ({:?})", category);
@@ -280,7 +266,7 @@ impl Label {
             .await;
 
         debug!("Storing labels into database");
-        let tx = interface.transaction().await?;
+        let tx = stash.transaction().await?;
         for labels in label_requests {
             match labels {
                 Err(e) => {
@@ -312,14 +298,11 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels_by_ids<PM: ProtonMail, A>(
+    pub async fn sync_labels_by_ids<PM: ProtonMail>(
         api: &PM,
-        interface: &A,
+        stash: &Stash,
         ids: Vec<ApiRemoteId>,
-    ) -> Result<(), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    ) -> Result<(), AppError> {
         let labels = api
             .get_labels_by_ids(ids)
             .await?
@@ -328,7 +311,7 @@ impl Label {
             .map_into::<Self>();
 
         debug!("Storing labels into database");
-        let tx = interface.transaction().await?;
+        let tx = stash.transaction().await?;
         for mut label in labels {
             Self::save(&mut label, &tx).await?;
         }
@@ -350,11 +333,11 @@ impl Label {
         Ok(())
     }
 
-    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
         let parent_id_option = self.remote_parent_id.clone();
         self.local_parent_id = match parent_id_option {
             Some(parent_id) => {
-                let res = parent_id.counterpart::<Self, _>(interface).await?;
+                let res = parent_id.counterpart::<Self, _>(bond).await?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -366,15 +349,14 @@ impl Label {
             }
             None => None,
         };
-        interface
-            .execute(
-                format!(
-                    "UPDATE {} SET local_parent_id=? WHERE local_id=?",
-                    Label::table_name()
-                ),
-                params![self.local_parent_id, self.local_id],
-            )
-            .await?;
+        bond.execute(
+            format!(
+                "UPDATE {} SET local_parent_id=? WHERE local_id=?",
+                Label::table_name()
+            ),
+            params![self.local_parent_id, self.local_id],
+        )
+        .await?;
         Ok(())
     }
 

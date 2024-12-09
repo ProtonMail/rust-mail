@@ -10,18 +10,14 @@ use crate::{
 #[tokio::test]
 async fn count_test() {
     let stash = new_core_test_connection().await;
+    let tx = stash.transaction().await.unwrap();
     for i in 0..10 {
         let mut address = create_test_address(i);
-        address
-            .save(&stash)
-            .await
-            .expect("failed to create address");
+        address.save(&tx).await.expect("failed to create address");
 
-        assert_eq!(
-            Address::count("", vec![], &stash).await.unwrap(),
-            i as u64 + 1
-        );
+        assert_eq!(Address::count("", vec![], &tx).await.unwrap(), i as u64 + 1);
     }
+    tx.commit().await.unwrap();
 
     assert_eq!(
         Address::count("WHERE remote_id = ?", params!["address_id_1"], &stash)

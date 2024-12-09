@@ -1,12 +1,12 @@
 #![allow(clippy::ignored_unit_patterns)]
 mod common;
 
-use crate::common::{DefaultError, TestExtension};
+use crate::common::{DefaultError, TestReadExtension, TestWriteExtension};
 use common::{new_factory, new_queue};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::ActionRemoteOutput;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 
 #[tokio::test]
 async fn state_preserved_after_local_change() {
@@ -80,7 +80,7 @@ impl Handler for TestActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE);
         action.v = ACTION_VALUE_AFTER_LOCAL_APPLY;
@@ -93,7 +93,7 @@ impl Handler for TestActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -105,11 +105,9 @@ impl Handler for TestActionHandler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
-
-        stash
-            .connection()
-            .ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL)
-            .await?;
+        let tx = stash.transaction().await?;
+        tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?;
+        tx.commit().await?;
 
         Ok(ACTION_VALUE_FINAL)
     }

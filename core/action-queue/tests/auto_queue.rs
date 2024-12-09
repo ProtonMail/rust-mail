@@ -6,7 +6,7 @@ use common::new_queue_typed;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::ActionRemoteOutput;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 
 #[tokio::test]
 async fn auto_queued_on_network_failure() {
@@ -47,7 +47,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // Nothing to do
         Ok(())
@@ -57,7 +57,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

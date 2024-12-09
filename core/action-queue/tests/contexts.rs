@@ -4,7 +4,7 @@ use crate::common::DefaultError;
 use common::new_queue_typed;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -77,7 +77,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         Ok(<Self::Action as Action>::LocalOutput::default())
     }
@@ -86,7 +86,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(())
     }

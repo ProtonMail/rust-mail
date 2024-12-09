@@ -3,7 +3,7 @@ use proton_action_queue::action::{Action, Error, Factory};
 use proton_action_queue::queue::Queue;
 use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError, Tether};
 
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
@@ -36,17 +36,67 @@ pub fn new_factory<T: Action>() -> Factory {
     factory
 }
 
-pub trait TestExtension {
+pub trait TestReadExtension {
+    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError>;
+}
+
+pub trait TestWriteExtension: TestReadExtension {
     async fn ext_create_table(&self) -> Result<(), StashError>;
 
     async fn ext_insert_value(&self, key: &str, value: u32) -> Result<(), StashError>;
 
     async fn ext_delete_value(&self, key: &str) -> Result<(), StashError>;
-
-    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError>;
 }
 
-impl TestExtension for Tether {
+impl TestReadExtension for Tether {
+    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
+        match self
+            .query_value::<_, u32>(
+                "SELECT value FROM ext WHERE key = ?",
+                params![key.to_owned()],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+}
+
+impl TestReadExtension for Bond {
+    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
+        match self
+            .query_value::<_, u32>(
+                "SELECT value FROM ext WHERE key = ?",
+                params![key.to_owned()],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+}
+
+impl TestWriteExtension for Bond {
     async fn ext_create_table(&self) -> Result<(), StashError> {
         self.execute(
             "CREATE TABLE ext (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
@@ -69,28 +119,6 @@ impl TestExtension for Tether {
         self.execute("DELETE FROM ext WHERE key=?", params![key.to_owned()])
             .await?;
         Ok(())
-    }
-
-    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
-        match self
-            .query_value::<_, u32>(
-                "SELECT value FROM ext WHERE key = ?",
-                params![key.to_owned()],
-            )
-            .await
-        {
-            Ok(v) => Ok(Some(v)),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    Err(e)
-                }
-            }
-        }
     }
 }
 

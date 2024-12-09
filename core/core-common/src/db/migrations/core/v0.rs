@@ -1,5 +1,5 @@
 use proton_sqlite3::Migration;
-use stash::stash::{StashError, Tether};
+use stash::stash::{Bond, StashError};
 
 mod addresses;
 mod contacts;
@@ -14,7 +14,7 @@ impl Migration for V0 {
         "proton_core_v0"
     }
 
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         addresses::create_tables(tx)?;
         user_settings::create_tables(tx)?;
         user::create_tables(tx)?;

@@ -49,7 +49,7 @@ impl Migration for M1 {
     fn name(&self) -> &'static str {
         "m1"
     }
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         block_on(async { tx.execute("CREATE TABLE test1 (ID INTEGER)", vec![]).await })?;
         Ok(())
     }
@@ -61,7 +61,7 @@ impl Migration for M2 {
     fn name(&self) -> &'static str {
         "m2"
     }
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         block_on(async { tx.execute("CREATE TABLE test2 (ID INTEGER)", vec![]).await })?;
         Ok(())
     }

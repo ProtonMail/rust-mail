@@ -330,16 +330,17 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
     let keys = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            user_ctx.stash(),
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found");
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert_eq!(keys.pinned_keys.len(), 2);
     assert!(keys.sign.unwrap());
@@ -372,13 +373,13 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
     let preferred_fingerprint_2 = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            user_ctx.stash(),
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found")
@@ -386,6 +387,7 @@ async fn test_contact_load_public_address_keys() {
         .first()
         .unwrap()
         .key_fingerprint();
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
 }
@@ -415,9 +417,15 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    Contact::sync_with_card(local_id, user_ctx.session().api(), user_ctx.stash())
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+    Contact::sync_with_card(local_id, user_ctx.session().api(), &tx)
         .await
         .expect("failed to sync contacts");
+    tx.commit().await.expect("Failed to commit transaction");
 }
 
 fn create_test_local_partial_contacts() -> Vec<Contact> {

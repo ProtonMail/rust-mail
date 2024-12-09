@@ -12,7 +12,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, Tether};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash};
 use std::collections::HashSet;
 use tracing::{error, warn};
 
@@ -109,17 +109,14 @@ impl Action for LabelAs {
 pub struct Handler;
 
 impl Handler {
-    pub(crate) async fn revert_one_locally<A>(
+    pub(crate) async fn revert_one_locally(
         conversation_id: &LocalId,
         added_labels: HashSet<LocalId>,
         removed_labels: HashSet<LocalId>,
         original_locations: Option<Option<ExclusiveLocation>>,
-        interface: &A,
-    ) -> Result<(), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(mut conversation) = Conversation::load(*conversation_id, interface).await? else {
+        bond: &Bond,
+    ) -> Result<(), AppError> {
+        let Some(mut conversation) = Conversation::load(*conversation_id, bond).await? else {
             warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
             return Ok(());
         };
@@ -131,12 +128,12 @@ impl Handler {
                 .map(|l| l.local_id.expect("Should be set")),
         );
         let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-        conversation.labels = ConversationLabel::find_by_ids(new_labels, interface).await?;
+        conversation.labels = ConversationLabel::find_by_ids(new_labels, bond).await?;
 
         if let Some(location) = original_locations {
             conversation.exclusive_location = location;
         }
-        conversation.save(interface).await?;
+        conversation.save(bond).await?;
 
         Ok(())
     }
@@ -150,7 +147,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<bool, <Self::Action as Action>::Error> {
         action.memorize_original_data(tx).await?;
         action.data.resolve_remote_ids(tx).await?;
@@ -180,7 +177,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::undo_label_as(
             action.data.local_ids.clone(),
@@ -220,6 +217,7 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
             let failed_ids = RemoteId::counterparts::<Conversation, _>(failed_ids, stash).await?;
+            let tx = stash.transaction().await?;
             for conversation_id in &failed_ids {
                 Self::revert_one_locally(
                     conversation_id,
@@ -234,10 +232,11 @@ impl ActionHandler for Handler {
                         .remove(conversation_id)
                         .unwrap_or_default(),
                     action.data.original_location.remove(conversation_id),
-                    stash,
+                    &tx,
                 )
                 .await?;
             }
+            tx.commit().await?;
         }
 
         if action.data.must_archive {

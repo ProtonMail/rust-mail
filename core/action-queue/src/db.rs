@@ -11,7 +11,7 @@ use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError, Tether};
 use std::ops::Add;
 use tracing::debug;
 
@@ -186,24 +186,22 @@ impl StoredAction {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
         // Create dependencies.
         for dep in &self.dependencies {
-            interface
-                .execute(
-                    "INSERT OR IGNORE INTO action_queue_dependencies VALUES (?,?)",
-                    params![self.id, *dep],
-                )
-                .await?;
+            bond.execute(
+                "INSERT OR IGNORE INTO action_queue_dependencies VALUES (?,?)",
+                params![self.id, *dep],
+            )
+            .await?;
         }
 
         // Create resources
-        interface
-            .execute(
-                "INSERT INTO action_queue_resources VALUES (?,?)",
-                params![self.id, self.resources.clone()],
-            )
-            .await?;
+        bond.execute(
+            "INSERT INTO action_queue_resources VALUES (?,?)",
+            params![self.id, self.resources.clone()],
+        )
+        .await?;
 
         Ok(())
     }
@@ -213,9 +211,8 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(tether: &Tether, id: Id) -> Result<(), StashError> {
-        tether
-            .execute("DELETE FROM action_queue WHERE id = ?", params![id])
+    pub async fn delete(bond: &Bond, id: Id) -> Result<(), StashError> {
+        bond.execute("DELETE FROM action_queue WHERE id = ?", params![id])
             .await?;
         Ok(())
     }
@@ -225,8 +222,8 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(tether: &Tether, id: Id) -> Result<Vec<Id>, StashError> {
-        tether
+    pub async fn dependees(bond: &Bond, id: Id) -> Result<Vec<Id>, StashError> {
+        bond
             .query_values::<_, Id>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
@@ -285,7 +282,7 @@ impl Migration for MigrationV1 {
         "action_queue_v1"
     }
 
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         // create actions table
         let query = indoc! {"
             CREATE TABLE action_queue (

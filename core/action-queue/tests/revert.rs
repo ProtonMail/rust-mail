@@ -2,13 +2,13 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{new_queue_typed, TestExtension};
+use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler, MetadataBuilder, Type,
 };
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 
 #[tokio::test]
 async fn network_failure_causes_revert_on_apply() {
@@ -201,7 +201,7 @@ impl Handler for RevertActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
     }
@@ -210,7 +210,7 @@ impl Handler for RevertActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(tx.ext_delete_value(&action.key).await?)
     }
@@ -255,7 +255,7 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let old_value = tx.ext_get_value(&action.key).await?.unwrap();
         action.old_value = old_value;
@@ -266,7 +266,7 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let current_value = tx.ext_get_value(&action.key).await?.unwrap();
         assert_eq!(current_value, action.value);

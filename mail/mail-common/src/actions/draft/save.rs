@@ -18,7 +18,7 @@ use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -116,7 +116,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Tether,
+        tether: &Bond,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_id = local_draft_label_id(tether).await?;
 
@@ -272,7 +272,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         _: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Tether,
+        tether: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // If create failed we need to wipe all new local resources so
         // they don't show up. Maybe keep them deleted until the remote
@@ -384,7 +384,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
-        tether.transaction().await?;
+        let bond = tether.transaction().await?;
         let row_id = message.row_id;
 
         // Update remote ids
@@ -397,26 +397,26 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // we can save the metadata returned by the server.
         message_body_metadata.remote_message_id = message.remote_id.clone();
         message_body_metadata
-            .save(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
 
         // Update conversation
         conversation
-            .save(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
 
         // Update message data
         let (mut message, mut new_message_body_metadata, _) =
-            Message::from_api_data(new_message, &tether)
+            Message::from_api_data(new_message, &bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to convert api message: {e}");
                 })?;
         message.row_id = row_id;
         message.local_id = Some(message_id);
-        message.save(&tether).await.inspect_err(|e| {
+        message.save(&bond).await.inspect_err(|e| {
             error!("Failed to update the message: {e}");
         })?;
 
@@ -424,13 +424,13 @@ impl proton_action_queue::action::Handler for SaveHandler {
         new_message_body_metadata.local_message_id = Some(message_id);
         new_message_body_metadata.row_id = message_body_metadata.row_id;
         new_message_body_metadata
-            .save(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to update message body metadata: {e}");
             })?;
 
-        tether.commit().await?;
+        bond.commit().await?;
 
         Ok(())
     }
@@ -554,7 +554,7 @@ impl Save {
         }
     }
 
-    async fn attachments(&self, tether: &Tether) -> Result<Vec<Attachment>, StashError> {
+    async fn attachments(&self, tether: &Bond) -> Result<Vec<Attachment>, StashError> {
         Attachment::find_by_ids(self.attachments.iter().cloned(), tether).await
     }
     fn attachment_metadata(attachments: &[Attachment]) -> Vec<AttachmentMetadata> {

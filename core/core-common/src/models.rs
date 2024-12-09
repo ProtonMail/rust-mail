@@ -57,6 +57,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
+use stash::stash::Bond;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 
 #[allow(async_fn_in_trait)]
@@ -378,11 +379,8 @@ pub trait ModelExtension: Model {
     /// # Errors
     ///
     /// See [`Model::save()`].
-    async fn with_save<A>(mut self, interface: &A) -> Result<Self, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        self.save(interface).await?;
+    async fn with_save(mut self, bond: &Bond) -> Result<Self, StashError> {
+        self.save(bond).await?;
         Ok(self)
     }
 }
@@ -484,18 +482,15 @@ impl Address {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Download and store user addresses into the database
@@ -725,17 +720,14 @@ impl User {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
             }
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Download and store user info and settings into the database
@@ -886,17 +878,14 @@ impl UserSettings {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
             }
         }
 
-        <Self as Model>::save(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 }
 
