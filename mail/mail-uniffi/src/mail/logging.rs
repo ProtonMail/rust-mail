@@ -1,7 +1,10 @@
 use chrono::Utc;
+use std::backtrace::Backtrace;
 use std::fs::{self, OpenOptions};
+use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use tracing::error;
+use tracing_appender::non_blocking;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -33,11 +36,12 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
     }
 
     let log_file = options.open(log_path)?;
+    let (appender, _guard) = non_blocking(log_file);
 
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)
         .with_line_number(false)
-        .with_writer(log_file)
+        .with_writer(appender)
         .with_target(false)
         .with_ansi(false)
         .with_filter(if debug {
@@ -46,6 +50,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
             app_tracing_env_filter_default()
         });
     tracing_subscriber::registry().with(file_subscriber).init();
+    log_backtrace_on_panic();
     Ok(())
 }
 
@@ -84,4 +89,13 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
             stash=trace",
         )
         .expect("bad log directives")
+}
+
+/// Modify the hook on panic so we log the `Backtrace`.
+fn log_backtrace_on_panic() {
+    let previous_hook = take_hook();
+    set_hook(Box::new(move |info| {
+        error!("Backtrace: {info}\n{}", Backtrace::force_capture());
+        previous_hook(info);
+    }));
 }

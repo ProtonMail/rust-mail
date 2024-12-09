@@ -14,13 +14,17 @@ use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use std::backtrace::Backtrace;
 use std::error::Error;
-use std::fs::read_to_string;
+use std::fs::{read_to_string, File};
+use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tokio::runtime::Runtime;
+use tracing::error;
 use tracing::level_filters::LevelFilter;
+use tracing_appender::non_blocking;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -379,11 +383,12 @@ fn app_tracing_env_filter() -> EnvFilter {
 }
 
 fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
-    let log_file = std::fs::File::create(log_path)?;
+    let log_file = File::create(log_path)?;
+    let (appender, _guard) = non_blocking(log_file);
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)
         .with_line_number(false)
-        .with_writer(log_file)
+        .with_writer(appender)
         .with_target(false)
         .with_ansi(false)
         .with_filter(app_tracing_env_filter());
@@ -394,7 +399,17 @@ fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         .with(file_subscriber)
         .with(tui_log_subscriber)
         .init();
+    log_backtrace_on_panic();
     Ok(())
+}
+
+/// Modify the hook on panic so we log the `Backtrace`.
+fn log_backtrace_on_panic() {
+    let previous_hook = take_hook();
+    set_hook(Box::new(move |info| {
+        error!("Backtrace: {info}\n{}", Backtrace::force_capture());
+        previous_hook(info);
+    }));
 }
 
 struct ErrorDialog {
