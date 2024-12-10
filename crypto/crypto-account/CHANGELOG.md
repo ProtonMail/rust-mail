@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added 
+
+- Make API PQC ready with OpenPGP v6 primary address key support.
+- Introduce a `primary_for_mail()` method on address keys to get the encryption/signing key with v6 support.
+- Introduce a `PrimaryDecryptedAddressKey` type for a primary address key, which is potentially v6.
+
+### Changed
+
+- Rename `primary()` on unlocked address keys to `primary_default()`
+- SKL generation now takes `UnlockedAddressKeys` as input.
+
 ## [0.7.4] - 2024-12-13
 
 ### Changed

@@ -1,10 +1,13 @@
 use proton_crypto_inbox::{
     message::{DecryptableMessage, EncryptableDraft, GettablePGPMessage},
-    proton_crypto::crypto::{DataEncoding, PGPProviderSync},
+    proton_crypto::crypto::{AccessKeyInfo, DataEncoding, PGPProviderSync},
 };
 
 mod common;
-use common::create_account_unlocked_address_key;
+use common::{
+    create_account_unlocked_address_keys, create_account_unlocked_address_keys_v6,
+    TEST_DECRYPTION_KEY_V6,
+};
 
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 
@@ -78,20 +81,71 @@ fn test_encrypt_and_decrypt_draft() {
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let unlocked_address_key =
-        create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
-
+    let unlocked_address_keys =
+        create_account_unlocked_address_keys(&pgp_provider, PRIVATE_KEY, "password");
+    let primary = unlocked_address_keys
+        .primary_for_mail()
+        .expect("There should be a primary key");
     let encrypted_draft = draft
-        .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
+        .encrypt_draft_body(&pgp_provider, &primary)
         .expect("encryption to succeed ");
 
     let decryptable_message = TestMessage(false, encrypted_draft.0);
 
     let plain_text = decryptable_message
-        .decrypt(&pgp_provider, &[unlocked_address_key.as_ref()])
+        .decrypt(&pgp_provider, &unlocked_address_keys)
         .unwrap();
 
     assert_eq!(plain_text.0.body(), message);
+}
+
+#[test]
+fn test_encrypt_and_decrypt_draft_v6() {
+    let pgp_provider = new_pgp_provider();
+    let message = "hello_world";
+    let draft = TestDraft(message.as_bytes().to_owned());
+
+    let unlocked_address_keys = create_account_unlocked_address_keys_v6(
+        &pgp_provider,
+        PRIVATE_KEY,
+        TEST_DECRYPTION_KEY_V6,
+        "password",
+    );
+    let primary = unlocked_address_keys
+        .primary_for_mail()
+        .expect("There should be a primary key");
+
+    assert!(
+        primary.is_v6 && primary.for_encryption().version() == 6,
+        "Primary must be v6"
+    );
+
+    let encrypted_draft = draft
+        .encrypt_draft_body(&pgp_provider, &primary)
+        .expect("encryption to succeed ");
+
+    let decryptable_message = TestMessage(false, encrypted_draft.0);
+
+    let plain_text = decryptable_message
+        .decrypt(&pgp_provider, &unlocked_address_keys)
+        .unwrap();
+    let signature_verification_v6 = plain_text
+        .1
+        .verify_signature(&pgp_provider, &[primary.for_encryption()]);
+    let primary_key_v4 = unlocked_address_keys.primary_default().unwrap();
+    let signature_verification_v4 = plain_text
+        .1
+        .verify_signature(&pgp_provider, &[primary_key_v4]);
+
+    assert_eq!(plain_text.0.body(), message);
+    assert!(
+        signature_verification_v6.is_ok(),
+        "signature should verify with a v6 key"
+    );
+    assert!(
+        signature_verification_v4.is_ok(),
+        "signature should verify with a v4 key"
+    );
 }
 
 #[test]
@@ -100,11 +154,14 @@ fn test_draft_decryption_fails_if_wrong_key_used() {
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let unlocked_address_key =
-        create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
+    let unlocked_address_keys =
+        create_account_unlocked_address_keys(&pgp_provider, PRIVATE_KEY, "password");
+    let primary = unlocked_address_keys
+        .primary_for_mail()
+        .expect("There should be a primary key");
 
     let encrypted_draft = draft
-        .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
+        .encrypt_draft_body(&pgp_provider, &primary)
         .expect("encryption to succeed ");
 
     let decryptable_message = TestMessage(false, encrypted_draft.0);

@@ -254,8 +254,11 @@ fn send_external_mime() {
     assert_eq!(draft.mime_type, "text/html");
 
     let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
+    let primary = sender_keys
+        .primary_for_mail()
+        .expect("Primary should be there");
     let encrypted_body = mime_body
-        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
+        .package_body_encrypt(&pgp_provider, &primary)
         .expect("Package encryption failed");
 
     let package = send_logic::process_package(
@@ -292,8 +295,11 @@ fn send_external_mime_sign_only() {
     assert_eq!(draft.mime_type, "text/html");
 
     let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
+    let primary = sender_keys
+        .primary_for_mail()
+        .expect("Primary should be there");
     let encrypted_body = mime_body
-        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
+        .package_body_encrypt(&pgp_provider, &primary)
         .expect("Package encryption failed");
 
     let package = send_logic::process_package(
@@ -597,20 +603,19 @@ mod recipient_keys {
 
 /// Unlocked sender address keys.
 mod sender_keys {
+    use proton_crypto_account::keys::UnlockedAddressKeys;
+
     use super::*;
 
     pub fn load_sender_address_keys<Provider: PGPProviderSync>(
         provider: &Provider,
-    ) -> Vec<UnlockedAddressKey<Provider>> {
-        vec![common::create_account_unlocked_address_key(
-            provider,
-            ADDRESS_KEY,
-            "password",
-        )]
+    ) -> UnlockedAddressKeys<Provider> {
+        common::create_account_unlocked_address_keys(provider, ADDRESS_KEY, "password")
     }
 }
 
 mod send_logic {
+    use proton_crypto_account::keys::UnlockedAddressKeys;
     use send_request::PackageSignaturesMode;
 
     use super::*;
@@ -621,7 +626,7 @@ mod send_logic {
     ) -> (
         CryptoMailSettings,
         models::DraftMessage,
-        Vec<UnlockedAddressKey<Provider>>,
+        UnlockedAddressKeys<Provider>,
     ) {
         let mail_settings = models::load_mail_settings();
         let draft = draft_loader();

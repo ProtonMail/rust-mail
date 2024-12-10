@@ -1,5 +1,5 @@
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorAsync, DecryptorSync,
+    AccessKeyInfo, AsPublicKeyRef, DataEncoding, Decryptor, DecryptorAsync, DecryptorSync,
     DetachedSignatureVariant, PGPProviderAsync, PGPProviderSync, VerifiedData,
 };
 use zeroize::Zeroizing;
@@ -166,12 +166,15 @@ pub fn unlock_legacy_key<Provider: PGPProviderSync>(
     let (private_key, public_key) =
         import_key_with_passphrase(pgp_provider, &locked_key.private_key, key_secret)
             .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+
+    let is_v6 = private_key.version() == 6;
     Ok(DecryptedAddressKey {
         private_key,
         public_key,
         id: locked_key.id.clone(),
         flags: *flags,
         primary: locked_key.primary,
+        is_v6,
     })
 }
 
@@ -188,11 +191,14 @@ pub async fn unlock_legacy_key_async<Provider: PGPProviderAsync>(
         import_key_with_passphrase_async(pgp_provider, &locked_key.private_key, key_secret)
             .await
             .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+
+    let is_v6 = private_key.version() == 6;
     Ok(DecryptedAddressKey {
         private_key,
         public_key,
         id: locked_key.id.clone(),
         flags: *flags,
         primary: locked_key.primary,
+        is_v6,
     })
 }

@@ -443,6 +443,7 @@ fn create_test_decrypted_address_key<T: PGPProviderSync>(
         private_key,
         public_key,
         flags: KeyFlag::from(3_u32),
-        primary: true
+        primary: true,
+        is_v6: false,
     }]
 }

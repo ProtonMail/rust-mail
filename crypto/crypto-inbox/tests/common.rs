@@ -1,5 +1,5 @@
 use proton_crypto_account::{
-    keys::{DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKey},
+    keys::{DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKeys},
     proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey},
 };
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
@@ -20,6 +20,29 @@ KkA00FuCKspj/lxrwngEGBYIACoFgmVkZlYJkO9CpuwXvqqMApsMFiEEpxDy
 wRi6lh7fyHBG70Km7Be+qowAAHeFAP91gCl/VD/zHEvYIpWEK672jkPUPDpP
 Ll+erDsL2C10mgEA5fbBK09OVIjtYUJxiId1YYfn/4/ym92WNEAT20prLww=
 -----END PGP PRIVATE KEY BLOCK-----";
+
+#[allow(dead_code)]
+pub const TEST_DECRYPTION_KEY_V6: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xX0GZ1g5cxsAAAAgNZbQcSMtbiRSg6xMvM8ZCaX3p8LP3TG5+cC2MZ4drEj+HQkL
+AwgQjyMiy81qWWCcWR6htqofAyKuKGePyeqxL4G8opCXZ9c2NEjGAdfx37xvc86e
+2B45RtXz8WV6dV3w1htWxYpX8l6sfCvGjKfP5BU61MKwBh8bCgAAAEEFgmdYOXMD
+CwkHAxUKCAMWAAICmwMCHgkioQaEU365+JMtkj6IznT4yWAEJcbFv6fUkOrbl8Qe
+rTkqwQUnCQIHAgAAAAAFTCDqQieusIZ7bHqzVmIQseD5m2frS4NlnpR+2CI1XtvE
+3MioCMjc25bjRhnmQHKnMIXq7m+ZDbeNksh5ZoF1/MeYzaoOseH3Obfwvuzag4yu
+2Cl2bDK3UUujP6p/RCrwfw7NH3J1c3RfdGVzdCA8cnVzdF90ZXN0QHByb3Rvbi5t
+ZT7CmwYTGwoAAAAsBYJnWDlzAhkBIqEGhFN+ufiTLZI+iM50+MlgBCXGxb+n1JDq
+25fEHq05KsEAAAAAO+8g19DO9IlJPpXqrQYmB+n1zP1FERx04guxRBRCMho/Qu54
+5LxHkdI7u+Lh4omVBWGMXtvrNWqxk4DWpNB4d/Vvf7nmEPxLIh73qCA3MjGty5w2
+1tcxSWgjVJDbzjeNHwsHx30GZ1g5cxkAAAAgwh+DK1Ho+O8s0yNV5+BX9GXwano4
+Y7uXOM3LZwxW6gD+HQkLAwgQjyMiy81qWWA9H+iweaVzKuAnwV/TcJ8Jp4GGkKuZ
+2+7bAIuMHlLVAjwImZpzLOWAa8K0DcV71P4900J9+FhTPR2KNy53wtmEXxsTOcKb
+BhgbCgAAACwFgmdYOXMCmwwioQaEU365+JMtkj6IznT4yWAEJcbFv6fUkOrbl8Qe
+rTkqwQAAAADkZiA7fBlrC518qQfBuTDZ6ZAejdFATGGQs+dCcsxOpbHEHBELs/7c
+Q0R+gtvwjDnTgL9dXewcwu6CfKAy4IYiL3wup9cYTZe9jPnXk3183zMVhNUCTkFB
+aRIU+dk6LILLIgE=
+-----END PGP PRIVATE KEY BLOCK-----
+";
 
 pub const TEST_VERIFICATION_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
 
@@ -96,22 +119,59 @@ pub fn get_test_address_keys<T: PGPProviderSync>(
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn create_account_unlocked_address_key<T: PGPProviderSync>(
+pub fn create_account_unlocked_address_keys<T: PGPProviderSync>(
     provider: &T,
     source: &str,
     passphrase: &str,
-) -> UnlockedAddressKey<T> {
+) -> UnlockedAddressKeys<T> {
     let private_key = provider
         .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
-    DecryptedAddressKey {
+    let key = DecryptedAddressKey {
         id: KeyId::from("address key"),
         private_key,
         public_key,
         flags: KeyFlag::default(),
         primary: true,
-    }
+        is_v6: false,
+    };
+    UnlockedAddressKeys(Vec::from([key]))
+}
+
+#[allow(clippy::missing_panics_doc, dead_code)]
+pub fn create_account_unlocked_address_keys_v6<T: PGPProviderSync>(
+    provider: &T,
+    primary_v4: &str,
+    primary_v6: &str,
+    passphrase: &str,
+) -> UnlockedAddressKeys<T> {
+    let private_key_v4 = provider
+        .private_key_import(primary_v4, passphrase, DataEncoding::Armor)
+        .unwrap();
+    let public_key_v4 = provider.private_key_to_public_key(&private_key_v4).unwrap();
+    let key_v4 = DecryptedAddressKey {
+        id: KeyId::from("address key"),
+        private_key: private_key_v4,
+        public_key: public_key_v4,
+        flags: KeyFlag::default(),
+        primary: true,
+        is_v6: false,
+    };
+
+    let private_key_v6 = provider
+        .private_key_import(primary_v6, passphrase, DataEncoding::Armor)
+        .unwrap();
+    let public_key_v6 = provider.private_key_to_public_key(&private_key_v6).unwrap();
+    let key_v6 = DecryptedAddressKey {
+        id: KeyId::from("address key"),
+        private_key: private_key_v6,
+        public_key: public_key_v6,
+        flags: KeyFlag::default(),
+        primary: true,
+        is_v6: true,
+    };
+    UnlockedAddressKeys(Vec::from([key_v4, key_v6]))
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]

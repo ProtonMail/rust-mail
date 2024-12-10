@@ -8,8 +8,8 @@ use proton_crypto::crypto::{
 use serde::{Deserialize, Serialize};
 
 use super::{
-    bool_from_integer, bool_to_integer, DecryptedAddressKey, KeyFlag, UnlockedAddressKey,
-    UnlockedUserKey,
+    bool_from_integer, bool_to_integer, DecryptedAddressKey, KeyFlag, PrimaryDecryptedAddressKey,
+    UnlockedAddressKeys,
 };
 
 pub const KT_SKL_VERIFICATION_CONTEXT_VALUE: &str = "key-transparency.key-list";
@@ -93,14 +93,14 @@ impl SKLData {
     pub fn encode_and_sign<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        signing_key: &UnlockedUserKey<Provider>,
+        primary_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<(SKLDataJson, SKLSignature), SKLError> {
         let encoded_data = serde_json::to_string(&self.0)?;
         let signing_context =
             pgp_provider.new_signing_context(KT_SKL_VERIFICATION_CONTEXT_VALUE.to_owned(), false);
         let signature = pgp_provider
             .new_signer()
-            .with_signing_key(signing_key.as_ref())
+            .with_signing_keys(primary_key.for_signing())
             .with_signing_context(&signing_context)
             .with_utf8()
             .sign_detached(encoded_data.as_bytes(), DataEncoding::Armor)
@@ -232,19 +232,18 @@ pub struct LocalSignedKeyList {
 
 impl LocalSignedKeyList {
     /// Generates a local signed keys list representing the address keys provided.
-    ///
-    /// Creates the signed key list data matching the provided address keys, and signs
-    /// the final data with user key.
     pub fn generate<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
-        user_key: &UnlockedUserKey<Provider>,
-        address_keys: &[UnlockedAddressKey<Provider>],
+        address_keys: &UnlockedAddressKeys<Provider>,
     ) -> Result<Self, SKLError> {
         let mut skl_data = SKLData(Vec::with_capacity(address_keys.len()));
         skl_data
             .0
             .extend(address_keys.iter().map(SKLKeyData::create_from));
-        let (data, signature) = skl_data.encode_and_sign(pgp_provider, user_key)?;
+        let primary_key = address_keys
+            .primary_for_mail()
+            .map_err(|_| SKLError::NoPrimaryKey)?;
+        let (data, signature) = skl_data.encode_and_sign(pgp_provider, &primary_key)?;
         Ok(Self { data, signature })
     }
 }

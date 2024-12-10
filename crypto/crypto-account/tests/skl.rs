@@ -4,29 +4,10 @@ use proton_crypto::{
 };
 
 use proton_crypto_account::keys::{
-    APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, DecryptedAddressKey,
-    DecryptedUserKey, KeyFlag, KeyId, LocalSignedKeyList, PublicAddressKeyGroup, SKLDataJson,
-    SKLSignature, SignedKeyList, UnlockedAddressKey, UnlockedUserKey,
+    APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, DecryptedAddressKey, KeyFlag,
+    KeyId, LocalSignedKeyList, PublicAddressKeyGroup, SKLDataJson, SKLSignature, SignedKeyList,
+    UnlockedAddressKeys,
 };
-
-const TEST_USER_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
-
-xYYEZie3jRYJKwYBBAHaRw8BAQdAAp+4PE1Sf5V95XrIY/P2dUNk1TOojoEG
-LuuOzULTa1v+CQMIyRkIEctTq7tgD0cHCXSlb9RoIlW0FkasmPMPfJW3+ejY
-Vk8849vYU4NIXwz8F6i/2i3hmVgUWQ+BwjBPubFEphf+U6TMIft6crssukxa
-1807bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp
-bF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZie3jQQLCQcICZA4nKgbRZBl
-GQMVCAoEFgACAQIZAQKbAwIeARYhBOZJEArPLqrMMxX8fzicqBtFkGUZAADk
-/AD+LA6NW1K+Z3IT66/DEtjH0cmw6HNqxkBdT7kaL2o5pAMA/j9b4JCurWk/
-62MBM4I9RwXzSo8lmgPiYwPp4d/xgEsMx4sEZie3jRIKKwYBBAGXVQEFAQEH
-QHvLC7RWIDsorX5ZmYwjZbUhbXnEcO2sYt8OFaIh5KtHAwEIB/4JAwjMoZVn
-MffCPWDpnZRakUprlUVlvDHHjPCJw7zVbFKfvTvYqqxsnNcqC74crMs7WVkE
-WI6Thna3/aBfMLkC7t9RnHE6u4wFZMF/SJ+ZomLtwngEGBYKACoFgmYnt40J
-kDicqBtFkGUZApsMFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkAAJ6BAQDv4nBl
-Nnj0W7XiAjiwRmVrY/sdybelB6j01p7UrcVAxQEAtEmT2cSIScVdWH1j3H9l
-0gGE7amH+cm6CjXOA7+Uwwc=
-=OHv0
------END PGP PRIVATE KEY BLOCK-----";
 
 const TEST_ADDRESS_KEY_PRIVATE: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -45,6 +26,28 @@ FiEEEbE4aKP46V65t2xfw+Upx3M5husAAPU7AQCMKF564vtdGCY/KIGqAhm2
 SNUnK5w6MkGKgrztbAhvngD/VK3t0WB8mUqXC3JoS2xC6rtyiyciAjQvuwWT
 2ePDxgI=
 =bOcf
+-----END PGP PRIVATE KEY BLOCK-----
+";
+
+const TEST_ADDRESS_KEY_PRIVATE_V6: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xX0GZ1g5cxsAAAAgNZbQcSMtbiRSg6xMvM8ZCaX3p8LP3TG5+cC2MZ4drEj+HQkL
+AwgQjyMiy81qWWCcWR6htqofAyKuKGePyeqxL4G8opCXZ9c2NEjGAdfx37xvc86e
+2B45RtXz8WV6dV3w1htWxYpX8l6sfCvGjKfP5BU61MKwBh8bCgAAAEEFgmdYOXMD
+CwkHAxUKCAMWAAICmwMCHgkioQaEU365+JMtkj6IznT4yWAEJcbFv6fUkOrbl8Qe
+rTkqwQUnCQIHAgAAAAAFTCDqQieusIZ7bHqzVmIQseD5m2frS4NlnpR+2CI1XtvE
+3MioCMjc25bjRhnmQHKnMIXq7m+ZDbeNksh5ZoF1/MeYzaoOseH3Obfwvuzag4yu
+2Cl2bDK3UUujP6p/RCrwfw7NH3J1c3RfdGVzdCA8cnVzdF90ZXN0QHByb3Rvbi5t
+ZT7CmwYTGwoAAAAsBYJnWDlzAhkBIqEGhFN+ufiTLZI+iM50+MlgBCXGxb+n1JDq
+25fEHq05KsEAAAAAO+8g19DO9IlJPpXqrQYmB+n1zP1FERx04guxRBRCMho/Qu54
+5LxHkdI7u+Lh4omVBWGMXtvrNWqxk4DWpNB4d/Vvf7nmEPxLIh73qCA3MjGty5w2
+1tcxSWgjVJDbzjeNHwsHx30GZ1g5cxkAAAAgwh+DK1Ho+O8s0yNV5+BX9GXwano4
+Y7uXOM3LZwxW6gD+HQkLAwgQjyMiy81qWWA9H+iweaVzKuAnwV/TcJ8Jp4GGkKuZ
+2+7bAIuMHlLVAjwImZpzLOWAa8K0DcV71P4900J9+FhTPR2KNy53wtmEXxsTOcKb
+BhgbCgAAACwFgmdYOXMCmwwioQaEU365+JMtkj6IznT4yWAEJcbFv6fUkOrbl8Qe
+rTkqwQAAAADkZiA7fBlrC518qQfBuTDZ6ZAejdFATGGQs+dCcsxOpbHEHBELs/7c
+Q0R+gtvwjDnTgL9dXewcwu6CfKAy4IYiL3wup9cYTZe9jPnXk3183zMVhNUCTkFB
+aRIU+dk6LILLIgE=
 -----END PGP PRIVATE KEY BLOCK-----
 ";
 
@@ -76,20 +79,7 @@ fn get_test_skl() -> SignedKeyList {
 
 fn create_test_private_keys_with_skl<Provider: PGPProviderSync>(
     provider: &Provider,
-) -> (
-    UnlockedUserKey<Provider>,
-    UnlockedAddressKey<Provider>,
-    SignedKeyList,
-) {
-    let private_key = provider
-        .private_key_import(TEST_USER_KEY, "password", DataEncoding::Armor)
-        .unwrap();
-    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
-    let user_key = DecryptedUserKey {
-        id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
-        private_key,
-        public_key,
-    };
+) -> (UnlockedAddressKeys<Provider>, SignedKeyList) {
     let private_key = provider
         .private_key_import(TEST_ADDRESS_KEY_PRIVATE, "password", DataEncoding::Armor)
         .unwrap();
@@ -100,6 +90,7 @@ fn create_test_private_keys_with_skl<Provider: PGPProviderSync>(
         primary: true,
         private_key,
         public_key,
+        is_v6: false,
     };
     let skl = SignedKeyList {
         min_epoch_id: Some(3),
@@ -110,7 +101,38 @@ fn create_test_private_keys_with_skl<Provider: PGPProviderSync>(
         obsolescence_token: None,
         revision: 1,
     };
-    (user_key, key, skl)
+    (UnlockedAddressKeys(Vec::from([key])), skl)
+}
+
+fn create_test_address_keys_v6<Provider: PGPProviderSync>(
+    provider: &Provider,
+) -> UnlockedAddressKeys<Provider> {
+    let private_key = provider
+        .private_key_import(TEST_ADDRESS_KEY_PRIVATE, "password", DataEncoding::Armor)
+        .unwrap();
+    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    let key = DecryptedAddressKey {
+        id: KeyId::from("1"),
+        flags: KeyFlag::from(3_u32),
+        primary: true,
+        private_key,
+        public_key,
+        is_v6: false,
+    };
+
+    let private_key_v6 = provider
+        .private_key_import(TEST_ADDRESS_KEY_PRIVATE_V6, "password", DataEncoding::Armor)
+        .unwrap();
+    let public_key_v6 = provider.private_key_to_public_key(&private_key_v6).unwrap();
+    let key_v6 = DecryptedAddressKey {
+        id: KeyId::from("2"),
+        flags: KeyFlag::from(3_u32),
+        primary: true,
+        private_key: private_key_v6,
+        public_key: public_key_v6,
+        is_v6: true,
+    };
+    UnlockedAddressKeys(Vec::from([key, key_v6]))
 }
 
 #[test]
@@ -132,8 +154,8 @@ fn test_verify_skl_data() {
 #[test]
 fn test_create_skl_data() {
     let provider = new_pgp_provider();
-    let (user_key, key, skl) = create_test_private_keys_with_skl(&provider);
-    let local_skl = LocalSignedKeyList::generate(&provider, &user_key, &[key])
+    let (address_keys, skl) = create_test_private_keys_with_skl(&provider);
+    let local_skl = LocalSignedKeyList::generate(&provider, &address_keys)
         .expect("SKL generation must not fail");
     assert_eq!(&local_skl.data, skl.data.as_ref().unwrap());
     let dummy_skl = SignedKeyList {
@@ -146,6 +168,34 @@ fn test_create_skl_data() {
         revision: 1,
     };
     dummy_skl
-        .verify_signature(&provider, &[&user_key.public_key], None)
+        .verify_signature(&provider, &address_keys, None)
         .expect("signature should verify");
+}
+
+#[test]
+fn test_create_skl_data_v6() {
+    let provider = new_pgp_provider();
+    let address_keys = create_test_address_keys_v6(&provider);
+    let local_skl = LocalSignedKeyList::generate(&provider, &address_keys)
+        .expect("SKL generation must not fail");
+    let dummy_skl = SignedKeyList {
+        min_epoch_id: None,
+        max_epoch_id: None,
+        expected_min_epoch_id: None,
+        data: Some(local_skl.data),
+        obsolescence_token: None,
+        signature: Some(local_skl.signature),
+        revision: 1,
+    };
+    let primary_address_key_v6 = address_keys.primary_for_mail().expect("no primary");
+    assert!(primary_address_key_v6.is_v6);
+    dummy_skl
+        .verify_signature(&provider, &[primary_address_key_v6.for_encryption()], None)
+        .expect("signature v6 should verify");
+
+    let primary_address_key_v4 = address_keys.primary_default().unwrap();
+    assert!(!primary_address_key_v4.is_v6);
+    dummy_skl
+        .verify_signature(&provider, &[primary_address_key_v4], None)
+        .expect("signature v4 should verify");
 }

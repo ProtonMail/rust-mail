@@ -2,7 +2,7 @@
 use std::{fmt, str::FromStr};
 
 use proton_crypto_account::{
-    keys::{EmailMimeType, UnlockedAddressKey},
+    keys::{EmailMimeType, PrimaryDecryptedAddressKey},
     proton_crypto::{
         crypto::{DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, SessionKeyAlgorithm},
         utils::remove_trailing_spaces,
@@ -136,7 +136,7 @@ pub trait EncryptablePackage {
     fn package_body_encrypt<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        address_key: &UnlockedAddressKey<Provider>,
+        address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<EncryptedPackageBody, MessageError> {
         package_body_encrypt(
             pgp_provider,
@@ -165,7 +165,7 @@ pub trait EncryptablePackage {
 /// Returns a [`MessageError::Encryption`] error if the encryption fails.
 pub fn package_body_encrypt<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    address_key: &UnlockedAddressKey<Provider>,
+    address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     mime_type: PackageMimeType,
     body: &[u8],
 ) -> Result<EncryptedPackageBody, MessageError> {
@@ -178,7 +178,7 @@ pub fn package_body_encrypt<Provider: PGPProviderSync>(
     let mut encryptor = pgp_provider
         .new_encryptor()
         .with_session_key_ref(&session_key)
-        .with_signing_key(address_key.as_ref())
+        .with_signing_keys(address_key.for_signing())
         .with_utf8();
     // Security trade-off for large mime messages.
     // We use compression on large mime messages with embedded attachments greater than 1MB.

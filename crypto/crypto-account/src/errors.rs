@@ -16,6 +16,16 @@ pub enum KeyError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum AddressKeySelectionError {
+    #[error("No valid primary address key found")]
+    NoPrimaryAddressKey,
+    #[error("Only a v6 primary key found")]
+    OnlyV6PrimaryAddressKey,
+    #[error("Cannot transform address key to primary address key: {0}")]
+    InvalidPrimaryTransform(KeyId),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum AccountCryptoError {
     #[error("Failed to verify signature for token {0}")]
     TokenVerification(#[from] VerificationError),
@@ -39,6 +49,8 @@ pub enum AccountCryptoError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SKLError {
+    #[error("Failed get primary address key")]
+    NoPrimaryKey,
     #[error("Failed to parse the SKL data: {0}")]
     ParseError(Box<dyn std::error::Error>),
     #[error("Failed to verify SKL signature: {0}")]

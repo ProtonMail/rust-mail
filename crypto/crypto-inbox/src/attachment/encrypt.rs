@@ -3,12 +3,15 @@ use std::{
     string::FromUtf8Error,
 };
 
-use proton_crypto_account::proton_crypto::{
-    crypto::{
-        ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
-        EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
+use proton_crypto_account::{
+    keys::PrimaryDecryptedAddressKey,
+    proton_crypto::{
+        crypto::{
+            ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
+            EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
+        },
+        CryptoError,
     },
-    CryptoError,
 };
 
 use crate::keys::{InboxSessionKey, KeyPacket, SessionKeyError};
@@ -65,17 +68,15 @@ pub trait EncryptableAttachment {
     /// Returns the plaintext attachment data.
     fn attachment_data(&self) -> &[u8];
 
-    /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
+    /// Encrypts and signs an attachment with the primary address key.
     ///
     /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
     /// containing the key packets, signatures, and encrypted signature.
-    /// If no signing keys are provided, i.e., a zero length slice, no signatures are produced.
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
-    /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
-    /// * `signing_keys`    - The signing keys of the user that the attachment is to be signed by.
+    /// * `pgp_provider`        - The pgp provider instance from `proton_crypto`.
+    /// * `primary_address_key` - The primary address key to encrypt and sign with.
     ///
     /// # Errors
     ///
@@ -83,16 +84,37 @@ pub trait EncryptableAttachment {
     fn attachment_encrypt_and_sign<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        encryption_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
-        signing_keys: &[impl AsRef<Provider::PrivateKey>],
+        primary_address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
-        encrypt(
-            pgp_provider,
-            encryption_keys,
-            signing_keys,
-            self.attachment_data(),
-        )
+        encrypt(pgp_provider, primary_address_key, self.attachment_data())
     }
+}
+
+/// Encrypts and signs an attachment with the primary address key.
+///
+/// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
+/// containing the key packets, signatures, and encrypted signature.
+///
+/// # Parameters
+///
+/// * `pgp_provider`        - The pgp provider instance from `proton_crypto`.
+/// * `primary_address_key` - The primary address key to encrypt and sign with.
+/// * `attachment_data`     - The attachment data to encrypt.
+///
+/// # Errors
+///
+/// One of encryption, signing, or encoding steps fails.
+pub fn encrypt<Provider: PGPProviderSync>(
+    pgp_provider: &Provider,
+    primary_address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+    attachment_data: impl AsRef<[u8]>,
+) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
+    encrypt_helper(
+        pgp_provider,
+        &[primary_address_key.for_encryption()],
+        primary_address_key.for_signing(),
+        attachment_data,
+    )
 }
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
@@ -111,7 +133,7 @@ pub trait EncryptableAttachment {
 /// # Errors
 ///
 /// One of encryption, signing, or encoding steps fails.
-pub fn encrypt<Provider: PGPProviderSync>(
+fn encrypt_helper<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     encryption_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
     signing_keys: &[impl AsRef<Provider::PrivateKey>],
@@ -119,10 +141,6 @@ pub fn encrypt<Provider: PGPProviderSync>(
 ) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
     if encryption_keys.is_empty() {
         return Err(AttachmentEncryptionError::NoKeys);
-    }
-    if signing_keys.is_empty() {
-        // Handle the case where no signatures should be produced.
-        return encrypt_attachment_without_signing(pgp_provider, encryption_keys, attachment_data);
     }
     // Generate a fresh PGP session key for encrypting the data and the signature.
     let session_key = pgp_provider
@@ -169,31 +187,42 @@ pub fn encrypt<Provider: PGPProviderSync>(
 ///
 /// The key packets and signatures (i.e., attachment metadata) can be accessed with [`SigncryptedAttachmentWriter::finalize`]
 /// once all data has been written.
-/// Both `encryption_keys` and `signing_keys` must contain at least one key else an error is thrown.
 ///
 /// # Parameters
 ///
-/// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
-/// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
-/// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
-/// * `attachment_data` - A writer where the encrypted attachment is written to.
+/// * `pgp_provider`         - The pgp provider instance from `proton_crypto`.
+/// * `primary_address_key`  - The encryption key of the recipients to encrypt the attachment to.
+/// * `attachment_data`      - A writer where the encrypted attachment is written to.
 ///
 /// # Errors
 ///
 /// One of encryption, signing, or encoding steps fails.
 pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     pgp_provider: &'a Provider,
-    encryption_keys: &'a [impl AsPublicKeyRef<Provider::PublicKey>],
+    primary_address_key: &'a PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+    attachment_data: W,
+) -> Result<
+    SigncryptedAttachmentWriter<'a, W, Provider, Provider::Encryptor<'a>>,
+    AttachmentEncryptionError,
+> {
+    encrypt_and_sign_to_writer_helper(
+        pgp_provider,
+        primary_address_key.for_encryption(),
+        primary_address_key.for_signing(),
+        attachment_data,
+    )
+}
+
+/// Streaming attachment encryption helper.
+fn encrypt_and_sign_to_writer_helper<'a, Provider: PGPProviderSync, W: Write + 'a>(
+    pgp_provider: &'a Provider,
+    encryption_key: &'a impl AsPublicKeyRef<Provider::PublicKey>,
     signing_keys: &'a [impl AsRef<Provider::PrivateKey>],
     attachment_data: W,
 ) -> Result<
     SigncryptedAttachmentWriter<'a, W, Provider, Provider::Encryptor<'a>>,
     AttachmentEncryptionError,
 > {
-    if encryption_keys.is_empty() {
-        return Err(AttachmentEncryptionError::NoKeys);
-    }
-
     if signing_keys.is_empty() {
         return Err(AttachmentEncryptionError::NoSigningKeys);
     }
@@ -201,7 +230,7 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     // Generate a fresh PGP session key for encrypting the data and the signature.
     let session_key = pgp_provider
         .new_encryptor()
-        .with_encryption_key_refs(encryption_keys)
+        .with_encryption_key(encryption_key.as_public_key())
         .generate_session_key()
         .map_err(AttachmentEncryptionError::SessionKeyGeneration)?;
 
@@ -209,7 +238,7 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     // The encrypted session key packets are called key packets for brevity.
     let key_packets = pgp_provider
         .new_encryptor()
-        .with_encryption_key_refs(encryption_keys)
+        .with_encryption_key(encryption_key.as_public_key())
         .encrypt_session_key(&session_key)
         .map_err(AttachmentEncryptionError::SessionKeyEncryption)?;
 
@@ -227,46 +256,6 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
             writer,
             session_key,
             key_packets,
-        })
-        .map_err(AttachmentEncryptionError::Encryption)?;
-    Ok(attachment_writer)
-}
-
-/// Creates an encryption writer, which writes the encrypted attachment data to the provided output writer
-/// but does not sign the data.
-///
-/// The writer produces a key packet to each key in `encryption_keys`.
-/// The key packets can be accessed with [`EncryptedAttachmentWriter::finalize`]
-/// once all data has been written.
-///
-/// # Warning
-///
-/// Use [`encrypt_and_sign_to_writer`] whenever possible to create signatures over the attachment.
-///
-/// # Parameters
-///
-/// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
-/// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
-/// * `attachment_data` - A writer where the encrypted attachment is written to.
-///
-/// # Errors
-///
-/// One of encryption, signing, or encoding steps fails.
-pub fn encrypt_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
-    pgp_provider: &'a Provider,
-    encryption_keys: &'a [impl AsPublicKeyRef<Provider::PublicKey>],
-    attachment_data: W,
-) -> Result<EncryptedAttachmentWriter<'a, W, Provider::Encryptor<'a>>, AttachmentEncryptionError> {
-    if encryption_keys.is_empty() {
-        return Err(AttachmentEncryptionError::NoKeys);
-    }
-
-    let attachment_writer = pgp_provider
-        .new_encryptor()
-        .with_encryption_key_refs(encryption_keys)
-        .encrypt_stream_split(attachment_data)
-        .map(|(key_packets, writer)| {
-            EncryptedAttachmentWriter(KeyPackets::new_from_bytes(&key_packets), writer)
         })
         .map_err(AttachmentEncryptionError::Encryption)?;
     Ok(attachment_writer)
@@ -350,31 +339,6 @@ fn encrypt_detached_signature<T: PGPProviderSync>(
     Ok(attachment_encrypted_signature)
 }
 
-fn encrypt_attachment_without_signing<T: PGPProviderSync>(
-    pgp_provider: &T,
-    encryption_keys: &[impl AsPublicKeyRef<T::PublicKey>],
-    attachment_data: impl AsRef<[u8]>,
-) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
-    let mut data = Vec::with_capacity(attachment_data.as_ref().len());
-    let key_packets = {
-        let (key_packets, mut pt_writer) = pgp_provider
-            .new_encryptor()
-            .with_encryption_key_refs(encryption_keys)
-            .encrypt_stream_split(&mut data)
-            .map_err(AttachmentEncryptionError::Encryption)?;
-        pt_writer
-            .write_all(attachment_data.as_ref())
-            .map_err(|err| AttachmentEncryptionError::Encryption(err.into()))?;
-        key_packets
-    };
-    let metadata = EncryptedAttachmentMetadata {
-        signature: None,
-        encrypted_signature: None,
-        key_packets: KeyPackets::new_from_bytes(&key_packets),
-    };
-    Ok(EncryptedAttachment { metadata, data })
-}
-
 impl DecryptableAttachment for EncryptedAttachmentMetadata {
     fn attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
@@ -448,48 +412,6 @@ where
             signature: Some(detached_signature),
             encrypted_signature: Some(encrypted_detached_signature),
             key_packets: KeyPackets::new_from_bytes(&self.key_packets),
-        };
-        Ok(metadata)
-    }
-}
-
-/// Attachment writer for encryption only without signing.
-#[derive(Debug)]
-pub struct EncryptedAttachmentWriter<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>(
-    KeyPackets,
-    ProvEncryptor::EncryptorWriter<'a, W>,
-);
-
-impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>> Write
-    for EncryptedAttachmentWriter<'a, W, ProvEncryptor>
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.1.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.1.flush()
-    }
-}
-
-impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>
-    EncryptedAttachmentWriter<'a, W, ProvEncryptor>
-{
-    /// Finalizes the encryption and returns the [`EncryptedAttachmentMetadata`].
-    ///
-    /// Must be called once all attachment data has been written to this writer.
-    ///
-    /// # Errors
-    ///
-    /// Writing final encryption output fails.
-    pub fn finalize(self) -> Result<EncryptedAttachmentMetadata, AttachmentEncryptionError> {
-        self.1
-            .finalize()
-            .map_err(AttachmentEncryptionError::Encryption)?;
-        let metadata = EncryptedAttachmentMetadata {
-            signature: None,
-            encrypted_signature: None,
-            key_packets: self.0,
         };
         Ok(metadata)
     }

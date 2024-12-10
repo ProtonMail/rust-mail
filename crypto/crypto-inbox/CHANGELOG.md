@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+- Make API PQC ready with OpenPGP v6 keys support.
+
+### Changed
+
+- Refactor attachment encryption API allowing encryption with the `PrimaryAddressKey` only.
+- Refactor draft encryption API allowing encryption with the `PrimaryAddressKey` only.
+
 ## [0.8.2] - 2024-12-13
 
 ### Changed

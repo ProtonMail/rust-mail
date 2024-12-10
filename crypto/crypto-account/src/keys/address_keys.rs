@@ -7,7 +7,7 @@ use crate::{
         generate_locked_pgp_key_with_token, generate_token_values, unlock_legacy_key,
         unlock_legacy_key_async,
     },
-    errors::AccountCryptoError,
+    errors::{AccountCryptoError, AddressKeySelectionError},
     salts::KeySecret,
 };
 
@@ -16,8 +16,8 @@ use super::{
     KeyTokenSignature, LockedKey, UnlockResult, UnlockedUserKey,
 };
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, KeyGeneratorAlgorithm, PGPProviderAsync, PGPProviderSync,
-    PrivateKey, PublicKey,
+    AccessKeyInfo, AsPublicKeyRef, DataEncoding, KeyGeneratorAlgorithm, PGPProviderAsync,
+    PGPProviderSync, PrivateKey, PublicKey,
 };
 use serde::{Deserialize, Serialize};
 
@@ -29,7 +29,7 @@ pub type UnlockedAddressKey<Provider: PGPProviderSync> =
 ///
 /// Provides utility methods for selecting and managing these keys.
 #[allow(clippy::module_name_repetitions)]
-pub struct UnlockedAddressKeys<Provider: PGPProviderSync>(Vec<UnlockedAddressKey<Provider>>);
+pub struct UnlockedAddressKeys<Provider: PGPProviderSync>(pub Vec<UnlockedAddressKey<Provider>>);
 
 impl<Provider: PGPProviderSync> Deref for UnlockedAddressKeys<Provider> {
     type Target = Vec<UnlockedAddressKey<Provider>>;
@@ -85,14 +85,117 @@ impl<Provider: PGPProviderSync> Clone for UnlockedAddressKeys<Provider> {
     }
 }
 
+impl<Provider: PGPProviderSync> From<UnlockedAddressKey<Provider>>
+    for UnlockedAddressKeys<Provider>
+{
+    fn from(value: UnlockedAddressKey<Provider>) -> Self {
+        Self(Vec::from([value]))
+    }
+}
+
 impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
-    /// Retrieves the primary address key for encryption and signing operations.
-    pub fn primary(&self) -> Option<&UnlockedAddressKey<Provider>> {
-        // For now we treat the first key in the list as primary.
-        // - This will change with OpenPGP v6 and PQC keys, where
-        //   multiple primary address keys are present.
-        // - Key transparency
-        self.0.first()
+    /// Retrieves the default primary address key for encryption and signing operations.
+    ///
+    /// Does not consider v6 `OpenPGP` keys.
+    /// v6 `OpenPGP` keys are currently only used in mail and should
+    /// not be used by other products.
+    ///
+    /// # Note
+    /// For e-mail encryption and signing, use [`Self::primary_for_mail`] instead.
+    pub fn primary_default(&self) -> Option<&UnlockedAddressKey<Provider>> {
+        self.0.iter().find(|key| !key.is_v6)
+    }
+
+    /// Retrieves the primary address key for mail encryption and signing.
+    ///
+    /// - If there is a primary v6 address key alongside a primary v4,
+    ///   this function will return a primary v6 key with v4 compatibility.
+    /// - If there is only a primary v4 address key, the v4 address key is returned.
+    ///
+    /// In the v6 case, data has to be signed with both primary keys for backwards compatibility.
+    /// The returned type offers a helper to retrieve the keys for encryption [`PrimaryDecryptedAddressKey::for_encryption`]
+    /// and signing [`PrimaryDecryptedAddressKey::for_signing`], which takes care of this logic.
+    ///
+    /// # Warning
+    /// Only use this function for e-mail. If you are unsure what to use, ask the crypto team.
+    pub fn primary_for_mail(
+        &self,
+    ) -> Result<
+        PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+        AddressKeySelectionError,
+    > {
+        // Select the first v4 key in the list as the flag can not be trusted (legacy).
+        let primary_v4_opt = self.0.iter().find(|key| !key.is_v6);
+        // Select the v6 key flagged as primary.
+        let primary_v6_opt = self.0.iter().find(|key| key.is_v6 && key.primary);
+        match (primary_v4_opt, primary_v6_opt) {
+            (None, None) => Err(AddressKeySelectionError::NoPrimaryAddressKey),
+            (None, Some(_)) => Err(AddressKeySelectionError::OnlyV6PrimaryAddressKey),
+            (Some(primary_v4), None) => Ok(PrimaryDecryptedAddressKey {
+                id: primary_v4.id.clone(),
+                flags: primary_v4.flags,
+                is_v6: false,
+                encrypt: primary_v4.public_key.clone(),
+                sign: Vec::from([primary_v4.private_key.clone()]),
+            }),
+            (Some(primary_v4), Some(primary_v6)) => Ok(PrimaryDecryptedAddressKey {
+                id: primary_v6.id.clone(),
+                flags: primary_v6.flags,
+                is_v6: true,
+                encrypt: primary_v6.public_key.clone(),
+                sign: Vec::from([
+                    primary_v4.private_key.clone(),
+                    primary_v6.private_key.clone(),
+                ]),
+            }),
+        }
+    }
+}
+
+/// Type that represent and primary address key for e-mail encryption and signing.
+#[derive(Debug, Clone)]
+pub struct PrimaryDecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
+    /// The key id of the primary key.
+    pub id: KeyId,
+
+    /// The primary key flags.
+    pub flags: KeyFlag,
+
+    /// Indicates if this is a `OpenPGP` v6 primary address key.
+    pub is_v6: bool,
+
+    encrypt: Pub,
+    sign: Vec<Priv>,
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> TryFrom<DecryptedAddressKey<Priv, Pub>>
+    for PrimaryDecryptedAddressKey<Priv, Pub>
+{
+    type Error = AddressKeySelectionError;
+
+    fn try_from(value: DecryptedAddressKey<Priv, Pub>) -> Result<Self, Self::Error> {
+        if value.is_v6 || !value.primary {
+            return Err(AddressKeySelectionError::InvalidPrimaryTransform(value.id));
+        }
+        Ok(Self {
+            id: value.id,
+            flags: value.flags,
+            is_v6: value.is_v6,
+            encrypt: value.public_key,
+            sign: Vec::from([value.private_key]),
+        })
+    }
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> PrimaryDecryptedAddressKey<Priv, Pub> {
+    /// Return a reference to the primary key for encryption.
+    pub fn for_encryption(&self) -> &Pub {
+        &self.encrypt
+    }
+
+    /// Return a reference to the primary keys for signing.
+    pub fn for_signing(&self) -> &[Priv] {
+        &self.sign
     }
 }
 
@@ -156,12 +259,15 @@ impl AddressKeys {
                     return None;
                 }
             };
+
+            let is_v6 = private_key.version() == 6;
             Some(DecryptedAddressKey {
                 private_key,
                 public_key,
                 id: locked_key.id.clone(),
                 flags: *flags,
                 primary: locked_key.primary,
+                is_v6,
             })
         }));
         UnlockResult {
@@ -206,12 +312,15 @@ impl AddressKeys {
                 .await;
                 let (private_key, public_key) = decryption_result
                     .map_err(|err| KeyError::UnlockToken(locked_key.id.clone(), err))?;
+
+                let is_v6 = private_key.version() == 6;
                 Ok(DecryptedAddressKey {
                     private_key,
                     public_key,
                     id: locked_key.id.clone(),
                     flags: *flags,
                     primary: locked_key.primary,
+                    is_v6,
                 })
             });
         }
@@ -250,6 +359,7 @@ pub struct DecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
     pub id: KeyId,
     pub flags: KeyFlag,
     pub primary: bool,
+    pub is_v6: bool,
     pub private_key: Priv,
     pub public_key: Pub,
 }
@@ -399,10 +509,13 @@ impl LocalAddressKey {
             &[user_key],
             None,
         )?;
+
+        let is_v6 = private_key.version() == 6;
         Ok(DecryptedAddressKey {
             id: key_id,
             flags: self.flags,
             primary: self.primary,
+            is_v6,
             private_key,
             public_key,
         })
@@ -429,10 +542,13 @@ impl LocalAddressKey {
         let public_key = pgp_provider
             .private_key_to_public_key(&private_key)
             .map_err(AccountCryptoError::KeyImport)?;
+
+        let is_v6 = private_key.version() == 6;
         Ok(DecryptedAddressKey {
             id: key_id,
             flags: self.flags,
             primary: self.primary,
+            is_v6,
             private_key,
             public_key,
         })

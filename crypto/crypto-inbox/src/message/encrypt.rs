@@ -1,10 +1,10 @@
 use crate::{keys::InboxSessionKey, message::errors::MessageError};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_crypto_account::{
-    keys::UnlockedAddressKey,
+    keys::PrimaryDecryptedAddressKey,
     proton_crypto::crypto::{
-        AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, Encryptor, EncryptorSync,
-        PGPMessage, PGPProviderSync,
+        DataEncoding, Decryptor, DecryptorSync, Encryptor, EncryptorSync, PGPMessage,
+        PGPProviderSync,
     },
 };
 
@@ -61,12 +61,12 @@ pub trait EncryptableDraft {
     fn encrypt_draft_body<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
-        address_key: &UnlockedAddressKey<Provider>,
+        address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<EncryptedDraft, MessageError> {
         let encrypted_draft = provider
             .new_encryptor()
-            .with_encryption_key(address_key.as_public_key())
-            .with_signing_key(address_key.as_ref())
+            .with_encryption_key(address_key.for_encryption())
+            .with_signing_keys(address_key.for_signing())
             .with_utf8()
             .encrypt_raw(self.plaintext_message_body(), DataEncoding::Armor)
             .map(String::from_utf8)
