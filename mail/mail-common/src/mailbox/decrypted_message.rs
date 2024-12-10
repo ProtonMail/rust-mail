@@ -220,11 +220,6 @@ pub fn transform_html(
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
-    // Only insert links if message is of type text.
-    if mime_type == MimeType::TextPlain {
-        transformer.insert_links();
-    }
-
     transformer.inject_style();
 
     if mail_settings.image_proxy | 2 == 2 {
