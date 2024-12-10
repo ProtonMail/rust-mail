@@ -14,6 +14,7 @@ use proton_mail_common::errors::{
 pub enum ActionErrorReason {
     UnknownLabel,
     UnknownMessage,
+    UnknownContentId,
 }
 
 impl From<RealActionErrorReason> for ActionErrorReason {
@@ -21,6 +22,7 @@ impl From<RealActionErrorReason> for ActionErrorReason {
         match reason {
             RealActionErrorReason::UnknownLabel => ActionErrorReason::UnknownLabel,
             RealActionErrorReason::UnknownMessage => ActionErrorReason::UnknownMessage,
+            RealActionErrorReason::UnknownContentId => ActionErrorReason::UnknownContentId,
         }
     }
 }

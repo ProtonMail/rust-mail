@@ -136,7 +136,7 @@ impl From<AppError> for ProtonMailError {
             AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
             AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
-            AppError::UnknownCid(_, _) => todo!(),
+            AppError::UnknownCid(_, _) => Self::reason(ActionErrorReason::UnknownContentId),
         }
     }
 }
@@ -163,7 +163,9 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(draft_error) => Self::from(draft_error),
-            MailContextError::PGPKeySelection(_encryption_preferences_error) => todo!(),
+            MailContextError::PGPKeySelection(_encryption_preferences_error) => {
+                Self::Unexpected(Unexpected::Crypto)
+            }
         }
     }
 }

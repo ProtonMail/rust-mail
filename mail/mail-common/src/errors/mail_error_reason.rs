@@ -57,6 +57,7 @@ impl From<OtherErrorReason> for MailErrorReason {
 pub enum ActionErrorReason {
     UnknownLabel,
     UnknownMessage,
+    UnknownContentId,
 }
 
 /// Specific Reason for error occurrence within Context.
