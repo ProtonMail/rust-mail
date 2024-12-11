@@ -81,8 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Sidebar::collapse_folder` method now returns `VoidProtonMailResult` instead of `SidebarResult<()>`.
   - `Sidebar::expand_folder` method now returns `VoidProtonMailResult` instead of `SidebarResult<()>`.
   - `Mailbox::new()` method is now a function `new_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
-  - `Mailbox::inbox()` method is now a function `inbox_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
-  - `Mailbox::all_mail()` method is now a function `all_mail_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::inbox()` method is now a function `new_inbox_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::all_mail()` method is now a function `new_all_mail_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
   - `Mailbox::with_label_id()` method is now a function `with_label_id_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
   - `Mailbox::unread_count()` method now returns `MailboxUnreadCountResult` instead of `MailboxResult<u64>`.
   - `Mailbox::watch_unread_count()` method now returns `MailboxWatchUnreadCountResult` instead of `MailboxResult<Arc<WatchHandle>>`.

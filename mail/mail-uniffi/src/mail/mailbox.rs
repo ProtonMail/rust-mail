@@ -64,7 +64,7 @@ pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResul
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi::export]
-pub async fn inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
+pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
     let ctx = ctx.ctx().clone();
     uniffi_async(async move {
         let mbox = proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::inbox()).await?;
@@ -90,7 +90,7 @@ pub async fn inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi::export]
-pub async fn all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
+pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
     let ctx = ctx.ctx().clone();
     uniffi_async(async move {
         let mbox =
