@@ -36,12 +36,14 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 #[derive(Debug, UniffiEnum)]
 pub enum SessionErrorReason {
     UnknownLabel,
+    DuplicateContext,
 }
 
 impl From<RealContextErrorReason> for SessionErrorReason {
     fn from(reason: RealContextErrorReason) -> Self {
         match reason {
             RealContextErrorReason::UnknownLabel => SessionErrorReason::UnknownLabel,
+            RealContextErrorReason::DuplicateContext => SessionErrorReason::DuplicateContext,
         }
     }
 }

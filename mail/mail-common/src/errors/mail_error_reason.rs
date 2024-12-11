@@ -69,6 +69,7 @@ pub enum ActionErrorReason {
 #[derive(Debug)]
 pub enum ContextErrorReason {
     UnknownLabel,
+    DuplicateContext,
 }
 
 /// Specific Reason for error occurrence within Login Flow.

@@ -311,7 +311,7 @@ async fn get_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
-    let conn = mailbox.stash().connection();
+    let conn = mailbox.stash().clone();
     let session = mailbox.mbox().user_context().session().clone();
     uniffi_async(async move {
         Result::<_, RealProtonMailError>::Ok(

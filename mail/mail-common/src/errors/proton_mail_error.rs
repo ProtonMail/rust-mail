@@ -166,6 +166,9 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::PGPKeySelection(_encryption_preferences_error) => {
                 Self::Unexpected(Unexpected::Crypto)
             }
+            MailContextError::DuplicateContext(_remote_id) => {
+                Self::reason(ContextErrorReason::DuplicateContext)
+            }
         }
     }
 }
@@ -187,10 +190,11 @@ impl From<DraftError> for ProtonMailError {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
             DraftError::MetadataNotFound(_metadata_id) => Self::Unexpected(Unexpected::Database),
-            DraftError::AddressWithoutPrimaryKey(_remote_id) => todo!(),
-            DraftError::DraftWithoutMessage => todo!(),
-            DraftError::SendMessage(_package_error) => todo!(),
-            DraftError::NoRecipients => todo!(),
+            // TODO: Check if there is need to provide real reson here:
+            DraftError::AddressWithoutPrimaryKey(_remote_id) => Self::Unexpected(Unexpected::Draft),
+            DraftError::DraftWithoutMessage => Self::Unexpected(Unexpected::Draft),
+            DraftError::SendMessage(_package_error) => Self::Unexpected(Unexpected::Draft),
+            DraftError::NoRecipients => Self::Unexpected(Unexpected::Draft),
         }
     }
 }
@@ -229,6 +233,9 @@ impl From<ContactError> for ProtonMailError {
             | ContactError::FullContactNotFound(_string) => Self::Unexpected(Unexpected::Database),
             ContactError::Validation(_vcard_validation_error) => {
                 Self::Unexpected(Unexpected::Unknown) // TODO: This will be changed in the future work on contacts
+            }
+            ContactError::ContactDoesNotHaveRemoteId(_local_id) => {
+                Self::Unexpected(Unexpected::Database)
             }
         }
     }
