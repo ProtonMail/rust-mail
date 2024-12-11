@@ -9,7 +9,7 @@ use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 /// Action which moves conversations between two labels.
@@ -57,7 +57,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
@@ -76,7 +76,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::move_conversations(
             action.0.destination_label_id,
@@ -88,7 +88,7 @@ impl ActionHandler for Handler {
 
         for remote_id in &action.0.remote_target_ids {
             RollbackItem::new(remote_id.clone(), RollbackItemType::Conversation)
-                .save_using(tx)
+                .save(tx)
                 .await?;
         }
 

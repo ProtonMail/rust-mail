@@ -56,7 +56,7 @@ async fn create_records(stash: &Stash) {
     let tx = stash.transaction().await.unwrap();
     for i in 1..=1000 {
         let mut test = TestModel::new(format!("Test model #{i}"), i);
-        test.save_using(&tx).await.unwrap();
+        test.save(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
 }
@@ -75,9 +75,6 @@ pub struct TestModel {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl TestModel {
@@ -87,7 +84,6 @@ impl TestModel {
             text,
             number,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -305,6 +301,7 @@ mod basic_pagination {
 mod extended_pagination {
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn navigate_several_pages() {
         let db_dir = tempfile::tempdir().unwrap();

@@ -1,3 +1,4 @@
+#![allow(clippy::ignored_unit_patterns)]
 mod common;
 
 use crate::common::{new_factory, DefaultError};
@@ -7,7 +8,7 @@ use proton_action_queue::action::{
     Action, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
 };
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 
 const STARTING_VALUE: u32 = 30;
 const END_VALUE: &str = "foo=30";
@@ -62,7 +63,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // Nothing to do
         Ok(())
@@ -72,7 +73,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -129,7 +130,7 @@ impl Handler for V2ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -138,7 +139,7 @@ impl Handler for V2ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

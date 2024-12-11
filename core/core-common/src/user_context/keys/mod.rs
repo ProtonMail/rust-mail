@@ -23,7 +23,7 @@ use proton_crypto_account::{
 use proton_vcard::{vcard::VCard, VCardError};
 use stash::{
     orm::Model,
-    stash::{Interface, StashError},
+    stash::{Bond, Interface, StashError},
 };
 use stash::{params, stash::AgnosticInterface};
 use thiserror::Error;
@@ -168,21 +168,18 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, db_interface, unlocked_user_keys))]
-    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync, DB>(
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, bond, unlocked_user_keys))]
+    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        db_interface: &DB,
+        bond: &Bond,
         unlocked_user_keys: &UnlockedUserKeys<Provider>,
         email: &str,
-    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>>
-    where
-        DB: Into<AgnosticInterface> + Interface,
-    {
+    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
         // First, we try to load an contact emails that matches the email.
         debug!("Try to load the contact email for {email} from the db");
         let contact_email =
-            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], db_interface)
+            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], bond)
                 .await?
                 .ok_or(ContactError::CardNotFound(email.to_owned()))?;
 
@@ -194,27 +191,34 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(local_contact_id, self.session().api(), db_interface).await?;
+        Contact::sync_with_card(local_contact_id, self.session().api(), bond).await?;
 
-        let mut contact = Contact::load(local_contact_id, db_interface)
+        let mut contact = Contact::load(local_contact_id, bond)
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
-        Ok(extract_pinned_keys(pgp_provider, unlocked_user_keys, &mut contact, email).await?)
+        Ok(
+            extract_pinned_keys(pgp_provider, bond, unlocked_user_keys, &mut contact, email)
+                .await?,
+        )
     }
 }
 
 /// Helper function to extract pinned keys from a contact with cards.
-async fn extract_pinned_keys<Provider: PGPProviderSync>(
+async fn extract_pinned_keys<Provider: PGPProviderSync, DB>(
     pgp_provider: &Provider,
+    db_interface: &DB,
     unlocked_user_keys: &UnlockedUserKeys<Provider>,
     full_contact: &mut Contact,
     email: &str,
-) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError> {
+) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError>
+where
+    DB: Into<AgnosticInterface> + Interface,
+{
     // The pinned key information can be found in the signed v-card.
     let signed_card_opt = full_contact
-        .cards()
+        .cards(db_interface)
         .await?
         .iter()
         .find(|card| card.card_type == ContactCardType::Signed);

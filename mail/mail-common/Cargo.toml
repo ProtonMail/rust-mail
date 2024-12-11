@@ -39,7 +39,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-clap = { version = "4.5", features = ["derive"] }
+clap = { workspace = true }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
 insta = { workspace = true }
@@ -56,6 +56,7 @@ tracing-subscriber = { workspace = true }
 #tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = { workspace = true }
 wiremock = { workspace = true }
+proton-core-test-utils = { workspace = true }
 proton-mail-test-utils = { workspace = true }
 
 # not compatible with global clippy configuration yet

@@ -7,7 +7,7 @@ use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
 use std::fmt::{Display, Formatter};
 
 /// Identifier for draft [`DraftMetadata`]
@@ -59,11 +59,6 @@ pub struct DraftMetadata {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl DraftMetadata {
@@ -72,10 +67,7 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn empty<A>(interface: &A) -> Result<Self, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn empty(bond: &Bond) -> Result<Self, StashError> {
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -83,10 +75,9 @@ impl DraftMetadata {
             local_parent_id: None,
             reply_mode: None,
             row_id: None,
-            stash: None,
         };
 
-        metadata.save_using(interface).await?;
+        metadata.save(bond).await?;
 
         Ok(metadata)
     }
@@ -96,15 +87,12 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn reply<A>(
+    pub async fn reply(
         reply_mode: ReplyMode,
         source_message_id: LocalId,
         source_conversation_id: LocalId,
-        interface: &A,
-    ) -> Result<Self, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> Result<Self, StashError> {
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -112,10 +100,9 @@ impl DraftMetadata {
             local_parent_id: Some(source_message_id),
             reply_mode: Some(reply_mode),
             row_id: None,
-            stash: None,
         };
 
-        metadata.save_using(interface).await?;
+        metadata.save(bond).await?;
 
         Ok(metadata)
     }
@@ -157,22 +144,18 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn delete_for_message<A>(
+    pub async fn delete_for_message(
         local_message_id: LocalId,
-        interface: &A,
-    ) -> Result<usize, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        interface
-            .execute(
-                format!(
-                    "DELETE FROM `{}` WHERE local_message_id = ?",
-                    Self::table_name()
-                ),
-                params![local_message_id],
-            )
-            .await
+        bond: &Bond,
+    ) -> Result<usize, StashError> {
+        bond.execute(
+            format!(
+                "DELETE FROM `{}` WHERE local_message_id = ?",
+                Self::table_name()
+            ),
+            params![local_message_id],
+        )
+        .await
     }
 
     /// Delete metadata for the given `id`.
@@ -180,15 +163,11 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn delete<A>(id: MetadataId, interface: &A) -> Result<usize, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        interface
-            .execute(
-                format!("DELETE FROM `{}` WHERE id = ?", Self::table_name()),
-                params![id],
-            )
-            .await
+    pub async fn delete(id: MetadataId, bond: &Bond) -> Result<usize, StashError> {
+        bond.execute(
+            format!("DELETE FROM `{}` WHERE id = ?", Self::table_name()),
+            params![id],
+        )
+        .await
     }
 }

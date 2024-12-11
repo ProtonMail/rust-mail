@@ -9,7 +9,7 @@ use proton_crypto_account::keys::{
 };
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash};
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn test_address_create() {
@@ -18,11 +18,8 @@ async fn test_address_create() {
         .transaction()
         .await
         .expect("Failed to start transaction");
-    let mut address = create_test_address(&conn);
-    address
-        .save_using(&tx)
-        .await
-        .expect("failed to create address");
+    let mut address = create_test_address();
+    address.save(&tx).await.expect("failed to create address");
     let db_address = Address::load(address.local_id.unwrap(), &tx)
         .await
         .expect("failed to get address")
@@ -38,14 +35,11 @@ async fn test_address_update() {
         .transaction()
         .await
         .expect("Failed to start transaction");
-    let mut address = create_test_address(&conn);
-    address
-        .save_using(&tx)
-        .await
-        .expect("failed to create address");
-    let mut address2 = create_test_address_updated(&conn);
+    let mut address = create_test_address();
+    address.save(&tx).await.expect("failed to create address");
+    let mut address2 = create_test_address_updated();
     address2
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to create duplicate");
     let db_address = Address::load(address.local_id.unwrap(), &tx)
@@ -63,11 +57,8 @@ async fn test_address_delete() {
         .transaction()
         .await
         .expect("Failed to start transaction");
-    let mut address = create_test_address(&conn);
-    address
-        .save_using(&tx)
-        .await
-        .expect("failed to create address");
+    let mut address = create_test_address();
+    address.save(&tx).await.expect("failed to create address");
     tx.execute(
         "DELETE FROM addresses WHERE remote_id=?",
         params![address.remote_id.clone()],
@@ -81,7 +72,7 @@ async fn test_address_delete() {
     tx.commit().await.expect("Failed to commit transaction");
 }
 
-fn create_test_address(stash: &Stash) -> Address {
+fn create_test_address() -> Address {
     Address {
         local_id: None,
         remote_id: Some(RemoteId::from("address_id")),
@@ -164,12 +155,11 @@ fn create_test_address(stash: &Stash) -> Address {
             revision: 20,
         },
         row_id: None,
-        stash: Some(stash.clone()),
     }
 }
 
-fn create_test_address_updated(stash: &Stash) -> Address {
-    let old_address = create_test_address(stash);
+fn create_test_address_updated() -> Address {
+    let old_address = create_test_address();
     Address {
         local_id: old_address.local_id,
         remote_id: Some(RemoteId::from("address_id2")),
@@ -195,6 +185,5 @@ fn create_test_address_updated(stash: &Stash) -> Address {
             revision: 20,
         },
         row_id: None,
-        stash: Some(stash.clone()),
     }
 }

@@ -13,7 +13,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::RemoteId;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError, Tether};
+use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
 use stash::{macros::Model, stash::Stash};
 use tokio::sync::Mutex;
 use tracing::{debug, error};
@@ -31,7 +31,7 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// ## Parameters
 ///
 /// * `$item` - The type of the item to sync. This is a token which allows the macro to put proper typing.
-/// * `$class` - Implementation of the type which contains `save_using`.
+/// * `$class` - Implementation of the type which contains `save`.
 /// * `$stash` - The local database instance to use for syncing.
 /// * `$batch` - The number of items to sync in a single batch.
 /// * `$api_request` - The API request to make to get the items. It is expected to be a clousure
@@ -79,7 +79,7 @@ macro_rules! sync_any {
                 let tx = stash.transaction().await?;
 
                 for item in items.iter_mut() {
-                    let result = $class::save_using(item, &tx).await;
+                    let result = $class::save(item, &tx).await;
 
                     if let Err(err) = result {
                         error!(
@@ -148,11 +148,6 @@ pub struct RollbackItem {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl RollbackItem {
@@ -161,7 +156,6 @@ impl RollbackItem {
             remote_id,
             item_type,
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 
@@ -174,38 +168,18 @@ impl RollbackItem {
     ///
     /// When the query fails.
     ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
-    /// Save or update a RollbackItem.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// When the query fails.
-    ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         let None = RollbackItem::find_first(
             "WHERE remote_id=? AND item_type=?",
             params![self.remote_id.clone(), self.item_type],
-            interface,
+            bond,
         )
         .await?
         else {
             return Ok(());
         };
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Synchronize all rollback items with remote counterparts.
@@ -337,17 +311,16 @@ impl RollbackItem {
     async fn delete_by_rid_and_kind(
         remote_id: Option<RemoteId>,
         kind: RollbackItemType,
-        tether: &Tether,
+        bond: &Bond,
     ) -> Result<(), StashError> {
-        tether
-            .execute(
-                format!(
-                    "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
-                    Self::table_name()
-                ),
-                params![remote_id, kind],
-            )
-            .await?;
+        bond.execute(
+            format!(
+                "DELETE FROM {} WHERE remote_id = ? AND item_type = ?",
+                Self::table_name()
+            ),
+            params![remote_id, kind],
+        )
+        .await?;
 
         Ok(())
     }
@@ -361,12 +334,9 @@ struct MessageAndBodyMetadata {
 }
 
 impl MessageAndBodyMetadata {
-    async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        self.message_metadata.save_using(interface).await?;
-        self.body_metadata.save_using(interface).await?;
+    async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        self.message_metadata.save(bond).await?;
+        self.body_metadata.save(bond).await?;
         Ok(())
     }
 }
@@ -381,7 +351,6 @@ mod test_utils {
                 remote_id: label.remote_id.clone().map(RemoteId::from).unwrap(),
                 item_type: RollbackItemType::Label,
                 row_id: None,
-                stash: label.stash.clone(),
             }
         }
     }
@@ -398,7 +367,6 @@ mod test_utils {
                 remote_id: message.remote_id.clone().unwrap(),
                 item_type: RollbackItemType::Message,
                 row_id: None,
-                stash: message.stash.clone(),
             }
         }
     }
@@ -415,7 +383,6 @@ mod test_utils {
                 remote_id: conversation.remote_id.clone().unwrap(),
                 item_type: RollbackItemType::Conversation,
                 row_id: None,
-                stash: conversation.stash.clone(),
             }
         }
     }

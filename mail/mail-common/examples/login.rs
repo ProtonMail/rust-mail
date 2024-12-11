@@ -1,3 +1,4 @@
+#![allow(clippy::print_stdout)]
 use futures::TryFutureExt;
 use proton_api_core::services::proton::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -23,23 +24,37 @@ async fn main() -> Result<()> {
     kch.store(key.to_base64())?;
 
     let mail_ctx = new_mail_ctx(dir.path(), kch.into(), cfg).await?;
-    let user_ctx = new_user_ctx(&mail_ctx).await?;
+    let user_ctx = new_user_ctx(mail_ctx).await?;
 
     println!("{:#?}", user_ctx.user().await?);
 
     Ok(())
 }
 
-async fn new_mail_ctx(dir: &Path, kch: Arc<InMemoryKeyChain>, cfg: Config) -> Result<MailContext> {
+async fn new_mail_ctx(
+    dir: &Path,
+    kch: Arc<InMemoryKeyChain>,
+    cfg: Config,
+) -> Result<Arc<MailContext>> {
     let session = dir.join("session");
     let user = dir.join("user");
     let cache_path = dir.join("cache");
     let cache_size = 1 << 20;
 
-    Ok(MailContext::new(session, user, cache_path, cache_size, kch, cfg, None).await?)
+    Ok(MailContext::new(
+        session,
+        user,
+        cache_path.join("core"),
+        cache_path.join("mail"),
+        cache_size,
+        kch,
+        cfg,
+        None,
+    )
+    .await?)
 }
 
-async fn new_user_ctx(ctx: &MailContext) -> Result<Arc<MailUserContext>> {
+async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     let mut flow = ctx.new_login_flow().await?;
 
     flow.login(read("username")?, read("password")?, None)

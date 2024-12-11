@@ -1,6 +1,6 @@
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
-pub async fn create_rollback_action_tables(tx: &Tether) -> Result<(), StashError> {
+pub async fn create_rollback_action_tables(tx: &Bond) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE rollback_actions(

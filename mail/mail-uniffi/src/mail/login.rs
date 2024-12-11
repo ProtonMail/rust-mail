@@ -26,11 +26,11 @@ use tokio::sync::Mutex;
 #[derive(uniffi::Object)]
 pub struct LoginFlow {
     flow: Arc<Mutex<CoreLoginFlow>>,
-    ctx: proton_mail_common::MailContext,
+    ctx: Arc<proton_mail_common::MailContext>,
 }
 
 impl LoginFlow {
-    pub(crate) fn new(flow: CoreLoginFlow, ctx: proton_mail_common::MailContext) -> Arc<Self> {
+    pub(crate) fn new(flow: CoreLoginFlow, ctx: Arc<proton_mail_common::MailContext>) -> Arc<Self> {
         Arc::new(Self {
             flow: Arc::new(Mutex::new(flow)),
             ctx,

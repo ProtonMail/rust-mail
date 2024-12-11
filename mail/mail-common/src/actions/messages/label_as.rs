@@ -11,7 +11,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, Tether};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash};
 use std::collections::HashSet;
 use tracing::{error, warn};
 
@@ -110,17 +110,14 @@ impl Action for LabelAs {
 pub struct Handler;
 
 impl Handler {
-    pub(crate) async fn revert_one_locally<A>(
+    pub(crate) async fn revert_one_locally(
         message_id: &LocalId,
         added_labels: HashSet<LocalId>,
         removed_labels: HashSet<LocalId>,
         original_locations: Option<Option<ExclusiveLocation>>,
-        interface: &A,
-    ) -> Result<(), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(mut message) = Message::load(*message_id, interface).await? else {
+        bond: &Bond,
+    ) -> Result<(), AppError> {
+        let Some(mut message) = Message::load(*message_id, bond).await? else {
             warn!("While reverting locally, could not find message with local_id: {message_id:?}");
             return Ok(());
         };
@@ -131,14 +128,12 @@ impl Handler {
             .map(|l| l.clone().into_inner())
             .collect_vec();
         let current_labels: HashSet<_> = HashSet::from_iter(current_labels.into_iter());
-        let removed_labels = LocalId::counterparts::<Label, _>(
-            Vec::from_iter(removed_labels.into_iter()),
-            interface,
-        )
-        .await?;
+        let removed_labels =
+            LocalId::counterparts::<Label, _>(Vec::from_iter(removed_labels.into_iter()), bond)
+                .await?;
         let removed_labels = HashSet::from_iter(removed_labels.into_iter());
         let added_labels =
-            LocalId::counterparts::<Label, _>(Vec::from_iter(added_labels.into_iter()), interface)
+            LocalId::counterparts::<Label, _>(Vec::from_iter(added_labels.into_iter()), bond)
                 .await?;
         let added_labels = HashSet::from_iter(added_labels.into_iter());
         let new_labels = &(&current_labels - &removed_labels) | &added_labels;
@@ -147,7 +142,7 @@ impl Handler {
         if let Some(location) = original_locations {
             message.exclusive_location = location;
         }
-        message.save_using(interface).await?;
+        message.save(bond).await?;
 
         Ok(())
     }
@@ -161,7 +156,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.memorize_original_data(tx).await?;
         action.data.resolve_remote_ids(tx).await?;
@@ -184,7 +179,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::undo_label_as(
             action.data.local_ids.clone(),
@@ -225,6 +220,7 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("LabelAs message operation failed for messages: {failed_ids:?}");
             let failed_ids = RemoteId::counterparts::<Message, _>(failed_ids, stash).await?;
+            let tx = stash.transaction().await?;
             for message_id in &failed_ids {
                 Self::revert_one_locally(
                     message_id,
@@ -239,10 +235,11 @@ impl ActionHandler for Handler {
                         .remove(message_id)
                         .unwrap_or_default(),
                     action.data.original_location.remove(message_id),
-                    stash,
+                    &tx,
                 )
                 .await?;
             }
+            tx.commit().await?;
         }
 
         if action.data.must_archive {

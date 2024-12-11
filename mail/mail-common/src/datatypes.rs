@@ -59,15 +59,16 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
     ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
     ConversationCount as ApiConversationCount, Disposition as ApiDisposition,
-    MessageAddress as ApiMessageAddress, MessageAttachment as ApiMessageAttachment,
+    MessageAttachment as ApiMessageAttachment,
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders,
     MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
-    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags, MimeType as ApiMimeType,
-    MobileSetting as ApiMobileSetting, MobileSettings as ApiMobileSettings,
-    NextMessageOnMove as ApiNextMessageOnMove, PgpScheme as ApiPgpScheme,
-    PmSignature as ApiPmSignature, ShowImages as ApiShowImages, ShowMoved as ApiShowMoved,
-    SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction, ViewLayout as ApiViewLayout,
-    ViewMode as ApiViewMode,
+    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
+    MessageRecipient as ApiMessageRecipient, MessageReplyTo as ApiMessageReplyTo,
+    MessageSender as ApiMessageSender, MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
+    MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
+    PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
+    ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
+    ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::{AvatarInformation, LabelId, LocalId, RemoteId};
 use proton_crypto_account::keys::{EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme};
@@ -1125,34 +1126,34 @@ impl ToSql for LabelColor {
     }
 }
 
-/// TODO: Document this struct.
+/// Sender details of message
 #[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MessageAddress {
-    /// TODO: Document this field.
+pub struct MessageSender {
+    /// Recipient email address.
     // TODO: Proper email parsing
     pub address: String,
 
     /// TODO: Document this field.
     pub bimi_selector: Option<String>,
 
-    /// TODO: Document this field.
+    /// Whether to display the sender image.
     pub display_sender_image: bool,
 
-    /// TODO: Document this field.
+    /// Whether the address is a proton address.
     pub is_proton: bool,
 
-    /// TODO: Document this field.
+    /// Whether address originated from simple login alias.
     pub is_simple_login: bool,
 
-    /// TODO: Document this field.
+    /// Recipient display name.
     pub name: String,
 }
 
-impl MessageAddress {
+impl MessageSender {
     /// Creates an AvatarInformation struct using the details of
     /// the first MessageAddress in the provided slice.
     ///
-    pub fn avatar_info(address_list: &[MessageAddress]) -> AvatarInformation {
+    pub fn avatar_info(address_list: &[MessageSender]) -> AvatarInformation {
         if let Some(address) = address_list.first() {
             AvatarInformation::from(address)
         } else {
@@ -1161,20 +1162,20 @@ impl MessageAddress {
     }
 }
 
-impl From<MessageAddress> for AvatarInformation {
-    fn from(address: MessageAddress) -> AvatarInformation {
-        AvatarInformation::from(&address)
-    }
-}
-
-impl From<&MessageAddress> for AvatarInformation {
-    fn from(address: &MessageAddress) -> AvatarInformation {
+impl From<MessageSender> for AvatarInformation {
+    fn from(address: MessageSender) -> AvatarInformation {
         AvatarInformation::from(&address.name).or_else(&address.address)
     }
 }
 
-impl From<ApiMessageAddress> for MessageAddress {
-    fn from(value: ApiMessageAddress) -> Self {
+impl From<&MessageSender> for AvatarInformation {
+    fn from(address: &MessageSender) -> AvatarInformation {
+        AvatarInformation::from(&address.name).or_else(&address.address)
+    }
+}
+
+impl From<ApiMessageSender> for MessageSender {
+    fn from(value: ApiMessageSender) -> Self {
         Self {
             address: value.address,
             bimi_selector: value.bimi_selector,
@@ -1186,7 +1187,7 @@ impl From<ApiMessageAddress> for MessageAddress {
     }
 }
 
-impl From<&str> for MessageAddress {
+impl From<&str> for MessageSender {
     fn from(value: &str) -> Self {
         Self {
             address: value.to_owned(),
@@ -1195,15 +1196,109 @@ impl From<&str> for MessageAddress {
     }
 }
 
-sql_using_serde!(MessageAddress);
+sql_using_serde!(MessageSender);
+
+/// Recipient address information.
+#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MessageRecipient {
+    /// Email of the recipient
+    pub address: String,
+
+    /// Whether the recipient is a proton address.
+    pub is_proton: bool,
+
+    /// Display name of the recipient,empty if none.
+    pub name: String,
+
+    /// Name of the address group this recipient belongs too.
+    pub group: Option<String>,
+}
+
+impl MessageRecipient {
+    /// Creates an AvatarInformation struct using the details of
+    /// the first MessageAddress in the provided slice.
+    ///
+    pub fn avatar_info(recipients: &[MessageRecipient]) -> AvatarInformation {
+        if let Some(recipient) = recipients.first() {
+            AvatarInformation::from(recipient)
+        } else {
+            AvatarInformation::default()
+        }
+    }
+}
+impl From<ApiMessageRecipient> for MessageRecipient {
+    fn from(value: ApiMessageRecipient) -> Self {
+        Self {
+            address: value.address,
+            is_proton: value.is_proton,
+            name: value.name,
+            group: value.group,
+        }
+    }
+}
+
+impl From<MessageRecipient> for AvatarInformation {
+    fn from(address: MessageRecipient) -> AvatarInformation {
+        AvatarInformation::from(&address.name).or_else(&address.address)
+    }
+}
+
+impl From<&MessageRecipient> for AvatarInformation {
+    fn from(address: &MessageRecipient) -> AvatarInformation {
+        AvatarInformation::from(&address.name).or_else(&address.address)
+    }
+}
+
+impl From<&str> for MessageRecipient {
+    fn from(value: &str) -> Self {
+        Self {
+            address: value.to_owned(),
+            ..Default::default()
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MessageReplyTo {
+    /// Email of the recipient
+    pub address: String,
+
+    /// Display name of the recipient,empty if none.
+    pub name: String,
+}
+
+impl From<ApiMessageReplyTo> for MessageReplyTo {
+    fn from(value: ApiMessageReplyTo) -> Self {
+        Self {
+            address: value.address,
+            name: value.name,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct MessageAddresses {
-    pub value: Vec<MessageAddress>,
+pub struct MessageRecipients {
+    pub value: Vec<MessageRecipient>,
 }
 
-sql_using_serde!(MessageAddresses);
+sql_using_serde!(MessageRecipients);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct MessageSenders {
+    pub value: Vec<MessageSender>,
+}
+
+sql_using_serde!(MessageSenders);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct MessageReplyTos {
+    pub value: Vec<MessageReplyTo>,
+}
+
+sql_using_serde!(MessageReplyTos);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct MessageAttachment {

@@ -1,3 +1,4 @@
+#![allow(clippy::module_inception)]
 #![allow(non_snake_case)]
 
 use super::*;
@@ -18,45 +19,46 @@ use stash::stash::{Stash, Tether};
 #[tokio::test]
 async fn test_remote_label_add() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     let labels = test_labels();
+    let tx = stash.transaction().await.unwrap();
     for label in labels.clone() {
-        Label::from(label).save_using(&tx).await.unwrap();
+        Label::from(label).save(&tx).await.unwrap();
     }
+    tx.commit().await.unwrap();
     compare_remote_labels_with_local(&stash, labels).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_add_1_char_long_name() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     let label = test_label(random_string(1).as_str());
-
-    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    Label::from(label.clone()).save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     compare_remote_label_with_local(&stash, label).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_add_100_char_long_name() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     let label = test_label(random_string(100).as_str());
-
-    Label::from(label.clone()).save_using(&tx).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    Label::from(label.clone()).save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     compare_remote_label_with_local(&stash, label).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_update() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     stash.execute("DELETE FROM labels", vec![]).await.unwrap();
     let mut labels = test_labels()
         .into_iter()
         .map(Label::from)
         .collect::<Vec<_>>();
+    let tx = stash.transaction().await.unwrap();
     for label in &mut labels {
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     let mut remote_labels = test_labels();
@@ -91,11 +93,9 @@ async fn test_remote_label_update() {
     labels[3].display_order = 2;
 
     for label in &mut labels {
-        label
-            .save_using(&tx)
-            .await
-            .expect("failed to update labels");
+        label.save(&tx).await.expect("failed to update labels");
     }
+    tx.commit().await.expect("failed to commit transaction");
 
     compare_remote_labels_with_local(&stash, remote_labels).await;
 }
@@ -103,19 +103,19 @@ async fn test_remote_label_update() {
 #[tokio::test]
 async fn test_delete_remote() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     let mut labels = test_labels();
 
+    let tx = stash.transaction().await.unwrap();
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id = Label::find_by_id(RemoteId::from(parent_id), &stash)
+            label.local_parent_id = Label::find_by_id(RemoteId::from(parent_id), &tx)
                 .await
                 .expect("failed to get parent label")
                 .expect("parent label should exist")
                 .local_id;
         }
-        label.save_using(&tx).await.unwrap();
+        label.save(&tx).await.unwrap();
     }
 
     tx.execute(
@@ -124,6 +124,7 @@ async fn test_delete_remote() {
     )
     .await
     .expect("failed to delete local label");
+    tx.commit().await.unwrap();
 
     labels.remove(0);
 
@@ -135,7 +136,7 @@ async fn test_delete_remote() {
 #[tokio::test]
 async fn label_with_counts() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     let label = ApiLabel {
         id: ApiRemoteId::from("label"),
         parent_id: None,
@@ -156,7 +157,7 @@ async fn label_with_counts() {
     let unread_msg = 600_u64;
 
     let mut local_label = Label::from(label.clone());
-    local_label.save_using(&tx).await.unwrap();
+    local_label.save(&tx).await.unwrap();
     let local_id = local_label.local_id.unwrap();
 
     Label::create_or_update_conversation_counts(
@@ -165,7 +166,7 @@ async fn label_with_counts() {
             total: total_conv,
             unread: unread_conv,
         }],
-        tx.stash(),
+        &tx,
     )
     .await
     .unwrap();
@@ -176,12 +177,13 @@ async fn label_with_counts() {
             total: total_msg,
             unread: unread_msg,
         }],
-        tx.stash(),
+        &tx,
     )
     .await
     .unwrap();
+    let conn = tx.commit().await.unwrap();
 
-    let label = Label::load(local_id, &tx)
+    let label = Label::load(local_id, &conn)
         .await
         .expect("failed to load label")
         .expect("should have a value");
@@ -195,7 +197,7 @@ async fn label_with_counts() {
 #[tokio::test]
 async fn create_local_label() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     for t in [
         LabelType::Label,
         LabelType::Folder,
@@ -223,12 +225,8 @@ async fn create_local_label() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -240,7 +238,7 @@ async fn create_local_label() {
 #[tokio::test]
 async fn create_local_label_1_char_long_name() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(1);
         let mut new_label = Label {
@@ -264,12 +262,8 @@ async fn create_local_label_1_char_long_name() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -281,7 +275,7 @@ async fn create_local_label_1_char_long_name() {
 #[tokio::test]
 async fn create_local_label_100_char_long_name() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(100);
         let mut new_label = Label {
@@ -305,12 +299,8 @@ async fn create_local_label_100_char_long_name() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: Some(stash.clone()),
         };
-        new_label
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label.save(&tx).await.expect("failed to create label");
         let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
@@ -322,7 +312,7 @@ async fn create_local_label_100_char_long_name() {
 #[tokio::test]
 async fn create_local_label_has_ascending_order_per_type() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     for t in [
         LabelType::Label,
         LabelType::Folder,
@@ -350,12 +340,8 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: None,
         };
-        new_label1
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label1.save(&tx).await.expect("failed to create label");
         let mut new_label2 = Label {
             local_id: None,
             remote_id: Some(format!("Label-{:?}-02", t).into()),
@@ -377,12 +363,8 @@ async fn create_local_label_has_ascending_order_per_type() {
             unread_conv: 0,
             unread_msg: 0,
             row_id: None,
-            stash: None,
         };
-        new_label2
-            .save_using(&tx)
-            .await
-            .expect("failed to create label");
+        new_label2.save(&tx).await.expect("failed to create label");
         // TODO
         // assert_eq!(
         //     new_label1.display_order + 1,
@@ -396,7 +378,7 @@ async fn create_local_label_has_ascending_order_per_type() {
 #[tokio::test]
 async fn update_local_label() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
         remote_id: Some("MyLabel".into()),
@@ -418,12 +400,8 @@ async fn update_local_label() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
     let new_label2 = Label {
         local_id: None,
         remote_id: Some("MyOtherLabel".into()),
@@ -445,12 +423,9 @@ async fn update_local_label() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
+    tx.commit().await.expect("failed to commit transaction");
 
     async fn compare_db_label(tx: &Tether, id: LocalId, f: impl FnOnce(&Label)) {
         let db_label = Label::load(id, tx)
@@ -460,33 +435,32 @@ async fn update_local_label() {
         (f)(&db_label);
     }
 
+    let conn = stash.connection();
     new_label.color = LabelColor::black();
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
-    compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
+    let tx = conn.transaction().await.unwrap();
+    new_label.save(&tx).await.expect("failed to save label");
+    let conn = tx.commit().await.expect("failed to commit transaction");
+    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.color, LabelColor::black());
     })
     .await;
 
     new_label.name = "NewName".to_owned();
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
-    compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
+    let tx = conn.transaction().await.unwrap();
+    new_label.save(&tx).await.expect("failed to save label");
+    let conn = tx.commit().await.expect("failed to commit transaction");
+
+    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.name, "NewName");
     })
     .await;
 
     new_label.remote_parent_id = new_label2.remote_id.clone();
     new_label.path = Some("MyLabel/NewName".into());
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to save label");
-    compare_db_label(&tx, new_label.local_id.unwrap(), |l| {
+    let tx = conn.transaction().await.unwrap();
+    new_label.save(&tx).await.expect("failed to save label");
+    let conn = tx.commit().await.expect("failed to commit transaction");
+    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.remote_parent_id, new_label2.remote_id);
         assert_eq!(l.path, Some("MyLabel/NewName".into()));
     })
@@ -496,7 +470,7 @@ async fn update_local_label() {
 #[tokio::test]
 async fn test_mark_labels_as_initialized() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
         remote_id: Some("MyLabel".into()),
@@ -518,23 +492,19 @@ async fn test_mark_labels_as_initialized() {
         unread_conv: 0,
         unread_msg: 0,
         row_id: None,
-        stash: None,
     };
-    new_label
-        .save_using(&tx)
-        .await
-        .expect("failed to create label");
+    new_label.save(&tx).await.expect("failed to create label");
     assert!(!new_label.initialized_conv);
     new_label.initialized_conv = true;
     new_label
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to mark label as initialized");
     assert!(new_label.initialized_conv);
     assert!(!new_label.initialized_msg);
     new_label.initialized_msg = true;
     new_label
-        .save_using(&tx)
+        .save(&tx)
         .await
         .expect("failed to mark label as initialized");
     assert!(new_label.initialized_msg);
@@ -543,7 +513,7 @@ async fn test_mark_labels_as_initialized() {
 #[tokio::test]
 async fn test_watch_label() {
     let stash = new_test_connection().await;
-    // let tx = stash.connection();
+    let tx = stash.transaction().await.unwrap();
 
     let mut label: Label = ApiLabel {
         id: ApiRemoteId::from("label_id"),
@@ -560,8 +530,8 @@ async fn test_watch_label() {
     }
     .into();
 
-    label.set_stash(&stash);
-    label.save_using(&stash).await.unwrap();
+    label.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &stash)
         .await
@@ -571,7 +541,9 @@ async fn test_watch_label() {
     assert_eq!(db_label, label);
 
     label.display_order = 10;
-    label.save_using(&stash).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    label.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     watcher.recv_async().await.unwrap();
 }

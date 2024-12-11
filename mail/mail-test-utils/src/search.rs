@@ -7,18 +7,17 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    Label as ApiLabel, MessageAddress as ApiMessageAddress, MessageMetadata,
+    Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
+    MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::RemoteId;
-use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, Id, LabelId, LocalId,
-};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
 use proton_mail_common::models::Label;
 use stash::orm::Model;
-use stash::stash::{Interface, Tether};
+use stash::stash::{AgnosticInterface, Interface, Tether};
 use std::collections::BTreeMap;
 
 lazy_static! {
@@ -260,12 +259,20 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
 /// failed.
 ///
 /// # Panics
-pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
+pub async fn create_labels<A>(interface: &A) -> Vec<LocalId>
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     let mut labels = [test_label1(), test_label2()];
+    let tx = interface
+        .stash()
+        .transaction()
+        .await
+        .expect("failed to create transaction");
     for label in &mut labels {
-        label.save_using(tx).await.expect("failed to create labels");
+        label.save(&tx).await.expect("failed to create labels");
         assert!(
-            Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), tx.stash())
+            Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), &tx)
                 .await
                 .expect("failed to resolve label ids")
                 .unwrap()
@@ -273,52 +280,9 @@ pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
                 .is_some()
         );
     }
+    tx.commit().await.expect("failed to commit transaction");
+
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
-}
-
-/// Can panic if the local conversation `id` is not set, the remote
-/// `label_id` is not set, the local `label` can not be found.
-///
-/// # Panics
-pub async fn create_address(core_tx: &Tether) -> Address {
-    let mut address = test_address();
-    address
-        .save_using(core_tx)
-        .await
-        .expect("failed to create address");
-
-    address
-}
-
-#[must_use]
-pub fn test_address() -> Address {
-    Address {
-        local_id: None,
-        remote_id: Some(MY_ADDRESS_ID.clone().into()),
-        email: "hello@world".to_owned(),
-        send: Default::default(),
-        receive: Default::default(),
-        status: AddressStatus::Enabled,
-        domain_id: None,
-        address_type: AddressType::Original,
-        display_order: 0,
-        display_name: "HelloWorld".to_owned(),
-        signature: "SIGNATURE".to_owned(),
-        keys: AddressKeys::default(),
-        catch_all: false,
-        proton_mx: false,
-        signed_key_list: AddressSignedKeyList {
-            min_epoch_id: None,
-            max_epoch_id: None,
-            expected_min_epoch_id: None,
-            data: None,
-            obsolescence_token: None,
-            signature: None,
-            revision: 0,
-        },
-        row_id: None,
-        stash: None,
-    }
 }
 
 #[must_use]
@@ -364,18 +328,18 @@ pub fn test_conversation(
         id: MY_CONVERSATION_ID.clone(),
         order: 50,
         subject: "Hello World".to_owned(),
-        senders: vec![ApiMessageAddress {
+        senders: vec![ApiMessageSender {
             address: "hello@world.com".to_owned(),
             name: "HelloWorld".to_owned(),
             ..Default::default()
         }],
         recipients: vec![
-            ApiMessageAddress {
+            ApiMessageRecipient {
                 address: "foo@bar.com".to_owned(),
                 name: "Foo".to_owned(),
                 ..Default::default()
             },
-            ApiMessageAddress {
+            ApiMessageRecipient {
                 address: "Bar@bar.com".to_owned(),
                 name: "bar".to_owned(),
                 ..Default::default()

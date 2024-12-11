@@ -1,6 +1,6 @@
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, MessageAddress,
+    KeyPackets, MessageSender,
 };
 use crate::models::*;
 use crate::AppError;
@@ -24,7 +24,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
 
 /// Represents a mail attachment.
 ///
@@ -71,8 +71,8 @@ use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 /// will come in a followup patch.
 ///
 /// To ensure that we do not overwrite the [`Attachment`] data in the database
-/// *NEVER* use [`Model::save()`] or [`Model::save_using()`] but instead
-/// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
+/// *NEVER* use [`Model::save()`]  but instead
+/// *ALWAYS* use [`Attachment::save()`].
 ///
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
@@ -141,7 +141,7 @@ pub struct Attachment {
 
     /// Sender of the attachment if received from an external address.
     #[DbField]
-    pub sender: Option<MessageAddress>,
+    pub sender: Option<MessageSender>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -150,10 +150,6 @@ pub struct Attachment {
     /// Size of the attachment in bytes.
     #[DbField]
     pub size: u64,
-
-    /// True if this Attachment is cached
-    #[DbField]
-    pub cached: bool,
 
     #[DbField]
     /// Content id of the attachment if inlined in the message.
@@ -178,12 +174,6 @@ pub struct Attachment {
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
 }
 
 impl Attachment {
@@ -223,28 +213,8 @@ impl Attachment {
 
     /// Save or update the attachment in the database.
     ///
-    /// It's imperative to call this function rather than [`Model::save()`] to
-    /// make sure that we override the existing partial metadata rather than
-    /// create a new entry that will cause a conflict.
-    ///
-    /// There is currently no way to handle this in stash directly, so we have
-    /// to manually perform this check.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-        self.save_using(&stash).await
-    }
-
-    /// Save or update the attachment in the database.
-    ///
     /// It's imperative to call this function rather than
-    /// [`Model::save_using()`] to make sure that we override the existing
+    /// [`Model::save()`] to make sure that we override the existing
     /// partial metadata rather than create a new entry that will cause a
     /// conflict.
     ///
@@ -260,14 +230,11 @@ impl Attachment {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if self.local_id.is_none() {
             if let Some(remote_id) = self.remote_id.clone() {
                 if let Some(existing) =
-                    Self::find_first("WHERE remote_id=?", params![remote_id], interface).await?
+                    Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
                 {
                     self.local_id = existing.local_id;
                     self.row_id = existing.row_id;
@@ -276,29 +243,25 @@ impl Attachment {
         }
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id = remote_address_id
-                    .counterpart::<Address, _>(interface)
-                    .await?;
+                self.local_address_id = remote_address_id.counterpart::<Address, _>(bond).await?;
             }
         }
 
         if self.local_message_id.is_none() {
             if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id = remote_message_id
-                    .counterpart::<Message, _>(interface)
-                    .await?;
+                self.local_message_id = remote_message_id.counterpart::<Message, _>(bond).await?;
             }
         }
 
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 self.local_conversation_id = remote_conversation_id
-                    .counterpart::<Conversation, _>(interface)
+                    .counterpart::<Conversation, _>(bond)
                     .await?;
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 
     /// Fetch attachment content from the API.
@@ -378,7 +341,7 @@ impl Attachment {
     pub async fn sync_complete_metadata<PM: ProtonMail>(
         &mut self,
         api: &PM,
-        interface: &AgnosticInterface,
+        stash: &Stash,
     ) -> Result<Option<()>, AppError> {
         let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
             remote_id
@@ -392,7 +355,9 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        attachment.save_using(interface).await?;
+        let tx = stash.transaction().await?;
+        attachment.save(&tx).await?;
+        tx.commit().await?;
         *self = attachment;
         Ok(Some(()))
     }
@@ -494,13 +459,11 @@ impl From<ApiAttachment> for Attachment {
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-            cached: false,
             content_id: None,
             transfer_encoding: None,
             image_width: None,
             image_height: None,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -525,13 +488,11 @@ impl From<ApiMessageAttachment> for Attachment {
             sender: None,
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-            cached: false,
             content_id: value.headers.content_id,
             transfer_encoding: value.headers.content_transfer_encoding,
             image_width: value.headers.image_width,
             image_height: value.headers.image_height,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -556,13 +517,11 @@ impl From<AttachmentMetadata> for Attachment {
             sender: None,
             signature: None,
             size: value.size,
-            cached: false,
             content_id: None,
             transfer_encoding: None,
             image_width: None,
             image_height: None,
             row_id: None,
-            stash: None,
         }
     }
 }

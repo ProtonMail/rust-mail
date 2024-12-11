@@ -5,7 +5,8 @@ use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, MessageMetadata, OperationResult,
+    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, Label as ApiLabel,
+    MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
@@ -125,6 +126,37 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate new mock expectations for marking conversations as unread.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`    - The list of conversation IDs to label.
+    /// * `failed` - The list of conversation IDs for which we want to
+    ///              simulate failure.
+    ///
+    pub async fn mock_mark_conversation_unread(
+        &self,
+        ids: Vec<ApiRemoteId>,
+        failed: Vec<ApiRemoteId>,
+    ) {
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        let request = PutConversationsReadRequest { ids: ids.clone() };
+        let resp = PutConversationsReadResponse {
+            responses: build_conv_responses(&ids, failed),
+        };
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/conversations/unread"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate new mock expectations for retrieving a `conversation` and associated `messages`'s
     /// metadata.
     ///
@@ -193,4 +225,32 @@ fn build_conv_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec<Op
             }
         })
         .collect()
+}
+
+pub trait ApiConversationTestUtils {
+    fn test_conversation(id: &str, labels: Vec<ApiLabel>) -> ApiConversation;
+}
+
+impl ApiConversationTestUtils for ApiConversation {
+    fn test_conversation(id: &str, labels: Vec<ApiLabel>) -> ApiConversation {
+        let labels = labels
+            .into_iter()
+            .map(|l| ApiConversationLabel {
+                id: l.id,
+                context_expiration_time: 0,
+                context_num_attachments: 0,
+                context_num_messages: 1,
+                context_num_unread: 0,
+                context_size: 0,
+                context_snooze_time: 0,
+                context_time: 0,
+            })
+            .collect();
+        ApiConversation {
+            id: id.into(),
+            num_messages: 1,
+            labels,
+            ..Default::default()
+        }
+    }
 }

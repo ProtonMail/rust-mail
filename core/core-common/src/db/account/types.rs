@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
 use stash::{params, sql_using_serde};
 use std::ops::Deref;
 use std::string::FromUtf8Error;
@@ -66,9 +66,6 @@ pub struct CoreAccount {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl CoreAccount {
@@ -93,7 +90,6 @@ impl CoreAccount {
             primary_addr: None,
             primary_at: None,
             row_id: None,
-            stash: None,
         }
     }
 
@@ -153,24 +149,6 @@ impl CoreAccount {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing accounts are updated.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
-    /// Save a account to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
-    /// ensure that existing accounts are updated.
-    ///
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
@@ -181,15 +159,12 @@ impl CoreAccount {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), interface).await? {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), bond).await? {
             self.row_id = existing.row_id;
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 }
 
@@ -226,9 +201,6 @@ pub struct CoreSession {
 
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl CoreSession {
@@ -262,7 +234,6 @@ impl CoreSession {
             // --- Optional fields ---
             key_secret: None,
             row_id: None,
-            stash: None,
         })
     }
 

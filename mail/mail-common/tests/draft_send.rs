@@ -8,7 +8,7 @@ use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel, MessageAddress, MessageFlags,
+    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
@@ -24,6 +24,7 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -43,13 +44,11 @@ async fn basic_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     let mut message = message_body_test_message_simple();
-    message.metadata.to_list.push(MessageAddress {
+    message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".to_string(),
-        bimi_selector: None,
-        display_sender_image: false,
         is_proton: false,
-        is_simple_login: false,
         name: "".to_string(),
+        group: None,
     });
     let mut sent_message = message.clone();
     message.metadata.label_ids.push(LabelId::drafts().into());
@@ -124,7 +123,7 @@ async fn basic_send_check() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let mut draft = Draft::empty(&tether).await.unwrap();
+    let mut draft = Draft::empty(tether.stash()).await.unwrap();
     draft.to_list.push("foo@bar.com".into());
     draft.save(user_ctx.queue()).await.unwrap();
 

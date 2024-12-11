@@ -3,7 +3,7 @@
 use futures::executor::block_on;
 use rusqlite::hooks::Action;
 use stash::params;
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Interface, Stash};
 use std::thread::spawn;
 use std::time::Duration;
 use tokio::spawn as async_spawn;
@@ -36,13 +36,13 @@ async fn query(stash: &Stash, value: &str) -> Vec<String> {
         .unwrap()
 }
 
-async fn create_table_tx(tx: &Tether) {
+async fn create_table_tx(tx: &Bond) {
     tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
         .await
         .unwrap();
 }
 
-async fn insert_tx(tx: &Tether, value: &str) {
+async fn insert_tx(tx: &Bond, value: &str) {
     tx.execute(
         r#"INSERT INTO test_kv (value) VALUES (?)"#,
         params![value.to_owned()],
@@ -51,7 +51,7 @@ async fn insert_tx(tx: &Tether, value: &str) {
     .unwrap();
 }
 
-async fn query_tx(tx: &Tether, value: &str) -> Vec<String> {
+async fn query_tx(tx: &Bond, value: &str) -> Vec<String> {
     tx.query_values::<_, String>(
         r#"SELECT value FROM test_kv WHERE value = ?"#,
         params![value.to_owned()],
@@ -95,8 +95,6 @@ mod concurrency_basic_sync {
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-
-        // Start a transaction
         let tx = stash
             .transaction()
             .await
@@ -117,9 +115,6 @@ mod concurrency_basic_sync {
             .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
             .await
             .unwrap();
-
-        // Commit the transaction
-        tx.commit().await.expect("Failed to commit transaction");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "test".to_owned());
@@ -177,7 +172,7 @@ mod concurrency_basic_sync {
             .unwrap();
 
         // Commit the transaction
-        tx2.commit().await.expect("Failed to commit transaction");
+        let tx2 = tx2.commit().await.expect("Failed to commit transaction");
 
         // Query the data, re-using the transaction connections
         let result2 = tx2
@@ -278,10 +273,10 @@ mod concurrency_async_functions {
         insert_tx(&tx2, "test2").await;
 
         // Commit the transaction
-        tx2.commit().await.expect("Failed to commit transaction");
+        let conn2 = tx2.commit().await.expect("Failed to commit transaction");
 
         // Query the data, re-using the transaction connections
-        let result2 = query_tx(&tx2, "test2").await;
+        let result2 = query(conn2.stash(), "test2").await;
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
@@ -371,8 +366,9 @@ mod concurrency_async_threads {
                 .await
                 .expect("Failed to start transaction");
             insert_tx(&tx2, "test2").await;
+            let result = query_tx(&tx2, "test2").await;
             tx2.commit().await.expect("Failed to commit transaction");
-            query_tx(&tx2, "test2").await
+            result
         });
 
         // Wait for the threads to complete
@@ -474,8 +470,8 @@ mod concurrency_std_threads {
                     .await
                     .expect("Failed to start transaction");
                 insert_tx(&tx2, "test2").await;
-                tx2.commit().await.expect("Failed to commit transaction");
-                query_tx(&tx2, "test2").await
+                let conn2 = tx2.commit().await.expect("Failed to commit transaction");
+                query(conn2.stash(), "test2").await
             })
         });
 
@@ -543,8 +539,8 @@ mod concurrency_mixed {
                     .await
                     .expect("Failed to start transaction");
                 insert_tx(&tx2, "test2").await;
-                tx2.commit().await.expect("Failed to commit transaction");
-                query_tx(&tx2, "test2").await
+                let conn2 = tx2.commit().await.expect("Failed to commit transaction");
+                query(conn2.stash(), "test2").await
             })
         });
 
@@ -578,8 +574,8 @@ mod concurrency_mixed {
                 .expect("Failed to start transaction");
             insert_tx(&tx4, "test5").await;
             sleep(Duration::from_millis(100)).await;
-            tx4.commit().await.expect("Failed to commit transaction");
-            query_tx(&tx4, "test5").await
+            let conn4 = tx4.commit().await.expect("Failed to commit transaction");
+            query(conn4.stash(), "test5").await
         });
 
         // Sixth thread (async), with no transaction

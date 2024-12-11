@@ -3,6 +3,7 @@ use proton_core_common::cache::{
     CacheConfig, CacheKey, CacheResult, ProtonCache, WeightingStrategy,
 };
 use std::ffi::OsString;
+use std::fmt::Debug;
 use std::fs::{read_dir, File};
 use std::hash::{Hash, Hasher};
 use std::io::Read;
@@ -32,14 +33,14 @@ struct TestConfig;
 impl CacheConfig for TestConfig {
     type Key = TestKey;
 
-    type Init = Vec<TestKey>;
+    type Resource = Vec<TestKey>;
     type ExtraMetadata = ();
 
-    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
-        Ok(init)
+    async fn get_existing(resource: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(_failed: Vec<TestKey>) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<TestKey>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 
@@ -56,13 +57,13 @@ struct TestWeightlessKey;
 
 impl CacheConfig for TestWeightlessKey {
     type Key = TestKey;
-    type Init = Vec<TestKey>;
+    type Resource = Vec<TestKey>;
     type ExtraMetadata = ();
-    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
-        Ok(init)
+    async fn get_existing(resource: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(_failed: Vec<TestKey>) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<TestKey>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 
@@ -99,13 +100,13 @@ impl PartialEq for TestExtraMetadata {
 impl CacheKey for TestExtraMetadata {}
 impl CacheConfig for TestExtraMetadata {
     type Key = TestExtraMetadata;
-    type Init = Vec<TestExtraMetadata>;
+    type Resource = Vec<TestExtraMetadata>;
     type ExtraMetadata = u8;
-    async fn get_existing(init: Self::Init) -> CacheResult<Vec<Self::Key>> {
-        Ok(init)
+    async fn get_existing(resource: Self::Resource) -> CacheResult<Vec<Self::Key>> {
+        Ok(resource)
     }
 
-    async fn handle_failed(_failed: Vec<Self::Key>) -> CacheResult<()> {
+    async fn handle_failed(_failed: Vec<Self::Key>, _resource: Self::Resource) -> CacheResult<()> {
         Ok(())
     }
 
@@ -395,6 +396,7 @@ async fn concurrent_insert_different() {
 
 #[tokio::test]
 async fn use_extra_metadata() {
+    #[allow(clippy::unused_async)]
     async fn with(value: Vec<u8>, extra: u8) -> CacheResult<(Vec<u8>, u8)> {
         Ok((value, extra))
     }
@@ -440,4 +442,41 @@ async fn use_extra_metadata() {
         .unwrap();
     // Key is in cache -> use original extra
     assert!(path.ends_with("5.6"));
+}
+
+#[tokio::test]
+async fn lock() {
+    // Setup:
+    // * Create a with a single pinned item taking all the space
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let mut cache = ProtonCache::<TestConfig>::new(dir.clone(), 20, vec![])
+        .await
+        .unwrap();
+    let value = "A very big file".as_bytes(); // 15 bytes
+    cache.add_item("key1".into(), value).unwrap();
+    cache.lock_item("key1".into()).unwrap();
+
+    // Action:
+    // * Try to add another item that should evict first item
+    cache.add_item("key2".into(), value).unwrap();
+
+    // Validation:
+    // * First item is still here
+    // * Second item inserted even if cache exceed its size
+    assert!(cache.get_item(&"key2".into()).unwrap().is_some());
+    assert!(cache.get_item(&"key1".into()).unwrap().is_some());
+
+    cache.unlock_item(&"key1".into());
+
+    // Action:
+    // * Try to add yet another item that should evict first item (and second)
+    cache.add_item("key3".into(), value).unwrap();
+
+    // Validation:
+    // * First and second items are no more
+    // * Third is here
+    assert!(cache.get_item(&"key3".into()).unwrap().is_some());
+    assert!(cache.get_item(&"key2".into()).unwrap().is_none());
+    assert!(cache.get_item(&"key1".into()).unwrap().is_none());
 }

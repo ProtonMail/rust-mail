@@ -9,7 +9,7 @@ use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use std::sync::Weak;
 use tracing::{debug, error, Level};
 
@@ -80,8 +80,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
             for event in events.iter_mut() {
                 if let Some(user) = event.get_core_event_user_mut() {
                     debug!("Handling user event");
-                    user.set_stash(&stash);
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.save(&tx).await.map_err(|e| {
                         error!("Failed to update user: {e}");
                         e
                     })?;
@@ -89,8 +88,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 if let Some(settings) = event.get_core_event_user_settings_mut() {
                     debug!("Handling user setting event");
                     settings.remote_id = Some(user_id.clone());
-                    settings.set_stash(&stash);
-                    settings.save_using(&tx).await.map_err(|e| {
+                    settings.save(&tx).await.map_err(|e| {
                         error!("Failed to update user settings:{e}");
                         e
                     })?;
@@ -99,8 +97,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user space event");
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.used_space = used_space;
-                    user.set_stash(&stash);
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.save(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
@@ -109,8 +106,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user product space event");
                     let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
-                    user.set_stash(&stash);
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.save(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
@@ -118,7 +114,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 if let Some(addresses) = event.get_core_event_addresses_mut() {
                     debug!("Handling address event");
                     for address in addresses {
-                        address.save_using(&tx).await.map_err(|e| {
+                        address.save(&tx).await.map_err(|e| {
                             error!("Failed to update user addresses: {e}");
                             e
                         })?;
@@ -143,7 +139,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
 }
 
 async fn handle_contact_event(
-    tx: &Tether,
+    tx: &Bond,
     contact_events: &mut [ContactEvent],
 ) -> Result<(), StashError> {
     for event in contact_events {
@@ -161,7 +157,7 @@ async fn handle_contact_event(
                 })?,
             Action::Create | Action::Update => {
                 if let Some(ref mut contact) = event.contact {
-                    contact.save_using(tx).await.map_err(|e| {
+                    contact.save(tx).await.map_err(|e| {
                         error!("Failed to create or update contact: {e}");
                         e
                     })?;
@@ -174,7 +170,7 @@ async fn handle_contact_event(
 }
 
 async fn handle_contact_email_event(
-    tx: &Tether,
+    tx: &Bond,
     contact_email_events: &mut [ContactEmailEvent],
 ) -> Result<(), StashError> {
     for event in contact_email_events {
@@ -192,7 +188,7 @@ async fn handle_contact_email_event(
                 })?,
             Action::Create | Action::Update => {
                 if let Some(ref mut contact_email) = event.contact_email {
-                    contact_email.save_using(tx).await.map_err(|e| {
+                    contact_email.save(tx).await.map_err(|e| {
                         error!("Failed to create or update contact mail: {e}");
                         e
                     })?;

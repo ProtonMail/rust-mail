@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
+#![allow(clippy::ignored_unit_patterns)]
 
 use crate::action::{Action, Handler};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 use std::future::Future;
 use std::marker::PhantomData;
 
@@ -25,7 +26,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> Result<<T as Action>::LocalOutput, T::Error> {
         Ok(<T as Action>::LocalOutput::default())
     }
@@ -34,7 +35,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Bond,
     ) -> impl Future<Output = Result<(), T::Error>> + Send {
         std::future::ready(Ok(()))
     }

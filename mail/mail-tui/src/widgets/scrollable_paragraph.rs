@@ -41,7 +41,7 @@ impl<'a> ScrollableParagraph<'a> {
     }
 }
 
-impl<'a> StatefulWidget for ScrollableParagraph<'a> {
+impl StatefulWidget for ScrollableParagraph<'_> {
     type State = ScrollableParagraphState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

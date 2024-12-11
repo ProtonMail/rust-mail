@@ -14,8 +14,6 @@ use serde_json::Value as JsonValue;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
-pub const API_SUCCESS_CODE: u32 = 1000;
-
 //  ENUMS
 //==============================================================================
 

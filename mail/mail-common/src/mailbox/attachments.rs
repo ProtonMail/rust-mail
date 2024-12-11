@@ -78,19 +78,15 @@ impl Mailbox {
     pub async fn get_attachment_content(&self, attachment: &Attachment) -> MailboxResult<PathBuf> {
         let user_context = self.user_context();
         let cache = user_context.attachements_cache();
-        let key = CacheAttachmentKey::from_attachment(attachment, user_context.user_stash());
+        let key = CacheAttachmentKey::from(attachment);
 
         Ok(cache
-            .get_path_or_insert(&key, self.store_attachment(attachment, &key))
+            .get_path_or_insert(&key, self.store_attachment(attachment))
             .await?)
     }
 
     /// Fetch and store Attachment data
-    async fn store_attachment(
-        &self,
-        attachment: &Attachment,
-        key: &CacheAttachmentKey,
-    ) -> CacheResult<Vec<u8>> {
+    async fn store_attachment(&self, attachment: &Attachment) -> CacheResult<Vec<u8>> {
         let attachment_id = attachment.local_id.expect("Should be set");
         let user_context = self.user_context();
         let pgp_provider = new_pgp_provider();
@@ -113,11 +109,8 @@ impl Mailbox {
             .await
             .map_err(|e| {
                 error!("Failed to decrypt attachment({attachment_id}): {e})");
-                CacheError::Callback(anyhow!(e.to_string()))
+                CacheError::Callback(anyhow!(e))
             })?;
-        key.set_cached()
-            .await
-            .map_err(|e| CacheError::Callback(anyhow!(e)))?;
         Ok(decrypted_content)
     }
 
@@ -131,7 +124,7 @@ impl Mailbox {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(user_context.session().api(), &self.stash().clone().into())
+                .sync_complete_metadata(user_context.session().api(), self.stash())
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id}) metadata: {e})")

@@ -23,7 +23,7 @@ impl<'a> CenteredThrobber<'a> {
     }
 }
 
-impl<'a> StatefulWidget for CenteredThrobber<'a> {
+impl StatefulWidget for CenteredThrobber<'_> {
     type State = ThrobberState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

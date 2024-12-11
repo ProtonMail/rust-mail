@@ -5,7 +5,7 @@ use crate::models::{Contact, ModelExtension};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Bond, StashError};
 
 /// Represents a contact's email.
 ///
@@ -78,11 +78,6 @@ pub struct ContactEmail {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl From<ApiContactEmail> for ContactEmail {
@@ -102,7 +97,6 @@ impl From<ApiContactEmail> for ContactEmail {
             last_used_time: value.last_used_time,
             name: value.name,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -126,7 +120,6 @@ impl Default for ContactEmail {
             last_used_time: Default::default(),
             name: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -135,24 +128,6 @@ impl ContactEmail {
     /// Save a contact email to the database.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
-    /// Save a contact email to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
     /// ensure that existing conversations are updated.
     ///
     /// # Parameters
@@ -165,23 +140,18 @@ impl ContactEmail {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
         }
 
         if let Some(contact_remote_id) = self.remote_contact_id.clone() {
-            self.local_contact_id = contact_remote_id
-                .counterpart::<Contact, _>(interface)
-                .await?;
+            self.local_contact_id = contact_remote_id.counterpart::<Contact, _>(bond).await?;
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
 }

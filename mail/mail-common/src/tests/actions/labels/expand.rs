@@ -22,10 +22,7 @@ async fn test(expand: bool, expanded: bool) -> TestCase {
     let stash = new_test_connection().await;
     let mut label = create_label(expanded);
 
-    label
-        .save_using(&stash)
-        .await
-        .expect("failed to save label");
+    label.save(&stash).await.expect("failed to save label");
 
     let local_id = label.local_id.expect("local_id should be set");
     let action = if expand {

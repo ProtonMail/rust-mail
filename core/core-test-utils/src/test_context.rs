@@ -199,6 +199,8 @@ impl TestContext {
             all_initializers,
             api_config.clone(),
             None,
+            tmp_dir.path().join("core-cache"),
+            4 * 1024 * 1024,
         )
         .await
         .expect("failed to create core context");
@@ -208,6 +210,10 @@ impl TestContext {
             // Create a temporary stash just to insert the fake data.
             let path = tmp_dir.path().join("account.db");
             let stash = Stash::new(Some(&path)).expect("failed to create stash");
+            let tx = stash
+                .transaction()
+                .await
+                .expect("failed to create transaction");
 
             // Create a fake account.
             let account = CoreAccount::new(
@@ -216,8 +222,7 @@ impl TestContext {
                 TfaStatus::None,
                 PasswordMode::One,
             )
-            .with_stash(&stash)
-            .with_save()
+            .with_save(&tx)
             .await
             .expect("fake account should save");
 
@@ -239,10 +244,10 @@ impl TestContext {
                 .expect("session should be created")
                 .with_key_secret(&user_key_secret, &encryption_key)
                 .expect("key secret should be set")
-                .with_stash(&stash)
-                .with_save()
+                .with_save(&tx)
                 .await
                 .expect("fake session should save");
+            tx.commit().await.expect("transaction should commit");
 
             (account, session)
         };
@@ -261,13 +266,8 @@ impl TestContext {
     ///
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
-        let cache_path = self.tmp_dir.path().join("image_cache");
         self.context
-            .user_context_from_session(
-                &self.core_session,
-                cache_path,
-                100_000, // ~100kB
-            )
+            .user_context_from_session(&self.core_session)
             .await
             .expect("failed to create user context")
     }

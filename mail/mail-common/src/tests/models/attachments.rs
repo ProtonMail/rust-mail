@@ -4,8 +4,8 @@ use super::*;
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
-    Disposition as ApiDisposition, MessageAddress as ApiMessageAddress,
-    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
+    MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
 use proton_core_common::models::Address;
@@ -15,18 +15,19 @@ use proton_crypto_inbox::attachment::{
 };
 use proton_mail_test_utils::db::new_test_connection_file;
 use stash::orm::Model;
-use stash::stash::Tether;
 
 #[tokio::test]
 async fn test_attachment_create_without_metadata() {
     // Simulates an attachment's full info being stored without having any previous
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let tx = stash.connection();
-    let (_, _, _) = create_attachment_dependencies(&tx, None).await.unwrap();
+    let conn = stash.connection();
+    let (_, _, _) = create_attachment_dependencies(&conn, None).await.unwrap();
     let api_attachment = test_attachment();
     let mut attachment = Attachment::from(api_attachment.clone());
-    attachment.save_using(&tx).await.unwrap();
+    let tx = conn.transaction().await.unwrap();
+    attachment.save(&tx).await.unwrap();
+    let conn = tx.commit().await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = Attachment::from(api_attachment);
@@ -35,8 +36,7 @@ async fn test_attachment_create_without_metadata() {
     expected.row_id = attachment.row_id;
     expected.local_message_id = Some(1.into());
     expected.local_conversation_id = Some(1.into());
-    expected.set_stash(&stash);
-    let db_attachment = Attachment::load(local_id.unwrap(), &stash)
+    let db_attachment = Attachment::load(local_id.unwrap(), &conn)
         .await
         .unwrap()
         .unwrap();
@@ -48,7 +48,7 @@ async fn test_attachment_create_with_metadata() {
     // Simulates an attachment's full info being stored with an existing
     // message or conversation metadata.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let tx = stash.connection();
+    let conn = stash.connection();
     let api_attachment = test_attachment();
     let metadata = ApiAttachmentMetadata {
         id: api_attachment.id.clone(),
@@ -57,7 +57,7 @@ async fn test_attachment_create_with_metadata() {
         mime_type: api_attachment.mime_type.clone(),
         disposition: api_attachment.disposition,
     };
-    let (_, _, _) = create_attachment_dependencies(&tx, Some(metadata))
+    let (_, _, _) = create_attachment_dependencies(&conn, Some(metadata))
         .await
         .unwrap();
 
@@ -65,13 +65,14 @@ async fn test_attachment_create_with_metadata() {
     assert!(!db_attachment.has_complete_metadata());
 
     let mut attachment = Attachment::from(api_attachment.clone());
-    attachment.save_using(&tx).await.unwrap();
+    let tx = conn.transaction().await.unwrap();
+    attachment.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = attachment.clone();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
-    expected.stash = Some(stash.clone());
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
         .await
         .unwrap()
@@ -88,7 +89,7 @@ fn test_attachment() -> ApiAttachment {
         key_packets: RealKeyPackets::from("key_packets"),
         signature: Some(RealAttachmentSignature::from("signature")),
         enc_signature: Some(RealAttachmentEncryptedSignature::from("enc_signature")),
-        sender: Some(ApiMessageAddress {
+        sender: Some(ApiMessageSender {
             address: "fooo".to_owned(),
             name: "fooo".to_owned(),
             is_proton: false,
@@ -113,11 +114,15 @@ fn message_id() -> RemoteId {
     RemoteId::from("msg")
 }
 
-async fn create_attachment_dependencies(
-    tx: &Tether,
+async fn create_attachment_dependencies<A>(
+    interface: &A,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(RemoteId, LocalId, LocalId), AppError> {
+) -> Result<(RemoteId, LocalId, LocalId), AppError>
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
+    let tx = interface.stash().transaction().await.unwrap();
 
     Address {
         local_id: None,
@@ -136,9 +141,8 @@ async fn create_attachment_dependencies(
         proton_mx: false,
         signed_key_list: Default::default(),
         row_id: None,
-        stash: None,
     }
-    .save_using(tx)
+    .save(&tx)
     .await?;
 
     let local_conv_ids = Conversation::create_or_update_conversations(
@@ -151,7 +155,7 @@ async fn create_attachment_dependencies(
                 .collect(),
             ..Default::default()
         }],
-        tx.stash(),
+        &tx,
     )
     .await?;
 
@@ -181,9 +185,10 @@ async fn create_attachment_dependencies(
             num_attachments: 0,
             attachments_metadata: metadata.clone(),
         }],
-        tx.stash(),
+        &tx,
     )
     .await?;
+    tx.commit().await?;
 
     Ok((
         address_id(),

@@ -26,16 +26,22 @@ async fn main() {
 
     let config = Config::default();
     _ = Url::parse(&config.base_url).unwrap();
-    let context = Context::new(session_db_dir, user_db_dir, key_chain, [], config, None)
-        .await
-        .unwrap();
+    let context = Context::new(
+        session_db_dir,
+        user_db_dir,
+        key_chain,
+        [],
+        config,
+        None,
+        cache_dir,
+        1024 * 1024,
+    )
+    .await
+    .unwrap();
 
     let mut flow = context.new_login_flow().await.unwrap();
 
     flow.login(user_email, user_password, None).await.unwrap();
 
-    context
-        .user_context_from_login_flow(&flow, cache_dir, 1024 * 1024)
-        .await
-        .unwrap();
+    context.user_context_from_login_flow(&flow).await.unwrap();
 }

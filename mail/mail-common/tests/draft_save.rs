@@ -8,8 +8,8 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::{AttachmentMetadata, MessageFlags};
 use proton_api_mail::services::proton::response_data::{
-    Disposition, Message as ApiMessage, MessageAddress as ApiMessageAddress, MessageAttachment,
-    MessageAttachmentHeaders,
+    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
+    MessageRecipient as ApiMessageRecipient,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
@@ -118,8 +118,7 @@ async fn create_empty_draft() {
     assert!(conversation
         .labels
         .iter()
-        .find(|l| { l.remote_label_id == LabelId::drafts().into() })
-        .is_some());
+        .any(|l| { l.remote_label_id == LabelId::drafts().into() }));
 
     // Opening this draft should work;
     Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -153,7 +152,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.to_list = new_to_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })
@@ -161,7 +160,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.cc_list = new_cc_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })
@@ -169,7 +168,7 @@ async fn create_empty_draft_and_save_twice() {
     updated_message.metadata.bcc_list = new_bcc_list
         .iter()
         .cloned()
-        .map(|v| ApiMessageAddress {
+        .map(|v| ApiMessageRecipient {
             address: v,
             ..Default::default()
         })
@@ -282,10 +281,9 @@ async fn create_draft_reply_without_body_is_error() {
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -330,10 +328,9 @@ async fn create_draft_reply_should_fail_for_drafts() {
         Message::from_api_data(remote_existing_message, user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -381,7 +378,9 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .unwrap();
 
     // Save message.
-    message.save_using(user_ctx.user_stash()).await.unwrap();
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     assert!(
         DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
@@ -444,7 +443,7 @@ async fn create_draft_forward_inherits_all_attachments() {
     let inline_attachment = gen_inline_attachment();
     let normal_attachment = gen_normal_attachment();
 
-    compare_inline_attachment(&attachment_1, inline_attachment);
+    compare_inline_attachment(attachment_1, inline_attachment);
     assert_eq!(
         attachment_2.remote_id.clone().unwrap(),
         normal_attachment.id.into()
@@ -493,10 +492,9 @@ async fn create_draft_reply_impl(
         Message::from_api_data(remote_existing_message.clone(), user_ctx.user_stash())
             .await
             .unwrap();
-    existing_message
-        .save_using(user_ctx.user_stash())
-        .await
-        .unwrap();
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let existing_message = existing_message;
 
     let expected_draft_params =

@@ -1,3 +1,4 @@
+#![allow(clippy::needless_pass_by_value)]
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -20,7 +21,6 @@ use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_event_loop::subscriber::Subscriber;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
 use std::sync::Arc;
 
 macro_rules! prune_email {
@@ -99,10 +99,10 @@ async fn test_sync_and_load_contacts() {
         .await
         .expect("Failed to get contacts");
     for contact in &mut contacts {
-        contact.cards().await.expect("Failed to query cards");
-        contact.emails().await.expect("Failed to query emails");
+        contact.cards(conn).await.expect("Failed to query cards");
+        contact.emails(conn).await.expect("Failed to query emails");
     }
-    let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
+    let expected_contacts = expected_local_contacts();
     prune_contacts!(contacts);
     assert_eq!(contacts, expected_contacts);
 }
@@ -132,10 +132,10 @@ async fn test_sync_and_load_contacts_mixed() {
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact.cards().await.expect("Failed to query cards");
-    contact.emails().await.expect("Failed to query emails");
+    contact.cards(conn).await.expect("Failed to query cards");
+    contact.emails(conn).await.expect("Failed to query emails");
     prune_contact!(contact);
-    let expected_contact = create_test_local_full_contact(Some(user_ctx.stash().clone()));
+    let expected_contact = create_test_local_full_contact();
 
     assert_eq!(contact, expected_contact);
 
@@ -143,10 +143,10 @@ async fn test_sync_and_load_contacts_mixed() {
         .await
         .expect("Failed to load contacts");
     for contact in &mut contacts {
-        contact.emails().await.expect("Failed to query emails");
+        contact.emails(conn).await.expect("Failed to query emails");
     }
     prune_contacts!(contacts);
-    let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
+    let expected_contacts = expected_local_contacts();
     assert_eq!(contacts, expected_contacts);
 
     let email_to_query = "KeYtranSparenCymAiler@gmail.com";
@@ -243,8 +243,7 @@ async fn test_sync_and_modify_event_contact() {
     )
     .await;
 
-    let (modified_contact, removed_email, added_email) =
-        create_test_local_full_modified_contact(Some(user_ctx.stash().clone()));
+    let (modified_contact, removed_email, added_email) = create_test_local_full_modified_contact();
 
     let remote_id = modified_contact.remote_id.clone().unwrap();
     let modify_contact_event = ContactEvent {
@@ -289,7 +288,7 @@ async fn test_sync_and_modify_event_contact() {
         .expect("Failed to load contact")
         .expect("contact should be found");
     contact
-        .emails()
+        .emails(conn)
         .await
         .expect("Failed to query contact emails");
 
@@ -299,13 +298,9 @@ async fn test_sync_and_modify_event_contact() {
         contact.contact_emails.len(),
         modified_contact.contact_emails.len()
     );
-    let expected_cards: Vec<ContactCard> = modified_contact
-        .cards
-        .iter()
-        .map(|value| value.clone())
-        .collect();
+    let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
     let mut cards = contact
-        .cards()
+        .cards(conn)
         .await
         .expect("Failed to query cards")
         .clone();
@@ -335,16 +330,17 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
     let keys = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            user_ctx.stash(),
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found");
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert_eq!(keys.pinned_keys.len(), 2);
     assert!(keys.sign.unwrap());
@@ -377,13 +373,13 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
     let preferred_fingerprint_2 = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            user_ctx.stash(),
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found")
@@ -391,6 +387,7 @@ async fn test_contact_load_public_address_keys() {
         .first()
         .unwrap()
         .key_fingerprint();
+    tx.commit().await.expect("Failed to commit transaction");
 
     assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
 }
@@ -420,12 +417,18 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    Contact::sync_with_card(local_id, user_ctx.session().api(), user_ctx.stash())
+    let tx = user_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+    Contact::sync_with_card(local_id, user_ctx.session().api(), &tx)
         .await
         .expect("failed to sync contacts");
+    tx.commit().await.expect("Failed to commit transaction");
 }
 
-fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
+fn create_test_local_partial_contacts() -> Vec<Contact> {
     vec![
         Contact {
             local_id: None,
@@ -440,7 +443,6 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
             deleted: false,
             row_id: None,
-            stash: stash.clone(),
         },
         Contact {
             local_id: None,
@@ -457,7 +459,6 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
             deleted: false,
             row_id: None,
-            stash: stash.clone(),
         },
     ]
 }
@@ -487,7 +488,7 @@ fn create_test_remote_partial_contacts() -> Vec<ApiContactBasic> {
     ]
 }
 
-fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
+fn create_test_local_contact_emails() -> Vec<ContactEmail> {
     vec![
         ContactEmail {
             local_id: None,
@@ -506,7 +507,6 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             last_used_time: 0,
             name: "contact_email_name_1".to_owned(),
             row_id: None,
-            stash: stash.clone(),
         },
         ContactEmail {
             local_id: None,
@@ -523,7 +523,6 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             last_used_time: 0,
             name: "contact_email_name_2".to_owned(),
             row_id: None,
-            stash: stash.clone(),
         },
         ContactEmail {
             local_id: None,
@@ -540,7 +539,6 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             last_used_time: 0,
             name: "contact_email_name_3".to_owned(),
             row_id: None,
-            stash: stash.clone(),
         },
     ]
 }
@@ -591,9 +589,9 @@ fn create_test_remote_contact_emails() -> Vec<ApiContactEmail> {
     ]
 }
 
-fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
-    let contacts = create_test_local_partial_contacts(stash.clone());
-    let contact_emails = create_test_local_contact_emails(stash.clone());
+fn expected_local_contacts() -> Vec<Contact> {
+    let contacts = create_test_local_partial_contacts();
+    let contact_emails = create_test_local_contact_emails();
     contacts
         .into_iter()
         .map(|mut contact| {
@@ -615,7 +613,6 @@ fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
                     last_used_time: email.last_used_time,
                     name: email.name.clone(),
                     row_id: None,
-                    stash: stash.clone(),
                 })
                 .collect();
             contact.contact_emails = contact_emails;
@@ -631,12 +628,12 @@ pub const VCARD_SIGNATURE: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: Proto
 pub const VCARD_SWAPPED_PREF: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN;PREF=1:keytransparencymailer@gmail.com\r\nUID:proton-web-5f3acd27-47b5-aea9-4988-52196fbf9c0e\r\nITEM1.EMAIL;PREF=1:keytransparencymailer@gmail.com\r\nITEM1.KEY;PREF=2:data:application/pgp-keys;base64,xjMEZf15lRYJKwYBBAHaRw8BA\r\n QdArPz06hKiOUYSVs6dbHpKSh63bW5/QyIFqRvJ5wOALJnNMkx1a2FzIEJ1cmtoYWx0ZXIgPGtl\r\n eXRyYW5zcGFyZW5jeW1haWxlckBnbWFpbC5jb20+wo8EExYIADcWIQSNEf53FU6EMmZs43pG8Pp\r\n wjTNiIAUCZf15lQUJBaOagAIbAwQLCQgHBRUICQoLBRYCAwEAAAoJEEbw+nCNM2IgaX0BANKGrE\r\n NgM7nbpt5uORfaT5JLx695q1RgKDetm6bQhB1/AQDHvY3oha+eabN+yKcOWKlvvNpbbbYzjunnr\r\n mfm7d+HDM44BGX9eZUSCisGAQQBl1UBBQEBB0Aq4KRFu4d/XmR2UEGjsXeWCWvvKUkzsCR/wRDn\r\n 8E/lRQMBCAfCfgQYFggAJhYhBI0R/ncVToQyZmzjekbw+nCNM2IgBQJl/XmVBQkFo5qAAhsMAAo\r\n JEEbw+nCNM2IgEzcBAPqEmyOcnbzbsGJaZ5uFEA3OfGH7anEg2xEbfZ0jxAh0AP9nsO+JqQrVW5\r\n m3aGW4MRMFRjnC2DIHthThNQMw1bZpDQ==\r\nITEM1.KEY;PREF=1:data:application/pgp-keys;base64,xsDNBGZqv0ABDAC0hqYS26MWx\r\n 0yfp+ZSPST3MRELdY/dammzBuT29qOIMGSN56pIHJLM/R1dwsJGzoHF5Tl1Z9g5KWw9VJeXXXWD\r\n lj47263WwOVS1Wj3vmRjtydJLUnVp9C17RVlIvXCiakA0+PgLJ3JhgMrfDTWWfHbeyDkd0RJIya\r\n giOwkE1IcGwXhmpNdQA6V4wRYLL5ddQX3rOCy6pYjtanC0MNloyCAibgx/6q3RL23J9Q0hvGa/P\r\n aV8kWtSUFAApxlkUAxc5R/oHfC+V/PtINVGgICIAW9nhNVYUE+sL9bTejxB7T55zFtnD7Lku7i8\r\n EQoAMDYAT8suIF7NWOtjWAHaFnW1QtnT9DWc8ncZn9aq8rVA88R+DS59/0LouNIs5lEEXCWA63O\r\n fJ4PuAcocw7jcmyRer3O906SQJNm5ILMzwvxkO/cBp5Qhm0R7smz11WxTkM6rFF32Ff8qPE//gX\r\n HRGyU/wVPyzwLSa0vqS4C2HeKFi9HHmqe1sRH6jbwnXiLVzleUZsAEQEAAc0yTHVrYXMgQnVya2\r\n hhbHRlciA8a2V5dHJhbnNwYXJlbmN5bWFpbGVyQGdtYWlsLmNvbT7CwQcEEwEIADEWIQSj3jdeI\r\n Nri4CPDzY2X8xzCZKxAmgUCZmq/QAIbAwQLCQgHBRUICQoLBRYCAwEAAAoJEJfzHMJkrECan3kM\r\n AKixP2CJ6MFClJI+tcqtUMQ1Ou3JhlzoEYsUjR1/wa9hOa8txKQACsOW3vwLG9qQB+zKchTynC1\r\n U78IxiNn8J5zFeAriJcUvOFFsF/0DQc9Wu4DRl6htewGOAEiQYv+StVlq0TNPdN99uAoBVWlEbi\r\n shy93omZeo07gkaJbT69msHgHsg8qyD6n+KILdAQmwutI9dBxBpWcf5IYhGXCo/9HqnD/7hbBkC\r\n 7gbRkI0QMUQhPurrJq0W2WgazY7dfaE9Z57QqRWMgb+ggk9LfZA5ON85BfemDu2v2q47jjnKkFP\r\n 3c2dDHVJ3kO8d2xKVP3sKB9EofZ0PvYDGxJjaURA068E9MH5iW9H4GMHOom7f6meA/wI9+ws3v7\r\n GUCOG/OAeVm0FUbaekSA6IHrl57DjKJ0/GOvzzSgDSCq33FqE/tRo0nWubUE6WI0UHbGddb7B6P\r\n IEB0Z5jr8uthbb73Ea7AwLw/FCIuHP4BMldMBPOBKM+g+EhZpiJ9akFcqjre7x/87AzQRmar9BA\r\n QwA3FRRLTSvdIQJ3ZxkrkJoQkXl1DIQTEbHwxaxtcWvRc9o1dJ6Iz4DHEit/DJuJrJGtY7HXOqm\r\n tgL9HkKbzYxnLBlse48vjhIGgd4HVet9AKamUCELBwBMtXRtuVz2g1ucgx12Vk0bk8p8i2uG7Td\r\n rs2bbTLIACJ5yi/6z2j4aLvyE6bdpXGJ7Oan3cMgpwZsCqbokKxBFS3G6bFyMLFnyT3g0rmtdpY\r\n tfvYsCzVCckC36qKTS4dg6x2GHSI4OviTaonnblH/mmnGN8JG/++K0Y8LloLpYs1S6IDYp3c9yz\r\n tjwzbkTHI4RE85ROrmWlTcN3pFKw7T/ZH6QXYLiPak1fYbnSfXlk028L8WyfwbgduMg45eI2tBX\r\n qSW3qKKSLHUxijyCfTIuH1HcOXq/b4mVD0U84CoLHhzg4QSJKw5jnn/7UYk3eKxlrQQhWKGAeTb\r\n 9OGxIwZmxFOt/hnG0rYr9phPgQkzLNfS+Q/asD3TTXorRBG5R/Yw/lUOAIIyw7/urABEBAAHCwP\r\n YEGAEIACAWIQSj3jdeINri4CPDzY2X8xzCZKxAmgUCZmq/QQIbDAAKCRCX8xzCZKxAmheZDACgV\r\n AF4Nsa/0oyMTRY1RS2nMzeDwrVj9nd7rWMnyX5iVXT4HJ8Gp8Volj0WabZSyvOm/ejBpcV2AgNs\r\n 1NKSkTZQ/+5LC5UoKZ7HUs0iCtOZEZhrAtiVYFlCvhMc8nB1DvW16kyyEjD/djHTeJywS4tH9fL\r\n 8eIBC21rVmd4bN8k+GyHK+IeAs70h/VvuIv76okoLSURln2LdhzutWj86tjxmXgOugx9lv5crJy\r\n dqVGbH9OmdqaWldNV24vDL2LphJz4zMB+eikziGJvlmHIvPkeUzMCjg1X0w5P7c5IoPPnBwWcPz\r\n 7KfyW5QtMMvvero/XpXZYy4xB+iMbJ48VTVvQvz0Tmb8hj+ArRSem/QWMOzGknQxflW9VceUK7R\r\n AevKvbW1bSWOmsKletCwS74FsUf3qGAa/LbRxy88UpyS62m15kM1Pr9FuSl0YAoz1HvrM1IErIS\r\n sULrStUENzKBciigR1vAl2uDp0BvleSI/hdVhRp27xsuMFPvmzLws57btokg=\r\nITEM1.X-PM-ENCRYPT:true\r\nITEM1.X-PM-SIGN:true\r\nEND:VCARD";
 pub const VCARD_SIGNATURE_SWAPPED_PREF: &str = "-----BEGIN PGP SIGNATURE-----\n\nwnUEABYKACcFgma99j4JkDicqBtFkGUZFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkA\nAIyZAQDEWHowBG6M2vGeRV1WcE5Iu7+fDACHI8ebNQ2kM1sZEgEAkICWy5h1Qm08\nI1dKy+wcu6IHEaL53hzL75FicLn6QQo=\n=c4Mw\n-----END PGP SIGNATURE-----\n";
 
-fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
-    let partial_contact = create_test_local_partial_contacts(stash.clone())
+fn create_test_local_full_contact() -> Contact {
+    let partial_contact = create_test_local_partial_contacts()
         .into_iter()
         .next()
         .unwrap();
-    let emails = create_test_local_contact_emails(stash.clone())
+    let emails = create_test_local_contact_emails()
         .into_iter()
         .filter(|mail| mail.remote_contact_id == partial_contact.remote_id)
         .collect();
@@ -660,7 +657,6 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
                 data: VCARD.to_owned(),
                 signature: Some(VCARD_SIGNATURE.to_owned()),
                 row_id: None,
-                stash: stash.clone(),
             },
             ContactCard {
                 local_id: None,
@@ -672,11 +668,9 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
                     "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned(),
                 ),
                 row_id: None,
-                stash: stash.clone(),
             },
         ],
         row_id: None,
-        stash: stash.clone(),
     }
 }
 
@@ -718,10 +712,8 @@ fn create_test_remote_full_contact() -> ApiContactFull {
     }
 }
 
-fn create_test_local_full_modified_contact(
-    stash: Option<Stash>,
-) -> (Contact, ContactEmail, ContactEmail) {
-    let mut contact = create_test_local_full_contact(stash.clone());
+fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactEmail) {
+    let mut contact = create_test_local_full_contact();
     let removed_mail = contact.contact_emails.pop().unwrap();
     let new_email = ContactEmail {
         local_id: None,
@@ -740,7 +732,6 @@ fn create_test_local_full_modified_contact(
         last_used_time: 0,
         name: "contact_email_name_mod".to_owned(),
         row_id: None,
-        stash: stash.clone(),
     };
     contact.modify_time += 1;
     contact.size += 1;
@@ -754,7 +745,6 @@ fn create_test_local_full_modified_contact(
             data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
             row_id: None,
-            stash: stash.clone(),
         },
         ContactCard {
             local_id: None,
@@ -764,7 +754,6 @@ fn create_test_local_full_modified_contact(
             data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----modified.*-----END PGP SIGNATURE-----".to_owned()),
             row_id: None,
-            stash: stash.clone(),
         }
     ];
     (contact, removed_mail, new_email)

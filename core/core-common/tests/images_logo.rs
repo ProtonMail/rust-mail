@@ -69,7 +69,9 @@ async fn get_sender_image_from_cache() {
 
     // Add an item into cache
     let mut key = create_test_key(TEST_ADDRESS, Some(ReceivedFormat::Png));
-    key.save_using(user_ctx.stash()).await.unwrap();
+    let tx = user_ctx.stash().transaction().await.unwrap();
+    key.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
     let extra_metadata = SenderImageMetadata {
         received_format: ReceivedFormat::Png,
         is_empty: false,

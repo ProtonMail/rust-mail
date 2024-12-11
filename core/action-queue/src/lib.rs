@@ -23,30 +23,24 @@
 //! use serde::{Deserialize, Serialize};
 //! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, Metadata, Priority, Type};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
-//! use proton_api_core::service::ApiServiceError;
-//! use proton_api_core::session::Session;
-//! use stash::stash::{Stash, Tether};
+//! use stash::stash::{Stash, Bond};
 //!
 //! #[derive(Serialize, Deserialize)]
 //! struct MyAction {
 //!    value:u32
 //! }
 //!
-//! #[derive(Debug,thiserror::Error)]
+//! #[derive(Debug,thiserror::Error, PartialEq)]
 //! enum MyActionError{
 //!     #[error("Foo")]
 //!     Foo,
-//!     #[error("Request: {0}")]
-//!     Request(ApiServiceError)
+//!     #[error("Request")]
+//!     Request
 //! }
 //!
 //! impl proton_action_queue::action::Error for MyActionError {
-//!     fn request_error(&self) -> Option<&ApiServiceError> {
-//!         let Self::Request(err) = self else {
-//!             return None;
-//!         };
-//!
-//!         Some(err)
+//!     fn is_network_failure(&self) -> bool {
+//!         Self::Request == *self
 //!     }
 //!}
 //!
@@ -69,20 +63,20 @@
 //!     type Action = MyAction;
 //!     type Context = ();
 //!
-//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, ctx: &Self::Context, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, ctx: &Self::Context, action: &mut Self::Action, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }
 //!
-//! async fn example(session:&Session) {
+//! async fn example() {
 //!     // Create stash instance.
 //!     let stash = stash::stash::Stash::new(None).unwrap();
 //!     // create queue.
@@ -90,7 +84,7 @@
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
 //!     // Execute action immediately
-//!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap().remote {
+//!     let queued_id = match queue.apply_action(MyAction{value:10}).await.unwrap().remote {
 //!         ActionRemoteOutput::Executed(value) => {
 //!             println!("Action was executed and returned: {:?}", value);
 //!             return;
@@ -110,7 +104,7 @@
 //!     ).await.unwrap();
 //!
 //!     // Flush all available actions.
-//!     queue.execute_all(session).await.unwrap();
+//!     queue.execute_all().await.unwrap();
 //! }
 //!
 //! ```

@@ -75,7 +75,7 @@ async fn mailbox_message_body_simple() {
 
     // Now a message is cached and it's the right one
     assert_eq!(cache.len(), 1);
-    let key = CacheMessageKey::from_message(&saved_message, user_ctx.user_stash());
+    let key = CacheMessageKey::from(&saved_message);
     let item = cache
         .get_item(&key)
         .unwrap()

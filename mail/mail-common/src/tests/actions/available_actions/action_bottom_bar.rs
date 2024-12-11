@@ -374,7 +374,7 @@ mod message {
     async fn bottom_bar_actions(test_case: &TestCase<Message>) {
         // Setup
         let stash = new_test_connection().await;
-
+        let address = create_address(&stash).await;
         let mut settings = MailSettings::get_or_default(&stash).await;
         settings.mobile_settings = Some(MobileSettings {
             message_toolbar: MobileSetting {
@@ -383,19 +383,19 @@ mod message {
             },
             ..Default::default()
         });
-        settings.save_using(&stash).await.unwrap();
-
-        let address = create_address(&stash.connection()).await;
+        let tx = stash.transaction().await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         let mut conversation = Conversation::default();
-        conversation.save_using(&stash).await.unwrap();
+        conversation.save(&tx).await.unwrap();
 
         let mut messages = test_case.items.clone();
         for message in &mut messages {
             message.local_address_id = address.local_id.unwrap();
             message.local_conversation_id = conversation.local_id;
-            message.save_using(&stash).await.unwrap();
+            message.save(&tx).await.unwrap();
         }
+        tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
             .counterpart::<Label, _>(&stash)
@@ -422,11 +422,29 @@ mod message {
 }
 
 mod conversation {
+    use super::*;
+    use crate::datatypes::ContextualConversation;
     use crate::models::ConversationLabel;
     use test_case::test_case;
 
-    use super::*;
-
+    static INBOX_LABEL_READ: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
+        remote_label_id: Some(LabelId::inbox()),
+        context_num_unread: 0,
+        context_num_messages: 1,
+        ..Default::default()
+    });
+    static INBOX_LABEL_UNREAD: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
+        remote_label_id: Some(LabelId::inbox()),
+        context_num_unread: 1,
+        context_num_messages: 1,
+        ..Default::default()
+    });
+    static TRASH_LABEL_UNREAD: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
+        remote_label_id: Some(LabelId::trash()),
+        context_num_unread: 1,
+        context_num_messages: 1,
+        ..Default::default()
+    });
     static STARRED_LABEL: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
         remote_label_id: Some(LabelId::starred()),
         ..Default::default()
@@ -451,11 +469,13 @@ mod conversation {
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_UNREAD.clone()],
                 ..Default::default()
             },
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_UNREAD.clone()],
                 ..Default::default()
             },
         ],
@@ -478,11 +498,13 @@ mod conversation {
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_READ.clone()],
                 ..Default::default()
             },
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_READ.clone()],
                 ..Default::default()
             },
         ],
@@ -505,11 +527,13 @@ mod conversation {
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_READ.clone()],
                 ..Default::default()
             },
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
+                labels: vec![INBOX_LABEL_UNREAD.clone()],
                 ..Default::default()
             },
         ],
@@ -552,11 +576,21 @@ mod conversation {
         ..Default::default()
     });
     static NONE_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
-        items: vec![Conversation::default(), Conversation::default()],
+        items: vec![
+            Conversation {
+                labels: vec![INBOX_LABEL_READ.clone()],
+                ..Default::default()
+            },
+            Conversation {
+                labels: vec![INBOX_LABEL_READ.clone()],
+                ..Default::default()
+            },
+        ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
+            TestActions::MarkUnread,
             TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
@@ -568,15 +602,19 @@ mod conversation {
     static CUSTOM_MIX_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         items: vec![
             Conversation {
-                labels: vec![STARRED_LABEL.clone()],
+                labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
                 ..Default::default()
             },
-            Conversation::default(),
+            Conversation {
+                labels: vec![INBOX_LABEL_READ.clone()],
+                ..Default::default()
+            },
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
         expected_hidden: vec![
+            TestActions::MarkUnread,
             TestActions::Unstar,
             TestActions::MoveTo,
             TestActions::LabelAs,
@@ -589,10 +627,13 @@ mod conversation {
     static MIX_STARRED_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         items: vec![
             Conversation {
-                labels: vec![STARRED_LABEL.clone()],
+                labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
                 ..Default::default()
             },
-            Conversation::default(),
+            Conversation {
+                labels: vec![INBOX_LABEL_READ.clone()],
+                ..Default::default()
+            },
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -603,6 +644,33 @@ mod conversation {
         expected_hidden: vec![
             TestActions::Star,
             TestActions::Unstar,
+            TestActions::MoveTo,
+            TestActions::LabelAs,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+        ],
+        ..Default::default()
+    });
+    static MIX_MAILBOX_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
+        items: vec![
+            Conversation {
+                labels: vec![INBOX_LABEL_READ.clone()],
+                num_unread: 0,
+                ..Default::default()
+            },
+            Conversation {
+                labels: vec![TRASH_LABEL_UNREAD.clone()],
+                num_unread: 1,
+                ..Default::default()
+            },
+        ],
+        expected_visible: vec![
+            TestActions::MarkUnread,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            TestActions::More,
+        ],
+        expected_hidden: vec![
+            TestActions::Star,
             TestActions::MoveTo,
             TestActions::LabelAs,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
@@ -711,6 +779,7 @@ mod conversation {
     #[test_case(&ALL_UNREAD_CASE; "unread")]
     #[test_case(&ALL_READ_CASE; "all_read")]
     #[test_case(&MIX_READ_CASE; "mixed_read")]
+    #[test_case(&MIX_MAILBOX_CASE; "mixed_mailbox")]
     #[test_case(&ALL_STARRED_CASE; "all_starred")]
     #[test_case(&CUSTOM_MIX_STARRED_CASE; "mix_custom_starred")]
     #[test_case(&MIX_STARRED_CASE; "mix_starred")]
@@ -734,12 +803,14 @@ mod conversation {
             },
             ..Default::default()
         });
-        settings.save_using(&stash).await.unwrap();
+        let tx = stash.transaction().await.unwrap();
+        settings.save(&tx).await.unwrap();
 
         let mut conversations = test_case.items.clone();
         for conversation in &mut conversations {
-            conversation.save_using(&stash).await.unwrap();
+            conversation.save(&tx).await.unwrap();
         }
+        tx.commit().await.unwrap();
         let current_local = test_case
             .current_local
             .counterpart::<Label, _>(&stash)
@@ -748,7 +819,7 @@ mod conversation {
             .unwrap();
 
         // Action
-        let result = Conversation::all_available_bottom_bar_actions_for_conversations(
+        let result = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             current_local,
             conversations.iter().map(|m| m.local_id.unwrap()).collect(),
             &stash,

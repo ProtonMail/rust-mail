@@ -100,7 +100,7 @@ async fn load_attachment_from_cache() {
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
-    let key = CacheAttachmentKey::new(attachment_local_id, "foo", user_ctx.user_stash().clone());
+    let key = CacheAttachmentKey::new(attachment_local_id, "foo");
     user_ctx
         .attachements_cache()
         .add_item(key, &testdata_attachment_data())
@@ -128,7 +128,9 @@ async fn load_attachment_content_first_time() {
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
-    attachment.save_using(user_ctx.user_stash()).await.unwrap();
+    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    attachment.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
@@ -181,11 +183,7 @@ async fn load_attachment_content_from_cache() {
 
     ctx.catch_all().await;
 
-    let key = CacheAttachmentKey::new(
-        attachment_local_id,
-        &attachment.filename,
-        user_ctx.user_stash().clone(),
-    );
+    let key = CacheAttachmentKey::new(attachment_local_id, &attachment.filename);
     user_ctx
         .attachements_cache()
         .add_item(key, b"abcdef")
@@ -235,12 +233,10 @@ where
         sender: None,
         signature: None,
         size: attachment.size,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,
         image_height: None,
         row_id: None,
-        stash: None,
     }
 }

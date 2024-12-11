@@ -473,6 +473,9 @@ pub enum AgnosticInterface {
 
     /// A [`Tether`] instance.
     Tether(Tether),
+
+    /// A [`Bond`] instance.
+    Bond(Bond),
 }
 
 impl From<Stash> for AgnosticInterface {
@@ -499,6 +502,18 @@ impl From<&Tether> for AgnosticInterface {
     }
 }
 
+impl From<Bond> for AgnosticInterface {
+    fn from(bond: Bond) -> Self {
+        Self::Bond(bond)
+    }
+}
+
+impl From<&Bond> for AgnosticInterface {
+    fn from(bond: &Bond) -> Self {
+        Self::Bond(bond.clone())
+    }
+}
+
 impl Interface for AgnosticInterface {
     async fn execute<Q: Into<String> + Send>(
         &self,
@@ -508,6 +523,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.execute(query, params).await,
             Self::Tether(ref tether) => tether.execute(query, params).await,
+            Self::Bond(ref bond) => bond.execute(query, params).await,
         }
     }
 
@@ -515,6 +531,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.has_active_transaction(),
             Self::Tether(ref tether) => tether.has_active_transaction(),
+            Self::Bond(ref bond) => bond.has_active_transaction(),
         }
     }
 
@@ -526,6 +543,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.load(id).await,
             Self::Tether(ref tether) => tether.load(id).await,
+            Self::Bond(ref bond) => bond.load(id).await,
         }
     }
 
@@ -542,6 +560,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.query(query, params).await,
             Self::Tether(ref tether) => tether.query(query, params).await,
+            Self::Bond(ref bond) => bond.query(query, params).await,
         }
     }
 
@@ -557,6 +576,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.query_values(query, params).await,
             Self::Tether(ref tether) => tether.query_values(query, params).await,
+            Self::Bond(ref bond) => bond.query_values(query, params).await,
         }
     }
 
@@ -564,13 +584,7 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash,
             Self::Tether(ref tether) => tether.stash(),
-        }
-    }
-
-    async fn transaction(&self) -> Result<Tether, StashError> {
-        match *self {
-            Self::Stash(ref stash) => stash.transaction().await,
-            Self::Tether(ref tether) => tether.transaction().await,
+            Self::Bond(ref bond) => bond.stash(),
         }
     }
 }
@@ -1431,6 +1445,43 @@ impl Stash {
         }
     }
 
+    /// Starts a new transaction.
+    ///
+    /// This function starts a new transaction. All queries executed within the transaction must be
+    /// executed against the same connection, which is why a new connection is
+    /// created for the transaction when using a [`Stash`], to ensure this.
+    ///
+    /// Note that under the current design, transactions are not nestable, and
+    /// each transaction must be carried out on its own, independent connection.
+    /// It is possible to reuse a connection for multiple transactions, but only
+    /// one transaction can be active at a time on a given connection.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
+    ///     A new transaction cannot be started because one is already active on
+    ///     this connection.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
+    ///     the transaction.
+    ///
+    /// # See also
+    ///
+    /// * [`Stash::connection()`]
+    ///
+    pub async fn transaction(&self) -> Result<Bond, StashError> {
+        let tether = self.connection();
+
+        tether.transaction().await
+    }
+
     /// Factory method that uses the registry.
     ///
     /// This method is used to get a [`Stash`] instance from the registry. If
@@ -1588,11 +1639,6 @@ impl Interface for Stash {
 
     fn stash(&self) -> &Stash {
         self
-    }
-
-    async fn transaction(&self) -> Result<Tether, StashError> {
-        let connection = self.connection();
-        connection.transaction().await
     }
 }
 
@@ -1787,16 +1833,13 @@ impl OperationLogic for Subscription {
 /// This struct provides a lightweight, thread-safe database connection context
 /// — which is not an actual connection, but a tether to one — that can be
 /// shared easily and without concern. It is used to execute queries against the
-/// database, but more importantly provides an associative context for handling
-/// transactions, as all queries within a transaction must be executed against
-/// the same connection.
+/// database,
 ///
 /// # Cloning
 ///
-/// [`Tether`] instances are lightweight, and can be freely cloned without any
-/// concerns, as all of their internals are wrapped in [`Arc`]s. For this reason
-/// the [`Tether`] struct is not itself wrapped in an [`Arc`], and does not need
-/// any self-reference.
+/// [`Tether`] instances are lightweight, and can be freely cloned but its not
+/// recommended as it may lead to nested transactions. Clone implementation
+/// is inteded to be used for internal use only.
 ///
 /// # Design
 ///
@@ -1845,65 +1888,39 @@ pub struct Tether {
 }
 
 impl Tether {
-    /// Commits a transaction.
+    /// Starts a new transaction.
     ///
-    /// This function commits, i.e. finalises, an existing, active transaction.
+    /// This function starts a new transaction. All queries executed within the transaction must be
+    /// executed against the same connection, which is why a new transaction consumes the [`Tether`].
+    ///
+    /// Note that under the current design, transactions are not nestable, and
+    /// each transaction must be carried out on its own, independent connection.
+    /// It is possible to reuse a connection for multiple transactions, but only
+    /// one transaction can be active at a time on a given connection.
     ///
     /// # Errors
     ///
     /// The following [`StashError`] variants can be returned:
     ///
-    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
-    ///     transaction is currently active on this connection.
     ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
     ///     back to the caller via the oneshot channel.
     ///   - [`QueueError`](StashError::QueueError) - Problem sending the
     ///     operation to the queue.
     ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
     ///     connection from the pool.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem
-    ///     committing the transaction.
-    ///
-    pub async fn commit(&self) -> Result<(), StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::CommitTransaction(Command::new(
-            &self.stash,
-            Some(that_end),
-            Some(Arc::clone(&self.handle)),
-        ));
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(())
-    }
-
-    /// Rolls back a transaction.
-    ///
-    /// This function rolls back, i.e. abandons, an existing, active
-    /// transaction.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
-    ///     transaction is currently active on this connection.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
+    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
+    ///     A new transaction cannot be started because one is already active on
+    ///     this connection.
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    pub async fn rollback(&self) -> Result<(), StashError> {
+    /// # See also
+    ///
+    /// * [`Stash::connection()`]
+    ///
+    pub async fn transaction(self) -> Result<Bond, StashError> {
         let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::RollbackTransaction(Command::new(
+        let operation = Operation::StartTransaction(Command::new(
             &self.stash,
             Some(that_end),
             Some(Arc::clone(&self.handle)),
@@ -1915,7 +1932,8 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(())
+
+        Ok(Bond::new(self))
     }
 }
 
@@ -2044,28 +2062,194 @@ impl Interface for Tether {
     fn stash(&self) -> &Stash {
         &self.stash
     }
+}
 
-    async fn transaction(&self) -> Result<Self, StashError> {
+impl PartialEq for Tether {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.handle, &other.handle)
+    }
+}
+
+/// Database transaction context.
+///
+/// This struct provides a lightweight, thread-safe database transaction context
+/// — which is not an actual transaction, but a tether to one — that can be
+/// shared easily and without concern. It is used to execute queries against the
+/// database,
+///
+/// # Cloning
+///
+/// [`Bond`] instances are lightweight, and can be freely cloned but its not
+/// recommended as it may lead to open transactions after commit. Clone implementation
+/// is inteded to be used for internal use only.
+///
+/// # Design
+///
+/// Its design resolves around being a wrapper around a [`Tether`] instance,
+/// to provide dedicated Transaction type. This type is meant to be required for
+/// database modification queries of any type to ensure safety of execution.
+/// Any modification query run of the scope of the Transaction may trigger
+/// `Database is busy` error.
+///
+/// # See also
+///
+/// * [`Tether`]
+///
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Bond {
+    /// The associated [`Tether`] instance.
+    tether: Tether,
+}
+
+impl Bond {
+    /// Create new instance of the Bond.
+    ///
+    const fn new(tether: Tether) -> Self {
+        Self { tether }
+    }
+
+    /// Commits a transaction.
+    ///
+    /// This function commits, i.e. finalises, an existing, active transaction.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
+    ///     transaction is currently active on this connection.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem
+    ///     committing the transaction.
+    ///
+    pub async fn commit(self) -> Result<Tether, StashError> {
         let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::StartTransaction(Command::new(
-            &self.stash,
+        let operation = Operation::CommitTransaction(Command::new(
+            &self.tether.stash,
             Some(that_end),
-            Some(Arc::clone(&self.handle)),
+            Some(Arc::clone(&self.tether.handle)),
         ));
-        self.queue
+        self.tether
+            .queue
             .send_async(operation)
             .await
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(self.clone())
+        Ok(self.tether)
+    }
+
+    /// Rolls back a transaction.
+    ///
+    /// This function rolls back, i.e. abandons, an existing, active
+    /// transaction.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
+    ///     transaction is currently active on this connection.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
+    ///     the transaction.
+    ///
+    pub async fn rollback(self) -> Result<Tether, StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let operation = Operation::RollbackTransaction(Command::new(
+            &self.tether.stash,
+            Some(that_end),
+            Some(Arc::clone(&self.tether.handle)),
+        ));
+        self.tether
+            .queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))??;
+        Ok(self.tether)
     }
 }
 
-impl PartialEq for Tether {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.handle, &other.handle)
+impl Interface for Bond {
+    async fn execute<Q: Into<String> + Send>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<usize, StashError> {
+        perform_execute(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.tether.handle)),
+        )
+        .await
+    }
+
+    fn has_active_transaction(&self) -> bool {
+        true
+    }
+
+    async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        I: ToSql + Send + 'static,
+    {
+        perform_load(id, &self.tether.clone().into()).await
+    }
+
+    async fn query<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: DbRecord + Send + 'static,
+        DbRecords: FromIterator<Box<T>>,
+    {
+        perform_query(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.tether.handle)),
+        )
+        .await
+    }
+
+    async fn query_values<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
+    {
+        perform_value_query(
+            self.stash().clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.tether.handle)),
+        )
+        .await
+    }
+
+    fn stash(&self) -> &Stash {
+        &self.tether.stash
     }
 }
 
@@ -3532,42 +3716,6 @@ pub trait Interface: Clone + Send + Sync {
     ///
     #[must_use]
     fn stash(&self) -> &Stash;
-
-    /// Starts a new transaction.
-    ///
-    /// This function starts a new transaction. If run on a [`Stash`] instance,
-    /// the transaction will be started on a new database connection; and if run
-    /// on a [`Tether`] instance, the transaction will be started on the current
-    /// database connection. All queries executed within the transaction must be
-    /// executed against the same connection, which is why a new connection is
-    /// created for the transaction when using a [`Stash`], to ensure this.
-    ///
-    /// Note that under the current design, transactions are not nestable, and
-    /// each transaction must be carried out on its own, independent connection.
-    /// It is possible to reuse a connection for multiple transactions, but only
-    /// one transaction can be active at a time on a given connection.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
-    ///     A new transaction cannot be started because one is already active on
-    ///     this connection.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
-    ///     the transaction.
-    ///
-    /// # See also
-    ///
-    /// * [`Stash::connection()`]
-    ///
-    async fn transaction(&self) -> Result<Tether, StashError>;
 }
 
 /// Logic for carrying out an operation on the database.

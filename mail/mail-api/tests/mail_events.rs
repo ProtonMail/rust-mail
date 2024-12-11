@@ -13,7 +13,7 @@ fn test_deserialize() {
     let actual = actual.trim();
     let expected = expected.trim();
     if actual != expected {
-        write("tests/data/mail_events/expected.json.new", &actual).unwrap();
+        write("tests/data/mail_events/expected.json.new", actual).unwrap();
     }
 
     assert_eq!(expected, actual);

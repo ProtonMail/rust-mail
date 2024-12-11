@@ -297,7 +297,7 @@ pub fn validate_parameters<S: ::std::hash::BuildHasher>(
 fn get_value_type(property: &Property) -> VcardValidationResult<Option<ValueType>> {
     if let Some(params) = &property.params {
         for (name, values) in params {
-            if name.to_ascii_uppercase() == "VALUE" {
+            if name.eq_ignore_ascii_case("VALUE") {
                 return if values.len() == 1 {
                     if let Ok(value) = ValueType::try_from(values[0].as_str()) {
                         Ok(Some(value))

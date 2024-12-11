@@ -1,7 +1,8 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, MessageAddress, MessageAddresses, MimeType,
+    AttachmentMetadata, Disposition, MessageRecipient, MessageRecipients, MessageSender,
+    MessageSenders, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::{Draft, Error, ReplyMode};
@@ -17,7 +18,7 @@ use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -115,7 +116,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Tether,
+        tether: &Bond,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_id = local_draft_label_id(tether).await?;
 
@@ -161,7 +162,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 attachment_metadata.clone(),
             );
             conversation
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
@@ -181,7 +182,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
             action.update_message(&address, &mut message, attachment_metadata, body_len, time);
 
-            message.save_using(tether).await.inspect_err(|e| {
+            message.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e}");
             })?;
 
@@ -195,7 +196,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             body_metadata.attachments = attachments;
             body_metadata.mime_type = action.mime_type;
 
-            body_metadata.save_using(tether).await.inspect_err(|e| {
+            body_metadata.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e}");
             })?;
 
@@ -214,7 +215,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             );
             message.local_conversation_id = Some(conversation_id);
             message
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to save message: {e}"))?;
 
@@ -226,11 +227,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 parsed_headers: Default::default(),
                 attachments,
                 row_id: None,
-                stash: None,
             };
 
             message_body_metadata
-                .save_using(tether)
+                .save(tether)
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e}"))?;
 
@@ -249,14 +249,12 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Store body in cache.
-        store_body_in_cache(ctx.messages_cache(), &message, &action.body, tether).inspect_err(
-            |e| {
-                error!("Failed to store draft body in cache :{e}");
-            },
-        )?;
+        store_body_in_cache(ctx.messages_cache(), &message, &action.body).inspect_err(|e| {
+            error!("Failed to store draft body in cache :{e}");
+        })?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
-        metadata.save_using(tether).await.inspect_err(|e| {
+        metadata.save(tether).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e}");
         })?;
 
@@ -274,7 +272,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         &self,
         _: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Tether,
+        tether: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // If create failed we need to wipe all new local resources so
         // they don't show up. Maybe keep them deleted until the remote
@@ -351,7 +349,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Load body.
-        let stored = load_message_body(ctx, &message, &tether)?;
+        let stored = load_message_body(ctx, &message)?;
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -386,7 +384,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
-        tether.transaction().await?;
+        let bond = tether.transaction().await?;
         let row_id = message.row_id;
 
         // Update remote ids
@@ -399,26 +397,26 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // we can save the metadata returned by the server.
         message_body_metadata.remote_message_id = message.remote_id.clone();
         message_body_metadata
-            .save_using(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
 
         // Update conversation
         conversation
-            .save_using(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
 
         // Update message data
         let (mut message, mut new_message_body_metadata, _) =
-            Message::from_api_data(new_message, &tether)
+            Message::from_api_data(new_message, &bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to convert api message: {e}");
                 })?;
         message.row_id = row_id;
         message.local_id = Some(message_id);
-        message.save_using(&tether).await.inspect_err(|e| {
+        message.save(&bond).await.inspect_err(|e| {
             error!("Failed to update the message: {e}");
         })?;
 
@@ -426,13 +424,13 @@ impl proton_action_queue::action::Handler for SaveHandler {
         new_message_body_metadata.local_message_id = Some(message_id);
         new_message_body_metadata.row_id = message_body_metadata.row_id;
         new_message_body_metadata
-            .save_using(&tether)
+            .save(&bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to update message body metadata: {e}");
             })?;
 
-        tether.commit().await?;
+        bond.commit().await?;
 
         Ok(())
     }
@@ -456,8 +454,8 @@ impl Save {
             local_address_id: address.local_id.unwrap(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
-            cc_list: to_message_addresses(&self.cc_list),
-            bcc_list: to_message_addresses(&self.bcc_list),
+            cc_list: to_message_recipients(&self.cc_list),
+            bcc_list: to_message_recipients(&self.bcc_list),
             deleted: false,
             exclusive_location: None,
             expiration_time: 0,
@@ -470,7 +468,7 @@ impl Save {
             num_attachments: num_attachments.try_into().unwrap_or_default(),
             display_order,
             reply_tos: Default::default(),
-            sender: MessageAddress {
+            sender: MessageSender {
                 address: address.email.clone(),
                 bimi_selector: None,
                 display_sender_image: false,
@@ -482,12 +480,10 @@ impl Save {
             snooze_time: 0,
             subject: self.subject.clone(),
             time,
-            to_list: to_message_addresses(&self.to_list),
+            to_list: to_message_recipients(&self.to_list),
             unread: false,
             custom_labels: vec![],
-            cached: false,
             row_id: None,
-            stash: None,
         }
     }
 
@@ -503,11 +499,11 @@ impl Save {
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
-        message.to_list = to_message_addresses(&self.to_list);
-        message.cc_list = to_message_addresses(&self.cc_list);
-        message.bcc_list = to_message_addresses(&self.bcc_list);
+        message.to_list = to_message_recipients(&self.to_list);
+        message.cc_list = to_message_recipients(&self.cc_list);
+        message.bcc_list = to_message_recipients(&self.bcc_list);
         message.num_attachments = num_attachments.try_into().unwrap_or_default();
-        message.sender = MessageAddress {
+        message.sender = MessageSender {
             address: address.email.clone(),
             bimi_selector: None,
             display_sender_image: false,
@@ -542,18 +538,23 @@ impl Save {
             num_unread: 0,
             display_order,
             recipients: Default::default(),
-            senders: to_message_addresses(std::iter::once(&address.email)),
+            senders: MessageSenders {
+                value: vec![MessageSender {
+                    address: address.email.clone(),
+                    is_proton: true,
+                    ..Default::default()
+                }],
+            },
             size: body_len,
             subject: self.subject.clone(),
             is_known: false,
             custom_labels: vec![],
             has_messages: false,
             row_id: None,
-            stash: None,
         }
     }
 
-    async fn attachments(&self, tether: &Tether) -> Result<Vec<Attachment>, StashError> {
+    async fn attachments(&self, tether: &Bond) -> Result<Vec<Attachment>, StashError> {
         Attachment::find_by_ids(self.attachments.iter().cloned(), tether).await
     }
     fn attachment_metadata(attachments: &[Attachment]) -> Vec<AttachmentMetadata> {
@@ -565,19 +566,17 @@ impl Save {
     }
 }
 
-fn to_message_addresses<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageAddresses {
-    MessageAddresses {
+fn to_message_recipients<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageRecipients {
+    MessageRecipients {
         value: addresses
             .into_iter()
             .map(|email| {
                 //TODO(ET-1416): Resolve contact info.
-                MessageAddress {
+                MessageRecipient {
                     address: email.clone(),
-                    bimi_selector: None,
-                    display_sender_image: false,
                     is_proton: false,
-                    is_simple_login: false,
                     name: String::new(),
+                    group: None,
                 }
             })
             .collect(),
@@ -585,16 +584,12 @@ fn to_message_addresses<'a>(addresses: impl IntoIterator<Item = &'a String>) -> 
 }
 
 /// Store the message body in the cache.
-fn store_body_in_cache<A>(
+fn store_body_in_cache(
     cache: &ProtonCache<CacheMessageConfig>,
     message: &Message,
     body: &str,
-    interface: &A,
-) -> Result<(), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let key = CacheMessageKey::from_message(message, interface);
+) -> Result<(), AppError> {
+    let key = CacheMessageKey::from(message);
 
     let storable = StorableMessageBody {
         body: body.to_owned(),

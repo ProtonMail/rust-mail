@@ -55,9 +55,7 @@ pub mod response_data;
 pub mod responses;
 
 use crate::auth::{CachedStore, Store, StoreError};
-use crate::service::{
-    ApiResponse, ApiService, ApiServiceError, Body, Json, Request, ServiceError, NO_PARAMS,
-};
+use crate::service::{ApiResponse, ApiService, ApiServiceError, Body, Json, Request, NO_PARAMS};
 use crate::services::proton::common::{Fido2Auth, RemoteId};
 use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::{
@@ -65,7 +63,7 @@ use crate::services::proton::requests::{
     GetImagesLogoOptions, GetKeysAllOptions, PostAuthInfoRequest, PostAuthRefreshRequest,
     PostAuthRequest, PostAuthSessionsForksRequest, PostAuthTfaRequest,
 };
-use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
+use crate::services::proton::response_data::ApiErrorInfo;
 use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
     GetEventResponse, GetEventsLatestResponse, GetKeysSaltsResponse, GetSettingsResponse,
@@ -85,39 +83,12 @@ use reqwest::{Client, Method, Url};
 use responses::{GetAddressResponse, PutDeleteContactsResponse};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
-use serde_json::{Error as JsonError, Value as JsonValue};
+use serde_json::Value as JsonValue;
 use smart_default::SmartDefault;
 use std::sync::Arc;
-use thiserror::Error;
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::error;
 use velcro::hash_map;
-
-const HUMAN_VERIFICATION_REQUESTED: u32 = 9001;
-
-#[derive(Debug, Error)]
-pub enum ProtonApiServiceError {
-    //  HUMAN VERIFICATION DATA ERRORS
-    //==========================================================================
-    /// Human verification data was returned, but could not be deserialised.
-    #[error("Failed to deserialize human verification data: {0}")]
-    FailedToDeserializeHumanVerificationData(JsonError),
-
-    /// Human verification has been requested — this should lead to this
-    /// particular error being detected and handled.
-    #[error("Human verification requested")]
-    HumanVerificationRequested(HumanVerificationChallenge),
-
-    /// Human verification was indicated, but the data is missing.
-    #[error("Missing human verification data")]
-    MissingHumanVerificationData,
-
-    /// Human verification was indicated, but the specified type is unknown.
-    #[error(r#"Unknown human verification type "{0}""#)]
-    UnknownHumanVerificationType(String),
-}
-
-impl ServiceError for ProtonApiServiceError {}
 
 /// The configuration for the Proton API service.
 #[derive(Clone, Debug, Eq, PartialEq, SmartDefault)]
@@ -285,46 +256,6 @@ impl ApiService for Proton {
                 // situation where the refresh succeeds and then the retry gets another 401
                 // Unauthorized, we track the number of retries in order to prevent this.
                 self.retry_request::<J, T>(request).await
-            }
-            // At present, the only extended error details that we are interested in
-            // are those for UnprocessableEntity statuses, as these can contain details
-            // for human verification, which we then need to carry out. This response
-            // can happen at any time.
-            ApiServiceError::UnprocessableEntity(_, body) => {
-                match serde_json::from_str::<ApiErrorInfo>(body) {
-                    Ok(info) => {
-                        // When we encounter a human verification challenge, we need to perform the
-                        // relevant actions for the specified type of human verification.
-                        if info.code == HUMAN_VERIFICATION_REQUESTED {
-                            let Some(details) = info.details else {
-                                return Err(ApiServiceError::ServiceError(Box::new(
-                                    ProtonApiServiceError::MissingHumanVerificationData,
-                                )));
-                            };
-                            Err(ApiServiceError::ServiceError(Box::new(
-                                ProtonApiServiceError::HumanVerificationRequested(
-                                    match serde_json::from_value::<HumanVerificationChallenge>(
-                                        details.clone(),
-                                    ) {
-                                        Ok(data) => data,
-                                        Err(err) => return Err(ApiServiceError::ServiceError(Box::new(
-                                            ProtonApiServiceError::FailedToDeserializeHumanVerificationData(err),
-                                        )))
-                                    }
-                                ),
-                            )))
-                        } else {
-                            Err(error)
-                        }
-                    }
-                    Err(err) => {
-                        // If we couldn't parse the response, we return it unaltered, as we don't
-                        // know if it contains a human verification challenge unless we can
-                        // deserialise it.
-                        error!("Failed to parse error response: {err}");
-                        Err(error)
-                    }
-                }
             }
             _ => Err(error),
         }
@@ -820,5 +751,33 @@ impl Proton {
     /// Retrieve the API authentication store
     pub(crate) fn auth_store(&self) -> &AsyncRwLock<CachedStore> {
         self.auth.as_ref()
+    }
+}
+
+impl ApiServiceError {
+    /// Attempts to extract the Proton error from the API error.
+    ///
+    /// Returns `None` if the error is not present or
+    /// failed to deserialize.
+    pub fn to_proton_error(&self) -> Option<ApiErrorInfo> {
+        //TODO(ET-1700): This should be returned by default.
+        let (ApiServiceError::BadRequest(_, body)
+        | ApiServiceError::Unauthorized(_, body)
+        | ApiServiceError::NotFound(_, body)
+        | ApiServiceError::UnprocessableEntity(_, body)
+        | ApiServiceError::TooManyRequest(_, body)
+        | ApiServiceError::ServiceUnavailable(_, body)
+        | ApiServiceError::OtherHttpError(_, _, body)) = self
+        else {
+            return None;
+        };
+
+        match ApiErrorInfo::from_json(body) {
+            Ok(e) => Some(e),
+            Err(e) => {
+                error!("Failed to parse API error: {}", e);
+                None
+            }
+        }
     }
 }

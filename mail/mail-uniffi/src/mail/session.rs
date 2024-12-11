@@ -27,7 +27,7 @@ use tracing::debug;
 ///
 #[derive(uniffi::Object)]
 pub struct MailSession {
-    ctx: MailContext,
+    ctx: Arc<MailContext>,
 }
 
 /// Configuration parameters for the [`MailSession`]
@@ -82,13 +82,16 @@ pub fn create_mail_session(
 
             let session_path = PathBuf::from(params.session_dir);
             let user_path = PathBuf::from(params.user_dir);
-            let mail_cache_path = PathBuf::from(params.mail_cache_dir);
+            let cache_path = PathBuf::from(params.mail_cache_dir);
+            let mail_cache_path = cache_path.join("mail-cache");
+            let core_cache_path = cache_path.join("core-cache");
 
             // create directories.
             debug!("Creating directories");
             std::fs::create_dir_all(&session_path)?;
             std::fs::create_dir_all(&user_path)?;
             std::fs::create_dir_all(&mail_cache_path)?;
+            std::fs::create_dir_all(&core_cache_path)?;
 
             // Generate session key;
             debug!("Checking keychain");
@@ -108,6 +111,7 @@ pub fn create_mail_session(
             let mail_ctx = MailContext::new(
                 session_path,
                 user_path,
+                core_cache_path,
                 mail_cache_path,
                 params.mail_cache_size,
                 Arc::from(FFIKeyChain::from(key_chain)),

@@ -4,7 +4,6 @@ use super::*;
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use stash::orm::Model;
-use stash::stash::Interface;
 
 #[tokio::test]
 async fn db_migration() {
@@ -50,13 +49,13 @@ async fn action_store_and_retrieve() {
     };
 
     let stash = new_test_connection().await;
-    let conn = stash.connection();
-
-    conn.transaction().await.unwrap();
+    let tx = stash.transaction().await.unwrap();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
-    stored.save_using(&conn).await.unwrap();
+
+    stored.save(&tx).await.unwrap();
+
     let first_action_id = stored.id.unwrap();
-    conn.commit().await.unwrap();
+    let conn = tx.commit().await.unwrap();
 
     let metadata = MetadataBuilder::new()
         .with_debug_string("my debug string")
@@ -66,21 +65,23 @@ async fn action_store_and_retrieve() {
         .build();
 
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
-    stored.set_stash(&stash);
+    let tx = conn.transaction().await.unwrap();
 
-    conn.transaction().await.unwrap();
-    stored.save_using(&conn).await.unwrap();
+    stored.save(&tx).await.unwrap();
+
+    let conn = tx.commit().await.unwrap();
     let id = stored.id.unwrap();
-    conn.commit().await.unwrap();
-    let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();
+    let db_action = StoredAction::load(id, &stash).await.unwrap().unwrap();
 
     assert_eq!(stored, db_action);
 
     // delete action should delete both actions
-    conn.transaction().await.unwrap();
-    StoredAction::delete(&conn, first_action_id).await.unwrap();
-    conn.commit().await.unwrap();
+    let tx = conn.transaction().await.unwrap();
+    StoredAction::delete(&tx, first_action_id).await.unwrap();
+    let conn = tx.commit().await.unwrap();
+
     let remaining = StoredAction::pending_count(&conn).await.unwrap();
+
     assert_eq!(remaining, 1);
 }
 

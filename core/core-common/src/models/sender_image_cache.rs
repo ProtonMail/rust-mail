@@ -1,4 +1,4 @@
-use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResult};
+use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResource, CacheResult};
 use crate::datatypes::{LightOrDarkMode, LocalId};
 use crate::models::ModelExtension;
 use anyhow::anyhow;
@@ -11,7 +11,7 @@ use stash::exports::{SqliteError, ToSql, Value};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Bond, Interface, Stash, StashError};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -72,10 +72,6 @@ pub struct SenderImage {
     /// as a consistent identifier for records when listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl SenderImage {
@@ -87,9 +83,12 @@ impl SenderImage {
     /// # Errors
     /// * if a database request fail.
     ///
-    pub async fn batch_delete(values: impl IntoIterator<Item = Self>) -> Result<(), StashError> {
+    pub async fn batch_delete(
+        values: impl IntoIterator<Item = Self>,
+        bond: &Bond,
+    ) -> Result<(), StashError> {
         for value in values {
-            value.delete().await?;
+            value.delete(bond).await?;
         }
         Ok(())
     }
@@ -99,14 +98,12 @@ impl SenderImage {
     /// # Error
     /// * If the database request fail.
     ///
-    pub(crate) async fn delete(&self) -> Result<(), StashError> {
-        let interface = self.stash.clone().ok_or(StashError::NoStashAvailable)?;
-        interface
-            .execute(
-                r"DELETE FROM sender_image_cache WHERE local_id = ?",
-                params![self.local_id],
-            )
-            .await?;
+    pub(crate) async fn delete(&self, bond: &Bond) -> Result<(), StashError> {
+        bond.execute(
+            r"DELETE FROM sender_image_cache WHERE local_id = ?",
+            params![self.local_id],
+        )
+        .await?;
         Ok(())
     }
 
@@ -115,22 +112,18 @@ impl SenderImage {
     /// N.B.: It's necessary since `PartialEq` exclude `received_format` and `is_empty` from
     ///       equality test
     ///
-    pub(crate) async fn set_metadata<A>(
+    pub(crate) async fn set_metadata(
         &mut self,
         metadata: &SenderImageMetadata,
-        interface: &A,
-    ) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> Result<(), StashError> {
         self.received_format = Some(metadata.received_format);
         self.is_empty = metadata.is_empty;
-        interface
-            .execute(
-                "UPDATE sender_image_cache SET received_format = ?, is_empty = ? WHERE local_id = ?",
-                params![self.received_format, self.is_empty, self.local_id],
-            )
-            .await?;
+        bond.execute(
+            "UPDATE sender_image_cache SET received_format = ?, is_empty = ? WHERE local_id = ?",
+            params![self.received_format, self.is_empty, self.local_id],
+        )
+        .await?;
         Ok(())
     }
 
@@ -193,41 +186,16 @@ impl SenderImage {
     ///
     /// Returns error if a database request fail.
     ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
-    /// Save or update a `SenderImage`.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to ensure that the
-    /// information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if a database request fail.
-    ///
     #[allow(clippy::missing_panics_doc)]
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         let (query, params) = self.build_query();
-        if self.stash.is_none() {
-            self.set_stash(interface.stash());
-        }
+        let mut values = Self::find(query, params, bond, None).await?;
 
-        let transaction = interface.transaction().await?;
-        let mut values = Self::find(query, params, &transaction, None).await?;
         match values.len() {
-            0 => <Self as Model>::save_using(self, &transaction).await?,
+            0 => <Self as Model>::save(self, bond).await?,
             1 => {
                 let value = values.get_mut(0).expect("One item present").clone();
                 self.local_id = value.local_id;
-                self.stash.clone_from(&value.stash);
                 self.row_id = value.row_id;
             }
             _ => {
@@ -236,7 +204,7 @@ impl SenderImage {
                 ))
             }
         }
-        transaction.commit().await?;
+
         Ok(())
     }
 }
@@ -303,7 +271,7 @@ impl From<&SenderImage> for GetImagesLogoOptions {
 
 impl CacheConfig for SenderImage {
     type Key = Self;
-    type Init = Stash;
+    type Resource = Stash;
     type ExtraMetadata = SenderImageMetadata;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
@@ -312,10 +280,12 @@ impl CacheConfig for SenderImage {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    async fn handle_failed(failed: Vec<Self::Key>) -> CacheResult<()> {
-        Self::batch_delete(failed)
-            .await
-            .map_err(|e| CacheError::Callback(anyhow!(e)))
+    async fn handle_failed(failed: Vec<Self::Key>, stash: Stash) -> CacheResult<()> {
+        let tx = stash.transaction().await?;
+        Self::batch_delete(failed, &tx).await?;
+        tx.commit().await?;
+
+        Ok(())
     }
 
     fn key_to_filename(
@@ -337,12 +307,15 @@ impl CacheConfig for SenderImage {
 }
 
 impl CacheKey for SenderImage {
-    fn after_evict(&self) {
+    fn after_evict<R: CacheResource>(&self, resource: R) {
         block_on(async {
+            // TODO: This block on may be trublesome as it may hit on Database is blocked as was the case in event loop
+            let tx = resource.stash().unwrap().transaction().await.unwrap();
             let _ = self
-                .delete()
+                .delete(&tx)
                 .await
                 .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
+            tx.commit().await.unwrap();
         });
     }
 }

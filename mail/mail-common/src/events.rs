@@ -36,7 +36,6 @@ mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
-use anyhow::anyhow;
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -44,9 +43,8 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::{CoreEvent, CoreEventSubscriberConnectionProvider};
+use proton_core_common::CoreEvent;
 use proton_event_loop::Event;
-use stash::stash::Stash;
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -203,19 +201,6 @@ impl Event for MailEvent {
 
     fn has_more(&self) -> bool {
         self.has_more
-    }
-}
-
-impl CoreEventSubscriberConnectionProvider for MailEvent {
-    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
-        self.user
-            .as_ref()
-            .and_then(|user| {
-                let user_id = user.remote_id.clone()?;
-                let stash = user.stash.clone()?;
-                Some((user_id, stash))
-            })
-            .ok_or_else(|| anyhow!("User not found"))
     }
 }
 

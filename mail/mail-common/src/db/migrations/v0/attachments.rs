@@ -1,7 +1,7 @@
 use indoc::indoc;
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
-pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
+pub async fn create_attachment_tables(tx: &Bond) -> Result<(), StashError> {
     // Attachments
     tx.execute(
         indoc! {"
@@ -27,7 +27,6 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
                 transfer_encoding TEXT DEFAULT NULL,
                 image_width TEXT DEFAULT NULL,
                 image_height TEXT DEFAULT NULL,
-                cached INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT attachments_address_id
                     FOREIGN KEY (local_address_id)

@@ -48,7 +48,7 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("strip utm", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                utm::strip(tr.document());
+                let _ = utm::strip(tr.document());
             })
         });
 
@@ -69,7 +69,7 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("strip", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                sanitizer::strip_whitelist(tr.document());
+                let _ = sanitizer::strip_whitelist(tr.document());
             })
         });
 

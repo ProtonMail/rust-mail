@@ -1,10 +1,10 @@
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
-use crate::{CoreContextError, CoreContextResult};
+use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
-use proton_api_core::services::proton::common::API_SUCCESS_CODE;
+use proton_api_core::consts::General;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
@@ -14,7 +14,7 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -79,35 +79,12 @@ pub struct Contact {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl Contact {
     /// Save a contact to the database.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash.clone() else {
-            return Err(StashError::NoStashAvailable);
-        };
-
-        self.save_using(&stash).await
-    }
-
-    /// Save a contact to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save_using()`] to
     /// ensure that existing conversations are updated.
     ///
     /// # Parameters
@@ -120,23 +97,20 @@ impl Contact {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
         } else if let Some(local_id) = self.local_id {
-            if let Some(existing) = Self::find_by_id(local_id, interface).await? {
+            if let Some(existing) = Self::find_by_id(local_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.remote_id = existing.remote_id;
             }
         }
 
-        <Self as Model>::save_using(self, interface).await
+        <Self as Model>::save(self, bond).await
     }
     /// Returns the associated cards for a contact.
     ///
@@ -147,17 +121,18 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the cards cannot be retrieved.
     ///
-    pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
-        let Some(stash) = self.stash() else {
-            return Err(StashError::NoStashAvailable);
-        };
+    pub async fn cards<A>(&mut self, interface: &A) -> Result<&Vec<ContactCard>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
-            stash,
+            interface,
             None,
         )
         .await?;
+
         Ok(&self.cards)
     }
 
@@ -170,14 +145,14 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the emails cannot be retrieved.
     ///
-    pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
-        let Some(stash) = self.stash() else {
-            return Err(StashError::NoStashAvailable);
-        };
+    pub async fn emails<A>(&mut self, interface: &A) -> Result<&Vec<ContactEmail>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
-            stash,
+            interface,
             None,
         )
         .await?;
@@ -190,7 +165,7 @@ impl Contact {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
         for card in &mut self.cards {
             card.local_contact_id = self.local_id;
             card.remote_contact_id.clone_from(&self.remote_id);
@@ -199,17 +174,15 @@ impl Contact {
             email.local_contact_id = self.local_id;
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        interface
-            .execute(
-                "DELETE FROM contact_cards WHERE local_contact_id = ?",
-                params![self.local_id],
-            )
-            .await?;
+        bond.execute(
+            "DELETE FROM contact_cards WHERE local_contact_id = ?",
+            params![self.local_id],
+        )
+        .await?;
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
-            card.set_stash(interface.stash());
-            card.save_using(interface).await.map_err(|e| {
+            card.save(bond).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
             })?;
@@ -320,11 +293,11 @@ impl Contact {
             .await?;
 
         for mut contact in contacts {
-            contact.save_using(&tx).await?;
+            contact.save(&tx).await?;
         }
 
         for mut contact_email in contact_emails {
-            contact_email.save_using(&tx).await?;
+            contact_email.save(&tx).await?;
         }
 
         tx.commit().await?;
@@ -345,19 +318,18 @@ impl Contact {
     ///
     /// Errors when the API request fails or when the database query fails.
     ///
-    pub async fn sync_with_card<A>(
+    pub async fn sync_with_card(
         local_id: LocalId,
         api: &Proton,
-        interface: &A,
-    ) -> CoreContextResult<()>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        bond: &Bond,
+    ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
         let remote_id = local_id
-            .counterpart::<Contact, _>(interface)
+            .counterpart::<Contact, _>(bond)
             .await?
-            .ok_or_else(|| CoreContextError::MissingRemoteId(local_id))?;
+            .ok_or_else(|| {
+                CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
+            })?;
 
         let mut contact_with_card = Contact::from(
             api.get_contact(remote_id.clone().into())
@@ -369,16 +341,13 @@ impl Contact {
                 .contact,
         );
 
-        contact_with_card
-            .save_using(interface)
-            .await
-            .map_err(|err| {
-                error!("Failed to sync full contact to db: {err}");
-                err
-            })?;
+        contact_with_card.save(bond).await.map_err(|err| {
+            error!("Failed to sync full contact to db: {err}");
+            err
+        })?;
 
         for email in &mut contact_with_card.contact_emails {
-            email.save_using(interface).await.map_err(|e| {
+            email.save(bond).await.map_err(|e| {
                 error!("Failed to update contact emails: {e}");
                 e
             })?;
@@ -403,7 +372,7 @@ impl Contact {
         let mut contacts = Contact::find("WHERE deleted = 0", vec![], interface, None).await?;
 
         for contact in &mut contacts {
-            contact.emails().await?;
+            contact.emails(interface).await?;
         }
 
         Ok(GroupedContacts::from_contacts(contacts))
@@ -422,24 +391,18 @@ impl Contact {
     /// the database, then it is deleted from the remote server, and finally
     /// It is deleted from the local database by the event loop update.
     ///
-    pub async fn mark_delete<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn mark_delete(&mut self, bond: &Bond) -> Result<(), StashError> {
         self.deleted = true;
-        self.save_using(interface).await
+        self.save(bond).await
     }
 
     /// Marks a contact as undeleted.
     /// This method serves as the reverse of [`Contact::mark_delete()`].
     /// which can revert the deletion of a contact in case of something unpredictable happend.
     ///
-    pub async fn mark_undelete<A>(&mut self, interface: &A) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn mark_undelete(&mut self, bond: &Bond) -> Result<(), StashError> {
         self.deleted = false;
-        self.save_using(interface).await
+        self.save(bond).await
     }
 
     pub async fn delete_from_remote(
@@ -453,7 +416,7 @@ impl Contact {
         Ok(response
             .responses
             .iter()
-            .filter(|r| r.response.code != API_SUCCESS_CODE)
+            .filter(|r| r.response.code != General::NoError as u32)
             .map(|r| r.id.clone().into())
             .collect())
     }
@@ -526,7 +489,6 @@ impl From<ApiContactBasic> for Contact {
             uid: value.uid.into(),
             deleted: false,
             row_id: None,
-            stash: None,
         }
     }
 }
@@ -548,7 +510,6 @@ impl Default for Contact {
             uid: RemoteId::from(String::default()),
             deleted: Default::default(),
             row_id: Default::default(),
-            stash: Default::default(),
         }
     }
 }
@@ -572,7 +533,6 @@ impl From<ApiContactFull> for Contact {
             uid: value.uid.into(),
             deleted: false,
             row_id: None,
-            stash: None,
         }
     }
 }

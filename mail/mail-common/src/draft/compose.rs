@@ -1,4 +1,4 @@
-use crate::datatypes::{MessageAddress, MimeType, PmSignature};
+use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
@@ -111,16 +111,13 @@ pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> 
     signature
 }
 
-fn recipient_from_message_sender(recipients: &[MessageAddress]) -> Vec<DraftRecipient> {
+fn recipient_from_message_sender(recipients: &[MessageRecipient]) -> Vec<DraftRecipient> {
     recipients
         .iter()
-        .map(|v| {
-            DraftRecipient {
-                address: v.address.clone(),
-                name: v.name.clone(),
-                // TODO: where to get group from?
-                group: None,
-            }
+        .map(|v| DraftRecipient {
+            address: v.address.clone(),
+            name: v.name.clone(),
+            group: v.group.clone(),
         })
         .collect()
 }
@@ -235,7 +232,7 @@ pub fn html_to_text(input: String) -> String {
 
 /// Generates a reply similar to:
 /// > On Tuesday, 01/01/2024 14:25, Slack <notification@slack.com> wrote:
-fn generate_sender_reply(sender: &MessageAddress, formatted_date: String) -> String {
+fn generate_sender_reply(sender: &MessageSender, formatted_date: String) -> String {
     if !sender.name.is_empty() && !sender.address.is_empty() {
         format!(
             "{formatted_date} {} <{}> wrote:",

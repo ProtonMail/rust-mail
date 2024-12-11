@@ -14,7 +14,7 @@ use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Interface, Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::error;
 
 #[derive(Serialize, Deserialize)]
@@ -54,7 +54,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
@@ -83,7 +83,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         message.flags.set(MessageFlags::SENT, true);
-        message.save_using(tx).await.inspect_err(|e| {
+        message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag: {e}");
         })?;
 
@@ -105,7 +105,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
@@ -120,7 +120,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         message.flags.set(MessageFlags::SENT, false);
-        message.save_using(tx).await.inspect_err(|e| {
+        message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag (revert): {e}");
         })?;
 
@@ -180,7 +180,7 @@ impl proton_action_queue::action::Handler for SendHandler {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let stored_message_body = load_message_body(context, &message_metadata, &tether)?;
+        let stored_message_body = load_message_body(context, &message_metadata)?;
 
         // Get recipient emails.
         let recipient_emails = load_all_recipients(&message_metadata);
@@ -191,16 +191,18 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let pgp_provider = new_pgp_provider();
 
+        let tx = tether.transaction().await?;
         // Load send preferences for each recipient of the message.
         let send_preferences = load_send_preferences_for_recipients(
             context,
             &pgp_provider,
-            &tether,
+            &tx,
             &recipient_emails,
             mail_settings.crypto_mail_settings(),
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err}"))?;
+        let tether = tx.commit().await?;
 
         // Unlock sender address keys
         let address_keys = context
@@ -238,7 +240,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let tx = tether.transaction().await?;
         let mut conversation: Conversation = response.conversation.into();
         conversation
-            .save_using(&tx)
+            .save(&tx)
             .await
             .inspect_err(|err| error!("Failed to update conversation after send: {err}"))?;
 
@@ -249,11 +251,11 @@ impl proton_action_queue::action::Handler for SendHandler {
                 error!("Failed to convert message from API response: {e}");
             })?;
 
-        metadata.save_using(&tx).await.inspect_err(|e| {
+        metadata.save(&tx).await.inspect_err(|e| {
             error!("Failed to update message metadata after send: {e}");
         })?;
 
-        body_metadata.save_using(&tx).await.inspect_err(|e| {
+        body_metadata.save(&tx).await.inspect_err(|e| {
             error!("Failed to update message body metadata after send: {e}");
         })?;
 

@@ -57,7 +57,7 @@ async fn paginate_conversations() {
         let last_page_0_item = page_chunks[0].last().unwrap();
         ctx.mock_get_conversations_page(
             std::iter::once(last_page_0_item.clone())
-                .chain(page_chunks[1].to_vec().into_iter())
+                .chain(page_chunks[1].iter().cloned())
                 .collect(),
             Some(last_page_0_item.id.clone().into()),
             Some(last_page_0_item.labels[0].context_time),
@@ -73,7 +73,7 @@ async fn paginate_conversations() {
         let last_page_1_item = page_chunks[1].last().unwrap();
         ctx.mock_get_conversations_page(
             std::iter::once(last_page_1_item.clone())
-                .chain(page_chunks[2].to_vec().into_iter())
+                .chain(page_chunks[2].iter().cloned())
                 .collect(),
             Some(last_page_1_item.id.clone().into()),
             Some(last_page_1_item.labels[0].context_time),
@@ -88,7 +88,7 @@ async fn paginate_conversations() {
     {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_conversations_page(
-            vec![last_page_2_item.clone().into()],
+            vec![last_page_2_item.clone()],
             Some(last_page_2_item.id.clone().into()),
             Some(last_page_2_item.labels[0].context_time),
             page_size as u64 + 1_u64,
@@ -120,15 +120,15 @@ async fn paginate_conversations() {
     .unwrap();
 
     let page1 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page1, &page_chunks[0]).await;
+    compare_conversations(&user_ctx, &page1, page_chunks[0]).await;
 
     // page 2
     let page2 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page2, &page_chunks[1]).await;
+    compare_conversations(&user_ctx, &page2, page_chunks[1]).await;
 
     // page 3
     let page3 = paginator.next_page().await.unwrap();
-    compare_conversations(&user_ctx, &page3, &page_chunks[2]).await;
+    compare_conversations(&user_ctx, &page3, page_chunks[2]).await;
 
     // page 4, no more values
     let page4 = paginator.next_page().await.unwrap();
@@ -163,7 +163,7 @@ async fn paginate_messages() {
         let last_page_0_item = page_chunks[0].last().unwrap();
         ctx.mock_get_message_metadata_page(
             std::iter::once(last_page_0_item.clone())
-                .chain(page_chunks[1].to_vec().into_iter())
+                .chain(page_chunks[1].iter().cloned())
                 .collect(),
             Some(last_page_0_item.id.clone().into()),
             None,
@@ -179,7 +179,7 @@ async fn paginate_messages() {
         let last_page_1_item = page_chunks[1].last().unwrap();
         ctx.mock_get_message_metadata_page(
             std::iter::once(last_page_1_item.clone())
-                .chain(page_chunks[2].to_vec().into_iter())
+                .chain(page_chunks[2].iter().cloned())
                 .collect(),
             Some(last_page_1_item.id.clone().into()),
             Some(last_page_1_item.time),
@@ -194,7 +194,7 @@ async fn paginate_messages() {
     {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_message_metadata_page(
-            vec![last_page_2_item.clone().into()],
+            vec![last_page_2_item.clone()],
             Some(last_page_2_item.id.clone().into()),
             Some(last_page_2_item.time),
             page_size as u64 + 1_u64,
@@ -227,15 +227,15 @@ async fn paginate_messages() {
     .unwrap();
 
     let page1 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page1, &page_chunks[0]).await;
+    compare_messages(&user_ctx, &page1, page_chunks[0]).await;
 
     // page 2
     let page2 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page2, &page_chunks[1]).await;
+    compare_messages(&user_ctx, &page2, page_chunks[1]).await;
 
     // page 3
     let page3 = paginator.next_page().await.unwrap();
-    compare_messages(&user_ctx, &page3, &page_chunks[2]).await;
+    compare_messages(&user_ctx, &page3, page_chunks[2]).await;
 
     // page 4, no more values
     let page4 = paginator.next_page().await.unwrap();
@@ -304,7 +304,6 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
             signed_key_list: Default::default(),
         }],
         conversations: (0..count)
-            .into_iter()
             .map(|i| ApiConversation {
                 id: conversation_id(i),
                 order: (i + 1).try_into().unwrap(),
@@ -337,7 +336,6 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
     };
 
     let messages = (0..count)
-        .into_iter()
         .map(|i| ApiMessageMetadata {
             id: message_id(i),
             conversation_id: conversation_id(i),
@@ -374,9 +372,8 @@ async fn paginate_conversations_for_label_with_filter() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -405,10 +402,9 @@ async fn paginate_conversations_for_label_with_filter() {
         conversation!(num_unread: 3, remote_id: Some("conv5".into())),
     ];
 
+    let tx = stash.transaction().await.unwrap();
     for mut conv in conversations {
-        conv.save_using(&tx)
-            .await
-            .expect("failed to create conversation");
+        conv.save(&tx).await.expect("failed to create conversation");
         Conversation::apply_label(mailbox_inbox.label_id(), vec![conv.local_id.unwrap()], &tx)
             .await
             .unwrap();
@@ -427,6 +423,7 @@ async fn paginate_conversations_for_label_with_filter() {
         .await
         .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
@@ -434,7 +431,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -458,7 +455,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -476,7 +473,7 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         true,
         None,
     )
@@ -501,9 +498,8 @@ async fn paginate_messages_for_label_with_filter() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -524,9 +520,10 @@ async fn paginate_messages_for_label_with_filter() {
         .await;
 
     // Set up test data
-    let address = create_address(&tx).await;
+    let address = create_address(stash).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    conversation.save_using(&tx).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     // Create 5 messages: 3 unread, 2 read
     let messages = vec![
@@ -542,11 +539,12 @@ async fn paginate_messages_for_label_with_filter() {
         msg.remote_address_id = address.remote_id.clone().unwrap();
         msg.local_conversation_id = conversation.local_id;
         msg.remote_conversation_id = conversation.remote_id.clone();
-        msg.save_using(&tx).await.expect("failed to create message");
+        msg.save(&tx).await.expect("failed to create message");
         Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
             .await
             .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
@@ -554,7 +552,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -575,7 +573,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -594,7 +592,7 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        filter.into(),
+        filter,
         PaginatorSearchOptions::default(),
         true,
         None,
@@ -616,9 +614,8 @@ async fn paginate_search() {
     let context = MailTestContext::new().await;
     let user_ctx = context.mail_user_context().await;
     let stash = user_ctx.user_stash();
-    let tx = stash.connection();
-    migrate_core_db(&stash).await.unwrap();
-    migrate_db(&stash).await.unwrap();
+    migrate_core_db(stash).await.unwrap();
+    migrate_db(stash).await.unwrap();
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -639,9 +636,10 @@ async fn paginate_search() {
         .await;
 
     // Set up test data
-    let address = create_address(&tx).await;
+    let address = create_address(stash).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    conversation.save_using(&tx).await.unwrap();
+    let tx = stash.transaction().await.unwrap();
+    conversation.save(&tx).await.unwrap();
 
     // Create 5 messages
     let messages = vec![
@@ -657,11 +655,12 @@ async fn paginate_search() {
         msg.remote_address_id = address.remote_id.clone().unwrap();
         msg.local_conversation_id = conversation.local_id;
         msg.remote_conversation_id = conversation.remote_id.clone();
-        msg.save_using(&tx).await.expect("failed to create message");
+        msg.save(&tx).await.expect("failed to create message");
         Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
             .await
             .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Test with search term "foo"
     let options = PaginatorSearchOptions {
@@ -672,7 +671,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )
@@ -689,7 +688,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )
@@ -708,7 +707,7 @@ async fn paginate_search() {
         mailbox_inbox.label_id(),
         50,
         PaginatorFilter::default(),
-        options.into(),
+        options,
         true,
         None,
     )

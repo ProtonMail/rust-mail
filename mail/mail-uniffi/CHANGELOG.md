@@ -118,18 +118,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
 
+## [0.24.0] - 2024-12-11
+
+### Changed
+
+  - `MessageAddress` type has been split into `MessageSender`, `MessageRecipient`
+     and `MessageReplyTo` types as they were incorrectly mapped.
+     - This affect the `Conversation` and `Message` types.
+  - `avatar_information_from_message_address` has been split into
+    - `avatar_information_from_message_sender`
+    - `avatar_information_from_message_recipient`
+  - `avatar_information_from_message_addresses` has been split into
+    - `avatar_information_from_message_senderes`
+    - `avatar_information_from_message_recipients`
+
+### Fix
+
+  - Marking read (or unread) already read (or unread) messages or conversations is now no-op.
+
+
+## [0.23.0] - 2024-11-28
+
+### Changed
+
+  - `MailUserSession` can now be created multiple times for a logged in session.
+  - `MailUserSession` will fail with an error if you attempt to log in if an existing session is
+    active.
+
+### Fix
+
+  - Conversations displayed as `read` with unread message in another mailbox now propose `mark as unread` action.
+
+## [0.22.2] - 2024-11-28
+
+### Fix
+
+  -  Cids with the format `<foo@bar>` no longer need angle brackets.
 
 ## [0.22.1] - 2024-11-26
 
 ### Changed
 
-- `get_embedded_attachment` now triggers errors on unknown CIDs
+  - `get_embedded_attachment` now triggers errors on unknown CIDs
 
 ## [0.22.0] - 2024-11-26
 
 ### Added
 
- - `Draft::send` to send drafts
+  - `Draft::send` to send drafts
 
 ### Fix
 

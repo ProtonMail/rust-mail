@@ -1,6 +1,6 @@
 pub use super::*;
 use crate::datatypes::attachment;
-use crate::datatypes::{Disposition, MessageAddress, MessageAddresses};
+use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::compose::DEFAULT_SUBJECT;
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
@@ -149,21 +149,22 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
         row_id: None,
-        stash: None,
     }
 }
 
 fn mail_settings_with_signature() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        ..Default::default()
+    }
 }
 
 fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
-    settings.pm_signature = PmSignature::Enabled;
-    settings
+    MailSettings {
+        signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
+        pm_signature: PmSignature::Enabled,
+        ..Default::default()
+    }
 }
 
 fn existing_message() -> Message {
@@ -175,14 +176,12 @@ fn existing_message() -> Message {
         local_address_id: local_address_id(),
         remote_address_id: remote_address_id(),
         attachments_metadata: vec![],
-        cc_list: MessageAddresses {
-            value: vec![MessageAddress {
+        cc_list: MessageRecipients {
+            value: vec![MessageRecipient {
                 address: "cc_contact_1@pm.me".to_string(),
-                bimi_selector: None,
-                display_sender_image: true,
                 is_proton: false,
-                is_simple_login: true,
                 name: "CC Contact".to_string(),
+                group: None,
             }],
         },
         bcc_list: Default::default(),
@@ -198,7 +197,7 @@ fn existing_message() -> Message {
         num_attachments: 0,
         display_order: 0,
         reply_tos: Default::default(),
-        sender: MessageAddress {
+        sender: MessageSender {
             address: "sender@void.org".to_owned(),
             bimi_selector: None,
             display_sender_image: false,
@@ -213,9 +212,7 @@ fn existing_message() -> Message {
         to_list: Default::default(),
         unread: false,
         custom_labels: vec![],
-        cached: false,
         row_id: None,
-        stash: None,
     }
 }
 
@@ -228,7 +225,6 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
         parsed_headers: Default::default(),
         attachments: vec![inline_attachment(), normal_attachment()],
         row_id: None,
-        stash: None,
     }
 }
 
@@ -277,7 +273,6 @@ fn inline_attachment() -> Attachment {
         filename: "image.jpeg".to_owned(),
         signature: None,
         size: 123,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,
@@ -286,7 +281,6 @@ fn inline_attachment() -> Attachment {
         remote_message_id: None,
         is_auto_forwardee: false,
         sender: None,
-        stash: None,
         key_packets: None,
     }
 }
@@ -305,7 +299,6 @@ fn normal_attachment() -> Attachment {
         filename: "doc.pdf".to_owned(),
         signature: None,
         size: 1024,
-        cached: false,
         content_id: None,
         transfer_encoding: None,
         image_width: None,
@@ -314,7 +307,6 @@ fn normal_attachment() -> Attachment {
         remote_message_id: None,
         is_auto_forwardee: false,
         sender: None,
-        stash: None,
         key_packets: None,
     }
 }

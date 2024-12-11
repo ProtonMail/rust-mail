@@ -21,27 +21,28 @@ use tracing_subscriber::{registry, EnvFilter};
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
 async fn new_test_connection() -> Stash {
+    use crate::db::migrations::migrate_account_db;
     drop(set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    use crate::db::migrations::migrate_account_db;
     let stash = Stash::new(None).expect("Failed to create Stash");
     migrate_account_db(&stash).await.expect("failed to migrate");
     stash
 }
 
 async fn new_test_account(stash: &Stash) -> Result<CoreAccount> {
+    let tx = stash.transaction().await?;
     let account = CoreAccount::new(
         RemoteId::from("user_id"),
         String::from("name_or_addr"),
         TfaStatus::None,
         PasswordMode::One,
     )
-    .with_stash(stash)
-    .with_save()
+    .with_save(&tx)
     .await?;
+    tx.commit().await?;
 
     Ok(account)
 }
@@ -90,12 +91,7 @@ async fn test_session_store_load() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
-
-        session.set_stash(&stash);
+        session.save(&tx).await.expect("failed to store session");
 
         let db_session = CoreSession::find_first(
             "WHERE account_id = ?",
@@ -131,10 +127,7 @@ async fn test_session_update() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
+        session.save(&tx).await.expect("failed to store session");
 
         // Back up the original session
         let original_session = session.clone();
@@ -143,8 +136,7 @@ async fn test_session_update() {
         session.access_token = EncryptedAccessToken::new(&"acc".to_owned().into(), &key).unwrap();
         session.refresh_token = EncryptedRefreshToken::new(&"acc".to_owned().into(), &key).unwrap();
         session.auth_scope = AuthScope::new(["baz", "qux"]);
-        session.save_using(&tx).await.expect("failed to update");
-        session.set_stash(&stash);
+        session.save(&tx).await.expect("failed to update");
 
         // Load the updated session from the database
         let db_session = CoreSession::find_first(
@@ -185,12 +177,7 @@ async fn test_session_delete_user_id() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
-
-        session.set_stash(&stash);
+        session.save(&tx).await.expect("failed to store session");
 
         tx.execute(
             "DELETE FROM core_sessions WHERE account_id =?",
@@ -228,12 +215,7 @@ async fn test_session_delete_session_id() {
             .await
             .expect("failed to start transaction");
 
-        session
-            .save_using(&tx)
-            .await
-            .expect("failed to store session");
-
-        session.set_stash(&stash);
+        session.save(&tx).await.expect("failed to store session");
 
         tx.execute(
             "DELETE FROM core_sessions WHERE remote_id =?",

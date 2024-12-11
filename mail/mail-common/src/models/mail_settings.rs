@@ -205,11 +205,6 @@ pub struct MailSettings {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-
-    /// The database instance that the record is associated with. This is
-    /// present for convenience.
-    #[StashField]
-    pub stash: Option<Stash>,
 }
 
 impl MailSettings {
@@ -230,10 +225,9 @@ impl MailSettings {
     ) -> Result<(), AppError> {
         let mut settings = MailSettings::from(api.get_settings().await.map(|r| r.mail_settings)?);
         debug!("Storing labels into database");
-        settings.set_stash(stash);
 
         let tx = stash.transaction().await?;
-        settings.save_using(&tx).await?;
+        settings.save(&tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -313,7 +307,6 @@ impl From<ApiMailSettings> for MailSettings {
             view_layout: value.view_layout.into(),
             view_mode: value.view_mode.into(),
             row_id: None,
-            stash: None,
         }
     }
 }

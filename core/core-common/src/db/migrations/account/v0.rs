@@ -1,4 +1,4 @@
-use stash::stash::{Interface, StashError, Tether};
+use stash::stash::{Bond, Interface, StashError};
 
 pub struct V0 {}
 
@@ -7,7 +7,7 @@ impl proton_sqlite3::Migration for V0 {
         "proton_core_db_v0"
     }
 
-    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
         create_table_core_accounts(tx).await?;
         create_table_core_sessions(tx).await?;
 
@@ -15,7 +15,7 @@ impl proton_sqlite3::Migration for V0 {
     }
 }
 
-async fn create_table_core_accounts(tx: &Tether) -> Result<(), StashError> {
+async fn create_table_core_accounts(tx: &Bond) -> Result<(), StashError> {
     tx.execute(
         r"
             CREATE TABLE core_accounts (
@@ -60,7 +60,7 @@ async fn create_table_core_accounts(tx: &Tether) -> Result<(), StashError> {
     Ok(())
 }
 
-async fn create_table_core_sessions(tx: &Tether) -> Result<(), StashError> {
+async fn create_table_core_sessions(tx: &Bond) -> Result<(), StashError> {
     tx.execute(
         r"
             CREATE TABLE core_sessions (

@@ -200,10 +200,12 @@ impl Mailbox {
                     label.initialized_msg = true;
                 }
             }
-            label.save().await.map_err(|e| {
+            let tx = ctx.user_stash().transaction().await?;
+            label.save(&tx).await.map_err(|e| {
                 error!("Failed to mark label as initialized: {e}");
                 MailContextError::Stash(e)
             })?;
+            tx.commit().await?;
 
             debug!("Syncing finished");
             Ok(())

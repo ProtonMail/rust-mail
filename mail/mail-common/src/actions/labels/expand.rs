@@ -6,7 +6,7 @@ use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{Stash, Tether};
+use stash::stash::{Bond, Stash};
 use tracing::debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -62,7 +62,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let mut label = Label::load(action.local_id, tx)
             .await?
@@ -89,7 +89,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         label.expanded = action.expand;
 
-        label.save_using(tx).await?;
+        label.save(tx).await?;
 
         Ok(())
     }
@@ -98,7 +98,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        tx: &Tether,
+        tx: &Bond,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let Some(original_state) = action
             .original_state
@@ -113,7 +113,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         if let Some(remote_id) = action.remote_id.clone() {
             RollbackItem::new(remote_id.into(), RollbackItemType::Label)
-                .save_using(tx)
+                .save(tx)
                 .await?;
         }
 

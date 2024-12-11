@@ -25,7 +25,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash};
+use stash::stash::{Bond, Stash};
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
@@ -35,7 +35,7 @@ use tracing::error;
 
 pub struct MailUserContext {
     this: Weak<Self>,
-    mail_context: MailContext,
+    mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
     event_loop: EventLoop,
     action_queue: Queue,
@@ -43,13 +43,14 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    pub async fn new(
-        mail_context: MailContext,
+    /// Create a new user context.
+    pub(crate) async fn new(
+        mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
-        let cache = Cache::new(cache_path, mail_context.mail_cache_size, &stash).await?;
+        let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
         let this = Arc::new_cyclic(|this| Self {
@@ -216,26 +217,22 @@ impl MailUserContext {
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] or [`proton_crypto_inbox::keys::EncryptionPreferencesError`] if the operation fails.
     ///
-    pub async fn recipient_send_preferences<Provider, DB>(
+    pub async fn recipient_send_preferences<Provider>(
         &self,
         pgp_provider: &Provider,
-        db_interface: &DB,
+        bond: &Bond,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
     ) -> MailContextResult<SendPreferences<Provider::PublicKey>>
     where
         Provider: PGPProviderSync,
-        DB: Into<AgnosticInterface> + Interface,
     {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email, db_interface)
-            .await
-            .inspect_err(|err| {
-                error!("send preferences: failed to search address by email: {err}")
-            })?
-        {
+        if let Some(address) = Address::by_email(email, bond).await.inspect_err(|err| {
+            error!("send preferences: failed to search address by email: {err}")
+        })? {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                 MailContextError::App(AppError::RemoteIdNotFound(
                     "address".to_owned(),
@@ -260,7 +257,7 @@ impl MailUserContext {
                 .public_address_keys(pgp_provider, email, false),
             self.user_context.public_address_keys_from_contacts(
                 pgp_provider,
-                db_interface,
+                bond,
                 &user_keys,
                 email
             )

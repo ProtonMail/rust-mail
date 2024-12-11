@@ -1,16 +1,20 @@
+use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
-    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageAddresses,
+    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageRecipients,
+    MessageSenders, MobileActions,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
 use indoc::formatdoc;
+use itertools::Itertools;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use tracing::warn;
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -18,6 +22,7 @@ use stash::stash::{AgnosticInterface, Interface, StashError};
 /// The data contained in the [`ConversationLabel`] is superimposed over the
 /// data in the [`Conversation`] to produce the correct information that needs
 /// to be displayed to the client.
+#[derive(Debug)]
 pub struct ContextualConversation {
     /// Local id of the conversation.
     pub local_id: LocalId,
@@ -68,10 +73,10 @@ pub struct ContextualConversation {
     pub total_unread: u64,
 
     /// Address of the recipients of the messages contained within.
-    pub recipients: MessageAddresses,
+    pub recipients: MessageRecipients,
 
     /// Address of all the senders in the messages.
-    pub senders: MessageAddresses,
+    pub senders: MessageSenders,
 
     /// Total size of all the messages.
     pub size: u64,
@@ -184,27 +189,25 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(interface,api))]
-    pub async fn conversation_and_messages<A, PM>(
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
+    pub async fn conversation_and_messages<PM>(
         local_conversation_id: LocalId,
         local_label_id: LocalId,
-        interface: &A,
+        stash: &Stash,
         api: &PM,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError>
     where
         PM: ProtonMail,
-        A: Into<AgnosticInterface> + Interface,
     {
-        let label = Label::find_by_id(local_label_id, interface)
+        let label = Label::find_by_id(local_label_id, stash)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        Conversation::sync_conversation_messages(local_conversation_id, interface, api).await?;
-        let Some(conversation) =
-            Self::load(local_conversation_id, local_label_id, interface).await?
+        Conversation::sync_conversation_messages(local_conversation_id, stash, api).await?;
+        let Some(conversation) = Self::load(local_conversation_id, local_label_id, stash).await?
         else {
             return Ok(None);
         };
-        let messages = Message::in_conversation(local_conversation_id, interface, None).await?;
+        let messages = Message::in_conversation(local_conversation_id, stash, None).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
@@ -481,6 +484,126 @@ impl ContextualConversation {
                 }
             }
         }
+    }
+
+    /// Get the available actions from bottom bar for given conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `current_label_id`  - Id of the current mailbox.
+    /// * `conversations_ids` - List of the conversations IDs.
+    /// * `interface`         - The database interface.
+    ///
+    pub async fn all_available_bottom_bar_actions_for_conversations<A>(
+        current_label_id: LocalId,
+        conversation_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<AllBottomBarMessageActions, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let inbox = MovableSystemFolderAction::inbox(interface).await?;
+        let archive = MovableSystemFolderAction::archive(interface).await?;
+        let trash = MovableSystemFolderAction::trash(interface).await?;
+        let spam = MovableSystemFolderAction::spam(interface).await?;
+
+        let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
+        let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
+        let conversations = Conversation::find_by_ids(conversation_ids.to_vec(), interface).await?;
+
+        let conversations = conversations
+            .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, current_label_id))
+            .collect_vec();
+
+        let visible_bottom_bar_actions = ContextualConversation::visible_bottom_bar_actions(
+            &current_label,
+            &conversations,
+            &bottom_bar_actions,
+            &inbox,
+            &archive,
+            &trash,
+            &spam,
+        )?;
+        let hidden_bottom_bar_actions = ContextualConversation::hidden_bottom_bar_actions(
+            current_label,
+            &conversations,
+            &visible_bottom_bar_actions,
+            &inbox,
+            &archive,
+            &trash,
+            &spam,
+        );
+
+        Ok(AllBottomBarMessageActions {
+            hidden_bottom_bar_actions,
+            visible_bottom_bar_actions,
+        })
+    }
+
+    /// Get actions to display in bottom_bar when selecting messages
+    pub(crate) fn visible_bottom_bar_actions(
+        current_label: &LabelId,
+        conversations: &[Self],
+        bottom_bar_actions: &[MobileActions],
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
+    ) -> Result<Vec<BottomBarActions>, AppError> {
+        let any_unread = conversations.iter().any(|c| c.num_unread > 0);
+        let all_starred = conversations.iter().all(|c| c.is_starred);
+
+        let mut result: Vec<_> = bottom_bar_actions
+            .iter()
+            .filter_map(|a| {
+                BottomBarActions::from_mobile_actions(
+                    a,
+                    any_unread,
+                    all_starred,
+                    current_label,
+                    inbox,
+                    archive,
+                    trash,
+                    spam,
+                )
+            })
+            .collect();
+        if result.len() > 5 {
+            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
+            result.truncate(5);
+        }
+        result.push(BottomBarActions::More);
+        Ok(result)
+    }
+
+    /// Get actions not displayed in bottom_bar when selecting messages
+    pub(crate) fn hidden_bottom_bar_actions(
+        current_label: LabelId,
+        conversations: &[Self],
+        visible_actions: &[BottomBarActions],
+        inbox: &MovableSystemFolderAction,
+        archive: &MovableSystemFolderAction,
+        trash: &MovableSystemFolderAction,
+        spam: &MovableSystemFolderAction,
+    ) -> Vec<BottomBarActions> {
+        let any_unread = conversations.iter().any(|m| m.num_unread > 0);
+        let any_read = conversations.iter().any(|m| m.num_unread < m.num_messages);
+        let any_starred = conversations.iter().any(|m| m.is_starred);
+        let any_unstarred = conversations.iter().any(|m| !m.is_starred);
+
+        BottomBarActions::hidden_bottom_bar_actions(
+            current_label,
+            any_unread,
+            any_read,
+            any_unstarred,
+            any_starred,
+            visible_actions,
+            inbox,
+            archive,
+            trash,
+            spam,
+        )
     }
 }
 
