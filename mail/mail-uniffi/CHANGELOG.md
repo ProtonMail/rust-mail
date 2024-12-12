@@ -122,6 +122,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+  - Log back trace on panic.
   - `MessageAddress` type has been split into `MessageSender`, `MessageRecipient`
      and `MessageReplyTo` types as they were incorrectly mapped.
      - This affect the `Conversation` and `Message` types.

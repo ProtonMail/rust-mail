@@ -18,6 +18,7 @@ use stash::stash::Stash;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
+use tracing_appender::non_blocking::WorkerGuard;
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -28,6 +29,7 @@ use tracing::debug;
 #[derive(uniffi::Object)]
 pub struct MailSession {
     ctx: Arc<MailContext>,
+    _log_guard: WorkerGuard,
 }
 
 /// Configuration parameters for the [`MailSession`]
@@ -78,7 +80,7 @@ pub fn create_mail_session(
             std::fs::create_dir_all(&log_path)?;
             log_path.push("proton-mail-uniffi.log");
 
-            init_log(&log_path, params.log_debug)?;
+            let log_guard = init_log(&log_path, params.log_debug)?;
 
             let session_path = PathBuf::from(params.session_dir);
             let user_path = PathBuf::from(params.user_dir);
@@ -121,7 +123,11 @@ pub fn create_mail_session(
                 }),
             )
             .await?;
-            Result::<_, RealProtonMailError>::Ok(Arc::new(MailSession { ctx: mail_ctx }))
+
+            Result::<_, RealProtonMailError>::Ok(Arc::new(MailSession {
+                ctx: mail_ctx,
+                _log_guard: log_guard,
+            }))
         })
         .map_err(UserSessionError::from)
 }
