@@ -1,4 +1,5 @@
 pub mod context_init;
+pub mod env;
 pub mod login;
 pub mod mailbox;
 pub mod session_select;
@@ -9,6 +10,7 @@ use crate::app::{Command, Model};
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
+use env::Env;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::Flex;
@@ -76,6 +78,20 @@ pub trait Popup {
     fn view(&mut self, frame: &mut Frame, area: Rect);
 }
 
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
+pub struct AppConfig {
+    pub env: Env,
+}
+
+impl AppConfig {
+    pub fn dir(&self) -> &'static str {
+        match self.env {
+            Env::Prod => "",
+            Env::Dev => "dev",
+        }
+    }
+}
+
 pub struct AppModel {
     context: Arc<MailContext>,
     state: AppState,
@@ -86,14 +102,16 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(runtime: &Runtime) -> Result<Self, Box<dyn Error>> {
+    pub fn new(runtime: &Runtime, app_config: &AppConfig) -> Result<Self, Box<dyn Error>> {
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
-            .join(APP_ID);
+            .join(APP_ID)
+            .join(app_config.dir());
 
         let data_dir = dirs::data_local_dir()
             .ok_or(anyhow!("Failed to get config dir"))?
-            .join(APP_ID);
+            .join(APP_ID)
+            .join(app_config.dir());
 
         let user_db_path = cache_dir.join("users");
         let mail_cache_dir = cache_dir.join("mail");
@@ -119,8 +137,7 @@ impl AppModel {
                 mail_cache_dir,
                 100 * 1024 * 1024,
                 Arc::new(keychain),
-                #[allow(clippy::default_trait_access)]
-                Default::default(),
+                app_config.env.api_config(),
                 None,
             )
             .await?;
