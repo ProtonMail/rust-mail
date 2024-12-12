@@ -236,7 +236,6 @@ async fn start_server(stash: &Stash) -> (MockServer, Proton) {
         let items = RollbackItem::find_by_kind(kind, stash).await.unwrap();
 
         for item in items {
-            dbg!(&item);
             match item.item_type {
                 RollbackItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
                 RollbackItemType::Message => mock_get_message(&mock_server, &item, stash).await,
