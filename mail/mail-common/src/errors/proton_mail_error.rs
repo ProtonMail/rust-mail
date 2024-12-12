@@ -50,6 +50,10 @@ impl From<MailErrorReason> for ProtonMailError {
 
 impl From<ApiServiceError> for ProtonMailError {
     fn from(error: ApiServiceError) -> Self {
+        if error.is_network_failure() {
+            return Self::Network;
+        }
+
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
             Err(unexpected) => Self::from(unexpected),
@@ -101,7 +105,7 @@ impl From<AppError> for ProtonMailError {
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
-            AppError::RemoteLabelDoesNotExist(_label_id) => Self::Network,
+            AppError::RemoteLabelDoesNotExist(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::Cache(cache_error) => Self::from(cache_error),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
@@ -119,7 +123,9 @@ impl From<AppError> for ProtonMailError {
             AppError::ConversationDoesNotHaveLabel(_, _) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
-            AppError::ConversationHasNoRemoteId(_local_id) => Self::Network,
+            AppError::ConversationHasNoRemoteId(_local_id) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
             AppError::EmptyListOfConversations => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::EmptyListOfMessages => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
