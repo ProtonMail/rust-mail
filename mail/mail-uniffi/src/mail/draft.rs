@@ -1,11 +1,13 @@
 use crate::core::datatypes::Id;
+use crate::errors::{DraftError, VoidDraftResult};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use parking_lot::RwLock;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
-use proton_mail_common::{MailContextError, MailUserContext};
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailUserContext;
 use std::sync::Arc;
 
 /// Draft creation mode.
@@ -29,74 +31,64 @@ pub struct Draft {
     ctx: Arc<MailUserContext>,
 }
 
+export_typed_result!(NewDraftResult, Arc<Draft>, DraftError);
+
+/// Create a new draft with the given `create_mode`.
+///
+/// # Errors
+///
+/// Return error if action failed.
+///
+#[uniffi::export]
+pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) -> NewDraftResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        let draft = match create_mode {
+            DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
+            DraftCreateMode::Reply(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
+            }
+            DraftCreateMode::ReplyAll(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
+            }
+            DraftCreateMode::Forward(id) => {
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
+            }
+        }
+        .map_err(RealProtonMailError::from)?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Draft {
+            draft: RwLock::new(draft),
+            ctx,
+        }))
+    })
+    .await
+    .map_err(DraftError::from)
+    .into()
+}
+
+/// Open an existing draft with `message_id`.
+///
+/// # Errors
+///
+/// Returns error if the query failed or the message is not a draft.
+///
+#[uniffi::export]
+pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Draft {
+            draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
+            ctx,
+        }))
+    })
+    .await
+    .map_err(DraftError::from)
+    .into()
+}
+
 #[uniffi::export]
 impl Draft {
-    /// Create a new draft with the given `create_mode`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if action failed.
-    #[uniffi::constructor]
-    pub async fn new(
-        session: &MailUserSession,
-        create_mode: DraftCreateMode,
-    ) -> Result<Self, MailSessionError> {
-        let ctx = session.ctx();
-        uniffi_async(async move {
-            let draft = match create_mode {
-                DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
-                DraftCreateMode::Reply(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
-                }
-                DraftCreateMode::ReplyAll(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
-                }
-                DraftCreateMode::Forward(id) => {
-                    RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
-                }
-            }
-            .map_err(MailContextError::from)?;
-
-            Ok(Self {
-                draft: RwLock::new(draft),
-                ctx,
-            })
-        })
-        .await
-    }
-
-    /// Create a new draft with the given `create_mode`.
-    ///
-    /// # Errors
-    ///
-    /// Return error if action failed.
-    #[uniffi::constructor]
-    pub async fn create(
-        session: &MailUserSession,
-        create_mode: DraftCreateMode,
-    ) -> Result<Self, MailSessionError> {
-        // For some reason the kotlin bindings do not generate the default
-        // async constructor, so we add this alternative named function.
-        Self::new(session, create_mode).await
-    }
-
-    #[uniffi::constructor]
-    /// Open an existing draft with `message_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed or the message is not a draft.
-    pub async fn open(session: &MailUserSession, message_id: Id) -> Result<Self, MailSessionError> {
-        let ctx = session.ctx();
-        uniffi_async(async move {
-            Ok(Self {
-                draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
-                ctx,
-            })
-        })
-        .await
-    }
-
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
         self.draft.read().sender.clone()
@@ -167,7 +159,10 @@ impl Draft {
     pub fn mime_type(&self) -> MimeType {
         self.draft.read().mime_type.into()
     }
+}
 
+#[uniffi::export]
+impl Draft {
     /// Save the current draft.
     ///
     /// Schedules an action to create or save the current draft.
@@ -175,7 +170,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(&self) -> Result<(), MailSessionError> {
+    pub async fn save(&self) -> VoidDraftResult {
         let action = {
             let draft = self.draft.read();
             draft.to_save_action()
@@ -185,10 +180,12 @@ impl Draft {
             ctx.queue()
                 .queue_action(action)
                 .await
-                .map_err(MailContextError::from)?;
-            Ok(())
+                .map_err(RealProtonMailError::from)?;
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
+        .map_err(DraftError::from)
+        .into()
     }
 
     /// Sends the draft.
@@ -198,18 +195,22 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn send(&self) -> Result<(), MailSessionError> {
+    pub async fn send(&self) -> VoidDraftResult {
         let (save_action, send_action) = {
             let draft = self.draft.read();
-            (draft.to_save_action(), draft.to_send_action()?)
+            (draft.to_save_action(), draft.to_send_action())
         };
         let ctx = Arc::clone(&self.ctx);
+
         uniffi_async(async move {
-            RealDraft::send(ctx.queue(), save_action, send_action)
+            RealDraft::send(ctx.queue(), save_action, send_action?)
                 .await
-                .map_err(MailContextError::from)?;
-            Ok(())
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
+        .map_err(DraftError::from)
+        .into()
     }
 }

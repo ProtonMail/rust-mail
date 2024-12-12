@@ -5,7 +5,7 @@ pub mod datatypes;
 mod draft;
 mod logging;
 mod login;
-mod mailbox;
+pub mod mailbox;
 pub mod messages;
 mod session;
 mod settings;

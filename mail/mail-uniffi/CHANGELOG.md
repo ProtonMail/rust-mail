@@ -8,6 +8,116 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Failable methods & functions no longer throw errors but rather encapsulate in distinct Result type for each method.
+    - Eg. `conversation -> Result<Conversation, MailboxError>` will now return `conversation -> ConversationResult` where
+      ```rust
+        enum ConversationResult {
+          Ok(Conversation),
+          Error(ProtonMailError)
+        }
+      ```
+  - `ProtonMailError` struct which is the new error interface returned by all failables. It contains
+    - `MailErrorKind` which describe source of the error such as eg. `UserActionError`
+    - `MailErrorDetails` which categorize error into eg. `Network` errors or specific `Reason` of that error occurrence.
+
+### Changed
+
+  - `UserLoginFlowVoidResult` was replaced with `VoidProtonMailResult`
+  - `LoginFlow::user_id()` method now return `LoginFlowUserIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::session_id()` method now return `LoginFlowSessionIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::to_user_context()` method now return `LoginFlowToUserContextResult` instead of `UserLoginFlowArcMailUserSessionResult` which differ only by a name.
+  - `MailSession::new_login_flow()` method now return `MailSessionNewLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `MailSession::resume_login_flow()` method now return `MailSessionResumeLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `apply_label_to_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `delete_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `available_actions_for_conversations` function now returns `AvailableActionsForConversationsResult` instead of `Result<ConversationAvailableActions, MailboxError>`.
+  - `available_label_as_actions_for_conversations` function now returns `AvailableLabelAsActionsForConversationsResult` instead of `MailboxResult<Vec<LabelAsAction>>`.
+  - `available_move_to_actions_for_conversations` function now returns `AvailableMoveToActionsForConversationsResult` instead of `MailboxResult<Vec<MoveAction>>`.
+  - `all_available_bottom_bar_actions_for_conversations` function now returns `AllAvailableBottomBarActionsForConversationsResult` instead of `MailboxResult<AllBottomBarMessageActions>`.
+  - `conversation` function now returns `ConversationResult` instead of `Result<Option<ConversationAndMessages>, MailboxError>`.
+  - `conversations_for_label` function now returns `ConversationsForLabelResult` instead of `Result<Vec<Conversation>, MailboxError>`.
+  - `load_conversation` function now returns `LoadConversationResult` instead of `Result<Option<Conversation>, MailboxError>`.
+  - `mark_conversations_as_read` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `mark_conversations_as_unread` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `move_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `paginate_conversations_for_label` function now returns `PaginateConversationsForLabelResult` instead of `Result<ConversationPaginator, MailboxError>`.
+  - `remove_label_from_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `search_for_conversations` function now returns `SearchForConversationsResult` instead of `Result<Vec<Conversation>, MailSessionError>`.
+  - `star_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `unstar_conversations` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `watch_conversation` function now returns `WatchConversationResult` instead of `Result<Option<WatchedConversation>, MailboxError>`.
+  - `watch_conversations_for_label` function now returns `WatchConversationsForLabelResult` instead of `Result<WatchedConversations, MailboxError>`.
+  - `label_conversations_as` function now returns `LabelConversationsAsResult` instead of `Result<bool, MailboxError>`.
+  - `get_attachment` function now returns `GetAttachmentResult` instead of `Result<DecryptedAttachment, MailboxError>`.
+  - `body` method of `DecryptedMessage` now returns `BodyResult` instead of `Result<BodyOutput, MailboxError>`.
+  - `message` function now returns `MessageResult` instead of `Result<Option<Message>, MailboxError>`.
+  - `watch_message` function now returns `WatchMessageResult` instead of `Result<Option<WatchedMessage>, MailboxError>`.
+  - `messages_for_conversation` function now returns `MessagesForConversationResult` instead of `Result<Vec<Message>, MailboxError>`.
+  - `messages_for_label` function now returns `MessagesForLabelResult` instead of `Result<Vec<Message>, MailboxError>`.
+  - `paginate_messages_for_label` function now returns `PaginateMessagesForLabelResult` instead of `Result<MessagePaginator, MailboxError>`.
+  - `paginate_search` function now returns `PaginateSearchResult` instead of `Result<MessagePaginator, MailboxError>`.
+  - `search_for_messages` function now returns `SearchForMessagesResult` instead of `Result<Vec<Message>, MailSessionError>`.
+  - `available_actions_for_messages` function now returns `AvailableActionsForMessagesResult` instead of `MailboxResult<MessageAvailableActions>`.
+  - `available_label_as_actions_for_messages` function now returns `AvailableLabelAsActionsForMessagesResult` instead of `MailboxResult<Vec<LabelAsAction>>`.
+  - `available_move_to_actions_for_messages` function now returns `AvailableMoveToActionsForMessagesResult` instead of `MailboxResult<Vec<MoveAction>>`.
+  - `all_available_bottom_bar_actions_for_messages` function now returns `AllAvailableBottomBarActionsForMessagesResult` instead of `MailboxResult<AllBottomBarMessageActions>`.
+  - `get_message_body` function now returns `GetMessageBodyResult` instead of `MailSessionResult<DecryptedMessage>`.
+  - `watch_messages_for_label` function now returns `WatchMessagesForLabelResult` instead of `Result<WatchedMessages, MailboxError>`.
+  - `apply_label_to_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `star_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `unstar_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `remove_label_from_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `mark_messages_read` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `mark_messages_unread` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `delete_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `move_messages` function now returns `VoidProtonMailResult` instead of `Result<(), MailSessionError>`.
+  - `label_messages_as` function now returns `LabelMessagesAsResult` instead of `Result<bool, MailSessionError>`.
+  - `Sidebar::system_labels` method now returns `SidebarSystemLabelsResult` instead of `SidebarResult<Vec<SidebarSystemLabel>>`.
+  - `Sidebar::custom_folders` method now returns `SidebarCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::all_custom_folders` method now returns `SidebarAllCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::custom_labels` method now returns `SidebarCustomLabelsResult` instead of `SidebarResult<Vec<SidebarCustomLabel>>`.
+  - `Sidebar::collapse_folder` method now returns `VoidProtonMailResult` instead of `SidebarResult<()>`.
+  - `Sidebar::expand_folder` method now returns `VoidProtonMailResult` instead of `SidebarResult<()>`.
+  - `Mailbox::new()` method is now a function `new_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::inbox()` method is now a function `new_inbox_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::all_mail()` method is now a function `new_all_mail_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::with_label_id()` method is now a function `with_label_id_mailbox` and returns `NewMailboxResult` instead of `MailboxResult<Arc<Self>>`.
+  - `Mailbox::unread_count()` method now returns `MailboxUnreadCountResult` instead of `MailboxResult<u64>`.
+  - `Mailbox::watch_unread_count()` method now returns `MailboxWatchUnreadCountResult` instead of `MailboxResult<Arc<WatchHandle>>`.
+  - `MailSession::create()` method is now a function `create_mail_session` and returns `CreateMailSessionResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `MailSession::user_context_from_session()` method now returns `MailSessionUserContextFromSessionResult` instead of `MailSessionResult<Arc<MailUserSession>>`.
+  - `MailSession::get_accounts()` method now returns `MailSessionGetAccountsResult` instead of `MailSessionResult<Vec<Arc<StoredAccount>>>`.
+  - `MailSession::watch_accounts()` method now returns `MailSessionWatchAccountsResult` instead of `MailSessionResult<WatchedAccounts>`.
+  - `MailSession::get_account()` method now returns `MailSessionGetAccountResult` instead of `MailSessionResult<Option<Arc<StoredAccount>>>`.
+  - `MailSession::get_sessions()` method now returns `MailSessionGetSessionsResult` instead of `MailSessionResult<Vec<Arc<StoredSession>>>`.
+  - `MailSession::watch_sessions()` method now returns `MailSessionWatchSessionsResult` instead of `MailSessionResult<WatchedSessions>`.
+  - `MailSession::get_session()` method now returns `MailSessionGetSessionResult` instead of `MailSessionResult<Option<Arc<StoredSession>>>`.
+  - `MailSession::get_account_state()` method now returns `MailSessionGetAccountStateResult` instead of `MailSessionResult<Option<StoredAccountState>>`.
+  - `MailSession::get_session_state()` method now returns `MailSessionGetSessionStateResult` instead of `MailSessionResult<Option<StoredSessionState>>`.
+  - `MailSession::get_primary_account()` method now returns `MailSessionGetPrimaryAccountResult` instead of `MailSessionResult<Option<Arc<StoredAccount>>>`.
+  - `MailSession::set_primary_account()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailSession::logout_account()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailSession::delete_account()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::logout()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::fork()` method now returns `MailUserSessionForkResult` instead of `MailSessionResult<String>`.
+  - `MailUserSession::user()` method now returns `MailUserSessionUserResult` instead of `MailSessionResult<User>`.
+  - `MailUserSession::initialize()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::movable_folders()` method now returns `MailUserSessionMovableFoldersResult` instead of `MailSessionResult<Vec<SidebarCustomFolder>>`.
+  - `MailUserSession::applicable_labels()` method now returns `MailUserSessionApplicableLabelsResult` instead of `MailSessionResult<Vec<SidebarCustomLabel>>`.
+  - `MailUserSession::get_sender_image()` method now returns `MailUserSessionGetSenderImageResult` instead of `MailSessionResult<Option<String>>`.
+  - `MailUserSession::execute_pending_action()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `MailUserSession::execute_pending_actions()` method now returns `VoidProtonMailResult` instead of `MailSessionResult<()>`.
+  - `watch_mail_settings()` function now returns `WatchMailSettingsResult` instead of `MailSessionResult<SettingsWatcher>`.
+  - `Draft::new()` method is now a function `new_draft` and returns `NewDraftResult` instead of `MailSessionResult<Arc<Self>>`.
+  - `Draft::open()` method is now a function `open_draft` and returns `NewDraftResult` instead of `MailSessionResult<Arc<Self>>`.
+
+
+### Removed
+
+  - Removed `MailSessionError` and `MailboxError` in favor of `UserSessionError` & `UserActionError`.
+
 ## [0.24.0] - 2024-12-11
 
 ### Changed

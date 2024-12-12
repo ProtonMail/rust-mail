@@ -3,7 +3,7 @@ use clap::Parser;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::Config;
 use proton_api_core::session::Session;
-use proton_mail_common::errors::login_flow::UserLoginFlowError;
+use proton_mail_common::errors::ProtonMailError;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -28,7 +28,7 @@ async fn main() {
         }
         Err(error) => {
             println!("Inner error: {error:?}");
-            let error = UserLoginFlowError::from(error);
+            let error = ProtonMailError::from(error);
             println!("User error: {error:?}");
         }
     }

@@ -4,11 +4,9 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::{
-    core::datatypes::User,
-    mail::{MailSessionError, MailSessionResult},
-    uniffi_async,
-};
+use crate::errors::{UserSessionError, VoidSessionResult};
+use crate::{core::datatypes::User, uniffi_async};
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
 use std::sync::Arc;
@@ -55,15 +53,21 @@ impl MailUserSession {
     }
 
     /// Log out a session.
-    pub async fn logout(&self) -> MailSessionResult<()> {
+    pub async fn logout(&self) -> VoidSessionResult {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.logout().await?;
-            Ok(())
+
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
+        .map_err(UserSessionError::from)
+        .into()
     }
+}
 
+#[proton_uniffi_macros::export_result]
+impl MailUserSession {
     /// Fork the current session.
     ///
     /// This call has to be made from a parent session, and forks the current
@@ -78,15 +82,16 @@ impl MailUserSession {
     /// Any of the [`MailSessionError::Http`] possibilities could be returned if
     /// there is a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> MailSessionResult<String> {
+    pub async fn fork(&self) -> Result<String, UserSessionError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.session()
                 .fork_with_version("web-account-lite".to_owned())
                 .await
-                .map_err(MailSessionError::from)
+                .map_err(RealProtonMailError::from)
         })
         .await
+        .map_err(UserSessionError::from)
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
@@ -94,13 +99,14 @@ impl MailUserSession {
     /// # Errors
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
-    pub async fn user(&self) -> MailSessionResult<User> {
+    pub async fn user(&self) -> Result<User, UserSessionError> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let user = ctx.user().await?;
-            Ok(user.into())
+            Result::<_, RealProtonMailError>::Ok(user.into())
         })
         .await
+        .map_err(UserSessionError::from)
     }
 }
 
