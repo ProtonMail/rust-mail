@@ -147,7 +147,7 @@ impl Composer {
         ])
     }
 
-    fn create_save_action(&mut self) -> Result<Save, recipients::Error> {
+    fn create_save_action(&mut self) -> Result<Save, recipients::RecipientError> {
         // We are TUI, what else can we do?
         self.draft.mime_type = MimeType::TextPlain;
         self.draft.subject = self.subject_input_state.value().to_owned();
@@ -437,10 +437,12 @@ enum SelectedInput {
     Body,
 }
 
-fn recipients_value_to_list(recipients: &str) -> Result<recipients::List, recipients::Error> {
-    let mut list = recipients::List::default();
+fn recipients_value_to_list(
+    recipients: &str,
+) -> Result<recipients::RecipientList, recipients::RecipientError> {
+    let mut list = recipients::RecipientList::default();
     for addr in recipients.split(',') {
-        list.add_single(recipients::Entry {
+        list.add_single(recipients::RecipientEntry {
             email: addr.to_owned(),
             display_name: None,
         })?;
@@ -448,7 +450,7 @@ fn recipients_value_to_list(recipients: &str) -> Result<recipients::List, recipi
     Ok(list)
 }
 
-fn recipient_list_to_display_value(list: &recipients::List) -> String {
+fn recipient_list_to_display_value(list: &recipients::RecipientList) -> String {
     list.to_message_recipients()
         .into_iter()
         .map(|v| v.address)

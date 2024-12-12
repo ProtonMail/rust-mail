@@ -22,7 +22,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
-use proton_mail_common::draft::recipients::{Entry, List};
+use proton_mail_common::draft::recipients::{RecipientEntry, RecipientList};
 use proton_mail_common::draft::{Draft, Error, ReplyMode};
 use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
 use proton_mail_common::MailContextError;
@@ -762,9 +762,9 @@ fn gen_normal_attachment() -> MessageAttachment {
     }
 }
 
-fn new_recipient_list_with_single_address(email: String) -> List {
-    let mut list = List::new();
-    list.add_single(Entry {
+fn new_recipient_list_with_single_address(email: String) -> RecipientList {
+    let mut list = RecipientList::new();
+    list.add_single(RecipientEntry {
         email,
         display_name: None,
     })

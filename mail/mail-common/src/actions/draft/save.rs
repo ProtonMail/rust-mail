@@ -5,7 +5,7 @@ use crate::datatypes::{
     MessageSenders, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
-use crate::draft::recipients::{Recipient, Single, ValidationState};
+use crate::draft::recipients::{Recipient, SingleRecipient, ValidationState};
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{
     Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
@@ -594,7 +594,10 @@ fn to_message_recipients<'a>(
     MessageRecipients { value: addresses }
 }
 
-fn message_recipient_from_recipient(recipient: &Single, group: Option<String>) -> MessageRecipient {
+fn message_recipient_from_recipient(
+    recipient: &SingleRecipient,
+    group: Option<String>,
+) -> MessageRecipient {
     MessageRecipient {
         address: recipient.email.clone(),
         is_proton: match recipient.state {

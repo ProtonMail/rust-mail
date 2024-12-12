@@ -7,7 +7,7 @@ use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
     prepare_html_reply, prepare_plain_text_reply,
 };
-use crate::draft::recipients::{ContactGroupResolver, List};
+use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
@@ -157,11 +157,11 @@ pub struct Draft {
     /// Sender email address
     pub sender: String,
     /// To Recipients addresses
-    pub to_list: List,
+    pub to_list: RecipientList,
     /// CC Recipients addresses
-    pub cc_list: List,
+    pub cc_list: RecipientList,
     /// BCC recipients addresses
-    pub bcc_list: List,
+    pub bcc_list: RecipientList,
     /// Address used to send the message
     pub address_id: RemoteId,
     /// Draft subject
@@ -230,9 +230,9 @@ impl Draft {
         Ok(Self {
             metadata_id,
             sender: message.sender.address,
-            to_list: List::from_message_recipients(context, message.to_list.value).await,
-            cc_list: List::from_message_recipients(context, message.cc_list.value).await,
-            bcc_list: List::from_message_recipients(context, message.bcc_list.value).await,
+            to_list: RecipientList::from_message_recipients(context, message.to_list.value).await,
+            cc_list: RecipientList::from_message_recipients(context, message.cc_list.value).await,
+            bcc_list: RecipientList::from_message_recipients(context, message.bcc_list.value).await,
             address_id: message.remote_address_id,
             subject: message.subject,
             body: body.body,
@@ -289,9 +289,9 @@ impl Draft {
         Self {
             metadata_id,
             sender: address.email.clone(),
-            to_list: List::new(),
-            cc_list: List::new(),
-            bcc_list: List::new(),
+            to_list: RecipientList::new(),
+            cc_list: RecipientList::new(),
+            bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
             subject: compose::DEFAULT_SUBJECT.to_owned(),
             body,
@@ -439,9 +439,9 @@ impl Draft {
         let mut draft = Self {
             metadata_id,
             sender: address.email.clone(),
-            to_list: List::new(),
-            cc_list: List::new(),
-            bcc_list: List::new(),
+            to_list: RecipientList::new(),
+            cc_list: RecipientList::new(),
+            bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             body,

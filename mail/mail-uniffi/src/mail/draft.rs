@@ -8,9 +8,8 @@ use proton_action_queue::queue::ActionError;
 use proton_mail_common::actions::draft;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::recipients::{
-    Entry as RecipientEntry, Error, Group as GroupRecipient, List as RecipientList,
-    OnBackgroundValidationComplete, Recipient as RealRecipient, Single as SingleRecipient,
-    ValidatingList as ValidatingRecipientList, ValidationState,
+    GroupRecipient, OnBackgroundValidationComplete, Recipient as RealRecipient, RecipientEntry,
+    RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList, ValidationState,
 };
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
 use proton_mail_common::{MailContextError, MailUserContext};
@@ -259,7 +258,7 @@ impl ComposerRecipientList {
                     }
                 }
                 Err(e) => match e {
-                    Error::DuplicateAddress(_) => AddSingleRecipientError::Duplicate,
+                    RecipientError::DuplicateAddress(_) => AddSingleRecipientError::Duplicate,
                 },
             }
         })

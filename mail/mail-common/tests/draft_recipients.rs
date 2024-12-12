@@ -3,7 +3,8 @@ use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::draft::recipients::{
-    ChannelBackgroundValidationComplete, Entry, Recipient, ValidatingList, ValidationState,
+    ChannelBackgroundValidationComplete, Recipient, RecipientEntry, ValidatingRecipientList,
+    ValidationState,
 };
 use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
@@ -43,7 +44,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     let user_ctx = ctx.mail_user_context().await;
 
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let list = ValidatingList::new(Some(cb));
+    let list = ValidatingRecipientList::new(Some(cb));
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
@@ -64,7 +65,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
 
     list.add_single(
         Arc::clone(&user_ctx),
-        Entry {
+        RecipientEntry {
             display_name: None,
             email: email.to_owned(),
         },
@@ -118,7 +119,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
     let user_ctx = ctx.mail_user_context().await;
 
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
-    let list = ValidatingList::new(Some(cb));
+    let list = ValidatingRecipientList::new(Some(cb));
 
     let params = Params::default_basic();
     ctx.setup_user(params).await;
@@ -140,7 +141,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
     list.add_group(
         Arc::clone(&user_ctx),
         "my_group",
-        [Entry {
+        [RecipientEntry {
             display_name: None,
             email: email.to_owned(),
         }],

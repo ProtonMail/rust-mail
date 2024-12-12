@@ -1,6 +1,6 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
-use crate::draft::recipients::{api_error_into_validation_state, ValidationState};
+use crate::draft::recipients::ValidationState;
 use crate::draft::{compose::html_to_text, Error, PackageError};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailContextResult, MailUserContext};
@@ -69,7 +69,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
 
                 // Catch recipient validation errors.
                 if let MailContextError::Api(err) = &err {
-                    match api_error_into_validation_state(err) {
+                    match ValidationState::from(err) {
                         ValidationState::InvalidEmail => {
                             return Error::SendMessage(PackageError::RecipientEmailInvalid(
                                 recipient.clone(),

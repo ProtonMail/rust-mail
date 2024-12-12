@@ -1,5 +1,5 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
-use crate::draft::recipients::{ContactGroupResolver, List};
+use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
@@ -29,7 +29,7 @@ pub(super) async fn patch_draft_with_reply_mode(
     // Copy over the addresses based on reply mode
     match reply_mode {
         ReplyMode::Sender => {
-            draft.to_list = List::from_message_recipients(
+            draft.to_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
                 std::iter::once(source_message.sender.clone().into()),
             )
@@ -37,13 +37,13 @@ pub(super) async fn patch_draft_with_reply_mode(
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::All => {
-            draft.to_list = List::from_message_recipients(
+            draft.to_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
                 std::iter::once(source_message.sender.clone().into())
                     .chain(source_message.to_list.value.clone()),
             )
             .await;
-            draft.cc_list = List::from_message_recipients(
+            draft.cc_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
                 source_message.cc_list.value.clone(),
             )

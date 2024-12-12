@@ -35,9 +35,35 @@ pub enum ValidationState {
     Unknown,
 }
 
+impl From<ApiServiceError> for ValidationState {
+    fn from(value: ApiServiceError) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<&ApiServiceError> for ValidationState {
+    fn from(value: &ApiServiceError) -> Self {
+        if value.is_network_failure() {
+            return ValidationState::Unchecked;
+        }
+
+        if let Some(proton_error) = value.to_proton_error() {
+            if proton_error.code == CoreBundle::KeyGetInputInvalid as u32 {
+                // 33101 = Invalid email address
+                return ValidationState::InvalidEmail;
+            } else if proton_error.code == CoreBundle::KeyGetAddressMissing as u32 {
+                // 33102 = Proton Address does not exist
+                return ValidationState::DoesNotExist;
+            }
+        }
+
+        ValidationState::Unknown
+    }
+}
+
 /// Represents a single recipient
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Single {
+pub struct SingleRecipient {
     /// Optional display name for the recipient.
     pub display_name: Option<String>,
     /// Recipient's email
@@ -48,9 +74,9 @@ pub struct Single {
 
 /// Represents list of recipients in named group.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Group {
+pub struct GroupRecipient {
     /// Recipients that compose this group
-    pub recipients: Vec<Single>,
+    pub recipients: Vec<SingleRecipient>,
     /// Name of the group
     pub group_name: String,
     /// Total number of addresses in this group.
@@ -58,7 +84,7 @@ pub struct Group {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum RecipientError {
     #[error("Address {0} already exists in the recipient list")]
     DuplicateAddress(String),
 }
@@ -66,19 +92,19 @@ pub enum Error {
 /// An email recipient.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub enum Recipient {
-    Single(Single),
-    Group(Group),
+    Single(SingleRecipient),
+    Group(GroupRecipient),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Entry {
+pub struct RecipientEntry {
     pub display_name: Option<String>,
     pub email: String,
 }
 
 /// Abstraction over possible contact group resolvers.
 pub trait ContactGroupResolver {
-    /// Resolve the total number of members in a contract group.
+    /// Resolve the total number of members in a contact group.
     ///
     /// Return 0 on error or if the group can't be found.
     fn resolve_contact_group_total(&self, name: &str) -> impl Future<Output = u64>;
@@ -113,11 +139,11 @@ impl ContactGroupResolver for MailUserContext {
 /// also check whether the address actually exists.
 ///
 #[derive(Debug, Default, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct List {
+pub struct RecipientList {
     recipients: Vec<Recipient>,
 }
 
-impl List {
+impl RecipientList {
     /// Create a new empty list.
     pub fn new() -> Self {
         Self {
@@ -135,7 +161,7 @@ impl List {
     ) -> Self {
         let mut list = Self::new();
         for recipient in recipients {
-            let entry = Entry {
+            let entry = RecipientEntry {
                 email: recipient.address,
                 display_name: if recipient.name.is_empty() {
                     None
@@ -173,17 +199,20 @@ impl List {
     ///
     /// Returns error if the address is not valid or was already added
     /// to this list.
-    pub fn add_single(&mut self, entry: Entry) -> Result<&mut Single, Error> {
+    pub fn add_single(
+        &mut self,
+        entry: RecipientEntry,
+    ) -> Result<&mut SingleRecipient, RecipientError> {
         self.add_single_with_state(entry, ValidationState::Unchecked)
     }
 
     fn add_single_with_state(
         &mut self,
-        entry: Entry,
+        entry: RecipientEntry,
         state: ValidationState,
-    ) -> Result<&mut Single, Error> {
+    ) -> Result<&mut SingleRecipient, RecipientError> {
         if self.is_duplicate_address(&entry.email) {
-            return Err(Error::DuplicateAddress(entry.email));
+            return Err(RecipientError::DuplicateAddress(entry.email));
         }
 
         let state = if EmailAddress::from_str(&entry.email).is_err() {
@@ -192,7 +221,7 @@ impl List {
             state
         };
 
-        self.recipients.push(Recipient::Single(Single {
+        self.recipients.push(Recipient::Single(SingleRecipient {
             display_name: entry.display_name,
             email: entry.email,
             state,
@@ -232,9 +261,9 @@ impl List {
     pub fn add_group(
         &mut self,
         group_name: &str,
-        entries: impl IntoIterator<Item = Entry>,
+        entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
-    ) -> (&mut Group, Vec<Entry>) {
+    ) -> (&mut GroupRecipient, Vec<RecipientEntry>) {
         assert!(!group_name.is_empty());
         self.add_group_with_state(
             group_name,
@@ -247,10 +276,10 @@ impl List {
     fn add_group_with_state(
         &mut self,
         group_name: &str,
-        entries: impl IntoIterator<Item = Entry>,
+        entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
         state: ValidationState,
-    ) -> (&mut Group, Vec<Entry>) {
+    ) -> (&mut GroupRecipient, Vec<RecipientEntry>) {
         let mut duplicates = Vec::new();
         let iter = entries.into_iter();
         let mut recipients = Vec::with_capacity(iter.size_hint().0);
@@ -267,7 +296,7 @@ impl List {
                 state
             };
 
-            recipients.push(Single {
+            recipients.push(SingleRecipient {
                 display_name: recipient.display_name,
                 email: recipient.email,
                 state,
@@ -313,7 +342,7 @@ impl List {
     pub fn recipients(&self) -> &[Recipient] {
         &self.recipients
     }
-    fn find_group_mut(&mut self, group_name: &str) -> Option<&mut Group> {
+    fn find_group_mut(&mut self, group_name: &str) -> Option<&mut GroupRecipient> {
         for r in self.recipients.iter_mut() {
             if let Recipient::Group(recipient) = r {
                 if recipient.group_name == group_name {
@@ -376,7 +405,7 @@ impl List {
         self.recipients.is_empty()
     }
 
-    fn find_recipient_by_email(&self, email: &str) -> Option<&Single> {
+    fn find_recipient_by_email(&self, email: &str) -> Option<&SingleRecipient> {
         for recipient in &self.recipients {
             match recipient {
                 Recipient::Single(single) => {
@@ -396,7 +425,7 @@ impl List {
         None
     }
 
-    fn find_recipient_by_email_mut(&mut self, email: &str) -> Option<&mut Single> {
+    fn find_recipient_by_email_mut(&mut self, email: &str) -> Option<&mut SingleRecipient> {
         for recipient in &mut self.recipients {
             match recipient {
                 Recipient::Single(single) => {
@@ -437,7 +466,7 @@ impl List {
         false
     }
 
-    fn get_or_create_group(&mut self, group_name: &str) -> &mut Group {
+    fn get_or_create_group(&mut self, group_name: &str) -> &mut GroupRecipient {
         // Still can't do get or insert properly due to false positive
         // in borrow checker, so do the index trick.
         let position = self.recipients.iter().position(|r| {
@@ -451,7 +480,7 @@ impl List {
         let recipient = if let Some(position) = position {
             &mut self.recipients[position]
         } else {
-            let group = Group {
+            let group = GroupRecipient {
                 recipients: vec![],
                 group_name: group_name.to_owned(),
                 total_in_group: 0,
@@ -518,21 +547,21 @@ impl OnBackgroundValidationComplete for ChannelBackgroundValidationComplete {
 ///
 /// This type exists so that the UI layer can defer the validation of the addresses as the user
 /// types them.
-pub struct ValidatingList<T: OnBackgroundValidationComplete> {
-    list: Arc<RwLock<List>>,
+pub struct ValidatingRecipientList<T: OnBackgroundValidationComplete> {
+    list: Arc<RwLock<RecipientList>>,
     cb: Mutex<Option<T>>,
 }
-impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
+impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     /// Create a new instance.
     pub fn new(on_updated: Option<T>) -> Self {
         Self {
-            list: Arc::new(RwLock::new(List::new())),
+            list: Arc::new(RwLock::new(RecipientList::new())),
             cb: Mutex::new(on_updated),
         }
     }
 
     /// Create a new instance from an existing `list`.
-    pub fn with_list(list: List, on_updated: Option<T>) -> Self {
+    pub fn with_list(list: RecipientList, on_updated: Option<T>) -> Self {
         Self {
             list: Arc::new(RwLock::new(list)),
             cb: Mutex::new(on_updated),
@@ -544,8 +573,12 @@ impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
         *self.cb.lock() = cb;
     }
 
-    /// See [`List::add_single`] for more details.
-    pub fn add_single(&self, ctx: Arc<MailUserContext>, entry: Entry) -> Result<(), Error> {
+    /// See [`RecipientList::add_single`] for more details.
+    pub fn add_single(
+        &self,
+        ctx: Arc<MailUserContext>,
+        entry: RecipientEntry,
+    ) -> Result<(), RecipientError> {
         let mut list = self.list.write();
         let entry = list.add_single(entry)?;
         if entry.state == ValidationState::Unchecked {
@@ -572,19 +605,19 @@ impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
         Ok(())
     }
 
-    /// See [`List::remove_group`] for more details.
+    /// See [`RecipientList::remove_group`] for more details.
     pub fn remove_single(&self, email: &str) {
         self.list.write().remove_single(email);
     }
 
-    /// See [`List::add_group`] for more details.
+    /// See [`RecipientList::add_group`] for more details.
     pub fn add_group(
         &self,
         ctx: Arc<MailUserContext>,
         group_name: &str,
-        entries: impl IntoIterator<Item = Entry>,
+        entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
-    ) -> Vec<Entry> {
+    ) -> Vec<RecipientEntry> {
         let mut list = self.list.write();
         let (group, duplicates) = list.add_group(group_name, entries, total_in_group);
 
@@ -626,17 +659,17 @@ impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
         duplicates
     }
 
-    /// See [`List::remove_group`] for more details;
+    /// See [`RecipientList::remove_group`] for more details;
     pub fn remove_group(&self, group_name: &str) {
         self.list.write().remove_group(group_name);
     }
 
-    /// See [`List::remove_group_recipient`] for more details.
+    /// See [`RecipientList::remove_group_recipient`] for more details.
     pub fn remove_group_recipient(&self, group_name: &str, email: &str) {
         self.list.write().remove_group_recipient(group_name, email);
     }
 
-    /// See [`List::remove_group_recipients`] for more details.
+    /// See [`RecipientList::remove_group_recipients`] for more details.
     pub fn remove_group_recipients<E: AsRef<str>>(
         &self,
         group_name: &str,
@@ -652,7 +685,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
         self.list.read().recipients.to_vec()
     }
 
-    /// See [`List::to_message_recipients`] for more details.
+    /// See [`RecipientList::to_message_recipients`] for more details.
     pub fn to_message_recipients(&self) -> Vec<MessageRecipient> {
         self.list.read().to_message_recipients()
     }
@@ -678,7 +711,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingList<T> {
     }
 
     /// Returns a copy of the underlying recipient list.
-    pub fn list(&self) -> List {
+    pub fn list(&self) -> RecipientList {
         self.list.read().clone()
     }
 }
@@ -696,25 +729,6 @@ async fn validate_address(ctx: &MailUserContext, email: String) -> ValidationSta
         .await
     {
         Ok(response) => ValidationState::Valid(response.is_proton),
-        Err(e) => api_error_into_validation_state(&e),
+        Err(e) => ValidationState::from(e),
     }
-}
-
-/// Convert the given API error into a validation state.
-pub fn api_error_into_validation_state(err: &ApiServiceError) -> ValidationState {
-    if err.is_network_failure() {
-        return ValidationState::Unchecked;
-    }
-
-    if let Some(proton_error) = err.to_proton_error() {
-        if proton_error.code == CoreBundle::KeyGetInputInvalid as u32 {
-            // 33101 = Invalid email address
-            return ValidationState::InvalidEmail;
-        } else if proton_error.code == CoreBundle::KeyGetAddressMissing as u32 {
-            // 33102 = Proton Address does not exist
-            return ValidationState::DoesNotExist;
-        }
-    }
-
-    ValidationState::Unknown
 }

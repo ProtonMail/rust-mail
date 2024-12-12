@@ -1,22 +1,22 @@
 use super::*;
 #[test]
 fn duplicate_single_recipient_reports_error() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "foo@example.com".to_owned(),
     };
 
     list.add_single(entry.clone()).unwrap();
     let err = list.add_single(entry).unwrap_err();
-    assert!(matches!(err, Error::DuplicateAddress(_)));
+    assert!(matches!(err, RecipientError::DuplicateAddress(_)));
 }
 
 #[test]
 fn remove_single_recipient() {
-    let mut list = List::default();
+    let mut list = RecipientList::default();
     let email = "foo@example.com".to_owned();
-    let entry = Entry {
+    let entry = RecipientEntry {
         display_name: None,
         email: email.clone(),
     };
@@ -29,8 +29,8 @@ fn remove_single_recipient() {
 
 #[test]
 fn invalid_email_is_added_to_list_with_error_status() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "borkenEmail!".to_owned(),
     };
@@ -47,8 +47,8 @@ fn invalid_email_is_added_to_list_with_error_status() {
 
 #[test]
 fn invalid_email_is_added_to_list_with_error_status_group() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "borkenEmail!".to_owned(),
     };
@@ -69,12 +69,12 @@ fn invalid_email_is_added_to_list_with_error_status_group() {
 
 #[test]
 fn duplicate_group_recipient_are_returned() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "foo@example.com".to_owned(),
     };
-    let entry2 = Entry {
+    let entry2 = RecipientEntry {
         display_name: None,
         email: "bar@example.com".to_owned(),
     };
@@ -96,12 +96,12 @@ fn duplicate_group_recipient_are_returned() {
 
 #[test]
 fn group_extend() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "foo@example.com".to_owned(),
     };
-    let entry2 = Entry {
+    let entry2 = RecipientEntry {
         display_name: None,
         email: "bar@example.com".to_owned(),
     };
@@ -135,12 +135,12 @@ fn group_extend() {
 
 #[test]
 fn remove_group_recipient() {
-    let mut list = List::default();
-    let entry = Entry {
+    let mut list = RecipientList::default();
+    let entry = RecipientEntry {
         display_name: None,
         email: "foo@example.com".to_owned(),
     };
-    let entry2 = Entry {
+    let entry2 = RecipientEntry {
         display_name: None,
         email: "bar@example.com".to_owned(),
     };
@@ -153,14 +153,14 @@ fn remove_group_recipient() {
 
 #[test]
 fn remove_single_recipient_from_group() {
-    let mut list = List::default();
+    let mut list = RecipientList::default();
     let email1 = "foo@example.com".to_owned();
     let email2 = "bar@example.com".to_owned();
-    let entry = Entry {
+    let entry = RecipientEntry {
         display_name: None,
         email: email1.clone(),
     };
-    let entry2 = Entry {
+    let entry2 = RecipientEntry {
         display_name: None,
         email: email2.clone(),
     };
@@ -183,34 +183,34 @@ fn remove_single_recipient_from_group() {
 
 #[test]
 fn to_message_recipient_only_copies_valid_values() {
-    let mut list = List::default();
+    let mut list = RecipientList::default();
 
-    let valid_entry = Entry {
+    let valid_entry = RecipientEntry {
         display_name: Some("Foo Ext".to_owned()),
         email: "foo@example.com".to_owned(),
     };
 
-    let valid_proton_entry = Entry {
+    let valid_proton_entry = RecipientEntry {
         display_name: Some("Foo Proton".to_owned()),
         email: "foo@proton.ch".to_owned(),
     };
 
-    let validating_entry = Entry {
+    let validating_entry = RecipientEntry {
         display_name: None,
         email: "validating@example.com".to_owned(),
     };
 
-    let unchecked_entry = Entry {
+    let unchecked_entry = RecipientEntry {
         display_name: None,
         email: "unchecked@example.com".to_owned(),
     };
 
-    let invalid_email_entry = Entry {
+    let invalid_email_entry = RecipientEntry {
         display_name: None,
         email: "@".to_owned(),
     };
 
-    let unknown_error_entry = Entry {
+    let unknown_error_entry = RecipientEntry {
         display_name: None,
         email: "unknown@error.org".to_owned(),
     };
@@ -261,34 +261,34 @@ fn to_message_recipient_only_copies_valid_values() {
 
 #[test]
 fn to_message_recipient_only_copies_valid_values_group() {
-    let mut list = List::default();
+    let mut list = RecipientList::default();
 
-    let valid_entry = Entry {
+    let valid_entry = RecipientEntry {
         display_name: Some("Foo Ext".to_owned()),
         email: "foo@example.com".to_owned(),
     };
 
-    let valid_proton_entry = Entry {
+    let valid_proton_entry = RecipientEntry {
         display_name: Some("Foo Proton".to_owned()),
         email: "foo@proton.ch".to_owned(),
     };
 
-    let validating_entry = Entry {
+    let validating_entry = RecipientEntry {
         display_name: None,
         email: "validating@example.com".to_owned(),
     };
 
-    let unchecked_entry = Entry {
+    let unchecked_entry = RecipientEntry {
         display_name: None,
         email: "unchecked@example.com".to_owned(),
     };
 
-    let invalid_email_entry = Entry {
+    let invalid_email_entry = RecipientEntry {
         display_name: None,
         email: "@".to_owned(),
     };
 
-    let unknown_error_entry = Entry {
+    let unknown_error_entry = RecipientEntry {
         display_name: None,
         email: "unknown@error.org".to_owned(),
     };
