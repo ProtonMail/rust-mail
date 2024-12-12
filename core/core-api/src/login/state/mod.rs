@@ -1,8 +1,8 @@
 use crate::login::state::complete::Complete;
 use crate::login::state::want_mbp::WantMbp;
-use crate::login::state::want_mbp_resume::WantMbpResume;
+use crate::login::state::want_resume_mbp::WantResumeMbp;
+use crate::login::state::want_resume_tfa::WantResumeTfa;
 use crate::login::state::want_tfa::WantTfa;
-use crate::login::state::want_tfa_resume::WantTfaResume;
 use crate::login::{state::want_login::WantLogin, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::Proton;
@@ -16,9 +16,9 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 mod complete;
 mod want_login;
 mod want_mbp;
-mod want_mbp_resume;
+mod want_resume_mbp;
+mod want_resume_tfa;
 mod want_tfa;
-mod want_tfa_resume;
 
 /// Represents the possible states that the login flow can be in,
 /// ensuring only valid transitions between states are possible.
@@ -31,16 +31,19 @@ pub enum State {
     WantTfa(WantTfa),
 
     /// The flow is waiting for the user to provide a 2FA token (resumed).
-    WantTfaResume(WantTfaResume),
+    WantTfaResume(WantResumeTfa),
 
     /// The flow is waiting for the user to provide their mailbox password.
     WantMbp(WantMbp),
 
     /// The flow is waiting for the user to provide their mailbox password (resumed).
-    WantMbpResume(WantMbpResume),
+    WantMbpResume(WantResumeMbp),
 
     /// The flow has been completed.
     Complete(Complete),
+
+    /// Invalid state, cannot be used.
+    Invalid,
 }
 
 impl State {
@@ -67,7 +70,7 @@ impl State {
         user_id: RemoteId,
         auth_id: RemoteId,
     ) -> Self {
-        WantTfaResume::new(client, store, user_id, auth_id).into()
+        WantResumeTfa::new(client, store, user_id, auth_id).into()
     }
 
     /// Create a `WantMbp` state.
@@ -82,7 +85,7 @@ impl State {
         user_id: RemoteId,
         auth_id: RemoteId,
     ) -> Self {
-        WantMbpResume::new(client, store, user_id, auth_id).into()
+        WantResumeMbp::new(client, store, user_id, auth_id).into()
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
@@ -100,40 +103,60 @@ impl State {
 
     /// Attempt to login with the provided credentials.
     pub async fn login(self, user: String, pass: String) -> Result<Self, LoginError> {
-        if let Self::WantLogin(state) = self {
-            Ok(state.login(user, pass).await?)
-        } else {
-            Err(LoginError::InvalidState)
-        }
+        let state = match self {
+            Self::WantLogin(state) => state.login(user, pass).await?,
+
+            _ => return Err(LoginError::InvalidState),
+        };
+
+        Ok(state)
     }
 
     /// Attempt to submit a TOTP code.
     pub async fn submit_totp(self, code: String) -> Result<Self, LoginError> {
-        Ok(match self {
+        let state = match self {
             Self::WantTfa(state) => state.submit_totp(code).await?,
             Self::WantTfaResume(state) => state.submit_totp(code).await?,
 
             _ => return Err(LoginError::InvalidState),
-        })
+        };
+
+        Ok(state)
+    }
+
+    /// Attempt to submit a FIDO code.
+    #[allow(unused)]
+    pub async fn submit_fido(self, code: String) -> Result<Self, LoginError> {
+        let state = match self {
+            Self::WantTfa(state) => state.submit_fido(code).await?,
+            Self::WantTfaResume(state) => state.submit_fido(code).await?,
+
+            _ => return Err(LoginError::InvalidState),
+        };
+
+        Ok(state)
     }
 
     /// Attempt to submit a mailbox password.
     pub async fn submit_mbp(self, pass: String) -> Result<Self, LoginError> {
-        Ok(match self {
+        let state = match self {
             Self::WantMbp(state) => state.submit_mbp(pass).await?,
             Self::WantMbpResume(state) => state.submit_mbp(pass).await?,
 
             _ => return Err(LoginError::InvalidState),
-        })
+        };
+
+        Ok(state)
     }
 
     /// Attempt to take the completed session from the flow.
     pub fn into_session(self) -> Result<Session, LoginError> {
-        if let Self::Complete(state) = self {
-            Ok(state.into_session()?)
-        } else {
-            Err(LoginError::InvalidState)
-        }
+        let session = match self {
+            Self::Complete(state) => state.into_session()?,
+            _ => return Err(LoginError::InvalidState),
+        };
+
+        Ok(session)
     }
 
     /// Get the user ID of the user that has (or is in the process of) logging in.
@@ -171,6 +194,7 @@ impl Debug for State {
             Self::WantMbp(_) => write!(f, "WantMbp"),
             Self::WantMbpResume(_) => write!(f, "WantMbpResume"),
             Self::Complete(_) => write!(f, "Complete"),
+            Self::Invalid => write!(f, "Invalid"),
         }
     }
 }
@@ -186,10 +210,13 @@ trait HasAuthId {
 }
 
 /// A trait for states that can accept a 2FA code.
-trait SubmitTfa {
+trait SubmitTotp {
     async fn submit_totp(self, code: String) -> Result<State, LoginError>;
+}
 
-    #[allow(unused)]
+/// A trait for states that can accept a FIDO code.
+#[allow(unused)]
+trait SubmitFido {
     async fn submit_fido(self, code: String) -> Result<State, LoginError>;
 }
 

@@ -5,7 +5,7 @@ use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
 use crate::session::Session;
 use crate::store::StoreError;
-use futures::TryFutureExt;
+use futures::{TryFuture, TryFutureExt};
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -70,18 +70,14 @@ impl ServiceError for LoginError {}
 /// The flow is used to guide the user through the login process,
 /// ensuring that all necessary steps are completed in the correct order.
 #[derive(Debug)]
-pub struct Flow {
-    state: Option<State>,
-}
+pub struct Flow(State);
 
 impl Flow {
     #[must_use]
     pub fn new(session: Session) -> Self {
         let (client, store) = session.into_parts();
 
-        Self {
-            state: Some(State::want_login(client, store)),
-        }
+        Self(State::want_login(client, store))
     }
 
     /// Resume the login flow at the 2FA step.
@@ -94,9 +90,7 @@ impl Flow {
     ) -> Self {
         let (client, store) = session.into_parts();
 
-        Self {
-            state: Some(State::want_tfa_resume(client, store, user_id, session_id)),
-        }
+        Self(State::want_tfa_resume(client, store, user_id, session_id))
     }
 
     /// Resume the login flow at the mailbox password step.
@@ -109,9 +103,7 @@ impl Flow {
     ) -> Self {
         let (client, store) = session.into_parts();
 
-        Self {
-            state: Some(State::want_mbp_resume(client, store, user_id, session_id)),
-        }
+        Self(State::want_mbp_resume(client, store, user_id, session_id))
     }
 
     /// Start login with credentials. The `human_verification` parameter only needs to be submitted
@@ -120,13 +112,7 @@ impl Flow {
     /// # Errors
     /// Returns error if the login request or SRP proof calculations failed.
     pub async fn login(&mut self, user: String, pass: String) -> Result<(), LoginError> {
-        self.state = (self.state.take())
-            .ok_or(LoginError::InvalidState)?
-            .login(user, pass)
-            .ok_into()
-            .await?;
-
-        Ok(())
+        self.transition(|s| s.login(user, pass)).await
     }
 
     /// Submit TOTP 2FA code.
@@ -135,13 +121,18 @@ impl Flow {
     ///
     /// Returns error if the request failed.
     pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
-        self.state = (self.state.take())
-            .ok_or(LoginError::InvalidState)?
-            .submit_totp(code)
-            .ok_into()
-            .await?;
+        self.transition(|s| s.submit_totp(code)).await
+    }
 
-        Ok(())
+    /// Submit FIDO 2FA code.
+    ///
+    /// This function is not yet implemented.
+    ///
+    /// # Errors
+    ///
+    /// Once implemented, this function will return an error if the request failed.
+    pub async fn submit_fido(&mut self, code: String) -> Result<(), LoginError> {
+        self.transition(|s| s.submit_fido(code)).await
     }
 
     /// Submit the second mailbox password in two password mode.
@@ -151,13 +142,7 @@ impl Flow {
     /// Returns error if the request failed.
     /// If the password fails to decrypt the user key it returns a [`LoginError::WrongMailboxPassword`].
     pub async fn submit_mailbox_password(&mut self, pass: String) -> Result<(), LoginError> {
-        self.state = (self.state.take())
-            .ok_or(LoginError::InvalidState)?
-            .submit_mbp(pass)
-            .ok_into()
-            .await?;
-
-        Ok(())
+        self.transition(|s| s.submit_mbp(pass)).await
     }
 
     /// Take the completed session from the flow.
@@ -166,23 +151,19 @@ impl Flow {
     ///
     /// Returns an error if the flow is incomplete.
     pub fn take_session(&mut self) -> Result<Session, LoginError> {
-        let session = (self.state.take())
-            .ok_or(LoginError::InvalidState)?
-            .into_session()?;
-
-        Ok(session)
+        self.take_state().into_session()
     }
 
     /// Check whether the session in logged out.
     #[must_use]
     pub fn is_logged_out(&self) -> bool {
-        matches!(self.state, Some(State::WantLogin(_)))
+        matches!(self.0, State::WantLogin(_))
     }
 
     /// Check whether the session is awaiting totp.
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
-        matches!(self.state, Some(State::WantTfa(_)))
+        matches!(self.0, State::WantTfa(_))
     }
 
     /// Check whether the session is awaiting a mailbox password.
@@ -190,13 +171,13 @@ impl Flow {
     /// If the user is in two password mode the mailbox password has to be provided separately.
     #[must_use]
     pub fn is_awaiting_mailbox_password(&self) -> bool {
-        matches!(self.state, Some(State::WantMbp(_)))
+        matches!(self.0, State::WantMbp(_))
     }
 
     /// Check whether the session has logged in.
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
-        matches!(self.state, Some(State::Complete(_)))
+        matches!(self.0, State::Complete(_))
     }
 
     /// Get the ID of the user that has been (or is about to be) logged in.
@@ -205,10 +186,7 @@ impl Flow {
     ///
     /// Returns an error if the user ID is not yet known.
     pub fn user_id(&self) -> Result<&RemoteId, LoginError> {
-        self.state
-            .as_ref()
-            .ok_or(LoginError::InvalidState)?
-            .user_id()
+        self.0.user_id()
     }
 
     /// Get the ID of the session that has been (or is about to be) logged in.
@@ -217,9 +195,20 @@ impl Flow {
     ///
     /// Returns an error if the session ID is not yet known.
     pub fn session_id(&self) -> Result<&RemoteId, LoginError> {
-        self.state
-            .as_ref()
-            .ok_or(LoginError::InvalidState)?
-            .auth_id()
+        self.0.auth_id()
+    }
+
+    /// Try to transition the flow to the next state.
+    async fn transition<F>(&mut self, f: impl FnOnce(State) -> F) -> Result<(), LoginError>
+    where
+        F: TryFuture<Ok = State, Error = LoginError>,
+    {
+        self.0 = f(self.take_state()).into_future().await?;
+
+        Ok(())
+    }
+
+    fn take_state(&mut self) -> State {
+        std::mem::replace(&mut self.0, State::Invalid)
     }
 }

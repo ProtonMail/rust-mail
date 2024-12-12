@@ -1,4 +1,4 @@
-use crate::login::state::{HasAuthId, HasUserId, SubmitTfa};
+use crate::login::state::{HasAuthId, HasUserId, SubmitFido, SubmitTotp};
 use crate::login::{state::State, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::store::DynStore;
@@ -46,7 +46,7 @@ impl HasAuthId for WantTfa {
     }
 }
 
-impl SubmitTfa for WantTfa {
+impl SubmitTotp for WantTfa {
     async fn submit_totp(self, code: String) -> Result<State, LoginError> {
         let client = match self.flow.totp(&code).await {
             Ok(client) => client,
@@ -61,8 +61,10 @@ impl SubmitTfa for WantTfa {
 
         Ok(state)
     }
+}
 
+impl SubmitFido for WantTfa {
     async fn submit_fido(self, _: String) -> Result<State, LoginError> {
-        todo!()
+        unimplemented!()
     }
 }
