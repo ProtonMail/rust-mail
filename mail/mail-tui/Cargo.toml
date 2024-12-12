@@ -29,6 +29,7 @@ thiserror = "1"
 throbber-widgets-tui = "0.7.1"
 tokio = { workspace = true }
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-error = "0.2"
 tracing-subscriber = { workspace = true }
 tui-input = "0.10.1"
