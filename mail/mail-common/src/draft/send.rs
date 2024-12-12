@@ -7,7 +7,9 @@ use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_mail::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
-use proton_crypto_account::keys::{UnlockedAddressKey, UnlockedAddressKeys};
+use proton_crypto_account::keys::{
+    PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
+};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::keys::{
@@ -114,8 +116,8 @@ pub async fn build_packages<Provider: PGPProviderSync>(
         .map(|send_preference| send_preference.mime_type)
         .collect();
     let primary = address_keys
-        .primary()
-        .ok_or(PackageError::PrimaryKeyNotFound)?;
+        .primary_for_mail()
+        .map_err(|_| PackageError::PrimaryKeyNotFound)?;
     let mut encrypted_packages = Vec::with_capacity(demanded_packages.len());
 
     for demanded_package in demanded_packages {
@@ -123,13 +125,13 @@ pub async fn build_packages<Provider: PGPProviderSync>(
         let encrypted_package = match demanded_package {
             PackageMimeType::Html => generate_html_encrypted_package_body(
                 pgp_provider,
-                primary,
+                &primary,
                 message_body_metadata,
                 stored_message_body,
             )?,
             PackageMimeType::Text => generate_text_encrypted_package_body(
                 pgp_provider,
-                primary,
+                &primary,
                 message_body_metadata,
                 stored_message_body,
             )?,
@@ -137,7 +139,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
                 generate_mime_top_package(
                     context,
                     pgp_provider,
-                    primary,
+                    &primary,
                     message_body_metadata,
                     stored_message_body,
                     attachments,
@@ -177,7 +179,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
 /// Encrypts an html body.
 pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    address_key: &UnlockedAddressKey<Provider>,
+    address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     _body_metadata: &MessageBodyMetadata,
     body: &StorableMessageBody,
 ) -> Result<EncryptedPackageBody, PackageError> {
@@ -197,7 +199,7 @@ pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
 /// Converts html to text if necessary.
 pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    address_key: &UnlockedAddressKey<Provider>,
+    address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     body_metadata: &MessageBodyMetadata,
     body: &StorableMessageBody,
 ) -> Result<EncryptedPackageBody, PackageError> {
@@ -222,7 +224,7 @@ pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
 pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     context: &MailUserContext,
     pgp_provider: &Provider,
-    address_key: &UnlockedAddressKey<Provider>,
+    address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     body_metadata: &MessageBodyMetadata,
     body: &StorableMessageBody,
     attachments: &[Attachment],

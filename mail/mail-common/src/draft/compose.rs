@@ -144,14 +144,16 @@ pub(super) async fn encrypt_draft_body(
     let draft_body = DraftBody { body };
     let pgp_provider = new_pgp_provider();
     let unlocked_keys = ctx.unlocked_address_keys(&pgp_provider, address_id).await?;
-    let Some(draft_encryption_key) = unlocked_keys.primary() else {
-        error!(
-            "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
-        );
-        return Err(Error::AddressWithoutPrimaryKey(address_id.clone()).into());
-    };
+    let draft_encryption_key = unlocked_keys
+        .primary_for_mail()
+        .map_err(|_| {
+            error!(
+                "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
+            );
+            Error::AddressWithoutPrimaryKey(address_id.clone())
+        })?;
     draft_body
-        .encrypt_draft_body(&pgp_provider, draft_encryption_key)
+        .encrypt_draft_body(&pgp_provider, &draft_encryption_key)
         .map_err(|e| {
             error!("Failed to encrypt draft: {e}");
             MailContextError::Crypto
