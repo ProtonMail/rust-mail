@@ -86,10 +86,11 @@ pub struct Mailbox {
 
 impl Mailbox {
     pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {
-        let Some(label) = Label::load(label_id, user_ctx.user_stash()).await? else {
+        let tether = user_ctx.user_stash().connection();
+        let Some(label) = Label::load(label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
-        let view_mode = label.view_mode(user_ctx.user_stash()).await?;
+        let view_mode = label.view_mode(&tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
         Ok(Self {
             label_id,
@@ -102,10 +103,11 @@ impl Mailbox {
         user_ctx: Arc<MailUserContext>,
         label_id: LabelId,
     ) -> MailboxResult<Self> {
-        let label = Label::find_by_id(RemoteId::from(label_id), user_ctx.user_stash())
+        let tether = user_ctx.user_stash().connection();
+        let label = Label::find_by_id(RemoteId::from(label_id), &tether)
             .await?
             .unwrap();
-        let view_mode = label.view_mode(user_ctx.user_stash()).await?;
+        let view_mode = label.view_mode(&tether).await?;
         debug!(
             "Creating Mailbox ({}, view_mode={:?})",
             label.local_id.unwrap(),
@@ -147,7 +149,8 @@ impl Mailbox {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, count))]
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let ctx = self.user_ctx.clone();
-        let Some(mut label) = Label::load(self.label_id, ctx.user_stash()).await? else {
+        let mut tether = ctx.user_stash().connection();
+        let Some(mut label) = Label::load(self.label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 
@@ -172,7 +175,7 @@ impl Mailbox {
                     remote_id,
                     count,
                     ctx.session().api(),
-                    ctx.user_stash(),
+                    &mut tether,
                 )
                 .await
                 .map_err(|e| {
@@ -183,7 +186,7 @@ impl Mailbox {
                     remote_id,
                     count,
                     ctx.session().api(),
-                    ctx.user_stash(),
+                    &mut tether,
                 )
                 .await
                 .map_err(|e| {
@@ -200,7 +203,7 @@ impl Mailbox {
                     label.initialized_msg = true;
                 }
             }
-            let tx = ctx.user_stash().transaction().await?;
+            let tx = tether.transaction().await?;
             label.save(&tx).await.map_err(|e| {
                 error!("Failed to mark label as initialized: {e}");
                 MailContextError::Stash(e)
@@ -225,8 +228,8 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     pub async fn unread_count(&self) -> Result<u64, MailboxError> {
-        let Some(label) = Label::find_by_id(self.label_id, self.user_ctx.user_stash()).await?
-        else {
+        let tether = self.user_ctx.user_stash().connection();
+        let Some(label) = Label::find_by_id(self.label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 

@@ -80,7 +80,7 @@ impl Handler for TestActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE);
         action.v = ACTION_VALUE_AFTER_LOCAL_APPLY;
@@ -93,7 +93,7 @@ impl Handler for TestActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -105,7 +105,8 @@ impl Handler for TestActionHandler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?;
         tx.commit().await?;
 

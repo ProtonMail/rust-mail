@@ -9,16 +9,12 @@ use crate::{AppError, MailContextError, MailUserContext};
 use proton_core_common::datatypes::{Id, LabelId, LocalId};
 pub use save::*;
 pub use send::*;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 use tracing::error;
 
 /// Resolve the Drafts folder local label id.
-async fn local_draft_label_id<A>(interface: &A) -> Result<LocalId, MailContextError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let Some(local_draft_label_id) = LabelId::drafts().counterpart::<Label, _>(interface).await?
-    else {
+async fn local_draft_label_id(tether: &Tether) -> Result<LocalId, MailContextError> {
+    let Some(local_draft_label_id) = LabelId::drafts().counterpart::<Label>(tether).await? else {
         return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
     };
 
@@ -26,12 +22,8 @@ where
 }
 
 /// Resolve the Sent folder  local label id.
-async fn local_sent_label_id<A>(interface: &A) -> Result<LocalId, MailContextError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let Some(local_draft_label_id) = LabelId::sent().counterpart::<Label, _>(interface).await?
-    else {
+async fn local_sent_label_id(tether: &Tether) -> Result<LocalId, MailContextError> {
+    let Some(local_draft_label_id) = LabelId::sent().counterpart::<Label>(tether).await? else {
         return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
     };
 

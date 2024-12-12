@@ -48,7 +48,8 @@ async fn get_sender_image() {
         .unwrap();
 
     mailbox.sync(1).await.expect("mailbox sync failed");
-    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
+    let tether = user_ctx.user_stash().connection();
+    let local_conversation = Conversation::find_first("", vec![], &tether)
         .await
         .unwrap()
         .unwrap();

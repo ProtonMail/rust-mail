@@ -20,7 +20,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -129,7 +129,7 @@ impl Label {
     /// Returns error if the local conversation id is not set, the remote
     /// label_id is not set, the local label can not be found or the query
     /// failed.
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(label) =
                 Label::find_first("WHERE remote_id=?", params![remote_id], bond).await?
@@ -178,7 +178,7 @@ impl Label {
 
     pub async fn create_or_update_conversation_counts(
         counts: Vec<ConversationCount>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for count in counts {
             bond.execute(
@@ -202,7 +202,7 @@ impl Label {
 
     pub async fn create_or_update_message_counts(
         counts: Vec<MessageCount>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for count in counts {
             bond.execute(
@@ -266,7 +266,8 @@ impl Label {
             .await;
 
         debug!("Storing labels into database");
-        let tx = stash.transaction().await?;
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
         for labels in label_requests {
             match labels {
                 Err(e) => {
@@ -300,7 +301,7 @@ impl Label {
     ///
     pub async fn sync_labels_by_ids<PM: ProtonMail>(
         api: &PM,
-        stash: &Stash,
+        tether: &mut Tether,
         ids: Vec<ApiRemoteId>,
     ) -> Result<(), AppError> {
         let labels = api
@@ -311,7 +312,7 @@ impl Label {
             .map_into::<Self>();
 
         debug!("Storing labels into database");
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         for mut label in labels {
             Self::save(&mut label, &tx).await?;
         }
@@ -320,24 +321,24 @@ impl Label {
         Ok(())
     }
 
-    async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
             self.local_parent_id = self
                 .remote_parent_id
                 .clone()
                 .expect("Should be set")
-                .counterpart::<Self, _>(interface)
+                .counterpart::<Self>(tether)
                 .await?;
         }
         // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
     }
 
-    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let parent_id_option = self.remote_parent_id.clone();
         self.local_parent_id = match parent_id_option {
             Some(parent_id) => {
-                let res = parent_id.counterpart::<Self, _>(bond).await?;
+                let res = parent_id.counterpart::<Self>(bond).await?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -429,10 +430,7 @@ impl Label {
     /// in the user's [`MailSettings`], otherwise the returned value should be
     /// used.
     ///
-    pub async fn view_mode<A>(&self, interface: &A) -> Result<ViewMode, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError> {
         if let Some(remote_id) = self.remote_id.as_ref() {
             if *remote_id == LabelId::drafts()
                 || *remote_id == LabelId::sent()
@@ -443,7 +441,7 @@ impl Label {
                 return Ok(ViewMode::Messages);
             }
         }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+        Ok(MailSettings::load(MAIL_SETTINGS_ID.into(), tether)
             .await?
             .unwrap_or_default()
             .view_mode)
@@ -460,14 +458,11 @@ impl Label {
     ///
     /// Returns an error if the data could not be read from the database.
     ///
-    pub async fn find_by_kind<A>(kind: LabelType, interface: &A) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         Label::find(
             "WHERE label_type = ? ORDER BY display_order ASC",
             params![kind],
-            interface,
+            tether,
             None,
         )
         .await
@@ -482,27 +477,19 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn watch<A>(
+    pub async fn watch(
         local_id: LocalId,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<
         Option<(
             Self,
             flume::Receiver<ResultsetChange<Self, <Self as Model>::IdType>>,
         )>,
         AppError,
-    >
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    > {
         let (sender, receiver) = flume::unbounded();
-        let mut labels = Label::find(
-            "WHERE local_id=?",
-            params![local_id],
-            interface,
-            Some(sender),
-        )
-        .await?;
+        let mut labels =
+            Label::find("WHERE local_id=?", params![local_id], tether, Some(sender)).await?;
         if labels.is_empty() {
             return Ok(None);
         }
@@ -515,14 +502,11 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the resolution failed.
-    pub async fn resolve_remote_label_id<A>(
+    pub async fn resolve_remote_label_id(
         local_id: LocalId,
-        interface: &A,
-    ) -> Result<LabelId, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(label_id) = local_id.counterpart::<Label, _>(interface).await? else {
+        tether: &Tether,
+    ) -> Result<LabelId, AppError> {
+        let Some(label_id) = local_id.counterpart::<Label>(tether).await? else {
             return Err(AppError::LabelNotFound(local_id));
         };
 
@@ -534,14 +518,11 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the resolution failed.
-    pub async fn resolve_local_label_id<A>(
+    pub async fn resolve_local_label_id(
         label_id: LabelId,
-        interface: &A,
-    ) -> Result<LocalId, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(label_id) = label_id.counterpart::<Label, _>(interface).await? else {
+        tether: &Tether,
+    ) -> Result<LocalId, AppError> {
+        let Some(label_id) = label_id.counterpart::<Label>(tether).await? else {
             return Err(AppError::RemoteLabelDoesNotExist(label_id));
         };
         Ok(label_id)

@@ -204,8 +204,9 @@ pub async fn message(
 ) -> Result<Option<Message>, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::load(id.into(), &stash).await?.map(Into::into),
+            RealMessage::load(id.into(), &tether).await?.map(Into::into),
         )
     })
     .await
@@ -248,8 +249,9 @@ pub async fn watch_message(
 ) -> Result<Option<WatchedMessage>, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         let Some((message, receiver)) =
-            RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
+            RealMessage::watch_message(RealLocalId::from(message_id), &tether).await?
         else {
             return Ok(None);
         };
@@ -282,8 +284,9 @@ pub async fn messages_for_conversation(
 ) -> Result<Vec<Message>, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(RealLocalId::from(conversation_id), &stash, None)
+            RealMessage::in_conversation(RealLocalId::from(conversation_id), &tether, None)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -313,8 +316,9 @@ pub async fn messages_for_label(
 ) -> Result<Vec<Message>, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_label(RealLocalId::from(label_id), &stash, None)
+            RealMessage::in_label(RealLocalId::from(label_id), &tether, None)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -400,10 +404,11 @@ pub async fn paginate_search(
     let context = session.ctx();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
+        let tether = session.user_stash().connection();
         let real_paginator = RealMessage::paginate_in_label(
             &context,
             RealLabelId::all_mail()
-                .counterpart::<RealLabel, _>(session.user_stash())
+                .counterpart::<RealLabel>(&tether)
                 .await?
                 .expect("All mail system label not found"),
             50,
@@ -442,17 +447,18 @@ pub async fn search_for_messages(
 ) -> Result<Vec<Message>, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(
-            RealMessage::search(
-                options.into_api_options(&stash).await?,
-                session.ctx().session().api(),
-                &stash,
-            )
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
+        let mut tether = stash.connection();
+        let messages = RealMessage::search(
+            options.into_api_options(&tether).await?,
+            session.ctx().session().api(),
+            &mut tether,
         )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect();
+
+        Result::<_, RealProtonMailError>::Ok(messages)
     })
     .await
     .map_err(ActionError::from)
@@ -478,15 +484,13 @@ pub async fn available_actions_for_messages(
 ) -> Result<MessageAvailableActions, ActionError> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
-        let view = RealLabel::load(view, mailbox.stash())
+        let tether = mailbox.stash().connection();
+        let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions = RealMessage::available_actions(
-            view,
-            ids.into_iter().map_into().collect(),
-            mailbox.stash(),
-        )
-        .await?;
+        let actions =
+            RealMessage::available_actions(view, ids.into_iter().map_into().collect(), &tether)
+                .await?;
 
         Result::<_, RealProtonMailError>::Ok(MessageAvailableActions::from(actions))
     })
@@ -512,14 +516,13 @@ pub async fn available_label_as_actions_for_messages(
     ids: Vec<Id>,
 ) -> Result<Vec<LabelAsAction>, ActionError> {
     uniffi_async(async move {
-        let actions = RealMessage::available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            mailbox.stash(),
-        )
-        .await?
-        .into_iter()
-        .map_into()
-        .collect_vec();
+        let tether = mailbox.stash().connection();
+        let actions =
+            RealMessage::available_label_as_actions(ids.into_iter().map_into().collect(), &tether)
+                .await?
+                .into_iter()
+                .map_into()
+                .collect_vec();
 
         Result::<_, RealProtonMailError>::Ok(actions)
     })
@@ -549,10 +552,10 @@ pub async fn watch_available_label_as_actions_for_messages(
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let handle = watch_channel(rx, callback).await;
-
+        let tether = mailbox.stash().connection();
         let actions = RealMessage::watch_available_label_as_actions(
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
             tx,
         )
         .await?
@@ -591,13 +594,14 @@ pub async fn available_move_to_actions_for_messages(
 ) -> Result<Vec<MoveAction>, ActionError> {
     uniffi_async(async move {
         let view = mailbox.mbox().label_id();
-        let view = RealLabel::load(view, mailbox.stash())
+        let tether = mailbox.stash().connection();
+        let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
         let actions = RealMessage::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?
         .into_iter()
@@ -627,10 +631,11 @@ pub async fn all_available_bottom_bar_actions_for_messages(
     message_ids: Vec<Id>,
 ) -> Result<AllBottomBarMessageActions, ActionError> {
     uniffi_async(async move {
+        let tether = mailbox.stash().connection();
         let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
             mailbox.label_id().into(),
             message_ids.into_iter().map_into().collect(),
-            mailbox.stash(),
+            &tether,
         )
         .await?
         .into();
@@ -694,8 +699,9 @@ pub async fn watch_messages_for_label(
 ) -> Result<WatchedMessages, ActionError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
+        let tether = stash.connection();
         let (messages, receiver) =
-            RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
+            RealMessage::watch_in_label(RealLocalId::from(label_id), &tether).await?;
         let watcher = watch_channel(receiver, callback).await;
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),

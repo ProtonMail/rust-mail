@@ -116,14 +116,14 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
         if self.target_ids.is_empty() {
             return Err(ActionError::NoInput);
         }
 
         self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tx).await?);
 
-        let conv_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
+        let conv_ids = LocalId::counterparts::<T>(self.target_ids.clone(), tx)
             .await
             .map_err(|e| {
                 error!("Failed to resolve ids: {e}");
@@ -139,7 +139,7 @@ where
     async fn mark_rollback(
         &self,
         item_type: RollbackItemType,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
             RollbackItem::new(remote_id.clone(), item_type)
@@ -213,10 +213,10 @@ where
     /// # Errors
     ///
     /// * if some id can not be resolved
-    async fn resolve_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
         self.remote_destination_label_id =
             Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
-        self.remote_target_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
+        self.remote_target_ids = LocalId::counterparts::<T>(self.target_ids.clone(), tx)
             .await
             .inspect_err(|e| error!("Failed to resolve ids: {e}"))?;
         Ok(())
@@ -275,15 +275,15 @@ where
     }
 
     /// Resolve all local ids into the remote counterpart.
-    async fn resolve_remote_ids(&mut self, tx: &Bond) -> Result<(), ActionError> {
-        self.remote_ids = LocalId::counterparts::<T, _>(self.local_ids.clone(), tx).await?;
+    async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
+        self.remote_ids = LocalId::counterparts::<T>(self.local_ids.clone(), tx).await?;
         self.remote_all_label_ids =
-            LocalId::counterparts::<Label, _>(self.local_all_label_ids.clone(), tx).await?;
+            LocalId::counterparts::<Label>(self.local_all_label_ids.clone(), tx).await?;
         let remote_selected_label_ids =
-            LocalId::counterparts::<Label, _>(self.local_selected_label_ids.clone(), tx).await?;
+            LocalId::counterparts::<Label>(self.local_selected_label_ids.clone(), tx).await?;
         self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
         let remote_partially_selected_label_ids =
-            LocalId::counterparts::<Label, _>(self.local_partially_selected_label_ids.clone(), tx)
+            LocalId::counterparts::<Label>(self.local_partially_selected_label_ids.clone(), tx)
                 .await?;
         self.remote_partially_selected_label_ids = remote_partially_selected_label_ids
             .into_iter()
@@ -292,7 +292,11 @@ where
         Ok(())
     }
 
-    async fn mark_rollback(&self, kind: RollbackItemType, bond: &Bond) -> Result<(), ActionError> {
+    async fn mark_rollback(
+        &self,
+        kind: RollbackItemType,
+        bond: &Bond<'_>,
+    ) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
             RollbackItem::new(remote_id.clone(), kind)
                 .save(bond)

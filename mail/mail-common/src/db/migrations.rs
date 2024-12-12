@@ -7,12 +7,12 @@ mod v0;
 
 const VERSION_TABLE_NAME: &str = "proton_mail_db_version";
 
-pub async fn migrate_db(conn: &Stash) -> Result<usize, MigratorError> {
+pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
     let migrations = vec![MigrationV0 {}];
-
+    let mut tether = stash.connection();
     let migrator = Migrator::new();
     migrator
-        .migrate(conn, VERSION_TABLE_NAME, &migrations)
+        .migrate(&mut tether, VERSION_TABLE_NAME, &migrations)
         .await
 }
 

@@ -63,7 +63,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // Nothing to do
         Ok(())
@@ -73,7 +73,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -130,7 +130,7 @@ impl Handler for V2ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -139,7 +139,7 @@ impl Handler for V2ActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

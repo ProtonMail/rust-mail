@@ -11,7 +11,7 @@ use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError, Tether};
+use stash::stash::{Bond, StashError, Tether};
 use std::ops::Add;
 use tracing::debug;
 
@@ -148,9 +148,9 @@ impl StoredAction {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    pub async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         // Dependencies
-        let dependencies = interface
+        let dependencies = tether
             .query_values::<_, Id>(
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
@@ -159,7 +159,7 @@ impl StoredAction {
         self.dependencies.extend(dependencies);
 
         // Resources
-        match interface
+        match tether
             .query_value::<_, Resources>(
                 "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
                 params![self.id],
@@ -186,7 +186,7 @@ impl StoredAction {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Create dependencies.
         for dep in &self.dependencies {
             bond.execute(
@@ -211,7 +211,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(bond: &Bond, id: Id) -> Result<(), StashError> {
+    pub async fn delete(bond: &Bond<'_>, id: Id) -> Result<(), StashError> {
         bond.execute("DELETE FROM action_queue WHERE id = ?", params![id])
             .await?;
         Ok(())
@@ -222,8 +222,8 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(bond: &Bond, id: Id) -> Result<Vec<Id>, StashError> {
-        bond
+    pub async fn dependees(tehter: &Tether, id: Id) -> Result<Vec<Id>, StashError> {
+        tehter
             .query_values::<_, Id>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
@@ -261,7 +261,7 @@ impl StoredAction {
 /// # Errors
 ///
 /// Returns errors if the query or migration failed.
-pub async fn create_tables(conn: &Stash) -> Result<(), MigratorError> {
+pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
     let span = tracing::debug_span!("Action Table Setup");
     let _enter = span.enter();
     let migrator = proton_sqlite3::Migrator::new();
@@ -282,7 +282,7 @@ impl Migration for MigrationV1 {
         "action_queue_v1"
     }
 
-    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
         // create actions table
         let query = indoc! {"
             CREATE TABLE action_queue (

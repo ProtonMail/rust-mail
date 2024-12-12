@@ -73,10 +73,11 @@ async fn sidebar_system_labels(
     // Tests
     let result: Vec<_> = result.iter().map(|l| l.local_id).collect();
     let mut to_expect = Vec::with_capacity(expected.len());
+    let tether = user_ctx.user_stash().connection();
     for label_id in expected {
         to_expect.push(
             label_id
-                .counterpart::<Label, _>(user_ctx.user_stash())
+                .counterpart::<Label>(&tether)
                 .await
                 .unwrap()
                 .unwrap(),

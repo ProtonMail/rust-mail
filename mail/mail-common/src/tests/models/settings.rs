@@ -6,7 +6,7 @@ use stash::orm::Model;
 
 #[tokio::test]
 async fn test_mail_settings_store_read() {
-    let stash = new_test_connection().await;
+    let mut tether = new_test_connection().await.connection();
     let mut settings = MailSettings {
         local_id: None,
         display_name: "foo".to_owned(),
@@ -52,10 +52,10 @@ async fn test_mail_settings_store_read() {
         hide_sender_images: Default::default(),
         row_id: None,
     };
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     settings.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
-    let db_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &stash)
+    let db_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &tether)
         .await
         .unwrap()
         .unwrap();

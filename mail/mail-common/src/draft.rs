@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use tracing::{debug, error};
 
 pub mod compose;
@@ -178,7 +178,8 @@ impl Draft {
         context: &MailUserContext,
         message_id: LocalId,
     ) -> Result<Self, MailContextError> {
-        let Some(message) = Message::find_by_id(message_id, context.user_stash()).await? else {
+        let mut tether = context.user_stash().connection();
+        let Some(message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
@@ -192,7 +193,6 @@ impl Draft {
                 error!("Failed to get message body from cache: {e}");
             })?;
 
-        let tether = context.user_stash().connection();
         let metadata_id = if let Some(metadata) =
             DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
                 .await
@@ -256,9 +256,9 @@ impl Draft {
     /// body into the cache.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(stash))]
     pub async fn empty(stash: &Stash) -> Result<Self, MailContextError> {
-        let conn = stash.connection();
+        let mut tether = stash.connection();
         // Default address should have display_order 0
-        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &conn, None)
+        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether, None)
             .await
             .inspect_err(|e| {
                 error!("Failed to load addresses: {e}");
@@ -269,9 +269,9 @@ impl Draft {
             return Err(Error::UserHasNoAddresses.into());
         }
 
-        let mail_settings = MailSettings::get(&conn).await?.unwrap_or_default();
+        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         let address = &addresses[0];
-        let tx = conn.transaction().await?;
+        let tx = tether.transaction().await?;
         let metadata = DraftMetadata::empty(&tx)
             .await
             .inspect_err(|e| error!("Failed to create new empty draft metadata: {e}"))?;
@@ -324,7 +324,7 @@ impl Draft {
         reply_mode: ReplyMode,
         use_utc: bool,
     ) -> Result<Self, MailContextError> {
-        let tether = context.user_stash().connection();
+        let mut tether = context.user_stash().connection();
         // Load the message we reply to.
         let Some(source_message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
@@ -648,11 +648,8 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn message_id<A>(&self, interface: &A) -> Result<Option<LocalId>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, interface).await? else {
+    pub async fn message_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, tether).await? else {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
@@ -667,11 +664,8 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn conversation_id<A>(&self, interface: &A) -> Result<Option<LocalId>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, interface).await? else {
+    pub async fn conversation_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, tether).await? else {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 

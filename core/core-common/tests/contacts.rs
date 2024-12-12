@@ -94,13 +94,13 @@ async fn test_sync_and_load_contacts() {
         .expect("failed to sync contacts");
 
     // Check database
-    let conn = user_ctx.stash();
-    let mut contacts = Contact::find("LIMIT 100", vec![], conn, None)
+    let conn = user_ctx.stash().connection();
+    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
         .await
         .expect("Failed to get contacts");
     for contact in &mut contacts {
-        contact.cards(conn).await.expect("Failed to query cards");
-        contact.emails(conn).await.expect("Failed to query emails");
+        contact.cards(&conn).await.expect("Failed to query cards");
+        contact.emails(&conn).await.expect("Failed to query emails");
     }
     let expected_contacts = expected_local_contacts();
     prune_contacts!(contacts);
@@ -125,25 +125,25 @@ async fn test_sync_and_load_contacts_mixed() {
     .await;
 
     // Check database
-    let conn = user_ctx.stash();
+    let conn = user_ctx.stash().connection();
 
     let remote_id = test_contacts.first().unwrap().id.clone();
-    let mut contact = Contact::find_by_id(RemoteId::from(remote_id), conn)
+    let mut contact = Contact::find_by_id(RemoteId::from(remote_id), &conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact.cards(conn).await.expect("Failed to query cards");
-    contact.emails(conn).await.expect("Failed to query emails");
+    contact.cards(&conn).await.expect("Failed to query cards");
+    contact.emails(&conn).await.expect("Failed to query emails");
     prune_contact!(contact);
     let expected_contact = create_test_local_full_contact();
 
     assert_eq!(contact, expected_contact);
 
-    let mut contacts = Contact::find("LIMIT 100", vec![], conn, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
         .await
         .expect("Failed to load contacts");
     for contact in &mut contacts {
-        contact.emails(conn).await.expect("Failed to query emails");
+        contact.emails(&conn).await.expect("Failed to query emails");
     }
     prune_contacts!(contacts);
     let expected_contacts = expected_local_contacts();
@@ -151,7 +151,7 @@ async fn test_sync_and_load_contacts_mixed() {
 
     let email_to_query = "KeYtranSparenCymAiler@gmail.com";
     let queried_contact_emails =
-        ContactEmail::find("WHERE email = ?", params![email_to_query], conn, None)
+        ContactEmail::find("WHERE email = ?", params![email_to_query], &conn, None)
             .await
             .expect("Failed to get contact emails");
     let expected_mail = contact
@@ -208,18 +208,18 @@ async fn test_sync_and_delete_event_contact() {
         .expect("failed to execute event");
 
     // Were the  deletions successful?
-    let conn = user_ctx.stash();
+    let conn = user_ctx.stash().connection();
     let queried_contact_emails = ContactEmail::find(
         "WHERE email = ?",
         params![email_to_remove.canonical_email],
-        conn,
+        &conn,
         None,
     )
     .await
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let contacts = Contact::find("LIMIT 100", vec![], conn, None)
+    let contacts = Contact::find("LIMIT 100", vec![], &conn, None)
         .await
         .expect("Failed to get contacts");
     assert_eq!(contacts.len(), test_contacts.len() - 1);
@@ -272,23 +272,23 @@ async fn test_sync_and_modify_event_contact() {
         .await
         .expect("failed to execute event");
 
-    let conn = user_ctx.stash();
+    let conn = user_ctx.stash().connection();
     let queried_contact_emails = ContactEmail::find(
         "WHERE email = ?",
         params![removed_email.canonical_email],
-        conn,
+        &conn,
         None,
     )
     .await
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let mut contact = Contact::find_by_id(remote_id, conn)
+    let mut contact = Contact::find_by_id(remote_id, &conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
     contact
-        .emails(conn)
+        .emails(&conn)
         .await
         .expect("Failed to query contact emails");
 
@@ -300,7 +300,7 @@ async fn test_sync_and_modify_event_contact() {
     );
     let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
     let mut cards = contact
-        .cards(conn)
+        .cards(&conn)
         .await
         .expect("Failed to query cards")
         .clone();
@@ -330,8 +330,8 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
-    let tx = user_ctx
-        .stash()
+    let mut tether = user_ctx.stash().connection();
+    let tx = tether
         .transaction()
         .await
         .expect("Failed to start transaction");
@@ -373,8 +373,7 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
-    let tx = user_ctx
-        .stash()
+    let tx = tether
         .transaction()
         .await
         .expect("Failed to start transaction");
@@ -409,16 +408,16 @@ async fn prepare_sync_test_data_contacts(
     ctx.catch_all().await;
 
     // Sync contacts
+    let mut tether = user_ctx.stash().connection();
     Contact::sync(user_ctx.session().api(), user_ctx.stash())
         .await
         .expect("failed to sync contacts");
     let local_id = RemoteId::from(remote_contact_id)
-        .counterpart::<Contact, _>(user_ctx.stash())
+        .counterpart::<Contact>(&tether)
         .await
         .unwrap()
         .unwrap();
-    let tx = user_ctx
-        .stash()
+    let tx = tether
         .transaction()
         .await
         .expect("Failed to start transaction");

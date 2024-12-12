@@ -58,7 +58,8 @@ use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::Bond;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::Tether;
+use stash::stash::{Stash, StashError};
 
 #[allow(async_fn_in_trait)]
 pub trait ModelExtension: Model {
@@ -85,14 +86,12 @@ pub trait ModelExtension: Model {
     ///
     /// * [`find()`](Model::find())
     ///
-    async fn all<A>(
-        interface: &A,
+    #[must_use]
+    async fn all(
+        tether: &Tether,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Self::find(String::new(), vec![], &interface.clone().into(), queue).await
+    ) -> Result<Vec<Self>, StashError> {
+        Self::find(String::new(), vec![], tether, queue).await
     }
 
     /// Finds a record by its ID.
@@ -127,12 +126,11 @@ pub trait ModelExtension: Model {
     /// * [`find_first()`](Model::find_first())
     /// * [`load()`](Model::load())
     ///
-    async fn find_by_id<I, A>(id: I, interface: &A) -> Result<Option<Self>, StashError>
+    async fn find_by_id<I>(id: I, tether: &Tether) -> Result<Option<Self>, StashError>
     where
         I: Into<AgnosticId> + Id,
-        A: Into<AgnosticInterface> + Interface,
     {
-        id.load(interface).await
+        id.load(tether).await
     }
 
     /// Finds a records by its IDs.
@@ -154,13 +152,12 @@ pub trait ModelExtension: Model {
     /// * [`load()`](Model::load())
     /// * [`load_by_id()`](ModelExtension::load_by_id())
     ///
-    async fn find_by_ids<I, A>(
+    async fn find_by_ids<I>(
         ids: impl IntoIterator<Item = I>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Vec<Self>, StashError>
     where
         I: Into<AgnosticId> + Id + ToSql + 'static,
-        A: Into<AgnosticInterface> + Interface,
     {
         let mut ids = ids.into_iter().peekable();
         let field_name = if let Some(first) = ids.peek() {
@@ -176,7 +173,7 @@ pub trait ModelExtension: Model {
         let placeholders = placeholders.join(", ");
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
-        Self::find(query, parameters, interface, None).await
+        Self::find(query, parameters, tether, None).await
     }
 
     /// Finds local record IDs matching given criteria.
@@ -214,16 +211,15 @@ pub trait ModelExtension: Model {
     /// * [`find()`](Model::find())
     /// * [`find_remote_ids()`](ModelExtension::find_remote_ids())
     ///
-    async fn find_local_ids<Q, A>(
+    async fn find_local_ids<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Vec<LocalId>, StashError>
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
     {
-        Ok(interface
+        Ok(tether
             .query_values::<_, u64>(
                 formatdoc!(
                     "
@@ -280,16 +276,15 @@ pub trait ModelExtension: Model {
     /// * [`find()`](Model::find())
     /// * [`find_local_ids()`](ModelExtension::find_local_ids())
     ///
-    async fn find_remote_ids<Q, A>(
+    async fn find_remote_ids<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &A,
+        tehter: &Tether,
     ) -> Result<Vec<RemoteId>, StashError>
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
     {
-        Ok(interface
+        Ok(tehter
             .query::<_, QueryResultRemoteId>(
                 formatdoc!(
                     "
@@ -323,14 +318,15 @@ pub trait ModelExtension: Model {
     /// # Errors
     ///
     /// Returns an error if we fail to delete the account from the db.
-    async fn delete_by_remote_id<A>(remote_id: RemoteId, interface: &A) -> Result<usize, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    #[must_use]
+    async fn delete_by_remote_id(
+        remote_id: RemoteId,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
         let table = Self::table_name();
         let query = format!("DELETE FROM {table} WHERE remote_id = ?");
 
-        interface.execute(query, params![remote_id]).await
+        bond.execute(query, params![remote_id]).await
     }
 
     /// Counts models in database.
@@ -353,16 +349,15 @@ pub trait ModelExtension: Model {
     ///
     /// When querying the database fails.
     ///
-    async fn count<Q, A>(
+    async fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<u64, StashError>
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
     {
-        interface
+        tether
             .query_value::<_, u64>(
                 formatdoc!(
                     "SELECT COUNT(*) AS value FROM {} {}",
@@ -379,7 +374,7 @@ pub trait ModelExtension: Model {
     /// # Errors
     ///
     /// See [`Model::save()`].
-    async fn with_save(mut self, bond: &Bond) -> Result<Self, StashError> {
+    async fn with_save(mut self, bond: &Bond<'_>) -> Result<Self, StashError> {
         self.save(bond).await?;
         Ok(self)
     }
@@ -482,7 +477,7 @@ impl Address {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
@@ -512,7 +507,8 @@ impl Address {
             .into_iter()
             .map(Address::from);
 
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         for mut address in addresses {
             address.save(&tx).await?;
         }
@@ -534,11 +530,8 @@ impl Address {
     ///
     /// Returns a [`StashError`] if the database access fails.
     ///
-    pub async fn by_email<A>(email: &str, interface: &A) -> Result<Option<Address>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Self::find_first("WHERE email = ?", params![email.to_owned()], interface).await
+    pub async fn by_email(email: &str, tether: &Tether) -> Result<Option<Address>, StashError> {
+        Self::find_first("WHERE email = ?", params![email.to_owned()], tether).await
     }
 }
 
@@ -720,7 +713,7 @@ impl User {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
@@ -746,7 +739,8 @@ impl User {
         let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
         settings.remote_id.clone_from(&user.remote_id);
 
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         user.save(&tx).await?;
         settings.save(&tx).await?;
         tx.commit().await?;
@@ -878,7 +872,7 @@ impl UserSettings {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;

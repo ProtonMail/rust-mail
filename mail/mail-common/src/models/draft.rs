@@ -7,7 +7,7 @@ use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, StashError};
+use stash::stash::{Bond, StashError, Tether};
 use std::fmt::{Display, Formatter};
 
 /// Identifier for draft [`DraftMetadata`]
@@ -67,7 +67,7 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn empty(bond: &Bond) -> Result<Self, StashError> {
+    pub async fn empty(bond: &Bond<'_>) -> Result<Self, StashError> {
         let mut metadata = Self {
             id: None,
             local_message_id: None,
@@ -91,7 +91,7 @@ impl DraftMetadata {
         reply_mode: ReplyMode,
         source_message_id: LocalId,
         source_conversation_id: LocalId,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<Self, StashError> {
         let mut metadata = Self {
             id: None,
@@ -112,11 +112,8 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn find_by_id<A>(id: MetadataId, interface: &A) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        DraftMetadata::find_first("WHERE id=?", params![id], interface).await
+    pub async fn find_by_id(id: MetadataId, tether: &Tether) -> Result<Option<Self>, StashError> {
+        DraftMetadata::find_first("WHERE id=?", params![id], tether).await
     }
 
     /// Find metadata for a message with `local_message_id`.
@@ -124,17 +121,14 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn find_by_message_id<A>(
+    pub async fn find_by_message_id(
         local_message_id: LocalId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
         DraftMetadata::find_first(
             "WHERE local_message_id=?",
             params![local_message_id],
-            interface,
+            tether,
         )
         .await
     }
@@ -146,7 +140,7 @@ impl DraftMetadata {
     /// Return error if the query failed.
     pub async fn delete_for_message(
         local_message_id: LocalId,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<usize, StashError> {
         bond.execute(
             format!(
@@ -163,7 +157,7 @@ impl DraftMetadata {
     /// # Errors
     ///
     /// Return error if the query failed.
-    pub async fn delete(id: MetadataId, bond: &Bond) -> Result<usize, StashError> {
+    pub async fn delete(id: MetadataId, bond: &Bond<'_>) -> Result<usize, StashError> {
         bond.execute(
             format!("DELETE FROM `{}` WHERE id = ?", Self::table_name()),
             params![id],

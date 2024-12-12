@@ -12,10 +12,10 @@ use stash::orm::Model;
 
 #[tokio::test]
 async fn test_core_store_and_load_user() {
-    let stash = new_core_test_connection().await;
+    let mut tether = new_core_test_connection().await.connection();
     let mut user = new_test_user();
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");
@@ -32,10 +32,10 @@ async fn test_core_store_and_load_user() {
 
 #[tokio::test]
 async fn test_core_user_space_updates() {
-    let stash = new_core_test_connection().await;
+    let mut tether = new_core_test_connection().await.connection();
     let mut user = new_test_user();
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");
@@ -65,7 +65,7 @@ async fn test_core_user_space_updates() {
 }
 #[tokio::test]
 async fn test_core_store_and_load_user_settings() {
-    let stash = new_core_test_connection().await;
+    let mut tether = new_core_test_connection().await.connection();
 
     let user_id = RemoteId::from("USER");
 
@@ -118,7 +118,7 @@ async fn test_core_store_and_load_user_settings() {
     };
 
     {
-        let tx = stash
+        let tx = tether
             .transaction()
             .await
             .expect("failed to start transaction");

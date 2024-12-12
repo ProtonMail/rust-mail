@@ -10,7 +10,7 @@ use itertools::Itertools;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{StashError, Tether};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ExclusiveLocation {
@@ -74,18 +74,15 @@ impl ExclusiveLocation {
     ///
     /// Returns error if the database request fail.
     ///
-    pub async fn from_label_ids<A>(
+    pub async fn from_label_ids(
         label_ids: &[LabelId],
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
         let label_ids = label_ids
             .iter()
             .map(|l| l.clone().into_inner())
             .collect_vec();
-        let labels = Label::find_by_ids(label_ids, interface).await?;
+        let labels = Label::find_by_ids(label_ids, tether).await?;
         Ok(ExclusiveLocation::from_labels(&labels))
     }
 

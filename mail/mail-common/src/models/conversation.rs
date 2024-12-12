@@ -41,7 +41,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -195,8 +195,9 @@ impl Conversation {
         queue: &proton_action_queue::queue::Queue,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+        let tether = queue.stash().connection();
         let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label, _>(queue.stash())
+            .counterpart::<crate::models::Label>(&tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
@@ -219,8 +220,9 @@ impl Conversation {
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+        let tether = queue.stash().connection();
         let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label, _>(queue.stash())
+            .counterpart::<crate::models::Label>(&tether)
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
@@ -412,7 +414,7 @@ impl Conversation {
         selected_label_ids: &[LocalId],
         partially_selected_label_ids: &[LocalId],
         must_archive: bool,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for label in Label::find_by_kind(LabelType::Label, bond).await? {
             let label_id = label.local_id.expect("Should be set");
@@ -425,10 +427,9 @@ impl Conversation {
         }
 
         if must_archive {
-            let archive_id =
-                RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), bond)
-                    .await?
-                    .expect("Archive label must have a RemoteId");
+            let archive_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), bond)
+                .await?
+                .expect("Archive label must have a RemoteId");
             Self::move_conversations(source_label_id, archive_id, conversation_ids, bond).await?;
         }
 
@@ -436,25 +437,22 @@ impl Conversation {
     }
 
     /// Remotely apply LabelAs action for conversations
-    pub(crate) async fn remote_relabel<A>(
+    pub(crate) async fn remote_relabel(
         session: &Session,
         added_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
         removed_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
-        interface: &A,
-    ) -> Result<Vec<RemoteId>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<RemoteId>, AppError> {
         /// Gets a hashmap of the remote label id and the local ids.
         async fn group_ids_by_label(
             label_ids: &HashMap<LocalId, HashSet<LocalId>>,
-            interface: &(impl Into<AgnosticInterface> + Interface),
+            tether: &Tether,
         ) -> Result<HashMap<RemoteId, HashSet<LocalId>>, AppError> {
             let mut map = HashMap::new();
             for (conv_id, local_label_ids) in label_ids {
-                let remote_label_ids = LocalId::counterparts::<Label, _>(
+                let remote_label_ids = LocalId::counterparts::<Label>(
                     Vec::from_iter(local_label_ids.iter().cloned()),
-                    interface,
+                    tether,
                 )
                 .await?;
                 for remote_label_id in remote_label_ids {
@@ -466,18 +464,16 @@ impl Conversation {
             Ok(map)
         }
 
-        let added_by_label = group_ids_by_label(added_label_ids, interface).await?;
-        let removed_by_label = group_ids_by_label(removed_label_ids, interface).await?;
+        let added_by_label = group_ids_by_label(added_label_ids, tether).await?;
+        let removed_by_label = group_ids_by_label(removed_label_ids, tether).await?;
 
         let api = session.api();
 
         let mut failed_ids = vec![];
         for (label_id, conversation_ids) in added_by_label {
-            let conversation_ids = LocalId::counterparts::<Conversation, _>(
-                Vec::from_iter(conversation_ids),
-                interface,
-            )
-            .await?;
+            let conversation_ids =
+                LocalId::counterparts::<Conversation>(Vec::from_iter(conversation_ids), tether)
+                    .await?;
             let response = api
                 .put_conversations_label(
                     conversation_ids.iter().cloned().map_into().collect(),
@@ -496,11 +492,9 @@ impl Conversation {
         }
 
         for (label_id, conversation_ids) in removed_by_label {
-            let conversation_ids = LocalId::counterparts::<Conversation, _>(
-                Vec::from_iter(conversation_ids),
-                interface,
-            )
-            .await?;
+            let conversation_ids =
+                LocalId::counterparts::<Conversation>(Vec::from_iter(conversation_ids), tether)
+                    .await?;
             let response = api
                 .put_conversations_unlabel(
                     conversation_ids.iter().cloned().map_into().collect(),
@@ -527,9 +521,9 @@ impl Conversation {
         mut removed_labels: HashMap<LocalId, HashSet<LocalId>>,
         mut original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
         must_archive: bool,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let archive_id = RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), bond)
+        let archive_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), bond)
             .await?
             .expect("Archive label must have a RemoteId");
 
@@ -567,16 +561,13 @@ impl Conversation {
     ///
     /// When database request fail.
     ///
-    pub(crate) async fn find_by_ids<A>(
+    pub(crate) async fn find_by_ids(
         conversation_ids: impl IntoIterator<Item = LocalId>,
-        interface: &A,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
         let (query, params) =
             find_in_query!("WHERE deleted = 0 AND local_id IN ({})", conversation_ids);
-        Conversation::find(query, params, interface, None).await
+        Conversation::find(query, params, tether, None).await
     }
 
     /// Create a new unknown conversation where we only know the `remote_id`.
@@ -623,7 +614,7 @@ impl Conversation {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
@@ -649,7 +640,7 @@ impl Conversation {
     pub async fn apply_label(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for id in ids {
             let message_ids = bond
@@ -782,7 +773,7 @@ impl Conversation {
     ///
     pub async fn create_or_update_conversations(
         conversations: Vec<Conversation>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<Vec<LocalId>, AppError> {
         let mut ids = Vec::with_capacity(conversations.len());
 
@@ -817,7 +808,7 @@ impl Conversation {
     pub async fn mark_deleted(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let all_mail_id = SystemLabel::AllMail.local_id(bond).await?;
         let is_all_mail = all_mail_id
@@ -847,7 +838,7 @@ impl Conversation {
     ///
     async fn mark_deleted_all_mail(
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
             let Some(mut conversation) = Conversation::find_by_id(id, bond).await? else {
@@ -903,7 +894,7 @@ impl Conversation {
     async fn remove_conversation_from_all_labels(
         &self,
         all_stats: HashMap<LocalId, MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let conv_labels = ConversationLabel::find(
             "WHERE local_conversation_id=? AND deleted=0",
@@ -951,7 +942,7 @@ impl Conversation {
     async fn mark_deleted_current_label(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
             let Some(mut conversation) = Conversation::find_first(
@@ -1015,7 +1006,7 @@ impl Conversation {
         &mut self,
         label_id: LocalId,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=0 AND local_label_id=?",
@@ -1063,7 +1054,7 @@ impl Conversation {
     pub async fn mark_undeleted(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let all_mail_id = SystemLabel::AllMail.local_id(bond).await?;
         let is_all_mail = all_mail_id
@@ -1093,7 +1084,7 @@ impl Conversation {
     ///
     async fn mark_undeleted_all_mail(
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
             let Some(mut conversation) = Conversation::find_by_id(id, bond).await? else {
@@ -1162,7 +1153,7 @@ impl Conversation {
     async fn add_conversation_to_all_labels(
         &self,
         all_stats: HashMap<LocalId, MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let conv_labels = ConversationLabel::find(
             "WHERE local_conversation_id=? AND deleted=1",
@@ -1210,7 +1201,7 @@ impl Conversation {
     async fn mark_undeleted_current_label(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
             let Some(mut conversation) =
@@ -1272,7 +1263,7 @@ impl Conversation {
         &mut self,
         label_id: LocalId,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=1 AND local_label_id=?",
@@ -1313,7 +1304,7 @@ impl Conversation {
     pub async fn mark_delete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let undeleted_messages = Message::count(
             "WHERE local_conversation_id=? AND deleted=0",
@@ -1352,7 +1343,7 @@ impl Conversation {
     pub async fn mark_undelete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
             self.num_messages += stats.count;
@@ -1510,10 +1501,7 @@ impl Conversation {
     ///
     /// Database error.
     ///
-    pub async fn load_labels<A>(&self, interface: &A) -> Result<Vec<Label>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn load_labels(&self, tehter: &Tether) -> Result<Vec<Label>, StashError> {
         let ids = self
             .labels
             .iter()
@@ -1527,7 +1515,7 @@ impl Conversation {
                 vec!["?"; ids.len()].join(",")
             ),
             ids,
-            interface,
+            tehter,
             None,
         )
         .await?;
@@ -1541,18 +1529,18 @@ impl Conversation {
     ///
     /// See [`Model::load()`].
     ///
-    async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+    async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.labels = ConversationLabel::find(
             "WHERE local_conversation_id = ?",
             params![self.local_id],
-            interface,
+            tether,
             None,
         )
         .await?;
-        let labels = self.load_labels(interface).await?;
+        let labels = self.load_labels(tether).await?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.attachments_metadata =
-            Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), interface)
+            Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), tether)
                 .await?;
         self.custom_labels = labels
             .into_iter()
@@ -1576,7 +1564,7 @@ impl Conversation {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this conversation.
         if !self.labels.is_empty() {
             #[allow(trivial_casts)]
@@ -1717,7 +1705,7 @@ impl Conversation {
     ///
     pub async fn mark_read(
         conversation_ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for conversation_id in conversation_ids {
             let mut conversation = Conversation::find_by_id(conversation_id, bond)
@@ -1842,7 +1830,7 @@ impl Conversation {
     pub async fn mark_unread(
         local_label_id: LocalId,
         conversation_ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for conversation_id in conversation_ids {
             let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await?
@@ -1980,7 +1968,7 @@ impl Conversation {
     pub async fn remove_label(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let mut label = Label::find_by_id(label_id, bond)
             .await?
@@ -2107,13 +2095,13 @@ impl Conversation {
     async fn sync_dependencies(
         conversations: &[ApiConversation],
         api: &Proton,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<(), AppError> {
         let mut missing_labels = vec![];
         for conv in conversations {
             for label in &conv.labels {
                 let rid: RemoteId = label.id.clone().into();
-                if (Label::find_by_id(rid, stash)).await?.is_none() {
+                if (Label::find_by_id(rid, tether)).await?.is_none() {
                     missing_labels.push(label.id.clone());
                 }
             }
@@ -2124,7 +2112,7 @@ impl Conversation {
                 "{} label(s) were in a conversations but not locally, synchronizing...",
                 missing_labels.len()
             );
-            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+            Label::sync_labels_by_ids(api, tether, missing_labels).await?;
         }
         Ok(())
     }
@@ -2151,7 +2139,7 @@ impl Conversation {
     pub async fn search(
         options: GetConversationsOptions,
         api: &Proton,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<Conversation>, AppError> {
         // Fetch all the conversations from the API
         let conversations = api
@@ -2160,13 +2148,13 @@ impl Conversation {
             .context("Error fetching the conversations from the API")?
             .conversations;
 
-        Self::sync_dependencies(&conversations, api, stash).await?;
+        Self::sync_dependencies(&conversations, api, tether).await?;
 
         let mut conversations = conversations
             .into_iter()
             .map(Conversation::from)
             .collect_vec();
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         Self::create_or_update_conversations(conversations.clone(), &tx).await?;
         tx.commit().await?;
         conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
@@ -2194,7 +2182,8 @@ impl Conversation {
             futures::join!(Conversation::fetch_counts(api), Message::fetch_counts(api));
         let (conversation_counts, message_counts) = (conversation_counts?, message_counts?);
 
-        let tx = stash.transaction().await?;
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
         Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
         Label::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
@@ -2219,7 +2208,7 @@ impl Conversation {
         label_id: LabelId,
         count: usize,
         api: &PM,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<(), AppError> {
         let response = api
             .get_conversations(GetConversationsOptions {
@@ -2236,7 +2225,7 @@ impl Conversation {
             response.conversations.len(),
             response.total
         );
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         Self::create_or_update_conversations(
             response
                 .conversations
@@ -2283,11 +2272,11 @@ impl Conversation {
     /// N.B.: `all_mail` label is the only not removable label.
     async fn remove_all_labels(
         conversation_ids: Vec<LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let all_mail_id = LabelId::all_mail()
             .into_inner()
-            .counterpart::<Label, _>(bond)
+            .counterpart::<Label>(bond)
             .await?
             .expect("AllMail should be set");
 
@@ -2323,7 +2312,7 @@ impl Conversation {
         source_id: LocalId,
         destination_id: LocalId,
         conversation_ids: Vec<LocalId>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let remote_source_id = Label::resolve_remote_label_id(source_id, bond).await?;
         let remote_destination_id = Label::resolve_remote_label_id(destination_id, bond).await?;
@@ -2385,19 +2374,16 @@ impl Conversation {
     /// * empty list of conversations is provided
     /// * conversation is not in the view
     ///
-    pub async fn available_actions<A>(
+    pub async fn available_actions(
         view: Label,
         conversation_ids: Vec<LocalId>,
-        interface: &A,
-    ) -> Result<ConversationAvailableActions, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<ConversationAvailableActions, AppError> {
         if conversation_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let conversations = Conversation::find_by_ids(conversation_ids, interface).await?;
+        let conversations = Conversation::find_by_ids(conversation_ids, tether).await?;
 
         let mut conversation_actions = Vec::new();
         if conversations.iter().any(|c| c.num_unread > 0) {
@@ -2414,7 +2400,7 @@ impl Conversation {
         }
         conversation_actions.push(ConversationAction::LabelAs);
 
-        let move_actions = MoveItemAction::from_view(view, interface).await?;
+        let move_actions = MoveItemAction::from_view(view, tether).await?;
 
         let general_actions = vec![GeneralActions::SaveAsPdf, GeneralActions::Print];
 
@@ -2436,13 +2422,10 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    pub async fn available_label_as_actions<A>(
+    pub async fn available_label_as_actions(
         local_ids: Vec<LocalId>,
-        interface: &A,
-    ) -> Result<Vec<LabelAsAction>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<LabelAsAction>, AppError> {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
@@ -2454,7 +2437,7 @@ impl Conversation {
         // Thus we need all messages that belong to all conversations,
         // then we find out which labels are in all of the messages and which are only in some.
 
-        let message_ids: Vec<LocalId> = interface
+        let message_ids: Vec<LocalId> = tether
             .query_values(
                 format!(
                     "SELECT local_id AS value
@@ -2465,7 +2448,7 @@ impl Conversation {
                 vec![],
             )
             .await?;
-        let res = Message::available_label_as_actions(message_ids, interface).await?;
+        let res = Message::available_label_as_actions(message_ids, tether).await?;
 
         Ok(res)
     }
@@ -2482,19 +2465,16 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    pub async fn watch_available_label_as_actions<A>(
+    pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalId>,
-        interface: &A,
+        tether: &Tether,
         sender: flume::Sender<()>,
-    ) -> Result<Vec<LabelAsAction>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    ) -> Result<Vec<LabelAsAction>, AppError> {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let ids = local_ids.iter().map(ToString::to_string).join(",");
 
         let (cnv_tx, cnv_rx) = flume::unbounded();
@@ -2503,7 +2483,7 @@ impl Conversation {
         let conversations = Conversation::find(
             "WHERE local_id IN (?)",
             params![ids.clone()],
-            interface,
+            tether,
             Some(cnv_tx),
         )
         .await?;
@@ -2511,7 +2491,7 @@ impl Conversation {
         let _ = ConversationLabel::find(
             "WHERE local_conversation_id IN (?)",
             params![ids.clone()],
-            interface,
+            tether,
             Some(cnv_label_tx),
         )
         .await?;
@@ -2563,30 +2543,27 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    pub async fn available_move_to_actions<A>(
+    pub async fn available_move_to_actions(
         view: Label,
         local_ids: Vec<LocalId>,
-        interface: &A,
-    ) -> Result<Vec<MoveAction>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<MoveAction>, AppError> {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system = Label::find_by_kind(LabelType::System, tether).await?;
         let all_system_excluding_view = all_system
             .iter()
             .filter(|label| label.local_id != view.local_id);
-        let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let all_custom_folders = Label::find_by_kind(LabelType::Folder, tether).await?;
         let conversations = Conversation::find(
             format!(
                 "WHERE local_id IN ({})",
                 local_ids.iter().map(ToString::to_string).join(",")
             ),
             vec![],
-            interface,
+            tether,
             None,
         )
         .await?;
@@ -2614,18 +2591,15 @@ impl Conversation {
                 .chain(all_custom_folders.iter()),
         );
 
-        MoveAction::finalize(all_move_to_actions, interface).await
+        MoveAction::finalize(all_move_to_actions, tether).await
     }
 
     /// Finds all the messages from this conversation
-    pub async fn load_messages<A>(&self, interface: &A) -> Result<Vec<Message>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn load_messages(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
         Message::find(
             "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
             params![self.local_id.unwrap()],
-            interface,
+            tether,
             None,
         )
         .await
@@ -2633,7 +2607,7 @@ impl Conversation {
 
     /// Finds all the conversations that have expired and deletes them and all of its
     /// messages.
-    pub async fn delete_expired(stash: &Stash) -> Result<usize, AppError> {
+    pub async fn delete_expired(tether: &mut Tether) -> Result<usize, AppError> {
         let ids = Self::find_local_ids(
             r"
         WHERE
@@ -2641,7 +2615,7 @@ impl Conversation {
           AND expiration_time != 0
         ",
             vec![],
-            stash,
+            tether,
         )
         .await?;
 
@@ -2649,10 +2623,10 @@ impl Conversation {
 
         if len != 0 {
             let label_id = SystemLabel::AllMail
-                .local_id(stash)
+                .local_id(tether)
                 .await?
                 .ok_or_else(|| StashError::IdNotSet)?;
-            let tx = stash.transaction().await?;
+            let tx = tether.transaction().await?;
             Self::mark_deleted(label_id, ids, &tx).await?;
             tx.commit().await?;
         }
@@ -2666,15 +2640,13 @@ impl Conversation {
     /// Intended for testing only
     /// (local_attachment_id, local_message_id)
     /// Sets a conversation to be deleted in `expire_in` ms
-    pub async fn set_expiration_time_in<A>(
+    pub async fn set_expiration_time_in(
         id: LocalId,
         expire_in: i64,
-        db: &A,
-    ) -> Result<(), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let affected = db
+        tether: &mut Tether,
+    ) -> Result<(), StashError> {
+        let tx = tether.transaction().await?;
+        let affected = tx
             .execute(
                 r"
             UPDATE
@@ -2687,6 +2659,7 @@ impl Conversation {
                 params![expire_in, id],
             )
             .await?;
+        tx.commit().await?;
         if affected != 1 {
             Err(StashError::Custom(String::from("No conversation found")))
         } else {
@@ -2694,18 +2667,15 @@ impl Conversation {
         }
     }
 
-    async fn check_has_label_and_is_unread<A>(
+    async fn check_has_label_and_is_unread(
         local_label_id: LocalId,
         local_conversation_id: LocalId,
-        interface: &A,
-    ) -> Result<(bool, bool), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<(bool, bool), StashError> {
         if let Some(label) = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND local_label_id=?",
             params![local_conversation_id, local_label_id],
-            interface,
+            tether,
         )
         .await?
         {
@@ -2729,7 +2699,7 @@ impl Conversation {
         local_label_id: LocalId,
         local_conversation_id: LocalId,
         local_message_ids: &[LocalId],
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         if local_message_ids.is_empty() {
             return Ok(());
@@ -2825,13 +2795,13 @@ impl Conversation {
     /// Returns error if the queries failed or if the server request failed.
     pub async fn sync_conversation_messages<PM>(
         local_conversation_id: LocalId,
-        stash: &Stash,
+        tether: &mut Tether,
         api: &PM,
     ) -> Result<(), AppError>
     where
         PM: ProtonMail,
     {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, stash).await? else {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, tether).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
@@ -2845,7 +2815,7 @@ impl Conversation {
                 AppError::from(e)
             })?;
 
-            let tx = stash.transaction().await?;
+            let tx = tether.transaction().await?;
 
             let message_metadata: Vec<ApiMessageMetadata> = conversation_response
                 .messages
@@ -2891,14 +2861,11 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn in_label<A>(
+    pub async fn in_label(
         local_label_id: LocalId,
-        interface: &A,
+        tether: &Tether,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    ) -> Result<Vec<Self>, StashError> {
         Conversation::find(
             formatdoc!(
                 "
@@ -2914,7 +2881,7 @@ impl Conversation {
                 "
             ),
             params![local_label_id],
-            interface,
+            tether,
             queue,
         )
         .await
@@ -3015,11 +2982,8 @@ impl Conversation {
     ///
     /// Returns error if the query failed.
     ///
-    pub async fn next_display_order<A>(interface: &A) -> Result<u64, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Ok(interface
+    pub async fn next_display_order(tether: &Tether) -> Result<u64, StashError> {
+        Ok(tether
             .query_value::<_, u64>(
                 format!(
                     "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
@@ -3051,21 +3015,18 @@ impl Conversation {
     }
 
     /// Queries `ConversationLabel` database and finds if there is a label with given `LocalId` in it.
-    pub async fn has_label<A>(
+    pub async fn has_label(
         &self,
         label_local_id: LocalId,
-        interface: &A,
-    ) -> Result<bool, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<bool, StashError> {
         let local_conversation_id = self.id().unwrap();
 
         // Find the first matching label
         let label = ConversationLabel::find_first(
             "WHERE local_conversation_id = ? AND local_label_id = ? AND deleted = 0",
             params![local_conversation_id, label_local_id],
-            interface,
+            tether,
         )
         .await?;
 
@@ -3189,19 +3150,16 @@ impl ConversationLabel {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn labels_ids_for_conversation<A>(
+    pub async fn labels_ids_for_conversation(
         conversation_id: LocalId,
-        interface: &A,
-    ) -> Result<Vec<LocalId>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<LocalId>, StashError> {
         let query = format!(
             "SELECT local_label_id as value FROM {} WHERE local_conversation_id = ?",
             Self::table_name()
         );
 
-        interface
+        tether
             .query_values::<_, LocalId>(&query, params![conversation_id])
             .await
     }
@@ -3217,17 +3175,14 @@ impl ConversationLabel {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn find_by_ids<A>(
+    pub async fn find_by_ids(
         label_ids: impl IntoIterator<Item = LocalId>,
-        interface: &A,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
         ConversationLabel::find(
             format!("WHERE local_id IN ({})", label_ids.into_iter().join(", ")),
             vec![],
-            interface,
+            tether,
             None,
         )
         .await
@@ -3247,7 +3202,7 @@ impl ConversationLabel {
     /// Returns error if the local conversation id is not set, the remote
     /// label_id is not set, the local label can not be found or the query
     /// failed.
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let Some(local_conversation_id) = self.local_conversation_id else {
             return Err(StashError::Custom(
                 "Missing local conversation id".to_owned(),
@@ -3300,7 +3255,7 @@ impl ConversationLabel {
     pub async fn mark_delete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
             self.context_num_messages = self.context_num_messages.saturating_sub(stats.count);
@@ -3330,7 +3285,7 @@ impl ConversationLabel {
     pub async fn mark_undelete_update_stats(
         &mut self,
         stats: Option<&MessageLabelStats>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
             self.context_num_messages += stats.count;
@@ -3356,12 +3311,12 @@ impl ConversationLabel {
     ///
     pub(crate) async fn create_or_update_from_message_metadata(
         metadata: &[ApiMessageMetadata],
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let mut conversation_label_counters = HashMap::new();
         for metadata in metadata {
             let local_conversation_id = if let Some(local_conversation_id) =
-                RemoteId::counterpart::<Conversation, _>(
+                RemoteId::counterpart::<Conversation>(
                     &metadata.conversation_id.clone().into(),
                     bond,
                 )
@@ -3388,10 +3343,9 @@ impl ConversationLabel {
 
         for (conversation_id, label_counters) in conversation_label_counters {
             for (label_id, counters) in label_counters {
-                let local_label_id =
-                    RemoteId::counterpart::<Label, _>(&label_id.clone().into(), bond)
-                        .await?
-                        .expect("Should be set");
+                let local_label_id = RemoteId::counterpart::<Label>(&label_id.clone().into(), bond)
+                    .await?
+                    .expect("Should be set");
                 let label_id = LabelId::from(label_id);
                 let conversation_label =
                     Self::find_by_conversation_and_label(&conversation_id, &local_label_id, bond)
@@ -3412,18 +3366,15 @@ impl ConversationLabel {
         Ok(())
     }
 
-    async fn find_by_conversation_and_label<A>(
+    async fn find_by_conversation_and_label(
         conversation_id: &LocalId,
         label_id: &LocalId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
         Self::find_first(
             "WHERE local_conversation_id = ? AND local_label_id = ?",
             params![*conversation_id, *label_id],
-            interface,
+            tether,
         )
         .await
     }
@@ -3492,15 +3443,12 @@ pub struct ConversationMessageLabelStats {
 impl ConversationMessageLabelStats {
     /// Get stats about for a conversation with `conversation_id` with the
     /// given `message_ids` for a label with `label_id`.
-    async fn with<A>(
+    async fn with(
         conversation_id: LocalId,
         label_id: LocalId,
         message_ids: &[LocalId],
-        interface: &A,
-    ) -> Result<Self, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Self, StashError> {
         let params = [label_id, conversation_id]
             .into_iter()
             .chain(message_ids.iter().cloned())
@@ -3510,7 +3458,7 @@ impl ConversationMessageLabelStats {
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
             "}, vec!["?"; message_ids.len()].join(",")),
-                                     params, interface, None).await?;
+                                     params, tether, None).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3522,15 +3470,12 @@ impl ConversationMessageLabelStats {
     /// Get stats about for a conversation with `conversation_id` for all the
     /// message that do not match the given `message_ids` for a label with
     /// `label_id`.
-    pub async fn without<A>(
+    pub async fn without(
         conversation_id: LocalId,
         label_id: LocalId,
         message_ids: &[LocalId],
-        interface: &A,
-    ) -> Result<Self, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Self, StashError> {
         let params = [label_id, conversation_id]
             .into_iter()
             .chain(message_ids.iter().cloned())
@@ -3540,7 +3485,7 @@ impl ConversationMessageLabelStats {
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
             "}, vec!["?"; message_ids.len()].join(",")),
-                                     params, interface, None).await?;
+                                     params, tether, None).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3638,10 +3583,8 @@ impl ConversationDataSource {
         label_id: LocalId,
         filter: PaginatorFilter,
     ) -> Result<Self, AppError> {
-        let Some(remote_id) = label_id
-            .counterpart::<Label, _>(context.user_stash())
-            .await?
-        else {
+        let tether = context.user_stash().connection();
+        let Some(remote_id) = label_id.counterpart::<Label>(&tether).await? else {
             return Err(AppError::LabelDoesNotHaveRemoteId(label_id));
         };
 
@@ -3658,9 +3601,9 @@ impl DataSource for ConversationDataSource {
     type Item = Conversation;
     type Error = AppError;
 
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
-    async fn total(&self, stash: &Stash) -> Result<usize, Self::Error> {
-        let label = Label::find_by_id(self.local_label_id, stash)
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, tether))]
+    async fn total(&self, tether: &Tether) -> Result<usize, Self::Error> {
+        let label = Label::find_by_id(self.local_label_id, tether)
             .await?
             .ok_or(AppError::LabelNotFound(self.local_label_id))?;
         debug!("Total conversations: {}", label.total_conv);
@@ -3671,7 +3614,7 @@ impl DataSource for ConversationDataSource {
     async fn sync_first_page(
         &self,
         page_size: NonZeroU32,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
             .session
@@ -3692,7 +3635,7 @@ impl DataSource for ConversationDataSource {
         Ok(self
             .save_to_database(
                 response.conversations.into_iter().map_into().collect(),
-                stash,
+                tether,
             )
             .await?)
     }
@@ -3703,7 +3646,7 @@ impl DataSource for ConversationDataSource {
         _: u32,
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         if elements.is_empty() {
             warn!("No element to sync");
@@ -3773,7 +3716,7 @@ impl DataSource for ConversationDataSource {
         Ok(self
             .save_to_database(
                 response.conversations.into_iter().map_into().collect(),
-                stash,
+                tether,
             )
             .await?)
     }
@@ -3783,9 +3726,9 @@ impl ConversationDataSource {
     async fn save_to_database(
         &self,
         mut records: Vec<Conversation>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<Conversation>, StashError> {
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         for record in &mut records {
             Conversation::save(record, &tx).await?;
         }

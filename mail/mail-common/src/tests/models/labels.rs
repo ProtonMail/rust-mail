@@ -14,49 +14,49 @@ use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::random_string;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, Tether};
+use stash::stash::Tether;
 
 #[tokio::test]
 async fn test_remote_label_add() {
-    let stash = new_test_connection().await;
+    let mut tether = new_test_connection().await.connection();
     let labels = test_labels();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for label in labels.clone() {
         Label::from(label).save(&tx).await.unwrap();
     }
     tx.commit().await.unwrap();
-    compare_remote_labels_with_local(&stash, labels).await;
+    compare_remote_labels_with_local(&tether, labels).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_add_1_char_long_name() {
-    let stash = new_test_connection().await;
+    let mut tether = new_test_connection().await.connection();
     let label = test_label(random_string(1).as_str());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Label::from(label.clone()).save(&tx).await.unwrap();
     tx.commit().await.unwrap();
-    compare_remote_label_with_local(&stash, label).await;
+    compare_remote_label_with_local(&tether, label).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_add_100_char_long_name() {
-    let stash = new_test_connection().await;
+    let mut tether = new_test_connection().await.connection();
     let label = test_label(random_string(100).as_str());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Label::from(label.clone()).save(&tx).await.unwrap();
     tx.commit().await.unwrap();
-    compare_remote_label_with_local(&stash, label).await;
+    compare_remote_label_with_local(&tether, label).await;
 }
 
 #[tokio::test]
 async fn test_remote_label_update() {
-    let stash = new_test_connection().await;
-    stash.execute("DELETE FROM labels", vec![]).await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    tether.execute("DELETE FROM labels", vec![]).await.unwrap();
     let mut labels = test_labels()
         .into_iter()
         .map(Label::from)
         .collect::<Vec<_>>();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for label in &mut labels {
         label.save(&tx).await.unwrap();
     }
@@ -97,15 +97,15 @@ async fn test_remote_label_update() {
     }
     tx.commit().await.expect("failed to commit transaction");
 
-    compare_remote_labels_with_local(&stash, remote_labels).await;
+    compare_remote_labels_with_local(&tether, remote_labels).await;
 }
 
 #[tokio::test]
 async fn test_delete_remote() {
-    let stash = new_test_connection().await;
+    let mut tether = new_test_connection().await.connection();
     let mut labels = test_labels();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
@@ -130,13 +130,13 @@ async fn test_delete_remote() {
 
     let remote_labels = labels;
 
-    compare_remote_labels_with_local(&stash, remote_labels).await;
+    compare_remote_labels_with_local(&tether, remote_labels).await;
 }
 
 #[tokio::test]
 async fn label_with_counts() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     let label = ApiLabel {
         id: ApiRemoteId::from("label"),
         parent_id: None,
@@ -181,9 +181,9 @@ async fn label_with_counts() {
     )
     .await
     .unwrap();
-    let conn = tx.commit().await.unwrap();
+    tx.commit().await.unwrap();
 
-    let label = Label::load(local_id, &conn)
+    let label = Label::load(local_id, &tether)
         .await
         .expect("failed to load label")
         .expect("should have a value");
@@ -196,8 +196,8 @@ async fn label_with_counts() {
 
 #[tokio::test]
 async fn create_local_label() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     for t in [
         LabelType::Label,
         LabelType::Folder,
@@ -237,8 +237,8 @@ async fn create_local_label() {
 
 #[tokio::test]
 async fn create_local_label_1_char_long_name() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(1);
         let mut new_label = Label {
@@ -274,8 +274,8 @@ async fn create_local_label_1_char_long_name() {
 
 #[tokio::test]
 async fn create_local_label_100_char_long_name() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(100);
         let mut new_label = Label {
@@ -311,8 +311,8 @@ async fn create_local_label_100_char_long_name() {
 
 #[tokio::test]
 async fn create_local_label_has_ascending_order_per_type() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     for t in [
         LabelType::Label,
         LabelType::Folder,
@@ -377,8 +377,8 @@ async fn create_local_label_has_ascending_order_per_type() {
 
 #[tokio::test]
 async fn update_local_label() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
         remote_id: Some("MyLabel".into()),
@@ -435,32 +435,31 @@ async fn update_local_label() {
         (f)(&db_label);
     }
 
-    let conn = stash.connection();
     new_label.color = LabelColor::black();
-    let tx = conn.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     new_label.save(&tx).await.expect("failed to save label");
-    let conn = tx.commit().await.expect("failed to commit transaction");
-    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
+    tx.commit().await.expect("failed to commit transaction");
+    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.color, LabelColor::black());
     })
     .await;
 
     new_label.name = "NewName".to_owned();
-    let tx = conn.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     new_label.save(&tx).await.expect("failed to save label");
-    let conn = tx.commit().await.expect("failed to commit transaction");
+    tx.commit().await.expect("failed to commit transaction");
 
-    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
+    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.name, "NewName");
     })
     .await;
 
     new_label.remote_parent_id = new_label2.remote_id.clone();
     new_label.path = Some("MyLabel/NewName".into());
-    let tx = conn.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     new_label.save(&tx).await.expect("failed to save label");
-    let conn = tx.commit().await.expect("failed to commit transaction");
-    compare_db_label(&conn, new_label.local_id.unwrap(), |l| {
+    tx.commit().await.expect("failed to commit transaction");
+    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
         assert_eq!(l.remote_parent_id, new_label2.remote_id);
         assert_eq!(l.path, Some("MyLabel/NewName".into()));
     })
@@ -469,8 +468,8 @@ async fn update_local_label() {
 
 #[tokio::test]
 async fn test_mark_labels_as_initialized() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
         remote_id: Some("MyLabel".into()),
@@ -512,8 +511,8 @@ async fn test_mark_labels_as_initialized() {
 
 #[tokio::test]
 async fn test_watch_label() {
-    let stash = new_test_connection().await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = new_test_connection().await.connection();
+    let tx = tether.transaction().await.unwrap();
 
     let mut label: Label = ApiLabel {
         id: ApiRemoteId::from("label_id"),
@@ -533,7 +532,7 @@ async fn test_watch_label() {
     label.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &stash)
+    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -541,21 +540,23 @@ async fn test_watch_label() {
     assert_eq!(db_label, label);
 
     label.display_order = 10;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     label.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     watcher.recv_async().await.unwrap();
 }
 
-async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiLabel>) {
+async fn compare_remote_labels_with_local(tether: &Tether, remote_labels: Vec<ApiLabel>) {
     for remote_label in remote_labels {
-        compare_remote_label_with_local(stash, remote_label).await;
+        compare_remote_label_with_local(tether, remote_label).await;
     }
 }
 
-async fn compare_remote_label_with_local(stash: &Stash, remote_label: ApiLabel) {
-    let local_labels = Label::all(stash, None).await.expect("failed to get labels");
+async fn compare_remote_label_with_local(tether: &Tether, remote_label: ApiLabel) {
+    let local_labels = Label::all(tether, None)
+        .await
+        .expect("failed to get labels");
     let find_label = |id: &LabelId| -> &Label {
         local_labels
             .iter()
@@ -565,7 +566,7 @@ async fn compare_remote_label_with_local(stash: &Stash, remote_label: ApiLabel) 
 
     // Check if parent ids are correct.
     let local = find_label(&LabelId::from(remote_label.id.clone()));
-    compare_local_to_remote(stash, local, &remote_label).await;
+    compare_local_to_remote(tether, local, &remote_label).await;
 }
 
 fn test_labels() -> Vec<ApiLabel> {
@@ -641,7 +642,7 @@ fn test_label(name: &str) -> ApiLabel {
     }
 }
 
-async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel) {
+async fn compare_local_to_remote(tether: &Tether, local: &Label, remote: &ApiLabel) {
     assert_eq!(
         local.remote_id,
         Some(remote.id.clone().into()),
@@ -702,7 +703,7 @@ async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel
     );
 
     if let Some(remote_parent_id) = local.remote_parent_id.clone() {
-        let parent_label = Label::find_by_id(RemoteId::from(remote_parent_id), stash)
+        let parent_label = Label::find_by_id(RemoteId::from(remote_parent_id), tether)
             .await
             .expect("failed to find parent label")
             .expect("Parent label should exist");

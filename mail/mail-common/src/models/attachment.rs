@@ -24,7 +24,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, StashError, Tether};
 
 /// Represents a mail attachment.
 ///
@@ -184,11 +184,11 @@ impl Attachment {
     /// Return error if the query failed.
     pub async fn load_conversation_attachment_metadata(
         conversation_id: LocalId,
-        interface: &AgnosticInterface,
+        tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
                 params![conversation_id],
-                   interface,
+                   tether,
                    None
         )
         .await.map(|v| v.into_iter().map(Into::into).collect())
@@ -201,11 +201,11 @@ impl Attachment {
     /// Return error if the query failed.
     pub async fn load_message_attachment_metadata(
         message_id: LocalId,
-        interface: &AgnosticInterface,
+        tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
                    params![message_id],
-                   interface,
+                   tether,
                    None
         )
         .await.map(|v| v.into_iter().map(Into::into).collect())
@@ -230,7 +230,7 @@ impl Attachment {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if self.local_id.is_none() {
             if let Some(remote_id) = self.remote_id.clone() {
                 if let Some(existing) =
@@ -243,20 +243,20 @@ impl Attachment {
         }
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id = remote_address_id.counterpart::<Address, _>(bond).await?;
+                self.local_address_id = remote_address_id.counterpart::<Address>(bond).await?;
             }
         }
 
         if self.local_message_id.is_none() {
             if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id = remote_message_id.counterpart::<Message, _>(bond).await?;
+                self.local_message_id = remote_message_id.counterpart::<Message>(bond).await?;
             }
         }
 
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 self.local_conversation_id = remote_conversation_id
-                    .counterpart::<Conversation, _>(bond)
+                    .counterpart::<Conversation>(bond)
                     .await?;
             }
         }
@@ -341,7 +341,7 @@ impl Attachment {
     pub async fn sync_complete_metadata<PM: ProtonMail>(
         &mut self,
         api: &PM,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Option<()>, AppError> {
         let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
             remote_id
@@ -355,7 +355,7 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         attachment.save(&tx).await?;
         tx.commit().await?;
         *self = attachment;
@@ -367,13 +367,10 @@ impl Attachment {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn for_message<A>(
+    pub async fn for_message(
         local_message_id: LocalId,
-        interface: &A,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
         Attachment::find(
             indoc! {"
             WHERE local_id IN (
@@ -382,7 +379,7 @@ impl Attachment {
             )
         "},
             params![local_message_id],
-            interface,
+            tether,
             None,
         )
         .await
@@ -399,13 +396,10 @@ impl Attachment {
     ///
     /// Returns an error if the query failed.
     ///
-    pub async fn find_by_ids<A>(
+    pub async fn find_by_ids(
         attachment_ids: impl IntoIterator<Item = LocalId>,
-        interface: &A,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
         let params: Vec<Box<dyn ToSql + Send>> = attachment_ids
             .into_iter()
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
@@ -413,7 +407,7 @@ impl Attachment {
         Attachment::find(
             format!("WHERE local_id IN ({})", vec!["?"; params.len()].join(","),),
             params,
-            interface,
+            tether,
             None,
         )
         .await

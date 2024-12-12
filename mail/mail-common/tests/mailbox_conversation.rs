@@ -109,13 +109,12 @@ async fn test_new_mailbox_sync_conversations() {
 
     // Sync mailbox 1 - this should fire a network request
     mailbox.sync(10).await.unwrap();
-
+    let tether = user_ctx.user_stash().connection();
     // Get conversations for mailbox.
-    let conversation =
-        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
-            .await
-            .unwrap()
-            .unwrap();
+    let conversation = Conversation::find_first("", vec![], &tether)
+        .await
+        .unwrap()
+        .unwrap();
 
     // Get the message for a conversation.
 

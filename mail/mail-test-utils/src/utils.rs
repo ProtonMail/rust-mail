@@ -10,7 +10,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default, Clone, Debug)]
@@ -31,42 +31,33 @@ pub struct TestDBStateMap {
 }
 
 /// # Panics
-pub async fn prepare_db_state_core<A>(interface: &A, env: &mut [Address])
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+pub async fn prepare_db_state_core(tether: &mut Tether, env: &mut [Address]) {
     // create addresses
-    let tx = interface.stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     for address in env.iter_mut() {
         address.save(&tx).await.unwrap();
     }
     tx.commit().await.expect("failed to commit transaction");
 }
 
-pub async fn prepare_and_patch_db_state<A>(
-    interface: &A,
+pub async fn prepare_and_patch_db_state(
+    tether: &mut Tether,
     env: TestDBState,
-) -> (TestDBState, TestDBStateMap)
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    prepare_and_patch_db_state_and_skip(interface, env, false).await
+) -> (TestDBState, TestDBStateMap) {
+    prepare_and_patch_db_state_and_skip(tether, env, false).await
 }
 
 /// # Panics
 #[allow(clippy::too_many_lines)]
-pub async fn prepare_and_patch_db_state_and_skip<A>(
-    interface: &A,
+pub async fn prepare_and_patch_db_state_and_skip(
+    tether: &mut Tether,
     mut env: TestDBState,
     skip_messages: bool,
-) -> (TestDBState, TestDBStateMap)
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+) -> (TestDBState, TestDBStateMap) {
     let mut result = TestDBStateMap {
         ..Default::default()
     };
-    let tx = interface.stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     // create labels
     let mut local_label_ids = vec![];
     for label in &mut env.labels {
@@ -200,7 +191,7 @@ where
         conv.expiration_time = conv.expiration_time.max(message.expiration_time);
     }
 
-    let tx = interface.stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     // create conversations
     let local_conversation_ids =
         Conversation::create_or_update_conversations(env.conversations.clone(), &tx)
@@ -305,12 +296,9 @@ pub fn message_counts_for_conversation(
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn conv_counts_as_map<A>(interface: &A) -> BTreeMap<LocalId, ConversationCount>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, ConversationCount> {
     BTreeMap::from_iter(
-        Label::all(interface, None)
+        Label::all(tether, None)
             .await
             .unwrap()
             .into_iter()
@@ -329,12 +317,9 @@ where
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn msg_counts_as_map<A>(interface: &A) -> BTreeMap<LocalId, MessageCount>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, MessageCount> {
     BTreeMap::from_iter(
-        Label::all(interface, None)
+        Label::all(tether, None)
             .await
             .unwrap()
             .into_iter()
@@ -352,12 +337,9 @@ where
 }
 
 /// # Panics
-pub async fn create_address<A>(interface: &A) -> Address
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+pub async fn create_address(tether: &mut Tether) -> Address {
     let mut address = test_address();
-    let tx = interface.stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     address.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 

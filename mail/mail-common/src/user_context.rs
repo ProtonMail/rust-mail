@@ -76,14 +76,15 @@ impl MailUserContext {
         let db = self.user_stash().clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
+            let mut tether = db.connection();
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
-                if let Err(e) = Conversation::delete_expired(&db).await {
+                if let Err(e) = Conversation::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired conversations: {e}");
                 }
 
-                if let Err(e) = Message::delete_expired(&db).await {
+                if let Err(e) = Message::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired messages: {e}");
                 }
                 interval.tick().await;
@@ -147,8 +148,9 @@ impl MailUserContext {
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> MailContextResult<User> {
         let stash = self.user_stash();
+        let tether = stash.connection();
         let user_id = self.user_id();
-        let real_user = User::load(user_id.clone(), stash)
+        let real_user = User::load(user_id.clone(), &tether)
             .await?
             .ok_or_else(|| MailContextError::Other(anyhow!("Missing User, this is a bug.")))?;
 
@@ -220,7 +222,7 @@ impl MailUserContext {
     pub async fn recipient_send_preferences<Provider>(
         &self,
         pgp_provider: &Provider,
-        bond: &Bond,
+        bond: &Bond<'_>,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,

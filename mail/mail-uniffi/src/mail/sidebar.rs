@@ -170,10 +170,11 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
+            let tether = sidebar.user_ctx.user_stash().connection();
             let results = RealLabel::find(
                 "WHERE label_type = ?",
                 params![RealLabelType::from(label_type)],
-                sidebar.user_ctx.user_stash(),
+                &tether,
                 Some(sender),
             )
                 .await?;

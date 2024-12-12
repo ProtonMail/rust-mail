@@ -24,7 +24,6 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
-use stash::stash::Interface;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -142,8 +141,8 @@ async fn basic_send_check() {
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
-
-    let draft_message = Message::load(draft_message_id, user_ctx.user_stash())
+    let tether = user_ctx.user_stash().connection();
+    let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");

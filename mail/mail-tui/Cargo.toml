@@ -15,6 +15,7 @@ stash = { workspace = true }
 anyhow = "1"
 chrono = { workspace = true }
 crossterm = "0.28.1"
+clap = { workspace = true }
 dirs = "5"
 flume = { workspace = true }
 futures = { workspace = true }

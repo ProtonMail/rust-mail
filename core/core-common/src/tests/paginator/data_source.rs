@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::ops::Range;
@@ -22,7 +22,7 @@ pub struct TestModel {
 
 impl TestModel {
     /// Override `save` for create or ignore
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], bond).await? {
             self.row_id = element.row_id;
         } else {
@@ -40,8 +40,8 @@ impl TestDataSource {
     fn new() -> Self {
         Self { total: 18 }
     }
-    async fn create_table(stash: &Stash) -> Result<(), StashError> {
-        stash
+    async fn create_table(tether: &mut Tether) -> Result<(), StashError> {
+        tether
             .execute("CREATE TABLE test (id INTEGER PRIMARY KEY)", vec![])
             .await?;
         Ok(())
@@ -49,9 +49,9 @@ impl TestDataSource {
     async fn insert_pages(
         &self,
         range: Range<u32>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<TestModel>, StashError> {
-        let tx = stash.transaction().await?;
+        let tx = tether.transaction().await?;
         let mut result = Vec::with_capacity(range.len());
         for i in range {
             let mut value = TestModel {
@@ -69,16 +69,16 @@ impl DataSource for TestDataSource {
     type Item = TestModel;
     type Error = StashError;
 
-    fn total(&self, _: &Stash) -> impl Future<Output = Result<usize, Self::Error>> + Send {
+    fn total(&self, _: &Tether) -> impl Future<Output = Result<usize, Self::Error>> + Send {
         std::future::ready(Ok(self.total))
     }
 
     async fn sync_first_page(
         &self,
         page_size: NonZeroU32,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        self.insert_pages(0_u32..page_size.get(), stash).await
+        self.insert_pages(0_u32..page_size.get(), tether).await
     }
 
     fn sync_page_after(
@@ -86,7 +86,7 @@ impl DataSource for TestDataSource {
         cursor_index: u32,
         page_size: NonZeroU32,
         mut elements: Vec<Self::Item>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         let last_element = elements.pop().unwrap();
         if cursor_index <= 15 {
@@ -99,7 +99,7 @@ impl DataSource for TestDataSource {
         let end = (start + page_size.get()).min(self.total.try_into().unwrap());
         async move {
             if start < self.total.try_into().unwrap() {
-                self.insert_pages(start..end, stash).await
+                self.insert_pages(start..end, tether).await
             } else {
                 Ok(vec![])
             }
@@ -113,14 +113,14 @@ impl DataSource for SkipFirstSyncSource {
     type Item = TestModel;
     type Error = StashError;
 
-    fn total(&self, stash: &Stash) -> impl Future<Output = Result<usize, Self::Error>> + Send {
-        self.0.total(stash)
+    fn total(&self, tether: &Tether) -> impl Future<Output = Result<usize, Self::Error>> + Send {
+        self.0.total(tether)
     }
 
     async fn sync_first_page(
         &self,
         _: NonZeroU32,
-        _: &Stash,
+        _: &mut Tether,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         panic!("Should not be called");
     }
@@ -130,16 +130,17 @@ impl DataSource for SkipFirstSyncSource {
         cursor_index: u32,
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
-        stash: &Stash,
+        tether: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         self.0
-            .sync_page_after(cursor_index, page_size, elements, stash)
+            .sync_page_after(cursor_index, page_size, elements, tether)
     }
 }
 
 #[tokio::test]
 async fn data_source_sync() {
     let (stash, _dir) = init_db().await;
+    let tether = stash.connection();
 
     let source = TestDataSource::new();
 
@@ -156,22 +157,22 @@ async fn data_source_sync() {
     .unwrap();
 
     // Check first page is downloaded
-    check_range(&stash, 0_u32..5_u32).await;
+    check_range(&tether, 0_u32..5_u32).await;
     check_page(&paginator).await;
 
     // Check element [5..9] are available
     paginator.next_page().await.unwrap();
-    check_range(&stash, 5_u32..10_u32).await;
+    check_range(&tether, 5_u32..10_u32).await;
     check_page(&paginator).await;
 
     // Check element [10..14] are available
     paginator.next_page().await.unwrap();
-    check_range(&stash, 10_u32..15_u32).await;
+    check_range(&tether, 10_u32..15_u32).await;
     check_page(&paginator).await;
 
     // Check element [15..18] are available
     let values = paginator.next_page().await.unwrap();
-    check_range_with_limit(&stash, 15_u32..19_u32, Some(3)).await;
+    check_range_with_limit(&tether, 15_u32..19_u32, Some(3)).await;
     assert_eq!(values.len(), 3);
 
     // Check no new values are returned for the current page.
@@ -185,9 +186,10 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
     // Check if the first sync is performed if some elements are present
     // but not more than page size.
     let (stash, _dir) = init_db().await;
-
+    let mut tether = stash.connection();
     let source = TestDataSource::new();
-    source.insert_pages(0..3_u32, &stash).await.unwrap();
+
+    source.insert_pages(0..3_u32, &mut tether).await.unwrap();
 
     let paginator = Paginator::new(
         "ORDER BY id ASC",
@@ -202,7 +204,7 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
     .unwrap();
 
     // Check first page is downloaded
-    check_range(&stash, 0_u32..5_u32).await;
+    check_range(&tether, 0_u32..5_u32).await;
     check_page(&paginator).await;
 }
 
@@ -211,9 +213,10 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
     // Check if the first sync is performed if some elements are present
     // but not more than page size.
     let (stash, _dir) = init_db().await;
+    let mut tether = stash.connection();
 
     let source = TestDataSource::new();
-    source.insert_pages(0..5_u32, &stash).await.unwrap();
+    source.insert_pages(0..5_u32, &mut tether).await.unwrap();
 
     let paginator = Paginator::new(
         "ORDER BY id ASC",
@@ -228,7 +231,7 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
     .unwrap();
 
     // Check first page is downloaded
-    check_range(&stash, 0_u32..5_u32).await;
+    check_range(&tether, 0_u32..5_u32).await;
     check_page(&paginator).await;
 }
 
@@ -236,6 +239,7 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
 async fn data_source_sync_with_callback() {
     // The page number should not increase when new elements are added.
     let (stash, _dir) = init_db().await;
+    let mut tether = stash.connection();
     let source = TestDataSource::new();
     let (sender, receiver) = flume::unbounded();
 
@@ -281,12 +285,12 @@ async fn data_source_sync_with_callback() {
         id: 19,
         row_id: None,
     };
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     new_value.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     drop(paginator);
-    drop(stash);
+    drop(tether);
 
     // We should only receive a notification for the manually inserted element.
     let notification = handle.await.unwrap().unwrap();
@@ -296,15 +300,16 @@ async fn data_source_sync_with_callback() {
 async fn init_db() -> (Stash, TempDir) {
     let dir = TempDir::new("remote_sync").unwrap();
     let stash = Stash::new(Some(&dir.path().join("sqlite.db"))).unwrap();
-    TestDataSource::create_table(&stash).await.unwrap();
+    let mut tether = stash.connection();
+    TestDataSource::create_table(&mut tether).await.unwrap();
     (stash, dir)
 }
 
 // Check the range of values is present in the database.
-async fn check_range(stash: &Stash, range: Range<u32>) {
-    check_range_with_limit(stash, range, None).await;
+async fn check_range(tether: &Tether, range: Range<u32>) {
+    check_range_with_limit(tether, range, None).await;
 }
-async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Option<usize>) {
+async fn check_range_with_limit(tether: &Tether, range: Range<u32>, max_len: Option<usize>) {
     let start = range.start;
     let end = range.end;
     let iter = range.into_iter().map(|id| TestModel {
@@ -321,7 +326,7 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
     let values = TestModel::find(
         "WHERE id >= ? AND id < ? ORDER BY id ASC ",
         params![start, end],
-        stash,
+        tether,
         None,
     )
     .await

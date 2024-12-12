@@ -66,19 +66,12 @@ async fn create_empty_draft() {
     user_ctx.execute_pending_actions().await.unwrap();
 
     // Load the draft.
-    let draft_message_id = draft
-        .message_id(user_ctx.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
-    let draft_conversation_id = draft
-        .conversation_id(user_ctx.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
-    let draft_message = Message::load(draft_message_id, user_ctx.user_stash())
+    let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -101,13 +94,11 @@ async fn create_empty_draft() {
 
     assert!(message_body_metadata.metadata.attachments.is_empty());
 
-    let conversation = Conversation::find_by_id(
-        draft_message.local_conversation_id.unwrap(),
-        user_ctx.user_stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let conversation =
+        Conversation::find_by_id(draft_message.local_conversation_id.unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
 
     // Conversation remote id has been set.
     assert_eq!(
@@ -243,11 +234,8 @@ async fn create_empty_draft_and_save_twice() {
     draft.save(user_ctx.queue()).await.unwrap();
     user_ctx.execute_pending_actions().await.unwrap();
 
-    let draft_message_id = draft
-        .message_id(user_ctx.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening the draft and check if all the information is up to date
     let draft = Draft::open(&user_ctx, draft_message_id).await.unwrap();
@@ -276,12 +264,11 @@ async fn create_draft_reply_without_body_is_error() {
 
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
-
-    let (mut existing_message, _, _) =
-        Message::from_api_data(remote_existing_message, user_ctx.user_stash())
-            .await
-            .unwrap();
-    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection();
+    let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
+        .await
+        .unwrap();
+    let tx = tether.transaction().await.unwrap();
     existing_message.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
     let existing_message = existing_message;
@@ -323,12 +310,11 @@ async fn create_draft_reply_should_fail_for_drafts() {
 
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
-
-    let (mut existing_message, _, _) =
-        Message::from_api_data(remote_existing_message, user_ctx.user_stash())
-            .await
-            .unwrap();
-    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection();
+    let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
+        .await
+        .unwrap();
+    let tx = tether.transaction().await.unwrap();
     existing_message.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
     let existing_message = existing_message;
@@ -372,18 +358,18 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
-
-    let mut message = Message::from_api_metadata(message.metadata, user_ctx.user_stash())
+    let mut tether = user_ctx.user_stash().connection();
+    let mut message = Message::from_api_metadata(message.metadata, &tether)
         .await
         .unwrap();
 
     // Save message.
-    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     message.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     assert!(
-        DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
+        DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
             .await
             .unwrap()
             .is_none()
@@ -394,11 +380,10 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .await
         .unwrap();
 
-    let draft_by_message_id =
-        DraftMetadata::find_by_message_id(message.local_id.unwrap(), user_ctx.user_stash())
-            .await
-            .unwrap()
-            .unwrap();
+    let draft_by_message_id = DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(draft.metadata_id, draft_by_message_id.id.unwrap());
     drop(draft);
 
@@ -488,11 +473,12 @@ async fn create_draft_reply_impl(
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 
+    let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) =
-        Message::from_api_data(remote_existing_message.clone(), user_ctx.user_stash())
+        Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     existing_message.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
     let existing_message = existing_message;
@@ -557,20 +543,12 @@ async fn create_draft_reply_impl(
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
 
-    let draft_message_id = draft
-        .message_id(user_ctx.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
-    let draft_conversation_id = draft
-        .conversation_id(user_ctx.user_stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
     // Load the draft.
-    let draft_message = Message::load(draft_message_id, user_ctx.user_stash())
+    let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -594,13 +572,11 @@ async fn create_draft_reply_impl(
         .await
         .unwrap();
 
-    let conversation = Conversation::find_by_id(
-        draft_message.local_conversation_id.unwrap(),
-        user_ctx.user_stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let conversation =
+        Conversation::find_by_id(draft_message.local_conversation_id.unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
 
     // Conversation remote id has been set.
     assert_eq!(

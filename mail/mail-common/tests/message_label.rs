@@ -37,7 +37,7 @@ async fn label_message() {
     //  * Create a Message
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -59,11 +59,11 @@ async fn label_message() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
         .unwrap()
         .unwrap();
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.custom_labels.is_empty());
     assert!(!message.label_ids.contains(&label_id));
 
@@ -79,7 +79,7 @@ async fn label_message() {
 
     // Verification:
     //   * The message have the label
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -95,7 +95,7 @@ async fn unlabel_message() {
     //  * Create a Message with this label
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -122,7 +122,7 @@ async fn unlabel_message() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
         .unwrap()
         .unwrap();
@@ -130,7 +130,7 @@ async fn unlabel_message() {
         .await
         .unwrap();
 
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&label_id));
     assert_eq!(message.custom_labels.len(), 1);
     assert_eq!(message.custom_labels[0].name, "mylabel");
@@ -147,7 +147,7 @@ async fn unlabel_message() {
 
     // Verification:
     //   * The message have the label
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -162,7 +162,7 @@ async fn message_action_read_unread() {
     //  * Create a Message
     let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
-    let stash = user_context.user_stash();
+    let tether = user_context.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -186,11 +186,11 @@ async fn message_action_read_unread() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
         .unwrap()
         .unwrap();
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
 
     // This message starts as read
     assert!(!message.unread);
@@ -207,7 +207,7 @@ async fn message_action_read_unread() {
 
     // Verification:
     //   * The message is unread
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -225,7 +225,7 @@ async fn message_action_read_unread() {
 
     // Verification:
     //   * The message is read
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -239,7 +239,7 @@ async fn message_action_delete() {
     //  * Create a Message
     let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
-    let stash = user_context.user_stash();
+    let tether = user_context.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -262,11 +262,11 @@ async fn message_action_delete() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
         .unwrap()
         .unwrap();
-    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(!message.deleted);
 
     // Actions:
@@ -281,7 +281,7 @@ async fn message_action_delete() {
 
     // Verification:
     //   * The message is marked as deleted
-    let message = Message::load(1.into(), stash)
+    let message = Message::load(1.into(), &tether)
         .await
         .unwrap()
         .expect("failed to load message");

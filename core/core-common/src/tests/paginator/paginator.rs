@@ -3,7 +3,7 @@
 use crate::paginator::{DataSource, Paginator, Param};
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Interface, Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use std::future::Future;
 use std::num::NonZeroU32;
 
@@ -13,14 +13,14 @@ impl DataSource for NullDataSource {
     type Item = TestModel;
     type Error = StashError;
 
-    fn total(&self, _: &Stash) -> impl Future<Output = Result<usize, Self::Error>> + Send {
+    fn total(&self, _: &Tether) -> impl Future<Output = Result<usize, Self::Error>> + Send {
         std::future::ready(Ok(0))
     }
 
     fn sync_first_page(
         &self,
         _: NonZeroU32,
-        _: &Stash,
+        _: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         std::future::ready(Ok(vec![]))
     }
@@ -30,14 +30,14 @@ impl DataSource for NullDataSource {
         _: u32,
         _: NonZeroU32,
         _: Vec<Self::Item>,
-        _: &Stash,
+        _: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         std::future::ready(Ok(vec![]))
     }
 }
 
-async fn create_table(stash: &Stash) {
-    stash
+async fn create_table(tether: &mut Tether) {
+    tether
         .execute(
             r"
 			CREATE TABLE test_models (
@@ -52,8 +52,8 @@ async fn create_table(stash: &Stash) {
         .unwrap();
 }
 
-async fn create_records(stash: &Stash) {
-    let tx = stash.transaction().await.unwrap();
+async fn create_records(tether: &mut Tether) {
+    let tx = tether.transaction().await.unwrap();
     for i in 1..=1000 {
         let mut test = TestModel::new(format!("Test model #{i}"), i);
         test.save(&tx).await.unwrap();
@@ -96,8 +96,9 @@ mod basic_pagination {
     async fn baseline_setup() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -121,8 +122,9 @@ mod basic_pagination {
     async fn current_page__start_of_set() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -159,8 +161,9 @@ mod basic_pagination {
     async fn current_page__midway_through_set() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -197,8 +200,9 @@ mod basic_pagination {
     async fn next_page__midway_through_set() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -236,8 +240,9 @@ mod basic_pagination {
     async fn previous_page__midway_through_set() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -277,7 +282,8 @@ mod basic_pagination {
     async fn reload_does_not_panic_on_first_page() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -306,8 +312,9 @@ mod extended_pagination {
     async fn navigate_several_pages() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -417,8 +424,9 @@ mod extended_pagination {
     async fn reload_after_navigating_forwards() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -495,8 +503,9 @@ mod extended_pagination {
     async fn reload_after_navigating_forward_then_back() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -586,8 +595,9 @@ mod changes_during_pagination {
     async fn previous_page__changes_to_data_seen() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        create_table(&stash).await;
-        create_records(&stash).await;
+        let mut tether = stash.connection();
+        create_table(&mut tether).await;
+        create_records(&mut tether).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
@@ -609,7 +619,7 @@ mod changes_during_pagination {
         _ = paginator.next_page().await.unwrap();
         assert_eq!(paginator.current_page_number().await, 3);
 
-        stash
+        tether
             .execute(r"DELETE FROM test_models WHERE number = ?", params![102])
             .await
             .unwrap();

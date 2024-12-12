@@ -140,7 +140,7 @@ impl ContactEmail {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
@@ -149,7 +149,7 @@ impl ContactEmail {
         }
 
         if let Some(contact_remote_id) = self.remote_contact_id.clone() {
-            self.local_contact_id = contact_remote_id.counterpart::<Contact, _>(bond).await?;
+            self.local_contact_id = contact_remote_id.counterpart::<Contact>(bond).await?;
         }
 
         <Self as Model>::save(self, bond).await

@@ -4,7 +4,7 @@ use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use stash::macros::DbRecord;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError};
+use stash::stash::{Stash, StashError};
 use tokio::spawn as spawn_async;
 
 #[derive(Debug)]
@@ -29,7 +29,7 @@ struct Person2 {
 }
 
 async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut rng = StdRng::from_entropy();
 
     //conn.busy_timeout(Duration::from_secs(10))?;
@@ -63,7 +63,7 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                 conn.query::<_, Person2>("SELECT person.id, person.name, person.data , person_map.data2 FROM person JOIN person_map ON person.id=person_map.person", vec![]).await?;
             }
             1 => {
-                let conn = conn.clone().transaction().await?;
+                let tx = conn.transaction().await?;
                 let mut nums: Vec<u8> = (1..20).collect();
                 nums.shuffle(&mut rng);
                 let me = Person {
@@ -72,7 +72,7 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                     data: Some(nums.clone()),
                 };
 
-                let id: i32 = conn
+                let id: i32 = tx
                     .query_value::<_, i32>(
                         "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
                         params![me.name, me.data],
@@ -82,12 +82,12 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
 
                 nums.shuffle(&mut rng);
 
-                conn.execute(
+                tx.execute(
                     "INSERT INTO person_map (person, data2) VALUES (?1, ?2)",
                     params![id, format!("{:?}", nums)],
                 )
                 .await?;
-                conn.commit().await.unwrap();
+                tx.commit().await.unwrap();
             }
 
             2 => {
@@ -114,21 +114,21 @@ async fn run_random_command_test() {
     let db_path = dir.path().join("sqlite.db");
 
     let stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
+    let conn = stash.connection();
 
     // Create db tables.
-    stash
-        .execute(
-            "CREATE TABLE person (
+    conn.execute(
+        "CREATE TABLE person (
             id   INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             data BLOB
         )",
-            vec![], // empty list of parameters.
-        )
-        .await
-        .expect("failed to run create query");
+        vec![], // empty list of parameters.
+    )
+    .await
+    .expect("failed to run create query");
 
-    stash.execute(
+    conn.execute(
             "CREATE TABLE person_map (
             person INTEGER,
             data2 TEXT NOT NULL,

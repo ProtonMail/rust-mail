@@ -1,26 +1,23 @@
 use crate::datatypes::LabelType;
 use crate::AppError;
 use proton_core_common::paginator::{DataSource, Paginator};
-use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::StashError;
+use stash::{orm::Model, stash::Tether};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::models::Label;
 
 /// Gets a watcher for move_to actions. This works for both messages and conversations.
-pub async fn watch_available_move_to_actions<A>(
+pub async fn watch_available_move_to_actions(
     sender: flume::Sender<()>,
-    interface: &A,
-) -> Result<(), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+    tether: &Tether,
+) -> Result<(), AppError> {
     let (tx, rx) = flume::unbounded();
     _ = Label::find(
         "WHERE label_type = ?",
         params![LabelType::Folder],
-        interface,
+        tether,
         Some(tx),
     )
     .await?;

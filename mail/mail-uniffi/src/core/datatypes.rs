@@ -48,6 +48,7 @@ mod contact_list;
 
 pub use avatar::*;
 pub use contact_list::*;
+use stash::stash::Tether;
 
 use core::fmt;
 use proton_api_core::services::proton::Config as RealApiConfig;
@@ -72,7 +73,6 @@ use proton_crypto_account::contacts::ContactCardType as RealCardType;
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use smart_default::SmartDefault;
-use stash::stash::{AgnosticInterface, Interface};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
@@ -755,27 +755,24 @@ impl Contact {
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the records.
     ///
-    pub async fn try_from_real<A>(value: RealContact, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn try_from_real(value: RealContact, tether: &Tether) -> Result<Self, AppError> {
         let mut contact_emails = Vec::with_capacity(value.contact_emails.len());
         for email in &value.contact_emails {
-            contact_emails.push(ContactEmail::try_from_real(email.clone(), interface).await?);
+            contact_emails.push(ContactEmail::try_from_real(email.clone(), tether).await?);
         }
 
         Ok(Self {
             cards: value.cards.into_iter().map(ContactCard::from).collect(),
             contact_emails,
             create_time: value.create_time,
-            label_ids: RealRemoteId::counterparts::<RealLabel, _>(
+            label_ids: RealRemoteId::counterparts::<RealLabel>(
                 value
                     .label_ids
                     .into_inner()
                     .into_iter()
                     .map(RealRemoteId::from)
                     .collect(),
-                interface,
+                tether,
             )
             .await?
             .into_iter()
@@ -863,10 +860,7 @@ impl ContactEmail {
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the records.
     ///
-    pub async fn try_from_real<A>(value: RealContactEmail, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn try_from_real(value: RealContactEmail, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
             canonical_email: value.canonical_email,
             contact_type: value.contact_type.deref().clone(),
@@ -874,14 +868,14 @@ impl ContactEmail {
             display_order: value.display_order,
             email: value.email,
             is_proton: value.is_proton,
-            label_ids: RealRemoteId::counterparts::<RealLabel, _>(
+            label_ids: RealRemoteId::counterparts::<RealLabel>(
                 value
                     .label_ids
                     .into_inner()
                     .into_iter()
                     .map(RealRemoteId::from)
                     .collect(),
-                interface,
+                tether,
             )
             .await?
             .into_iter()

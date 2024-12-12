@@ -46,7 +46,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 
@@ -66,7 +66,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let contacts = Contact::find_by_ids(action.local_ids.clone(), tx).await?;
 
@@ -89,8 +89,9 @@ impl proton_action_queue::action::Handler for Handler {
         if failed.is_empty() {
             Ok(())
         } else {
+            let conn = stash.connection();
             for remote_id in failed {
-                let Some(local_id) = remote_id.counterpart::<Contact, _>(stash).await? else {
+                let Some(local_id) = remote_id.counterpart::<Contact>(&conn).await? else {
                     continue;
                 };
 

@@ -2,7 +2,7 @@ use crate::datatypes::{LabelColor, ViewMode};
 use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
 use crate::AppError;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 
 pub mod custom_folder;
 pub mod custom_labels;
@@ -17,11 +17,8 @@ pub mod system_labels;
 /// * `inteface` - The database interface, i.e. [`Stash`] or [`Tether`], to
 ///                use for finding the records.
 ///
-pub async fn messages_counts<A>(label: &Label, interface: &A) -> Result<(u64, u64), AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    match label.view_mode(interface).await? {
+pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
+    match label.view_mode(tether).await? {
         ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
         ViewMode::Messages => Ok((label.unread_msg, label.total_msg)),
     }
@@ -41,14 +38,11 @@ where
 ///
 /// If there is no [`MailSettings`] in the [`Stash`]
 ///
-pub async fn color_to_display<A>(
+pub async fn color_to_display(
     value: &Label,
-    interface: &A,
-) -> Result<Option<LabelColor>, AppError>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
-    let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+    tether: &Tether,
+) -> Result<Option<LabelColor>, AppError> {
+    let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), tether)
         .await?
         .expect("MailSettings in Stash");
 
@@ -57,7 +51,7 @@ where
             // Get parent until there is no more parent and take its color
             let mut current = value.clone();
             while let Some(parent_id) = current.local_parent_id {
-                current = Label::load(parent_id, interface)
+                current = Label::load(parent_id, tether)
                     .await?
                     .ok_or(AppError::LabelNotFound(parent_id))?;
             }

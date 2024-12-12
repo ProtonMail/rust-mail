@@ -13,7 +13,7 @@ use proton_core_common::models::ModelExtension;
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use tracing::warn;
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
@@ -139,18 +139,15 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if conversation could not be loaded from the database.
-    pub async fn load<A>(
+    pub async fn load(
         local_conversation_id: LocalId,
         local_label_id: LocalId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
         if let Some(conversation) = Conversation::find_first(
             "WHERE local_id = ? AND deleted = 0",
             params![local_conversation_id],
-            interface,
+            tether,
         )
         .await?
         {
@@ -165,14 +162,11 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn in_label<A>(
+    pub async fn in_label(
         local_label_id: LocalId,
-        interface: &A,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Ok(Conversation::in_label(local_label_id, interface, None)
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        Ok(Conversation::in_label(local_label_id, tether, None)
             .await?
             .into_iter()
             .filter_map(|c| Self::new(c, local_label_id))
@@ -199,15 +193,16 @@ impl ContextualConversation {
     where
         PM: ProtonMail,
     {
-        let label = Label::find_by_id(local_label_id, stash)
+        let mut conn = stash.connection();
+        let label = Label::find_by_id(local_label_id, &conn)
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
-        Conversation::sync_conversation_messages(local_conversation_id, stash, api).await?;
-        let Some(conversation) = Self::load(local_conversation_id, local_label_id, stash).await?
+        Conversation::sync_conversation_messages(local_conversation_id, &mut conn, api).await?;
+        let Some(conversation) = Self::load(local_conversation_id, local_label_id, &conn).await?
         else {
             return Ok(None);
         };
-        let messages = Message::in_conversation(local_conversation_id, stash, None).await?;
+        let messages = Message::in_conversation(local_conversation_id, &conn, None).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
@@ -227,13 +222,10 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the queries failed.
-    pub async fn watch_conversation_and_messages<A>(
+    pub async fn watch_conversation_and_messages(
         local_conversation_id: LocalId,
-        interface: &A,
-    ) -> Result<flume::Receiver<()>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<flume::Receiver<()>, StashError> {
         //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
         let (label_sender, label_receiver) = flume::unbounded();
@@ -245,16 +237,16 @@ impl ContextualConversation {
             Conversation::find(
                 "WHERE local_id = ?",
                 params![local_conversation_id],
-                interface,
+                tether,
                 Some(conv_sender),
             ),
             ConversationLabel::find(
                 "WHERE local_conversation_id =? ",
                 params![local_conversation_id],
-                interface,
+                tether,
                 Some(label_sender),
             ),
-            Message::in_conversation(local_conversation_id, interface, Some(msg_sender)),
+            Message::in_conversation(local_conversation_id, tether, Some(msg_sender)),
             // Watching the message custom labels only here is enough as
             // the conversation's custom labels are a combination of all
             // the message labels. At this point we also have all
@@ -269,7 +261,7 @@ impl ContextualConversation {
                     )
                 "},
                 params![LabelType::Label, local_conversation_id],
-                interface,
+                tether,
                 Some(msg_label_sender),
             )
         )?;
@@ -325,13 +317,10 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the queries failed.
-    pub async fn watch<A>(
+    pub async fn watch(
         ids: impl IntoIterator<Item = LocalId>,
-        interface: &A,
-    ) -> Result<flume::Receiver<()>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<flume::Receiver<()>, StashError> {
         //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let conversation_ids = ids.into_iter().collect::<Vec<_>>();
         let var_args = vec!["?"; conversation_ids.len()].join(",");
@@ -347,7 +336,7 @@ impl ContextualConversation {
                     .iter()
                     .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
                     .collect(),
-                interface,
+                tether,
                 Some(conv_label_sender),
             ),
             Conversation::find(
@@ -356,7 +345,7 @@ impl ContextualConversation {
                     .iter()
                     .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
                     .collect(),
-                interface,
+                tether,
                 Some(conv_sender),
             ),
             Label::find(
@@ -374,7 +363,7 @@ impl ContextualConversation {
                             .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
                     )
                     .collect(),
-                interface,
+                tether,
                 Some(label_sender),
             )
         )?;
@@ -394,13 +383,10 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the queries failed.
-    pub async fn watch_in_label<A>(
+    pub async fn watch_in_label(
         label_id: LocalId,
-        interface: &A,
-    ) -> Result<(Vec<ContextualConversation>, flume::Receiver<()>), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<(Vec<ContextualConversation>, flume::Receiver<()>), StashError> {
         //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
         let (conv_label_sender, conv_label_receiver) = flume::unbounded();
@@ -411,10 +397,10 @@ impl ContextualConversation {
             ConversationLabel::find(
                 "WHERE local_label_id =? AND deleted = 0",
                 params![label_id],
-                interface,
+                tether,
                 Some(conv_label_sender),
             ),
-            Conversation::in_label(label_id, interface, Some(conv_sender),),
+            Conversation::in_label(label_id, tether, Some(conv_sender),),
             Label::find(
                 formatdoc! {"
                     WHERE label_type=? AND local_id IN (
@@ -426,7 +412,7 @@ impl ContextualConversation {
                     )
                 "},
                 params![LabelType::Label, label_id],
-                interface,
+                tether,
                 Some(label_sender),
             )
         )?;
@@ -494,22 +480,19 @@ impl ContextualConversation {
     /// * `conversations_ids` - List of the conversations IDs.
     /// * `interface`         - The database interface.
     ///
-    pub async fn all_available_bottom_bar_actions_for_conversations<A>(
+    pub async fn all_available_bottom_bar_actions_for_conversations(
         current_label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-        interface: &A,
-    ) -> Result<AllBottomBarMessageActions, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let inbox = MovableSystemFolderAction::inbox(interface).await?;
-        let archive = MovableSystemFolderAction::archive(interface).await?;
-        let trash = MovableSystemFolderAction::trash(interface).await?;
-        let spam = MovableSystemFolderAction::spam(interface).await?;
+        tether: &Tether,
+    ) -> Result<AllBottomBarMessageActions, AppError> {
+        let inbox = MovableSystemFolderAction::inbox(tether).await?;
+        let archive = MovableSystemFolderAction::archive(tether).await?;
+        let trash = MovableSystemFolderAction::trash(tether).await?;
+        let spam = MovableSystemFolderAction::spam(tether).await?;
 
-        let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
-        let conversations = Conversation::find_by_ids(conversation_ids.to_vec(), interface).await?;
+        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
+        let bottom_bar_actions = MobileActions::bottom_bar_actions(tether).await?;
+        let conversations = Conversation::find_by_ids(conversation_ids.to_vec(), tether).await?;
 
         let conversations = conversations
             .into_iter()

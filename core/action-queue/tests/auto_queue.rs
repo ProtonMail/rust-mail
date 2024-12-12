@@ -47,7 +47,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // Nothing to do
         Ok(())
@@ -57,7 +57,7 @@ impl Handler for ErrorActionHandler {
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

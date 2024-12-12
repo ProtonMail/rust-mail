@@ -14,7 +14,7 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use tracing::{debug, error};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -97,7 +97,7 @@ impl Contact {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
@@ -121,14 +121,11 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the cards cannot be retrieved.
     ///
-    pub async fn cards<A>(&mut self, interface: &A) -> Result<&Vec<ContactCard>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn cards(&mut self, tether: &Tether) -> Result<&Vec<ContactCard>, StashError> {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
-            interface,
+            tether,
             None,
         )
         .await?;
@@ -145,14 +142,11 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the emails cannot be retrieved.
     ///
-    pub async fn emails<A>(&mut self, interface: &A) -> Result<&Vec<ContactEmail>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn emails(&mut self, tether: &Tether) -> Result<&Vec<ContactEmail>, StashError> {
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
-            interface,
+            tether,
             None,
         )
         .await?;
@@ -165,7 +159,7 @@ impl Contact {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         for card in &mut self.cards {
             card.local_contact_id = self.local_id;
             card.remote_contact_id.clone_from(&self.remote_id);
@@ -284,7 +278,8 @@ impl Contact {
         let (contacts, contact_emails) = tokio::join!(contacts_handle, contact_emails_handle);
         let (contacts, contact_emails) = (map_err(contacts)?, map_err(contact_emails)?);
 
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         // Reset the database state by deleting all contacts.
         tx.execute("DELETE FROM contacts", vec![]).await?;
         tx.execute("DELETE FROM contact_emails", vec![]).await?;
@@ -321,11 +316,11 @@ impl Contact {
     pub async fn sync_with_card(
         local_id: LocalId,
         api: &Proton,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
         let remote_id = local_id
-            .counterpart::<Contact, _>(bond)
+            .counterpart::<Contact>(bond)
             .await?
             .ok_or_else(|| {
                 CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
@@ -365,14 +360,11 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
-    pub async fn contact_list<A>(interface: &A) -> Result<Vec<GroupedContacts>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let mut contacts = Contact::find("WHERE deleted = 0", vec![], interface, None).await?;
+    pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
+        let mut contacts = Contact::find("WHERE deleted = 0", vec![], tether, None).await?;
 
         for contact in &mut contacts {
-            contact.emails(interface).await?;
+            contact.emails(tether).await?;
         }
 
         Ok(GroupedContacts::from_contacts(contacts))
@@ -391,7 +383,7 @@ impl Contact {
     /// the database, then it is deleted from the remote server, and finally
     /// It is deleted from the local database by the event loop update.
     ///
-    pub async fn mark_delete(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn mark_delete(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.deleted = true;
         self.save(bond).await
     }
@@ -400,7 +392,7 @@ impl Contact {
     /// This method serves as the reverse of [`Contact::mark_delete()`].
     /// which can revert the deletion of a contact in case of something unpredictable happend.
     ///
-    pub async fn mark_undelete(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn mark_undelete(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.deleted = false;
         self.save(bond).await
     }
@@ -421,20 +413,18 @@ impl Contact {
             .collect())
     }
 
-    pub async fn watch_contact_list<A>(
-        interface: &A,
-    ) -> Result<(Vec<GroupedContacts>, flume::Receiver<()>), StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn watch_contact_list(
+        stash: &Stash,
+    ) -> Result<(Vec<GroupedContacts>, flume::Receiver<()>), StashError> {
         let (contact_sender, contact_receiver) = flume::unbounded();
         let (contact_email_sender, contact_email_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
+        let tether = stash.connection();
 
         let (contacts, _, _) = futures::try_join!(
-            Self::contact_list(interface),
-            Contact::find("WHERE deleted = 0", vec![], interface, Some(contact_sender)),
-            ContactEmail::find("", vec![], interface, Some(contact_email_sender))
+            Self::contact_list(&tether),
+            Contact::find("WHERE deleted = 0", vec![], &tether, Some(contact_sender)),
+            ContactEmail::find("", vec![], &tether, Some(contact_email_sender))
         )?;
 
         tokio::spawn(async move {

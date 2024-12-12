@@ -2,8 +2,8 @@ use crate::actions::labels::Expand;
 use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
 use crate::{AppError, MailContextError};
 use proton_core_common::datatypes::{LabelId, LocalId};
-use stash::orm::Model;
 use stash::params;
+use stash::{orm::Model, stash::Tether};
 use tracing::error;
 
 use crate::datatypes::labels::custom_folder::CustomFolder;
@@ -25,48 +25,48 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<SystemLabel>> {
-        let interface = self.user_ctx.user_stash();
-        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+        let tether = self.user_ctx.user_stash().connection();
+        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &tether)
             .await?
             .unwrap_or_default();
 
-        let mut labels = vec![self.get_label(LabelId::inbox()).await?];
+        let mut labels = vec![self.get_label(LabelId::inbox(), &tether).await?];
         if settings.show_moved == ShowMoved::KeepInDrafts
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            labels.push(self.get_label(LabelId::all_drafts()).await?);
+            labels.push(self.get_label(LabelId::all_drafts(), &tether).await?);
         } else {
-            labels.push(self.get_label(LabelId::drafts()).await?);
+            labels.push(self.get_label(LabelId::drafts(), &tether).await?);
         }
-        let all_scheduled = self.get_label(LabelId::all_scheduled()).await?;
+        let all_scheduled = self.get_label(LabelId::all_scheduled(), &tether).await?;
         if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
             labels.push(all_scheduled);
         }
-        let outbox = self.get_label(LabelId::outbox()).await?;
+        let outbox = self.get_label(LabelId::outbox(), &tether).await?;
         if outbox.total_conv != 0 || outbox.total_msg != 0 {
             labels.push(outbox);
         }
-        let snoozed = self.get_label(LabelId::snoozed()).await?;
+        let snoozed = self.get_label(LabelId::snoozed(), &tether).await?;
         if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
             labels.push(snoozed);
         }
-        labels.push(self.get_label(LabelId::starred()).await?);
+        labels.push(self.get_label(LabelId::starred(), &tether).await?);
         if settings.show_moved == ShowMoved::KeepInSent
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            labels.push(self.get_label(LabelId::all_sent()).await?);
+            labels.push(self.get_label(LabelId::all_sent(), &tether).await?);
         } else {
-            labels.push(self.get_label(LabelId::sent()).await?);
+            labels.push(self.get_label(LabelId::sent(), &tether).await?);
         }
-        labels.push(self.get_label(LabelId::spam()).await?);
-        labels.push(self.get_label(LabelId::archive()).await?);
-        labels.push(self.get_label(LabelId::trash()).await?);
+        labels.push(self.get_label(LabelId::spam(), &tether).await?);
+        labels.push(self.get_label(LabelId::archive(), &tether).await?);
+        labels.push(self.get_label(LabelId::trash(), &tether).await?);
         if settings.almost_all_mail == AlmostAllMail::AllMail {
-            labels.push(self.get_label(LabelId::all_mail()).await?);
+            labels.push(self.get_label(LabelId::all_mail(), &tether).await?);
         } else {
-            labels.push(self.get_label(LabelId::almost_all_mail()).await?);
+            labels.push(self.get_label(LabelId::almost_all_mail(), &tether).await?);
         }
-        Ok(SystemLabel::from_labels(labels.as_slice(), interface).await?)
+        Ok(SystemLabel::from_labels(labels.as_slice(), &tether).await?)
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -85,10 +85,10 @@ impl Sidebar {
 
     /// Get all the [`CustomFolder`].
     pub async fn all_custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
-        let interface = self.user_ctx.user_stash();
-        let labels = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let tether = self.user_ctx.user_stash().connection();
+        let labels = Label::find_by_kind(LabelType::Folder, &tether).await?;
 
-        Ok(CustomFolder::from_labels(labels.as_slice(), interface).await?)
+        Ok(CustomFolder::from_labels(labels.as_slice(), &tether).await?)
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -97,10 +97,10 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_labels(&self) -> SidebarResult<Vec<CustomLabel>> {
-        let interface = self.user_ctx.user_stash();
-        let labels = Label::find_by_kind(LabelType::Label, interface).await?;
+        let tether = self.user_ctx.user_stash().connection();
+        let labels = Label::find_by_kind(LabelType::Label, &tether).await?;
 
-        Ok(CustomLabel::from_labels(labels.as_slice(), interface).await?)
+        Ok(CustomLabel::from_labels(labels.as_slice(), &tether).await?)
     }
 
     /// Set folder `expanded` field to it's collapsed state
@@ -128,18 +128,14 @@ impl Sidebar {
     }
 
     /// Get a [`Label`] given a [`LabelId`]
-    async fn get_label(&self, label_id: LabelId) -> SidebarResult<Label> {
-        Label::find_first(
-            "WHERE remote_id = ?",
-            params![label_id.clone()],
-            self.user_ctx.user_stash(),
-        )
-        .await?
-        .ok_or_else(|| {
-            error!("System Label don't exist: {}", label_id);
-            SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
-                label_id,
-            )))
-        })
+    async fn get_label(&self, label_id: LabelId, tether: &Tether) -> SidebarResult<Label> {
+        Label::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
+            .await?
+            .ok_or_else(|| {
+                error!("System Label don't exist: {}", label_id);
+                SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
+                    label_id,
+                )))
+            })
     }
 }

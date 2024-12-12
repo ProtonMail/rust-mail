@@ -3,7 +3,7 @@ use crate::datatypes::LabelDescription;
 use crate::models::Label;
 use crate::AppError;
 use proton_core_common::datatypes::LocalId;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 
 /// Representation of a `Label` defined by the system
 pub struct SystemLabel {
@@ -46,11 +46,8 @@ impl SystemLabel {
     /// * `label`     - the original [`Label`].
     /// * `interface` - a connexion to the database
     ///
-    pub async fn new<A>(label: &Label, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let (unread, total) = messages_counts(label, interface).await?;
+    pub async fn new(label: &Label, tether: &Tether) -> Result<Self, AppError> {
+        let (unread, total) = messages_counts(label, tether).await?;
         let label_description = LabelDescription::new(label);
         Ok(Self {
             local_id: label.local_id.expect("Should be set"),
@@ -71,14 +68,11 @@ impl SystemLabel {
     ///
     /// * `labels`    - the original [`Label`]s to convert in `SystemLabel`.
     /// * `interface` - a connexion to the database
-    ///
-    pub async fn from_labels<A>(labels: &[Label], interface: &A) -> Result<Vec<Self>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    //
+    pub async fn from_labels(labels: &[Label], tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::with_capacity(labels.len());
         for label in labels {
-            let label = Self::new(label, interface).await?;
+            let label = Self::new(label, tether).await?;
             result.push(label);
         }
         Ok(result)

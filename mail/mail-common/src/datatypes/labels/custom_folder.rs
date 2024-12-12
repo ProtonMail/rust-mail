@@ -3,7 +3,7 @@ use crate::datatypes::{LabelColor, LabelDescription};
 use crate::models::Label;
 use crate::AppError;
 use proton_core_common::datatypes::LocalId;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 
 /// Contextual representation of a `Label` when it is opened for display.
 #[derive(Clone, Debug)]
@@ -96,15 +96,12 @@ impl CustomFolder {
     /// * `labels`    - the original [`Label`]s to convert in `CustomFolder`.
     /// * `interface` - a connexion to the database
     ///
-    pub async fn from_labels<A>(labels: &[Label], interface: &A) -> Result<Vec<Self>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn from_labels(labels: &[Label], tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::with_capacity(labels.len());
 
         for label in labels {
-            let color = color_to_display(label, interface).await?;
-            let (unread, total) = messages_counts(label, interface).await?;
+            let color = color_to_display(label, tether).await?;
+            let (unread, total) = messages_counts(label, tether).await?;
             let label = Self::new(label, color, unread, total)?;
             result.push(label);
         }

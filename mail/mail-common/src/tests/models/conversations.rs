@@ -524,9 +524,9 @@ mod available_actions {
     #[test_case(&TEST5; "TEST5: Two conversations, one from TEST1 and other from TEST2")]
     #[tokio::test]
     async fn test_available_actions(test_case: &TestCase) {
-        let stash = new_test_connection().await;
+        let mut tether = new_test_connection().await.connection();
         let mut conversation_ids = vec![];
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
 
         for ConversationWithLabels {
             mut conversation,
@@ -553,13 +553,13 @@ mod available_actions {
 
         let view = Label::find_by_id(
             test_case.view.remote_id.clone().unwrap().into_inner(),
-            &stash,
+            &tether,
         )
         .await
         .unwrap()
         .unwrap();
 
-        let result = Conversation::available_actions(view, conversation_ids, &stash).await;
+        let result = Conversation::available_actions(view, conversation_ids, &tether).await;
 
         match result {
             Ok(mut actual) => {
@@ -644,7 +644,7 @@ mod available_move_to_actions {
                 MoveAction::CustomFolder(action) => ExpectedCustomFolder {
                     label_id: action
                         .local_id
-                        .counterpart::<Label, _>(tx)
+                        .counterpart::<Label>(tx)
                         .await
                         .unwrap()
                         .unwrap()
@@ -886,7 +886,7 @@ mod available_move_to_actions {
         expected: Result<&[ExpectedMoveAction], AppError>,
     ) {
         let stash = new_test_connection().await;
-        let conn = stash.connection();
+        let mut conn = stash.connection();
 
         let mut settings = MailSettings::default();
         let tx = conn.transaction().await.unwrap();
@@ -919,7 +919,7 @@ mod available_move_to_actions {
                 Conversation::apply_label(label_id, ids, &tx).await.unwrap();
             }
         }
-        let conn = tx.commit().await.unwrap();
+        tx.commit().await.unwrap();
 
         let view = Label::find_by_id(view.remote_id.clone().unwrap().into_inner(), &conn)
             .await
@@ -927,14 +927,15 @@ mod available_move_to_actions {
             .unwrap();
 
         let result = Conversation::available_move_to_actions(view, conversation_ids, &conn).await;
-        let fun_conn = || conn.clone();
+        let new_conn = || stash.connection();
 
         match result {
             Ok(actual) => {
                 let actual = stream::iter(actual.into_iter())
-                    .then(
-                        |action| async move { ExpectedMoveAction::new(action, &fun_conn()).await },
-                    )
+                    .then(|action| async move {
+                        let tether = new_conn();
+                        ExpectedMoveAction::new(action, &tether).await
+                    })
                     .collect::<Vec<_>>()
                     .await;
 
@@ -988,11 +989,12 @@ mod available_move_to_actions {
 #[tokio::test]
 async fn test_conversation_create_no_labels() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    create_labels(&mut tether).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1000,7 +1002,7 @@ async fn test_conversation_create_no_labels() {
     tx.commit().await.expect("failed to commit transaction");
     let id = local_conversation.local_id.unwrap();
 
-    let db_conversation = Conversation::load(id, &stash)
+    let db_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1010,18 +1012,19 @@ async fn test_conversation_create_no_labels() {
 #[tokio::test]
 async fn test_conversation_has_messages_flag() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    create_labels(&mut tether).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
         .expect("failed to create conversation");
     tx.commit().await.expect("failed to commit transaction");
 
-    let db_conv = Conversation::load(local_conversation.local_id.unwrap(), &stash)
+    let db_conv = Conversation::load(local_conversation.local_id.unwrap(), &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1031,12 +1034,18 @@ async fn test_conversation_has_messages_flag() {
 #[tokio::test]
 async fn test_unknown_conversation_messages_returns_error() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
     let id = 1024;
     assert_eq!(
-        Message::find("WHERE local_conversation_id = ?", params![id], &stash, None)
-            .await
-            .expect("failed to get messages"),
+        Message::find(
+            "WHERE local_conversation_id = ?",
+            params![id],
+            &tether,
+            None
+        )
+        .await
+        .expect("failed to get messages"),
         vec![]
     );
 }
@@ -1054,17 +1063,18 @@ async fn test_conversation_create_starred() {
         context_snooze_time: 0,
     };
     let (stash, _db_dir) = new_test_connection_file().await;
-    stash.execute("DELETE FROM labels", vec![]).await.unwrap();
-    create_address(&stash).await;
-    create_labels(&stash).await;
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = stash.connection();
+    tether.execute("DELETE FROM labels", vec![]).await.unwrap();
+    create_address(&mut tether).await;
+    create_labels(&mut tether).await;
+    let tx = tether.transaction().await.unwrap();
     test_starred_label().save(&tx).await.unwrap();
     tx.commit().await.expect("failed to commit transaction");
 
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1073,7 +1083,7 @@ async fn test_conversation_create_starred() {
     let id = local_conversation.local_id.unwrap();
 
     {
-        let db_conversation = Conversation::load(id, &stash)
+        let db_conversation = Conversation::load(id, &tether)
             .await
             .expect("failed to get conversation")
             .expect("should have value");
@@ -1090,11 +1100,11 @@ async fn test_conversation_create_starred() {
         assert!(db_conversation.is_starred());
     }
     {
-        let db_conversation = Conversation::load(id, &stash)
+        let db_conversation = Conversation::load(id, &tether)
             .await
             .expect("failed to get conversation")
             .expect("should have value");
-        let mut local_conversation = Conversation::load(id, &stash)
+        let mut local_conversation = Conversation::load(id, &tether)
             .await
             .expect("failed to get conversation")
             .expect("should have value");
@@ -1113,7 +1123,7 @@ async fn test_conversation_create_starred() {
             deleted: false,
             row_id: None,
         }];
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         local_conversation
             .save(&tx)
             .await
@@ -1126,12 +1136,12 @@ async fn test_conversation_create_starred() {
     }
 
     // Remove starred label, should lose starred attribute.
-    let mut local_conversation = Conversation::load(id, &stash)
+    let mut local_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
     local_conversation.labels = vec![];
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1139,7 +1149,7 @@ async fn test_conversation_create_starred() {
     tx.commit().await.expect("failed to commit transaction");
     let id = local_conversation.local_id.unwrap();
     {
-        let db_conversation = Conversation::load(id, &stash)
+        let db_conversation = Conversation::load(id, &tether)
             .await
             .expect("failed to get conversation")
             .expect("should have value");
@@ -1152,8 +1162,9 @@ async fn test_conversation_create_starred() {
 #[tokio::test]
 async fn test_conversation_create_with_labels() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    let _local_label_ids = create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    let _local_label_ids = create_labels(&mut tether).await;
     let conv = test_conversation(
         vec![
             ApiConversationLabel {
@@ -1195,7 +1206,7 @@ async fn test_conversation_create_with_labels() {
         deleted: false,
         row_id: None,
     }];
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1203,7 +1214,7 @@ async fn test_conversation_create_with_labels() {
     tx.commit().await.expect("failed to commit transaction");
     let id = local_conversation.local_id.unwrap();
 
-    let db_conversation = Conversation::load(id, &stash)
+    let db_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1213,8 +1224,9 @@ async fn test_conversation_create_with_labels() {
 #[tokio::test]
 async fn test_conversation_create_with_attachment() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    create_labels(&mut tether).await;
     let conv = test_conversation(
         vec![],
         vec![ApiAttachmentMetadata {
@@ -1226,7 +1238,7 @@ async fn test_conversation_create_with_attachment() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1236,7 +1248,7 @@ async fn test_conversation_create_with_attachment() {
 
     assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
-    let db_conversation = Conversation::load(id, &stash)
+    let db_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1245,7 +1257,7 @@ async fn test_conversation_create_with_attachment() {
     // Patch local id.
     local_conversation.attachments_metadata[0].local_id =
         RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment, _>(&stash)
+            .counterpart::<Attachment>(&tether)
             .await
             .unwrap();
 
@@ -1258,8 +1270,9 @@ async fn test_conversation_create_with_attachment() {
 #[tokio::test]
 async fn test_conversation_create_with_attachment_and_label() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    create_labels(&mut tether).await;
     let conv = test_conversation(
         vec![ApiConversationLabel {
             id: MY_LABEL_ID1.clone(),
@@ -1280,7 +1293,7 @@ async fn test_conversation_create_with_attachment_and_label() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation
         .save(&tx)
         .await
@@ -1290,7 +1303,7 @@ async fn test_conversation_create_with_attachment_and_label() {
 
     assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
-    let db_conversation = Conversation::load(id, &stash)
+    let db_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1298,7 +1311,7 @@ async fn test_conversation_create_with_attachment_and_label() {
     // Patch local id.
     local_conversation.attachments_metadata[0].local_id =
         RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment, _>(&stash)
+            .counterpart::<Attachment>(&tether)
             .await
             .unwrap();
 
@@ -1312,8 +1325,9 @@ async fn test_conversation_create_with_attachment_and_label() {
 #[tokio::test]
 async fn test_conversation_update() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    create_address(&stash).await;
-    let _local_label_ids = create_labels(&stash).await;
+    let mut tether = stash.connection();
+    create_address(&mut tether).await;
+    let _local_label_ids = create_labels(&mut tether).await;
     let conv = test_conversation(
         vec![ApiConversationLabel {
             id: MY_LABEL_ID2.clone(),
@@ -1334,7 +1348,7 @@ async fn test_conversation_update() {
         }],
     );
     let mut local_conversation1 = Conversation::from(conv.clone());
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation1
         .save(&tx)
         .await
@@ -1394,7 +1408,7 @@ async fn test_conversation_update() {
     ];
     local_conversation2.local_id = local_conversation1.local_id;
     local_conversation2.row_id = local_conversation1.row_id;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     local_conversation2
         .save(&tx)
         .await
@@ -1406,12 +1420,12 @@ async fn test_conversation_update() {
     // Patch local id.
     local_conversation2.attachments_metadata[0].local_id =
         RemoteId::from(conv_update.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment, _>(&stash)
+            .counterpart::<Attachment>(&tether)
             .await
             .unwrap();
     local_conversation2.labels.remove(1);
 
-    let db_conversation = Conversation::load(id, &stash)
+    let db_conversation = Conversation::load(id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1423,10 +1437,11 @@ async fn test_conversation_undelete_all_mail() {
     // Same as test_conversation_delete, but undoing the deletions should restore all the state
     // back to the initial values.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_delete_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
-    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), &stash)
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
+    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), &tether)
         .await
         .unwrap()
         .unwrap()
@@ -1443,7 +1458,7 @@ async fn test_conversation_undelete_all_mail() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(all_mail_label, vec![local_conv_id1, local_conv_id2], &tx)
         .await
         .expect("failed to mark as deleted");
@@ -1455,7 +1470,7 @@ async fn test_conversation_undelete_all_mail() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values
         {
             let start_label_counts = state_map
@@ -1480,7 +1495,7 @@ async fn test_conversation_undelete_all_mail() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -1510,11 +1525,12 @@ async fn test_conversation_delete_all_mail() {
     // Simulate conversation delete from all mail, all messages for the conversation a
     // are deleted.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_delete_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
     let all_mail_label = SystemLabel::AllMail
-        .local_id(&stash)
+        .local_id(&tether)
         .await
         .unwrap()
         .unwrap();
@@ -1530,7 +1546,7 @@ async fn test_conversation_delete_all_mail() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(all_mail_label, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
@@ -1539,7 +1555,7 @@ async fn test_conversation_delete_all_mail() {
     let db_conversation = Conversation::find_first(
         "WHERE local_id = ? AND deleted = 0",
         params![local_conv_id],
-        stash.stash(),
+        &tether,
     )
     .await
     .expect("failed to get conversation");
@@ -1547,7 +1563,7 @@ async fn test_conversation_delete_all_mail() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values
         {
             let start_label_counts = state_map
@@ -1572,7 +1588,7 @@ async fn test_conversation_delete_all_mail() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -1611,13 +1627,13 @@ async fn test_conversation_delete_all_mail() {
         .conversations
         .get(&state.conversations[1].remote_id.clone().unwrap())
         .unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(all_mail_label, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark conv as deleted");
     tx.commit().await.expect("failed to commit");
 
-    for count in Label::all(stash.stash(), None).await.unwrap() {
+    for count in Label::all(&tether, None).await.unwrap() {
         assert_eq!(
             count.total_msg, 0,
             "Label {:?} does not have 0 total count",
@@ -1646,9 +1662,10 @@ async fn test_conversation_delete() {
     // Simulate conversation according to API expectations, only delete conversations in that label.
     // If conversation has messages in other labels, it must still exist.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_delete_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
     // Deleting a conversation must
     // * Update conversation counters
     // * Update message counters
@@ -1659,13 +1676,13 @@ async fn test_conversation_delete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1685,7 +1702,7 @@ async fn test_conversation_delete() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, conversation should have been removed.
         {
             let start_label_counts = state_map
@@ -1710,7 +1727,7 @@ async fn test_conversation_delete() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -1740,7 +1757,7 @@ async fn test_conversation_delete() {
     }
 
     // Deleting conv1 in label 2  should remove all traces of the  conversation
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(local_label_id2, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark conv as deleted");
@@ -1750,7 +1767,7 @@ async fn test_conversation_delete() {
         let db_conversation = Conversation::find_first(
             "WHERE local_id = ? AND deleted = 0",
             params![local_conv_id],
-            stash.stash(),
+            &tether,
         )
         .await
         .expect("failed to get conversation");
@@ -1759,7 +1776,7 @@ async fn test_conversation_delete() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, should be empty
         {
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
@@ -1780,7 +1797,7 @@ async fn test_conversation_delete() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -1805,9 +1822,10 @@ async fn test_conversation_delete() {
 async fn test_conversation_undelete() {
     // Same as test_conversation_delete, but checks for reverse operations.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_delete_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
     // Deleting a conversation must
     // * Update conversation counters
@@ -1819,7 +1837,7 @@ async fn test_conversation_undelete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
@@ -1835,7 +1853,7 @@ async fn test_conversation_undelete() {
         .expect("Failed to mark as undeleted");
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1851,7 +1869,7 @@ async fn test_conversation_undelete() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, should match original state.
         {
             let start_label_counts = state_map
@@ -1876,7 +1894,7 @@ async fn test_conversation_undelete() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1 - should match original state.
         {
@@ -1904,9 +1922,10 @@ async fn test_conversation_undelete() {
 #[tokio::test]
 async fn test_conversation_counts() {
     let (stash, _db_dir) = new_test_connection_file().await;
-    stash.execute("DELETE FROM labels", vec![]).await.unwrap();
-    create_address(&stash).await;
-    let labels = create_labels(&stash).await;
+    let mut tether = stash.connection();
+    tether.execute("DELETE FROM labels", vec![]).await.unwrap();
+    create_address(&mut tether).await;
+    let labels = create_labels(&mut tether).await;
     let counts = vec![
         ConversationCount {
             label_id: MY_LABEL_ID1.clone().into(),
@@ -1920,13 +1939,13 @@ async fn test_conversation_counts() {
         },
     ];
     let counts_clone = counts.clone();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Label::create_or_update_conversation_counts(counts_clone, &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.expect("failed to commit");
 
-    let db_labels = Label::all(&stash, None)
+    let db_labels = Label::all(&tether, None)
         .await
         .expect("failed to get counters");
     let db_counters = db_labels
@@ -1940,7 +1959,7 @@ async fn test_conversation_counts() {
     assert!(db_counters.contains(&counts[0]));
     assert!(db_counters.contains(&counts[1]));
 
-    let label_conv_counter = Label::load(labels[0], &stash).await.unwrap().unwrap();
+    let label_conv_counter = Label::load(labels[0], &tether).await.unwrap().unwrap();
     assert!(db_labels.contains(&label_conv_counter));
 
     assert_eq!(db_labels.len(), 2);
@@ -1954,8 +1973,10 @@ async fn test_conversation_mark_read_no_message_metadata() {
     // Mark conversation as read without message metadata.
     let mut state = new_test_unread_db_state();
     let (stash, _db_dir) = new_test_connection_file().await;
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    let mut tether = stash.connection();
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -1964,13 +1985,13 @@ async fn test_conversation_mark_read_no_message_metadata() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
         .await
         .unwrap();
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1981,7 +2002,7 @@ async fn test_conversation_mark_read_no_message_metadata() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, conversation should have been removed.
         {
             let start_label_counts = state_map
@@ -2009,9 +2030,10 @@ async fn test_conversation_mark_read_no_message_metadata() {
 async fn test_conversation_mark_read() {
     // Mark conversation as read and update all conversation / message counts
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_unread_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2020,13 +2042,13 @@ async fn test_conversation_mark_read() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
         .await
         .unwrap();
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2037,7 +2059,7 @@ async fn test_conversation_mark_read() {
 
     // Check conversation counts
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, conversation should have been removed.
         {
             let start_label_counts = state_map
@@ -2062,7 +2084,7 @@ async fn test_conversation_mark_read() {
 
     // Check message counts
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -2097,9 +2119,11 @@ async fn test_conversation_mark_unread_no_metadata() {
     // Mark conversation as read and then mark it unread, since we don't have message
     // metadata we should mark the current conversation label only as unread.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_unread_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2107,7 +2131,7 @@ async fn test_conversation_mark_unread_no_metadata() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
         .await
         .unwrap();
@@ -2116,7 +2140,7 @@ async fn test_conversation_mark_unread_no_metadata() {
         .unwrap();
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2127,7 +2151,7 @@ async fn test_conversation_mark_unread_no_metadata() {
 
     // Check conversation counts match original values.
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         {
             let start_label_counts = state_map
                 .conversation_counts
@@ -2160,10 +2184,11 @@ async fn test_conversation_mark_unread() {
     // 3 are in label1 and 1 in label2
     // The last message in the conversation is of label1
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_unread_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let state = new_test_unread_db_state();
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2172,12 +2197,12 @@ async fn test_conversation_mark_unread() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     // First mark all msgs as unread
     Conversation::mark_read([local_conv_id], &tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2185,14 +2210,14 @@ async fn test_conversation_mark_unread() {
     assert_eq!(db_conversation.num_messages, 4);
     assert_eq!(db_conversation.num_unread, 0);
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     // Mark last one as unread
     Conversation::mark_unread(local_label_id1, [local_conv_id], &tx)
         .await
         .unwrap();
     tx.commit().await.unwrap();
 
-    let db_conversation = Conversation::load(local_conv_id, &stash)
+    let db_conversation = Conversation::load(local_conv_id, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2201,7 +2226,7 @@ async fn test_conversation_mark_unread() {
         "WHERE local_conversation_id=?
                 AND unread=1",
         params![local_conv_id],
-        &stash,
+        &tether,
         None,
     )
     .await
@@ -2218,7 +2243,7 @@ async fn test_conversation_mark_unread() {
     // The unread conversation counts should be 0 because the conversation is
     // not fully marked as unread
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         {
             let start_label_counts = state_map
                 .conversation_counts
@@ -2241,7 +2266,7 @@ async fn test_conversation_mark_unread() {
 
     // Check message counts, only one message should be unread
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
 
         // Check label1
         {
@@ -2270,22 +2295,23 @@ async fn test_conversation_mark_unread() {
 async fn test_conversation_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
     let local_conv_id = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &stash)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2308,7 +2334,7 @@ async fn test_conversation_label_with_message_metadata() {
 
     // Check conversation counts have the new conversation.
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         let label_counts = conv_counts.get(&local_label_id1).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 1);
@@ -2316,7 +2342,7 @@ async fn test_conversation_label_with_message_metadata() {
 
     // Check message counts, only one message should be unread
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
         let label_counts = message_counts.get(&local_label_id1).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 3);
@@ -2328,10 +2354,10 @@ async fn test_conversation_double_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation twice and check
     // the changes are not duplicated.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&conn, state.clone()).await;
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2345,7 +2371,7 @@ async fn test_conversation_double_label_with_message_metadata() {
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    let conn = tx.commit().await.expect("failed to commit");
+    tx.commit().await.expect("failed to commit");
 
     let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
         .await
@@ -2389,8 +2415,9 @@ async fn test_conversation_double_label_with_message_metadata() {
 async fn test_conversation_label_partially() {
     // Label conversation with a label where one of the messages already has been labeled
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let mut state = state.clone();
     state.messages[1]
         .label_ids
@@ -2408,20 +2435,20 @@ async fn test_conversation_label_partially() {
         }
         .into(),
     );
-    let (state, state_map) = prepare_and_patch_db_state(&stash, state).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state).await;
 
     let local_conv_id = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &stash)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2444,7 +2471,7 @@ async fn test_conversation_label_partially() {
 
     // Check conversation counts have the new conversation.
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         let label_counts = conv_counts.get(&local_label_id1).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 1);
@@ -2452,7 +2479,7 @@ async fn test_conversation_label_partially() {
 
     // Check message counts, only one message should be unread
     {
-        let message_counts = msg_counts_as_map(&stash).await;
+        let message_counts = msg_counts_as_map(&tether).await;
         let label_counts = message_counts.get(&local_label_id1).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 3);
@@ -2464,10 +2491,11 @@ async fn test_conversation_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&conn, state.clone(), true).await;
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut conn, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2478,7 +2506,7 @@ async fn test_conversation_label_without_message_metadata() {
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    let conn = tx.commit().await.expect("failed to commit");
+    tx.commit().await.expect("failed to commit");
 
     let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
         .await
@@ -2511,10 +2539,11 @@ async fn test_conversation_double_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present 2 times and check the data is not duplicated.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&conn, state.clone(), true).await;
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut conn, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2528,7 +2557,7 @@ async fn test_conversation_double_label_without_message_metadata() {
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    let conn = tx.commit().await.expect("failed to commit");
+    tx.commit().await.expect("failed to commit");
 
     let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
         .await
@@ -2563,22 +2592,24 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
     // There is a fallback to 0 values if no such thing exists. In production
     // conversation will always be assigned to the "All Mail".
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state_label_with_existing_labels();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &stash)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2602,7 +2633,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
 
     // Check conversation counts have the new conversation.
     {
-        let conv_counts = conv_counts_as_map(&stash).await;
+        let conv_counts = conv_counts_as_map(&tether).await;
         {
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             // unread is 0 due to lack of messages.
@@ -2616,10 +2647,10 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
 async fn test_conversation_unlabel_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&conn, state.clone()).await;
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2633,7 +2664,7 @@ async fn test_conversation_unlabel_with_message_metadata() {
     Conversation::remove_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to unlabel");
-    let conn = tx.commit().await.expect("failed to commit");
+    tx.commit().await.expect("failed to commit");
 
     assert!(
         ContextualConversation::load(local_conv_id, local_label_id1, &conn)
@@ -2664,10 +2695,11 @@ async fn test_conversation_unlabel_without_message_metadata() {
     // Label and then unlabel a conversation with a label that was never assigned without having any message metadata
     // present.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let conn = stash.connection();
+    let mut conn = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&conn, state.clone(), true).await;
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut conn, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2681,7 +2713,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
     Conversation::remove_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    let conn = tx.commit().await.expect("failed to commit");
+    tx.commit().await.expect("failed to commit");
 
     assert!(
         ContextualConversation::load(local_conv_id, local_label_id1, &conn)
@@ -2702,22 +2734,22 @@ async fn test_conversation_unlabel_without_message_metadata() {
 #[tokio::test]
 async fn test_conversation_expiration() {
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
 
-    dbg!(state.conversations.len());
-
     // Delete all expired, no matches
-    let res = Conversation::delete_expired(&stash).await.unwrap();
+    let res = Conversation::delete_expired(&mut tether).await.unwrap();
     assert_eq!(res, 0);
 
-    let cv = Conversation::load(local_conv_id, &stash)
+    let cv = Conversation::load(local_conv_id, &tether)
         .await
         .unwrap()
         .unwrap();
@@ -2725,23 +2757,23 @@ async fn test_conversation_expiration() {
     assert_eq!(cv.deleted, false);
 
     // Load a conversation
-    Conversation::set_expiration_time_in(local_conv_id, -1000, &stash)
+    Conversation::set_expiration_time_in(local_conv_id, -1000, &mut tether)
         .await
         .unwrap();
 
     // Delete all expired
-    let res = Conversation::delete_expired(&stash).await.unwrap();
+    let res = Conversation::delete_expired(&mut tether).await.unwrap();
 
     assert_eq!(res, 1);
 
     // Check if it's deleted
-    let cv = Conversation::load(local_conv_id, &stash)
+    let cv = Conversation::load(local_conv_id, &tether)
         .await
         .unwrap()
         .unwrap();
 
     // Check that all messages are deleted too
-    let messages = cv.load_messages(&stash).await.unwrap();
+    let messages = cv.load_messages(&tether).await.unwrap();
     for message in messages {
         assert_eq!(message.deleted, true);
     }
@@ -2752,31 +2784,33 @@ async fn test_conversation_expiration() {
 #[tokio::test]
 async fn test_conversation_watcher() {
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let (_, watch_result) = ContextualConversation::watch_in_label(local_label_id1, &stash)
+    let (_, watch_result) = ContextualConversation::watch_in_label(local_label_id1, &tether)
         .await
         .unwrap();
 
     tokio::spawn(async move {
         //bypass model to only execute exactly 2 queries.
-        stash.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
+        tether.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
                    params![30, local_label_id1, local_conv_id],
         ).await.unwrap();
-        stash
+        tether
             .execute(
                 "UPDATE conversations SET num_unread=? WHERE local_id=?",
                 params![10, local_conv_id],
@@ -2794,9 +2828,11 @@ async fn test_conversation_watcher() {
 #[tokio::test]
 async fn test_contextual_conversation_messages() {
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&stash, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state_and_skip(&stash, state.clone(), true).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut tether, state.clone(), true).await;
 
     let local_conv_id = *state_map
         .conversations
@@ -2805,11 +2841,11 @@ async fn test_contextual_conversation_messages() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
 
     let watch_result =
-        ContextualConversation::watch_conversation_and_messages(local_conv_id, &stash)
+        ContextualConversation::watch_conversation_and_messages(local_conv_id, &tether)
             .await
             .unwrap();
 
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
@@ -2844,11 +2880,12 @@ async fn conversation_exclusive_location_on_save(
     // Setup:
     //   * create a conversation with some labels
     let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
 
     let mut conversation = Conversation {
         ..Default::default()
     };
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     conversation.save(&tx).await.unwrap();
     let mut conversation_labels = Vec::with_capacity(labels.len());
     for mut label in labels {
