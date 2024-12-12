@@ -25,6 +25,7 @@ use tokio::runtime::Runtime;
 use tracing::error;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking;
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -87,6 +88,7 @@ pub struct AppModel {
     bg_progress: Option<BackgroundProgress>,
     tui_logger_state: TuiWidgetState,
     display_log: bool,
+    _log_guard: WorkerGuard,
 }
 
 impl AppModel {
@@ -110,7 +112,7 @@ impl AppModel {
         std::fs::create_dir_all(&user_db_path)?;
 
         let log_file = cache_dir.join("app.log");
-        init_log(log_file)?;
+        let log_guard = init_log(log_file)?;
 
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
@@ -137,6 +139,7 @@ impl AppModel {
                 bg_progress: None,
                 tui_logger_state: TuiWidgetState::new(),
                 display_log: false,
+                _log_guard: log_guard,
             })
         })
     }
@@ -382,9 +385,9 @@ fn app_tracing_env_filter() -> EnvFilter {
         .expect("Error parsing tracing directives")
 }
 
-fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+fn init_log(log_path: impl AsRef<Path>) -> Result<WorkerGuard, Box<dyn Error>> {
     let log_file = File::create(log_path)?;
-    let (appender, _guard) = non_blocking(log_file);
+    let (appender, guard) = non_blocking(log_file);
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)
         .with_line_number(false)
@@ -400,7 +403,7 @@ fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
         .with(tui_log_subscriber)
         .init();
     log_backtrace_on_panic();
-    Ok(())
+    Ok(guard)
 }
 
 /// Modify the hook on panic so we log the `Backtrace`.

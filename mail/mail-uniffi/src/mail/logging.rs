@@ -5,6 +5,7 @@ use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use tracing::error;
 use tracing_appender::non_blocking;
+use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -25,7 +26,7 @@ fn rename_old_file(log_path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
+pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<WorkerGuard> {
     let mut options = OpenOptions::new();
     options.read(true).write(true).create(true);
 
@@ -36,7 +37,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
     }
 
     let log_file = options.open(log_path)?;
-    let (appender, _guard) = non_blocking(log_file);
+    let (appender, guard) = non_blocking(log_file);
 
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)
@@ -51,7 +52,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
         });
     tracing_subscriber::registry().with(file_subscriber).init();
     log_backtrace_on_panic();
-    Ok(())
+    Ok(guard)
 }
 
 pub fn app_tracing_env_filter_default() -> EnvFilter {
