@@ -1,7 +1,6 @@
 pub use super::*;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
-use crate::draft::compose::DEFAULT_SUBJECT;
 use crate::draft::recipients::NullContactGroupResolver;
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
@@ -14,7 +13,7 @@ fn new_draft_message_creation() {
     let mail_settings = MailSettings::default();
     let draft = Draft::new_empty_draft(MetadataId(0), &address, &mail_settings);
 
-    assert_eq!(draft.subject, DEFAULT_SUBJECT);
+    assert!(draft.subject.is_empty());
     assert_eq!(draft.address_id, address.remote_id.unwrap());
     assert_eq!(draft.sender, address.email);
     assert!(draft.to_list.is_empty());

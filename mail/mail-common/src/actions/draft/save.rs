@@ -6,7 +6,7 @@ use crate::datatypes::{
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::{Recipient, SingleRecipient, ValidationState};
-use crate::draft::{Draft, Error, ReplyMode};
+use crate::draft::{compose, Draft, Error, ReplyMode};
 use crate::models::{
     Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
 };
@@ -76,7 +76,11 @@ impl Save {
             message_id: None,
             conversation_id: None,
             address_id: draft.address_id.clone(),
-            subject: draft.subject.clone(),
+            subject: if draft.subject.is_empty() {
+                compose::DEFAULT_SUBJECT.to_owned()
+            } else {
+                draft.subject.clone()
+            },
             body: draft.body.clone(),
             attachments: draft
                 .attachments

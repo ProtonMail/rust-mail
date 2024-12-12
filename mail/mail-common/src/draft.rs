@@ -293,7 +293,7 @@ impl Draft {
             cc_list: RecipientList::new(),
             bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
-            subject: compose::DEFAULT_SUBJECT.to_owned(),
+            subject: String::new(),
             body,
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
