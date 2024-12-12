@@ -247,8 +247,9 @@ impl Message {
         queue: &Queue,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+        let tether = queue.stash().connection();
         let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label>(queue.tether())
+            .counterpart::<crate::models::Label>(&tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
@@ -271,8 +272,9 @@ impl Message {
         queue: &Queue,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+        let tether = queue.stash().connection();
         let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label>(queue.tether())
+            .counterpart::<crate::models::Label>(&tether)
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());

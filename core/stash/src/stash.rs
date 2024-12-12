@@ -384,6 +384,7 @@
 
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
 use core::fmt::Debug;
+use core::mem;
 use core::ops::Deref;
 use core::ptr::null;
 use core::sync::atomic::AtomicU32;
@@ -1705,12 +1706,6 @@ impl OperationLogic for Subscription {
 /// shared easily and without concern. It is used to execute queries against the
 /// database,
 ///
-/// # Cloning
-///
-/// [`Tether`] instances are lightweight, and can be freely cloned but its not
-/// recommended as it may lead to nested transactions. Clone implementation
-/// is inteded to be used for internal use only.
-///
 /// # Design
 ///
 /// Because [`PooledConnection`] is not [`Send`] compatible, it cannot be passed
@@ -2000,10 +1995,10 @@ impl Tether {
     ///
     /// ```
     /// use stash::params;
-    /// use stash::stash::{AgnosticInterface, Interface};
+    /// use stash::stash::Tether;
     ///
-    /// async fn value_query(interface:&AgnosticInterface) {
-    ///     let values:Vec<f64> = interface.query_values(
+    /// async fn value_query(tether:&Tether) {
+    ///     let values:Vec<f64> = tether.query_values(
     ///         "SELECT number AS value FROM table",
     ///         vec![]).await.unwrap();
     /// }
@@ -2122,23 +2117,6 @@ impl Tether {
 
         Ok(Bond::new(self))
     }
-
-    /// A way to obtain new [`Tether`] instances for performing transactions
-    /// in non mutable context.
-    ///
-    #[must_use]
-    pub fn new(&self) -> Self {
-        self.stash.connection()
-    }
-
-    /// Wrap self in an Arc.
-    ///
-    /// This is useful for passing read-only Tether to other threads.
-    ///
-    #[must_use]
-    pub fn arc(self) -> Arc<Self> {
-        Arc::new(self)
-    }
 }
 
 impl Drop for Tether {
@@ -2181,18 +2159,6 @@ impl Drop for Tether {
     }
 }
 
-// impl Clone for Tether {
-//     fn clone(&self) -> Self {
-//         let _old_total = self.handle.fetch_add(1, Ordering::SeqCst);
-//         Self {
-//             handle: Arc::clone(&self.handle),
-//             queue: self.queue.clone(),
-//             start_time: Arc::clone(&self.start_time),
-//             stash: self.stash.clone(),
-//         }
-//     }
-// }
-
 /// Database transaction context.
 ///
 /// This struct provides a lightweight, thread-safe database transaction context
@@ -2200,19 +2166,16 @@ impl Drop for Tether {
 /// shared easily and without concern. It is used to execute queries against the
 /// database,
 ///
-/// # Cloning
-///
-/// [`Bond`] instances are lightweight, and can be freely cloned but its not
-/// recommended as it may lead to open transactions after commit. Clone implementation
-/// is inteded to be used for internal use only.
 ///
 /// # Design
 ///
-/// Its design resolves around being a wrapper around a [`Tether`] instance,
-/// to provide dedicated Transaction type. This type is meant to be required for
-/// database modification queries of any type to ensure safety of execution.
-/// Any modification query run of the scope of the Transaction may trigger
-/// `Database is busy` error.
+/// Its design resolves around being a wrapper around a mutable referance to [`Tether`] instance,
+/// to provide dedicated Transaction type. This type is meant to be required for any
+/// database modification queries to ensure safety of execution. Rust type system ensures that
+/// there is only one transaction per tether.
+///
+/// # Errors
+/// Any modification query run of the scope of the Transaction may trigger `Database is busy` error.
 ///
 /// # See also
 ///
@@ -2222,19 +2185,13 @@ impl Drop for Tether {
 pub struct Bond<'tether> {
     /// The associated [`Tether`] instance.
     tether: &'tether mut Tether,
-
-    /// The property to indicate if the transaction is finalized.
-    finalized: bool,
 }
 
 impl<'tether> Bond<'tether> {
     /// Create new instance of the Bond.
     ///
     fn new(tether: &'tether mut Tether) -> Self {
-        Self {
-            tether,
-            finalized: false,
-        }
+        Self { tether }
     }
 
     /// Commits a transaction.
@@ -2256,8 +2213,8 @@ impl<'tether> Bond<'tether> {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem
     ///     committing the transaction.
     ///
-    pub async fn commit(mut self) -> Result<(), StashError> {
-        self.finalized = true;
+    #[allow(clippy::mem_forget)]
+    pub async fn commit(self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
             &self.tether.stash,
@@ -2272,6 +2229,9 @@ impl<'tether> Bond<'tether> {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
+
+        // Transaction commited, skip the drop logic
+        mem::forget(self);
 
         Ok(())
     }
@@ -2296,8 +2256,8 @@ impl<'tether> Bond<'tether> {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    pub async fn rollback(mut self) -> Result<(), StashError> {
-        self.finalized = true;
+    #[allow(clippy::mem_forget)]
+    pub async fn rollback(self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command::new(
             &self.tether.stash,
@@ -2313,6 +2273,9 @@ impl<'tether> Bond<'tether> {
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
 
+        // Transaction rolled back, skip the drop logic
+        mem::forget(self);
+
         Ok(())
     }
 }
@@ -2327,10 +2290,6 @@ impl Deref for Bond<'_> {
 
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
-        if self.finalized {
-            return;
-        }
-
         if self
             .queue
             .send(Operation::RollbackTransaction(Command::new(

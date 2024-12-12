@@ -275,7 +275,7 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// The [`Stash`] instance used for database operations. This is not used
     /// for the initial query (that uses whatever was supplied), but is required
     /// for subsequent queries and for live updates.
-    tether: Tether,
+    stash: Stash,
 
     /// The [`DataSource`] from where pagination data will be synced
     /// from.
@@ -361,7 +361,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         Q: Into<String> + Send,
         R: DataSource,
     {
-        let tether = stash.connection();
         let paginator = Self {
             shared: Arc::new(Mutex::new(Shared {
                 cursor_index: 0,
@@ -372,7 +371,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             page_size,
             params,
             query_logic: query_logic.into(),
-            tether,
+            stash: stash.clone(),
             remote: Arc::new(remote),
         };
 
@@ -381,13 +380,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         paginator.start_update_listener(queue);
 
         Ok(paginator)
-    }
-
-    /// Returns tether to database.
-    ///
-    #[must_use]
-    pub fn tether(&self) -> &Tether {
-        &self.tether
     }
 
     /// Initializes the paginator by fetching the initial set of records.
@@ -410,12 +402,13 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     #[allow(clippy::cast_possible_truncation)]
     async fn initialize(&self, _local_first: bool) -> Result<(), R::Error> {
-        let total = self.remote.total(&self.tether).await?;
+        let mut tether = self.stash.connection();
+        let total = self.remote.total(&tether).await?;
 
         let mut initial_records = T::find(
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
-            &self.tether,
+            &tether,
             None,
         )
         .await?;
@@ -429,7 +422,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             || (initial_records.len() < self.page_size.get() as usize
                 && initial_records.len() < total)
         {
-            let mut tether = self.tether.new();
             initial_records = self
                 .remote
                 .sync_first_page(self.page_size, &mut tether)
@@ -444,7 +436,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
     /// Starts the update listener to handle live updates.
     fn start_update_listener(&self, sender: Option<QueueSender<ResultsetChange<T, T::IdType>>>) {
-        let stash = self.tether.stash().clone();
+        let stash = self.stash.clone();
         let query_logic = self.query_logic.clone();
         let params = self.params.clone();
         let shared_cloned = Arc::clone(&self.shared);
@@ -678,7 +670,8 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
         let current_index = { self.shared.lock().await.cursor_index };
-        self.page_at(current_index).await
+        let tether = self.stash.connection();
+        self.page_at(current_index, &tether).await
     }
 
     /// Retrieves the page at the given cursor index.
@@ -693,11 +686,11 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    async fn page_at(&self, cursor_index: u32) -> Result<Vec<T>, StashError> {
+    async fn page_at(&self, cursor_index: u32, tether: &Tether) -> Result<Vec<T>, StashError> {
         T::find(
             paging_query(&self.query_logic, cursor_index, self.page_size),
             convert_params(&self.params),
-            self.tether(),
+            tether,
             None,
         )
         .await
@@ -716,8 +709,8 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         // watcher until we are done updating all the relevant data.
         let mut shared = self.shared.lock().await;
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
-        let current_page = self.page_at(shared.cursor_index).await?;
-        let mut tether = self.tether.new();
+        let mut tether = self.stash.connection();
+        let current_page = self.page_at(shared.cursor_index, &tether).await?;
         let sync_elements = self
             .remote
             .sync_page_after(next_index, self.page_size, current_page, &mut tether)
@@ -732,7 +725,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         if let Some(element) = T::find(
             paging_query(&self.query_logic, next_index, NonZeroU32::new(1).unwrap()),
             convert_params(&self.params),
-            &self.tether,
+            &tether,
             None,
         )
         .await?
@@ -742,7 +735,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             shared.cursor_row_id = Some(element.row_id().unwrap());
         }
 
-        let next_page = self.page_at(shared.cursor_index).await?;
+        let next_page = self.page_at(shared.cursor_index, &tether).await?;
         Ok(next_page)
     }
 
@@ -775,6 +768,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     #[allow(clippy::missing_panics_doc)]
     pub async fn reload(&self) -> Result<Vec<T>, StashError> {
+        let tether = self.stash.connection();
         #[allow(clippy::unwrap_used)]
         T::find(
             paging_query(
@@ -790,7 +784,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 .unwrap(),
             ),
             convert_params(&self.params),
-            &self.tether,
+            &tether,
             None,
         )
         .await

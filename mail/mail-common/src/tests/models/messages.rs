@@ -790,7 +790,7 @@ mod available_move_to_actions {
         }
 
         tx.commit().await.unwrap();
-        let new_conn = || conn.new();
+        let new_conn = || stash.connection();
         let view = Label::find_by_id(view.remote_id.clone().unwrap().into_inner(), &conn)
             .await
             .unwrap()
@@ -2110,15 +2110,16 @@ async fn label_messages() {
         assert_eq!(label_counts.total, 1);
     }
 
-    let check_full_conversations = |tx: &Tether| -> BoxFuture<'_, ()> {
+    let check_full_conversations = |stash: &Stash| -> BoxFuture<'_, ()> {
         let state = &state;
-        let tx = tx.new();
+        let tether = stash.connection();
         async move {
             // Check conversation after all messages have been labeled.
-            let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
-                .await
-                .expect("failed to get conversation")
-                .unwrap();
+            let db_conversation =
+                ContextualConversation::load(local_conv_id, local_label_id1, &tether)
+                    .await
+                    .expect("failed to get conversation")
+                    .unwrap();
             assert_eq!(db_conversation.num_unread, 1);
             assert_eq!(db_conversation.num_messages, 3);
             assert_eq!(db_conversation.num_attachments, 1);
@@ -2144,7 +2145,7 @@ async fn label_messages() {
 
             // Check conversation counts.
             {
-                let conv_counts = conv_counts_as_map(&tx).await;
+                let conv_counts = conv_counts_as_map(&tether).await;
                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
                 assert_eq!(label_counts.unread, 1);
                 assert_eq!(label_counts.total, 1);
@@ -2152,7 +2153,7 @@ async fn label_messages() {
 
             // Check message counts.
             {
-                let message_counts = msg_counts_as_map(&tx).await;
+                let message_counts = msg_counts_as_map(&tether).await;
                 let label_counts = message_counts.get(&local_label_id1).unwrap();
                 assert_eq!(label_counts.unread, 1);
                 assert_eq!(label_counts.total, 3);
@@ -2168,7 +2169,7 @@ async fn label_messages() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    check_full_conversations(&conn).await;
+    check_full_conversations(&stash).await;
 
     // Apply again, should be noop.
     let tx = conn.transaction().await.unwrap();
@@ -2181,7 +2182,7 @@ async fn label_messages() {
     .unwrap();
     tx.commit().await.unwrap();
 
-    check_full_conversations(&conn).await;
+    check_full_conversations(&stash).await;
 }
 
 #[tokio::test]
@@ -2285,12 +2286,12 @@ async fn unlabel_messages() {
         assert_eq!(label_counts.total, 2);
     }
 
-    let check_final_conv_state = |tx: &Tether| -> BoxFuture<'_, ()> {
-        let tx = tx.new();
+    let check_final_conv_state = |stash: &Stash| -> BoxFuture<'_, ()> {
+        let tether = stash.connection();
         async move {
             // Conversation should no longer have the label
             assert!(
-                ContextualConversation::load(local_conv_id, local_label_id1, &tx)
+                ContextualConversation::load(local_conv_id, local_label_id1, &tether)
                     .await
                     .expect("failed to get conversation")
                     .is_none()
@@ -2298,7 +2299,7 @@ async fn unlabel_messages() {
 
             // Check conversation counts.
             {
-                let conv_counts = conv_counts_as_map(&tx).await;
+                let conv_counts = conv_counts_as_map(&tether).await;
                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
                 assert_eq!(label_counts.unread, 0);
                 assert_eq!(label_counts.total, 0);
@@ -2306,7 +2307,7 @@ async fn unlabel_messages() {
 
             // Check message counts.
             {
-                let message_counts = msg_counts_as_map(&tx).await;
+                let message_counts = msg_counts_as_map(&tether).await;
                 let label_counts = message_counts.get(&local_label_id1).unwrap();
                 assert_eq!(label_counts.unread, 0);
                 assert_eq!(label_counts.total, 0);
@@ -2322,7 +2323,7 @@ async fn unlabel_messages() {
         .unwrap();
     tx.commit().await.unwrap();
 
-    check_final_conv_state(&conn).await;
+    check_final_conv_state(&stash).await;
 
     // Apply again, should be noop.
     let tx = conn.transaction().await.unwrap();
@@ -2335,7 +2336,7 @@ async fn unlabel_messages() {
     .unwrap();
     tx.commit().await.unwrap();
 
-    check_final_conv_state(&conn).await;
+    check_final_conv_state(&stash).await;
 }
 
 lazy_static! {

@@ -144,13 +144,13 @@ impl MessagesState {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let tether = ctx.user_stash().connection().arc();
+        let tether = ctx.user_stash().connection();
         let receiver =
             ContextualConversation::watch_conversation_and_messages(conversation_id, &tether)
                 .await?;
 
         let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
-            let tether = Arc::clone(&tether);
+            let tether = ctx.user_stash().connection();
             async move {
                 Some(
                     match MailMessage::in_conversation(conversation_id, &tether, None).await {

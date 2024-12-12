@@ -40,10 +40,9 @@ async fn test_tracker() {
     let mut join_handles = Vec::new();
     for _ in 0..3 {
         let stash_clone = stash.clone();
-        let conn_clone = stash_clone.connection();
         let h = spawn_async(async move {
-            conn_clone
-                .execute("INSERT INTO foo VALUES (null, 10)", vec![])
+            let conn = stash_clone.connection();
+            conn.execute("INSERT INTO foo VALUES (null, 10)", vec![])
                 .await
                 .expect("failed tx");
         });
