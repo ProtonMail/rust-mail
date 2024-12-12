@@ -1,5 +1,6 @@
 use super::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, BoolFromInt};
 use std::fmt::{Display, Formatter};
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -169,6 +170,7 @@ pub struct LockedKey {
 ///
 /// For example the 'core/v4/keys/all' route can be used to retrieve public keys of
 /// another proton user.
+#[serde_as]
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIPublicKey {
@@ -178,6 +180,9 @@ pub struct APIPublicKey {
     pub flags: KeyFlag,
     /// `OpenPGP` armored public key.
     pub public_key: String,
+    /// Is the key marked as primary.
+    #[serde_as(as = "BoolFromInt")]
+    pub primary: bool,
 }
 #[derive(Debug, Default, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]

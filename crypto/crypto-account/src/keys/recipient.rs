@@ -285,9 +285,11 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
             .into_iter()
             .map(|public_key| {
                 let fingerprint = public_key.public_keys.key_fingerprint();
-                let bitmask = (u8::from(obsolete_fingerprints.contains(&fingerprint)) << 2)
-                    | (u8::from(compromised_fingerprints.contains(&fingerprint)) << 1)
-                    | u8::from(!trusted_fingerprints.contains(&fingerprint));
+                let bitmask = (u8::from(public_key.public_keys.version() != 6) << 4) // isNotPreferredVersion
+                    | (u8::from(!public_key.primary) << 3) // isNotPrimary
+                    | (u8::from(obsolete_fingerprints.contains(&fingerprint)) << 2) // isObsolete
+                    | (u8::from(compromised_fingerprints.contains(&fingerprint)) << 1) // isCompromised
+                    | u8::from(!trusted_fingerprints.contains(&fingerprint)); // isNotTrusted
 
                 (bitmask, public_key.public_keys)
             })
@@ -307,9 +309,10 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
             .into_iter()
             .map(|public_key| {
                 let fingerprint = public_key.key_fingerprint();
-                let bitmask = (u8::from(obsolete_fingerprints.contains(&fingerprint)) << 2)
-                    | (u8::from(compromised_fingerprints.contains(&fingerprint)) << 1)
-                    | u8::from(!encryption_capable_fingerprints.contains(&fingerprint));
+                let bitmask = (u8::from(public_key.version() != 6) << 3) // isNotPreferredVersion
+                    | (u8::from(obsolete_fingerprints.contains(&fingerprint)) << 2) // isObsolete
+                    | (u8::from(compromised_fingerprints.contains(&fingerprint)) << 1) // isCompromised
+                    | u8::from(!encryption_capable_fingerprints.contains(&fingerprint)); // cannotSend
 
                 (bitmask, public_key)
             })

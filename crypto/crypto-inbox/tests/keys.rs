@@ -378,6 +378,7 @@ fn create_test_public_key<T: PGPProviderSync>(provider: &T) -> PublicAddressKeys
     let address_keys = vec![APIPublicKey {
         source: APIPublicKeySource::Proton,
         flags: KeyFlag::from(3_u32),
+        primary: true,
         public_key: TEST_KEY.into(),
     }];
     let skl = SignedKeyList {
@@ -410,6 +411,7 @@ fn create_test_public_key_external<T: PGPProviderSync>(
     let wkd_key = vec![APIPublicKey {
         source: APIPublicKeySource::WKD,
         flags: KeyFlag::from(3_u32),
+        primary: true,
         public_key: TEST_KEY.into(),
     }];
     let address_key_keygroup = APIUnverifiedPublicAddressKeyGroup { keys: wkd_key };

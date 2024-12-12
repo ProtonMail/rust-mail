@@ -533,6 +533,7 @@ mod recipient_keys {
         let address_keys = vec![APIPublicKey {
             source: APIPublicKeySource::Proton,
             flags: KeyFlag::from(3_u32),
+            primary: true,
             public_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxjMEZsNYwBYJKwYBBAHaRw8BAQdAfgCr5GL1OaFneBvtkCLKtXfxXhBuOu7w\nErbqLyzOqO3NKWx1YnVxYUBwcm90b24uYmxhY2sgPGx1YnVxYUBwcm90b24u\nYmxhY2s+wowEEBYKAD4FgmbDWMAECwkHCAmQjHhrAnsKfCUDFQgKBBYAAgEC\nGQECmwMCHgEWIQSAuZravmHpbXRi/mKMeGsCewp8JQAA+1UA/2q1hjPcwVC9\njkUPV7BJkwJNTBqSgbWjgaIzBbWb6FM/APwPAwVTmYwFqEucYSPtphEPgWvS\nySWdK6bxJGhBsMWFBsLAHgQQFggAkAWCZsNY/gWDAO1OAAmQ1NIaBVGnsuw1\nFAAAAAAAHAAQc2FsdEBub3RhdGlvbnMub3BlbnBncGpzLm9yZ+WIj1ihxJT6\n1ZQV5FYf3DksHFRlc3QgT3BlblBHUCBDQSA8dGVzdC1vcGVucGdwLWNhQHBy\nb3Rvbi5tZT4WIQQ2FUO/DaVtpgyz2pTU0hoFUaey7AAAeUoA/0RZGi8Zi67e\nJ3s2oaXj3ojVEiZNPsIIRkKBlIqXZjseAQC6QUF0HCzOWrJMpqKDi5l4OJ4N\nubnqCt218efp5/UaD844BGbDWMASCisGAQQBl1UBBQEBB0BBom9x/zFNXn6o\nQzcGzSuwgciKUrpbb4qeuz/7KnyTNgMBCAfCeAQYFgoAKgWCZsNYwAmQjHhr\nAnsKfCUCmwwWIQSAuZravmHpbXRi/mKMeGsCewp8JQAAssoA+wTZTc5+zOlQ\nsvJae7cLzw5JzT9taAvLS7WTw6YNqd7zAP42f8YSAse1yDHrGHJlUpzeWYkP\nj27RcNERSwJBd6hxCg==\n=/8F+\n-----END PGP PUBLIC KEY BLOCK-----\n".to_owned(),
         }];
 
@@ -569,6 +570,7 @@ mod recipient_keys {
             keys: vec![APIPublicKey {
                 source: APIPublicKeySource::WKD,
                 flags: KeyFlag::from(3_u32),
+                primary: true,
                 public_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxjMEZf15lRYJKwYBBAHaRw8BAQdArPz06hKiOUYSVs6dbHpKSh63bW5/QyIF\nqRvJ5wOALJnNMkx1a2FzIEJ1cmtoYWx0ZXIgPGtleXRyYW5zcGFyZW5jeW1h\naWxlckBnbWFpbC5jb20+wo8EExYIADcWIQSNEf53FU6EMmZs43pG8PpwjTNi\nIAUCZf15lQUJBaOagAIbAwQLCQgHBRUICQoLBRYCAwEAAAoJEEbw+nCNM2Ig\naX0BANKGrENgM7nbpt5uORfaT5JLx695q1RgKDetm6bQhB1/AQDHvY3oha+e\nabN+yKcOWKlvvNpbbbYzjunnrmfm7d+HDM44BGX9eZUSCisGAQQBl1UBBQEB\nB0Aq4KRFu4d/XmR2UEGjsXeWCWvvKUkzsCR/wRDn8E/lRQMBCAfCfgQYFggA\nJhYhBI0R/ncVToQyZmzjekbw+nCNM2IgBQJl/XmVBQkFo5qAAhsMAAoJEEbw\n+nCNM2IgEzcBAPqEmyOcnbzbsGJaZ5uFEA3OfGH7anEg2xEbfZ0jxAh0AP9n\nsO+JqQrVW5m3aGW4MRMFRjnC2DIHthThNQMw1bZpDQ==\n=ziuc\n-----END PGP PUBLIC KEY BLOCK-----\n".to_owned(),
             }]
         };

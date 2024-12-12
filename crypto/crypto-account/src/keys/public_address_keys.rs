@@ -21,6 +21,8 @@ pub struct PublicAddressKey<Pub: PublicKey> {
     pub source: APIPublicKeySource,
     /// Key flags encoded in a bitmap.
     pub flags: KeyFlag,
+    /// Is this is key marked as primary.
+    pub primary: bool,
     /// The imported PGP provider public key.
     pub public_keys: Pub,
 }
@@ -71,6 +73,7 @@ fn parse_keys_sync<T: proton_crypto::crypto::PGPProviderSync>(
                     .map(|public_key| PublicAddressKey {
                         source: api_public_key.source,
                         flags: api_public_key.flags,
+                        primary: api_public_key.primary,
                         public_keys: public_key,
                     })
             })
@@ -100,6 +103,7 @@ async fn async_parse_keys<T: proton_crypto::crypto::PGPProviderAsync>(
                 .map(|public_key| PublicAddressKey {
                     source: api_public_key.source,
                     flags: api_public_key.flags,
+                    primary: api_public_key.primary,
                     public_keys: public_key,
                 })
         })

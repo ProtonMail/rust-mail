@@ -57,6 +57,7 @@ fn get_test_keys<T: PGPProviderSync>(provider: &T) -> PublicAddressKeyGroup<T::P
             APIPublicKey{
                 source:APIPublicKeySource::Proton,
                 flags: KeyFlag::from(3_u32),
+                primary: true,
                 public_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxjMEYV78vBYJKwYBBAHaRw8BAQdATzuHJEfffnkkxR6voPu8hMI30ZleJZrF\nci81cphX+9jNL3Rlc3RrdEBrdC5wcm90b24uYmxhY2sgPHRlc3RrdEBrdC5w\ncm90b24uYmxhY2s+wo8EEBYKACAFAmFe/LwGCwkHCAMCBBUICgIEFgIBAAIZ\nAQIbAwIeAQAhCRAk1S96jDVEmRYhBAkUoLQ3MQGw5M9DtyTVL3qMNUSZo6UB\nAPzhGjHv//jl43mqXEo2/V47nREbm9MofSMOh+nqfg6wAP94opkrY95h9WVu\nG5+63MJWeHfVChrtYGLdE5PuSeSBBc44BGFe/LwSCisGAQQBl1UBBQEBB0B8\nQ43HsvkQ2JimHPujgpIcwDyMAnVxjoYJWHiDyZ9yKgMBCAfCeAQYFggACQUC\nYV78vAIbDAAhCRAk1S96jDVEmRYhBAkUoLQ3MQGw5M9DtyTVL3qMNUSZ9kkA\n/jzoeQgc7VnhdliB5VvOk7dKQBI4kqGpK7at8ThZHPXYAP9g7k0OjUeMfnh/\nNP1i3leIoG0QRT9lJ4XM0qcrhVqjBg==\n=XfZT\n-----END PGP PUBLIC KEY BLOCK-----\n".to_owned() 
             },
         ],
