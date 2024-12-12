@@ -702,7 +702,7 @@ impl Message {
         cid: &str,
     ) -> Result<EmbeddedAttachmentInfo, MailboxError> {
         // We use this for logging if no embedded image was found.
-        let mut available_cids = String::new();
+        let mut available_cids = vec![];
         let mut cid_match = |x: &str| {
             // If the cid is provided in the `<foo@bar>` format
             let x = if x.starts_with('<') && x.ends_with('>') {
@@ -718,8 +718,7 @@ impl Message {
             if x == cid {
                 true
             } else {
-                available_cids.push_str(x);
-                available_cids.push(',');
+                available_cids.push(x.to_owned());
                 false
             }
         };
@@ -739,7 +738,12 @@ impl Message {
             let find = Message::message_body(&mailbox.user_context(), id)
                 .await?
                 .pgp_attachments
-                .and_then(|x| x.into_iter().find(|at| cid_match(&at.content_id)));
+                .and_then(|x| {
+                    x.into_iter().find(|at| {
+                        info!("{}", at.name);
+                        cid_match(&at.content_id)
+                    })
+                });
             match find {
                 Some(at) => {
                     return Ok(EmbeddedAttachmentInfo {
@@ -747,13 +751,17 @@ impl Message {
                         mime: at.mime_type,
                         height: None,
                         width: None,
-                    })
+                    });
                 }
                 None => {
                     return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());
                 }
             }
         };
+
+        if matches!(att.disposition, Disposition::Attachment) {
+            warn!("inline attachment used with Disposition::Attachment");
+        }
 
         // PERF: Optimize this part
         let path = mailbox.get_attachment_content(&att).await?;
@@ -2852,16 +2860,6 @@ impl Message {
         self.attachments_metadata
             .iter()
             .filter(|mdata| matches!(mdata.disposition, Disposition::Attachment))
-            .cloned()
-            .collect()
-    }
-
-    /// Only get Disposition::Inline attachments
-    #[allow(dead_code)] // Will get used later on
-    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
-        self.attachments_metadata
-            .iter()
-            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
             .cloned()
             .collect()
     }
