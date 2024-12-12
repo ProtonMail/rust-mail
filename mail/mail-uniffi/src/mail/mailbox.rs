@@ -218,7 +218,8 @@ impl Mailbox {
         let label_id = self.mbox.label_id();
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
-            let Some((_, receiver)) = RealLabel::watch(label_id, &stash).await? else {
+            let tether = stash.connection();
+            let Some((_, receiver)) = RealLabel::watch(label_id, &tether).await? else {
                 return Err(MailboxError::LabelNotFound(Id::from(label_id)));
             };
 

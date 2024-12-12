@@ -25,7 +25,8 @@ pub async fn contact_list(
     session: Arc<MailUserSession>,
 ) -> Result<Vec<GroupedContacts>, MailboxError> {
     uniffi_async(async move {
-        Ok(RealContact::contact_list(session.user_stash())
+        let tether = session.user_stash().connection();
+        Ok(RealContact::contact_list(&tether)
             .await?
             .into_iter()
             .map(Into::into)

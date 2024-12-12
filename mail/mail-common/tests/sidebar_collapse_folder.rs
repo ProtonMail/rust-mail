@@ -9,7 +9,7 @@ use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
+use stash::stash::Tether;
 use velcro::hash_map;
 
 #[tokio::test]
@@ -23,11 +23,11 @@ async fn folder_expansion() {
     ctx.setup_user(sidebar_test_params(name, false)).await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 
-    let folder = get_folder("foo", stash).await;
+    let folder = get_folder("foo", &tether).await;
     assert!(!folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), true).await;
@@ -40,7 +40,7 @@ async fn folder_expansion() {
         .unwrap();
 
     // Tests
-    let folder = get_folder(name, sidebar.user_ctx.user_stash()).await;
+    let folder = get_folder(name, &tether).await;
     assert!(folder.expanded);
 }
 
@@ -55,11 +55,11 @@ async fn folder_collapse() {
     ctx.setup_user(sidebar_test_params(name, true)).await;
 
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 
-    let folder = get_folder("foo", stash).await;
+    let folder = get_folder("foo", &tether).await;
     assert!(folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), false).await;
@@ -72,12 +72,12 @@ async fn folder_collapse() {
         .unwrap();
 
     // Tests
-    let folder = get_folder(name, sidebar.user_ctx.user_stash()).await;
+    let folder = get_folder(name, &tether).await;
     assert!(!folder.expanded);
 }
 
-async fn get_folder(name: &str, stash: &Stash) -> Label {
-    Label::find_first("WHERE remote_id = ?", params![RemoteId::from(name)], stash)
+async fn get_folder(name: &str, tether: &Tether) -> Label {
+    Label::find_first("WHERE remote_id = ?", params![RemoteId::from(name)], tether)
         .await
         .unwrap()
         .unwrap()

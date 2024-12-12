@@ -63,11 +63,11 @@
 //!     type Action = MyAction;
 //!     type Context = ();
 //!
-//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!

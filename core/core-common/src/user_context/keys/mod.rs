@@ -23,9 +23,9 @@ use proton_crypto_account::{
 use proton_vcard::{vcard::VCard, VCardError};
 use stash::{
     orm::Model,
-    stash::{Bond, Interface, StashError},
+    params,
+    stash::{Bond, StashError, Tether},
 };
-use stash::{params, stash::AgnosticInterface};
 use thiserror::Error;
 use tracing::{debug, Level};
 
@@ -172,7 +172,7 @@ impl UserContext {
     pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        bond: &Bond,
+        bond: &Bond<'_>,
         unlocked_user_keys: &UnlockedUserKeys<Provider>,
         email: &str,
     ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
@@ -206,16 +206,13 @@ impl UserContext {
 }
 
 /// Helper function to extract pinned keys from a contact with cards.
-async fn extract_pinned_keys<Provider: PGPProviderSync, DB>(
+async fn extract_pinned_keys<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    db_interface: &DB,
+    db_interface: &Tether,
     unlocked_user_keys: &UnlockedUserKeys<Provider>,
     full_contact: &mut Contact,
     email: &str,
-) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError>
-where
-    DB: Into<AgnosticInterface> + Interface,
-{
+) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError> {
     // The pinned key information can be found in the signed v-card.
     let signed_card_opt = full_contact
         .cards(db_interface)

@@ -1,5 +1,5 @@
 use futures::executor::block_on;
-use stash::stash::{Bond, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
 #[allow(clippy::too_many_lines)]
 pub fn create_tables(tx: &Bond) -> Result<(), StashError> {

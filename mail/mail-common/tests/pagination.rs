@@ -23,7 +23,6 @@ use proton_mail_test_utils::utils::create_address;
 use proton_mail_test_utils::{conversation, message};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Interface;
 use std::sync::Arc;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
@@ -247,14 +246,13 @@ async fn compare_conversations(
     page: &[Conversation],
     api: &[ApiConversation],
 ) {
+    let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv = Conversation::find_by_id::<RemoteId, _>(
-            api_conv.id.clone().into(),
-            user_ctx.user_stash(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let api_local_conv =
+            Conversation::find_by_id::<RemoteId>(api_conv.id.clone().into(), &tether)
+                .await
+                .unwrap()
+                .unwrap();
         assert_eq!(*local_conv, api_local_conv);
     }
 }
@@ -263,12 +261,12 @@ async fn compare_messages(
     page: &[Message],
     api: &[ApiMessageMetadata],
 ) {
+    let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv =
-            Message::find_by_id::<RemoteId, _>(api_conv.id.clone().into(), user_ctx.user_stash())
-                .await
-                .unwrap()
-                .unwrap();
+        let api_local_conv = Message::find_by_id::<RemoteId>(api_conv.id.clone().into(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(*local_conv, api_local_conv);
     }
 }
@@ -402,7 +400,8 @@ async fn paginate_conversations_for_label_with_filter() {
         conversation!(num_unread: 3, remote_id: Some("conv5".into())),
     ];
 
-    let tx = stash.transaction().await.unwrap();
+    let mut tether = stash.connection();
+    let tx = tether.transaction().await.unwrap();
     for mut conv in conversations {
         conv.save(&tx).await.expect("failed to create conversation");
         Conversation::apply_label(mailbox_inbox.label_id(), vec![conv.local_id.unwrap()], &tx)
@@ -520,9 +519,10 @@ async fn paginate_messages_for_label_with_filter() {
         .await;
 
     // Set up test data
-    let address = create_address(stash).await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     conversation.save(&tx).await.unwrap();
 
     // Create 5 messages: 3 unread, 2 read
@@ -636,9 +636,10 @@ async fn paginate_search() {
         .await;
 
     // Set up test data
-    let address = create_address(stash).await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
     let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     conversation.save(&tx).await.unwrap();
 
     // Create 5 messages

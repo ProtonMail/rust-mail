@@ -144,23 +144,16 @@ impl MessagesState {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let receiver = ContextualConversation::watch_conversation_and_messages(
-            conversation_id,
-            ctx.user_stash(),
-        )
-        .await?;
+        let tether = ctx.user_stash().connection();
+        let receiver =
+            ContextualConversation::watch_conversation_and_messages(conversation_id, &tether)
+                .await?;
 
         let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
-            let context_cloned = Arc::clone(&ctx);
+            let tether = ctx.user_stash().connection();
             async move {
                 Some(
-                    match MailMessage::in_conversation(
-                        conversation_id,
-                        context_cloned.user_stash(),
-                        None,
-                    )
-                    .await
-                    {
+                    match MailMessage::in_conversation(conversation_id, &tether, None).await {
                         Ok(m) => MessageMessage::Refreshed(m).into(),
                         Err(e) => {
                             let e = anyhow!("Message list Query error: {e}");

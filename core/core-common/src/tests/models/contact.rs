@@ -190,9 +190,9 @@ mod contact_list {
         emails: Vec<ContactEmail>,
         expected: Vec<GroupedContacts>,
     ) {
-        let stash = new_core_test_connection().await;
+        let mut tether = new_core_test_connection().await.connection();
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         contact.save(&tx).await.unwrap();
 
         for mut email in emails {
@@ -201,28 +201,28 @@ mod contact_list {
         }
         tx.commit().await.expect("commit failed");
 
-        let result = Contact::contact_list(&stash).await.unwrap();
+        let result = Contact::contact_list(&tether).await.unwrap();
         assert_eq!(result, expected);
     }
 }
 
 mod contact_watcher {
-    use stash::{exports::Action, orm::Model, params, stash::Interface};
+    use stash::{exports::Action, orm::Model, params};
 
     use crate::{contact, models::Contact, rid, tests::common::new_core_test_connection};
 
     #[tokio::test]
     async fn test_contact_list_watcher() {
-        let stash = new_core_test_connection().await;
+        let mut tether = new_core_test_connection().await.connection();
         let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
-        let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
-        let stash_reciever = stash.subscribe().await.unwrap();
+        let (_, list_receiver) = Contact::watch_contact_list(tether.stash()).await.unwrap();
+        let stash_reciever = tether.stash().subscribe().await.unwrap();
 
         // Rename contact
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         contact.name = "Barbara Lox".to_string();
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
@@ -234,7 +234,7 @@ mod contact_watcher {
         assert_eq!(notification.action, Action::SQLITE_UPDATE);
 
         // Soft delete contact
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         contact.deleted = true;
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
@@ -247,7 +247,7 @@ mod contact_watcher {
         assert_eq!(notification.action, Action::SQLITE_UPDATE);
 
         // Soft undelete contact
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         contact.deleted = false;
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
@@ -260,7 +260,7 @@ mod contact_watcher {
         assert_eq!(notification.action, Action::SQLITE_UPDATE);
 
         // Hard delete contact
-        let tx = stash.transaction().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
         tx.execute(
             "DELETE FROM contacts WHERE local_id = ?",
             params![contact.local_id],
@@ -268,7 +268,7 @@ mod contact_watcher {
         .await
         .unwrap();
         tx.commit().await.unwrap();
-        let all_contacts = Contact::find("", vec![], &stash, None).await.unwrap();
+        let all_contacts = Contact::find("", vec![], &tether, None).await.unwrap();
         assert_eq!(all_contacts.len(), 0);
 
         assert!(list_receiver.recv_async().await.is_ok());

@@ -1,5 +1,5 @@
 use futures::executor::block_on;
-use stash::stash::{Bond, Interface, StashError};
+use stash::stash::{Bond, StashError};
 
 pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
     block_on(async {

@@ -20,8 +20,9 @@ impl MailUserSession {
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
             let _sys_folders = RealLabelId::movable_sys_folder_list();
-            let labels = RealLabel::find_by_kind(RealLabelType::Folder, &stash).await?;
-            let labels = RealCustomFolder::from_labels(labels.as_slice(), &stash).await?;
+            let tether = stash.connection();
+            let labels = RealLabel::find_by_kind(RealLabelType::Folder, &tether).await?;
+            let labels = RealCustomFolder::from_labels(labels.as_slice(), &tether).await?;
             Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
         })
         .await
@@ -35,8 +36,9 @@ impl MailUserSession {
     pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, MailSessionError> {
         let stash = self.ctx.user_stash().clone();
         uniffi_async(async move {
-            let labels = RealLabel::find_by_kind(RealLabelType::Label, &stash).await?;
-            let labels = RealCustomLabel::from_labels(labels.as_slice(), &stash).await?;
+            let tether = stash.connection();
+            let labels = RealLabel::find_by_kind(RealLabelType::Label, &tether).await?;
+            let labels = RealCustomLabel::from_labels(labels.as_slice(), &tether).await?;
             Ok(labels.into_iter().map(SidebarCustomLabel::from).collect())
         })
         .await

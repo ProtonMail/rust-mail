@@ -210,7 +210,8 @@ impl TestContext {
             // Create a temporary stash just to insert the fake data.
             let path = tmp_dir.path().join("account.db");
             let stash = Stash::new(Some(&path)).expect("failed to create stash");
-            let tx = stash
+            let mut tether = stash.connection();
+            let tx = tether
                 .transaction()
                 .await
                 .expect("failed to create transaction");

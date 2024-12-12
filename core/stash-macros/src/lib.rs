@@ -302,51 +302,44 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     // Generation custom action code
     let on_load_impl = if has_on_load {
         quote! {
-            async fn find<Q, A>(
+            async fn find<Q>(
                 query_logic: Q,
                 params: Vec<Box<dyn stash::exports::ToSql + Send>>,
-                interface: &A,
+                tether: &stash::stash::Tether,
                 queue: Option<flume::Sender<stash::orm::ResultsetChange<Self, Self::IdType>>>,
             ) -> Result<Vec<Self>, stash::stash::StashError>
             where
                 Q: Into<String> + Send,
-                A: Into<stash::stash::AgnosticInterface> + stash::stash::Interface,
             {
-                let interface = interface.clone().into();
-                let mut instances = stash::orm::perform_find(query_logic, params, &interface, queue).await?;
+                let mut instances = stash::orm::perform_find(query_logic, params, tether, queue).await?;
                 for instance in instances.iter_mut() {
-                    instance.on_load(&interface).await?;
+                    instance.on_load(tether).await?;
                 }
                 Ok(instances)
             }
-            async fn find_first<Q, A>(
+            async fn find_first<Q>(
                 query_logic: Q,
                 params: Vec<Box<dyn stash::exports::ToSql + Send>>,
-                interface: &A,
+                tether: &stash::stash::Tether,
             ) -> Result<Option<Self>, stash::stash::StashError>
             where
                 Q: Into<String> + Send,
-                A: Into<stash::stash::AgnosticInterface> + stash::stash::Interface,
             {
-                let interface = interface.clone().into();
-                let mut instance: Option<Self> = stash::orm::perform_find(query_logic, params, &interface, None).await?.into_iter().next();
+                let mut instance: Option<Self> = stash::orm::perform_find(query_logic, params, &tether, None).await?.into_iter().next();
                 match instance {
                     Some(mut i) => {
-                        i.on_load(&interface).await?;
+                        i.on_load(&tether).await?;
                         Ok(Some(i))
                     },
                     None => Ok(None),
                 }
             }
-            async fn load<A>(id: Self::IdType, interface: &A) -> Result<Option<Self>, stash::stash::StashError>
-            where
-                A: Into<stash::stash::AgnosticInterface> + stash::stash::Interface,
+            async fn load(id: Self::IdType, tether: &stash::stash::Tether) -> Result<Option<Self>, stash::stash::StashError>
             {
-                let interface = interface.clone().into();
-                let mut instance: Option<Self> = stash::orm::perform_load(id, &interface).await?;
+                let mut instance: Option<Self> = stash::orm::perform_load(id, &tether).await?;
                 match instance {
                     Some(mut i) => {
-                        i.on_load(&interface).await?;
+                        i.on_load(&tether).await?;
                         Ok(Some(i))
                     },
                     None => Ok(None),
@@ -358,7 +351,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     };
     let on_save_impl = if has_on_save {
         quote! {
-            async fn save(&mut self, bond: &stash::stash::Bond) -> Result<(), stash::stash::StashError>
+            async fn save(&mut self, bond: &stash::stash::Bond<'_>) -> Result<(), stash::stash::StashError>
             {
                 stash::orm::perform_save(self, &bond).await?;
                 self.on_save(&bond).await

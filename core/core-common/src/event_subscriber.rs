@@ -9,7 +9,7 @@ use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError};
 use std::sync::Weak;
 use tracing::{debug, error, Level};
 
@@ -72,7 +72,8 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
             })?;
         {
-            let tx = stash.transaction().await.map_err(|e| {
+            let mut conn = stash.connection();
+            let tx = conn.transaction().await.map_err(|e| {
                 error!("Failed to start transaction: {e}");
                 SubscriberError::Other(anyhow!("Failed to start transaction: {e}"))
             })?;
@@ -95,7 +96,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(used_space) = event.get_core_event_used_space() {
                     debug!("Handling user space event");
-                    let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
+                    let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
                     user.used_space = used_space;
                     user.save(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
@@ -104,7 +105,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(used_product_space) = event.get_core_event_used_product_space() {
                     debug!("Handling user product space event");
-                    let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
+                    let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
                     user.save(&tx).await.map_err(|e| {
                         error!("Failed to update used space:{e}");
@@ -139,7 +140,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
 }
 
 async fn handle_contact_event(
-    tx: &Bond,
+    tx: &Bond<'_>,
     contact_events: &mut [ContactEvent],
 ) -> Result<(), StashError> {
     for event in contact_events {
@@ -170,7 +171,7 @@ async fn handle_contact_event(
 }
 
 async fn handle_contact_email_event(
-    tx: &Bond,
+    tx: &Bond<'_>,
     contact_email_events: &mut [ContactEmailEvent],
 ) -> Result<(), StashError> {
     for event in contact_email_events {

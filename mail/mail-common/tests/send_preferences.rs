@@ -21,13 +21,14 @@ async fn load_sending_preferences() {
         .expect("no test recipient found")
         .0
         .as_str();
-    let mail_settings = MailSettings::get(user_ctx.user_stash())
+
+    let mut tether = user_ctx.user_stash().connection();
+    let mail_settings = MailSettings::get(&tether)
         .await
         .expect("Failed to get mail settings")
         .unwrap();
 
-    let tx = user_ctx
-        .user_stash()
+    let tx = tether
         .transaction()
         .await
         .expect("Failed to begin transaction");
@@ -66,13 +67,13 @@ async fn load_sending_preferences_for_self() {
 
     let pgp_provider = proton_crypto::new_pgp_provider();
     let self_address = params.addresses.first().unwrap().email.as_str();
-    let mail_settings = MailSettings::get(user_ctx.user_stash())
+    let mut tether = user_ctx.user_stash().connection();
+    let mail_settings = MailSettings::get(&tether)
         .await
         .expect("Failed to get mail settings")
         .unwrap();
 
-    let tx = user_ctx
-        .user_stash()
+    let tx = tether
         .transaction()
         .await
         .expect("Failed to begin transaction");

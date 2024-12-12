@@ -10,7 +10,7 @@ use crate::{
 };
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
@@ -58,14 +58,11 @@ impl MoveAction {
     /// * `actions` - An iterator over the actions. Duplicates for each item are expected.
     /// * `interface` - An interface that is used to load the labels.
     ///
-    pub async fn finalize<A>(
+    pub async fn finalize(
         actions: impl IntoIterator<Item = MoveAction>,
-        interface: &A,
-    ) -> Result<Vec<MoveAction>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let actions = MoveAction::calculate_color(actions, interface).await?;
+        tether: &Tether,
+    ) -> Result<Vec<MoveAction>, AppError> {
+        let actions = MoveAction::calculate_color(actions, tether).await?;
         let actions = MoveAction::build_folder_structure(actions);
 
         Ok(actions.collect())
@@ -129,13 +126,10 @@ impl MoveAction {
     /// Color is calculated based on user settings.
     /// Method requires access to the database for loading the settings & labels.
     ///
-    async fn calculate_color<A>(
+    async fn calculate_color(
         actions: impl IntoIterator<Item = MoveAction>,
-        interface: &A,
-    ) -> Result<Vec<MoveAction>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Vec<MoveAction>, AppError> {
         use futures::stream::{self, StreamExt, TryStreamExt};
 
         let actions: Vec<MoveAction> = stream::iter(actions.into_iter())
@@ -143,8 +137,8 @@ impl MoveAction {
                 match action {
                     MoveAction::CustomFolder(mut action) => {
                         action.color = color_to_display(
-                            &Label::load(action.local_id, interface).await?.unwrap(),
-                            interface,
+                            &Label::load(action.local_id, tether).await?.unwrap(),
+                            tether,
                         )
                         .await?;
 
@@ -179,11 +173,8 @@ impl MovableSystemFolderAction {
         })
     }
 
-    pub(crate) async fn inbox<A>(interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::inbox().into_inner(), interface)
+    pub(crate) async fn inbox(tether: &Tether) -> Result<Self, AppError> {
+        let local_id = RemoteId::counterpart::<Label>(&LabelId::inbox().into_inner(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -192,25 +183,18 @@ impl MovableSystemFolderAction {
         })
     }
 
-    pub(crate) async fn archive<A>(interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let local_id =
-            RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), interface)
-                .await?
-                .expect("Should be set");
+    pub(crate) async fn archive(tether: &Tether) -> Result<Self, AppError> {
+        let local_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), tether)
+            .await?
+            .expect("Should be set");
         Ok(Self {
             local_id,
             name: MovableSystemFolder::Archive,
         })
     }
 
-    pub(crate) async fn trash<A>(interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::trash().into_inner(), interface)
+    pub(crate) async fn trash(tether: &Tether) -> Result<Self, AppError> {
+        let local_id = RemoteId::counterpart::<Label>(&LabelId::trash().into_inner(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -219,11 +203,8 @@ impl MovableSystemFolderAction {
         })
     }
 
-    pub(crate) async fn spam<A>(interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let local_id = RemoteId::counterpart::<Label, _>(&LabelId::spam().into_inner(), interface)
+    pub(crate) async fn spam(tether: &Tether) -> Result<Self, AppError> {
+        let local_id = RemoteId::counterpart::<Label>(&LabelId::spam().into_inner(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -312,27 +293,24 @@ pub enum MoveItemAction {
 }
 
 impl MoveItemAction {
-    pub(crate) async fn from_view<A>(view: Label, interface: &A) -> Result<Vec<Self>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub(crate) async fn from_view(view: Label, tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::new();
         if view.remote_id != Some(LabelId::trash()) && view.remote_id != Some(LabelId::spam()) {
-            result.push(MovableSystemFolderAction::trash(interface).await?.into());
+            result.push(MovableSystemFolderAction::trash(tether).await?.into());
         } else {
             result.push(Self::PermanentDelete);
         }
         if view.remote_id != Some(LabelId::archive()) {
-            result.push(MovableSystemFolderAction::archive(interface).await?.into());
+            result.push(MovableSystemFolderAction::archive(tether).await?.into());
         }
         if view.remote_id == Some(LabelId::archive()) || view.remote_id == Some(LabelId::trash()) {
-            result.push(MovableSystemFolderAction::inbox(interface).await?.into());
+            result.push(MovableSystemFolderAction::inbox(tether).await?.into());
         }
         if view.remote_id != Some(LabelId::spam()) {
-            result.push(MovableSystemFolderAction::spam(interface).await?.into());
+            result.push(MovableSystemFolderAction::spam(tether).await?.into());
         } else {
             result.push(Self::NotSpam(
-                MovableSystemFolderAction::inbox(interface).await?,
+                MovableSystemFolderAction::inbox(tether).await?,
             ));
         }
         result.push(Self::MoveTo);

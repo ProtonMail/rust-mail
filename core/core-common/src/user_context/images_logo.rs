@@ -55,7 +55,8 @@ impl UserContext {
         };
 
         // generate local_id if not exist
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         if key.local_id.is_none() {
             key.save(&tx).await?;
         }
@@ -82,7 +83,7 @@ impl UserContext {
     async fn get_images_logo(
         &self,
         mut key: SenderImage,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> CacheResult<(Vec<u8>, SenderImageMetadata)> {
         let image = self
             .session()

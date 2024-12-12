@@ -17,7 +17,7 @@ use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
 use proton_mail_common::models::Label;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Tether};
+use stash::stash::Tether;
 use std::collections::BTreeMap;
 
 lazy_static! {
@@ -245,13 +245,13 @@ impl MailTestContext {
 
 /// # Panics
 pub async fn remote_counterpart<T: Model>(id: LocalId, tx: &Tether) -> RemoteId {
-    id.counterpart::<T, _>(tx).await.unwrap().unwrap()
+    id.counterpart::<T>(tx).await.unwrap().unwrap()
 }
 
 #[allow(dead_code)]
 /// # Panics
 pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
-    id.counterpart::<T, _>(tx).await.unwrap().unwrap()
+    id.counterpart::<T>(tx).await.unwrap().unwrap()
 }
 
 /// Can panic if the local conversation `id` is not set, the remote
@@ -259,13 +259,9 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
 /// failed.
 ///
 /// # Panics
-pub async fn create_labels<A>(interface: &A) -> Vec<LocalId>
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
     let mut labels = [test_label1(), test_label2()];
-    let tx = interface
-        .stash()
+    let tx = tether
         .transaction()
         .await
         .expect("failed to create transaction");

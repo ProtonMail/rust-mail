@@ -48,7 +48,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Message does not exist) for message already unread
         let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
@@ -67,7 +67,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_read(action.0.target_ids.iter().copied(), tx).await?;
         action
@@ -102,8 +102,9 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("Unread messages failed for: {failed_ids:?} ");
 
-            let tx = stash.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
+            let mut conn = stash.connection();
+            let tx = conn.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
 
             Message::mark_read(local_ids, &tx)
                 .await

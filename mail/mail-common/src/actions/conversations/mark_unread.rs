@@ -46,7 +46,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Conversation was not updated) for conversation already unread
         let conversations = Conversation::find_by_ids(action.0.target_ids.clone(), tx).await?;
@@ -67,7 +67,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::mark_read(action.0.target_ids.clone(), tx).await?;
         action
@@ -99,9 +99,9 @@ impl proton_action_queue::action::Handler for Handler {
         if !failed_ids.is_empty() {
             error!("Mark unread operation failed for: {:?}", failed_ids);
 
-            let tx = stash.transaction().await?;
-            let local_ids =
-                RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
+            let mut conn = stash.connection();
+            let tx = conn.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
 
             Conversation::mark_read(local_ids, &tx).await.map_err(|e| {
                 error!("Failed to rollback failed conversations: {e}");

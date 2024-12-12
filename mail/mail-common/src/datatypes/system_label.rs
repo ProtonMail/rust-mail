@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{StashError, Tether};
 
 use crate::{
     datatypes::{LabelId, LabelType},
@@ -108,11 +108,8 @@ impl SystemLabel {
         self.label_id().into_inner()
     }
 
-    pub async fn local_id<A>(&self, interface: &A) -> Result<Option<LocalId>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        self.remote_id().counterpart::<Label, _>(interface).await
+    pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+        self.remote_id().counterpart::<Label>(tether).await
     }
 }
 

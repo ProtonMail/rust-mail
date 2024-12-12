@@ -25,7 +25,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // General setup
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash: &stash::stash::Stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     // Set up test data
     let remote_label_name = "selected";
@@ -38,7 +38,7 @@ async fn test_labeling_conversation_with_custom_label() {
         .await
         .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
-    let inbox_local_label = inbox_mailbox.get_local_label(stash).await;
+    let inbox_local_label = inbox_mailbox.get_local_label(&tether).await;
 
     let remote_conversation_id = "first";
     let remote_conversation =
@@ -68,11 +68,14 @@ async fn test_labeling_conversation_with_custom_label() {
 
     inbox_mailbox.sync(10).await.unwrap();
 
-    let local_conversation = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let local_conversation = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     let custom_label_mailbox = Mailbox::with_remote_id(user_ctx.clone(), remote_label_id.clone())
         .await
         .expect("failed to create mailbox");
-    let custom_label_local_label = custom_label_mailbox.get_local_label(stash).await;
+    let custom_label_local_label = custom_label_mailbox.get_local_label(&tether).await;
     let local_conversation_id = local_conversation.id().unwrap();
 
     // Apply label action
@@ -87,7 +90,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .has_label(inbox_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -97,7 +100,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that custom label mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(custom_label_local_label.local_id.unwrap(), stash)
+            .has_label(custom_label_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -117,7 +120,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .has_label(inbox_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -127,7 +130,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that custom label mailbox does NOT contain conversation.
     assert!(
         !local_conversation
-            .has_label(custom_label_local_label.local_id.unwrap(), stash)
+            .has_label(custom_label_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
@@ -141,30 +144,24 @@ async fn test_labeling_conversation_with_custom_label() {
 async fn test_labeling_conversation_with_starred_label() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash: &stash::stash::Stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     let remote_conversation_id = "first";
     let inbox_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
-    let inbox_local_label = Label::load(
-        inbox_mailbox.label_id(),
-        ctx.mail_user_context().await.user_stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let inbox_local_label = Label::load(inbox_mailbox.label_id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     let starred_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::starred())
         .await
         .expect("failed to create mailbox");
-    let starred_local_label = Label::load(
-        starred_mailbox.label_id(),
-        ctx.mail_user_context().await.user_stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let starred_local_label = Label::load(starred_mailbox.label_id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     let remote_conversation =
         ApiConversation::test_conversation(remote_conversation_id, vec![inbox_remote_label]);
     let conversations = vec![remote_conversation.clone()];
@@ -190,7 +187,10 @@ async fn test_labeling_conversation_with_starred_label() {
 
     inbox_mailbox.sync(10).await.unwrap();
 
-    let local_conversation = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let local_conversation = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
 
     // Apply label action
     Conversation::action_apply_label(
@@ -204,7 +204,7 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .has_label(inbox_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -214,7 +214,7 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that starred mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(starred_local_label.local_id.unwrap(), stash)
+            .has_label(starred_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -234,7 +234,7 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that conversation contains label.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), stash)
+            .has_label(inbox_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -243,7 +243,7 @@ async fn test_labeling_conversation_with_starred_label() {
     );
     assert!(
         !local_conversation
-            .has_label(starred_local_label.local_id.unwrap(), stash)
+            .has_label(starred_local_label.local_id.unwrap(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
@@ -259,7 +259,7 @@ async fn test_labeling_fails_when_labelling_folders() {
     // General setup
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash: &stash::stash::Stash = user_ctx.user_stash();
+    let tether = user_ctx.user_stash().connection();
 
     // Set up test data
     let remote_conversation_id = "first";
@@ -280,16 +280,16 @@ async fn test_labeling_fails_when_labelling_folders() {
     // Sync the mailbox
     inbox_mailbox.sync(10).await.unwrap();
 
-    let label = Label::load(
-        inbox_mailbox.label_id(),
-        ctx.mail_user_context().await.user_stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let label = Label::load(inbox_mailbox.label_id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
 
     // Get the local conversation id
-    let local_conversation = Conversation::load(1.into(), stash).await.unwrap().unwrap();
+    let local_conversation = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
 
     // Label conversation with folder, should fail.
     Conversation::apply_label_to_multiple_remote(

@@ -57,7 +57,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
@@ -76,7 +76,7 @@ impl ActionHandler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::move_conversations(
             action.0.destination_label_id,
@@ -128,8 +128,9 @@ impl ActionHandler for Handler {
 
         error!("Move operation failed for: {:?}", failed_ids);
 
-        let tx = stash.transaction().await?;
-        let local_ids = RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
+        let local_ids = RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
 
         Conversation::move_conversations(
             action.0.destination_label_id,

@@ -14,7 +14,7 @@ use futures::FutureExt;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
@@ -388,7 +388,8 @@ impl Queue {
     ///
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
-        db::create_tables(&stash).await?;
+        let mut tether = stash.connection();
+        db::create_tables(&mut tether).await?;
         let default_context = Arc::new(());
         let default_context_downgraded = Arc::downgrade(&default_context);
         let shared = Arc::new(Shared {
@@ -472,7 +473,7 @@ impl Queue {
             .map_err(|e| ActionError::Queue(e.into()))?;
 
         let (local_output, id) = execute_action_local(
-            &self.shared.stash,
+            &self.shared,
             context.as_ref(),
             &handler,
             &mut action,
@@ -544,7 +545,7 @@ impl Queue {
             let output = async {
                 // 1) Apply local action and store in the queue
                 let (local_output, id) = execute_action_local(
-                    &shared.stash,
+                    &shared,
                     context.as_ref(),
                     &handler,
                     &mut action,
@@ -836,7 +837,8 @@ impl BackgroundWorker {
                 }
                 Command::ExecuteOne(tx) => {
                     self.wait_on_tasks().await;
-                    let r = self.execute_impl().await;
+                    let tether = self.shared.stash.connection();
+                    let r = self.execute_impl(&tether).await;
                     if tx.send(r).is_err() {
                         error!("Failed to send execute one result back to callee");
                     }
@@ -865,8 +867,8 @@ impl BackgroundWorker {
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    async fn execute_impl(&self) -> QueuedResult<Option<Id>> {
-        let Some(action) = self.next_action().await.map_err(|e| {
+    async fn execute_impl(&self, tether: &Tether) -> QueuedResult<Option<Id>> {
+        let Some(action) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
             e
         })?
@@ -890,17 +892,21 @@ impl BackgroundWorker {
 
     /// See [`Queue::execute_all()`] for more details.
     async fn execute_all(&self) -> QueuedResult<()> {
-        while self.execute_impl().await?.is_some() {}
+        let tether = self.shared.stash.connection();
+        while self.execute_impl(&tether).await?.is_some() {}
         Ok(())
     }
 
-    async fn next_action(&self) -> std::result::Result<Option<StoredAction>, StashError> {
-        let tether = self.shared.stash.connection();
-        StoredAction::next(&tether).await
+    async fn next_action(
+        &self,
+        tether: &Tether,
+    ) -> std::result::Result<Option<StoredAction>, StashError> {
+        StoredAction::next(tether).await
     }
     /// See [`Queue::delete()`] for more details.
-    async fn delete(&self, action_id: Id) -> QueuedResult<()> {
-        let tx = self.shared.stash.transaction().await?;
+    async fn delete(&mut self, action_id: Id) -> QueuedResult<()> {
+        let mut tether = self.shared.stash.connection();
+        let tx = tether.transaction().await?;
         StoredAction::delete(&tx, action_id).await?;
         tx.commit().await?;
         Ok(())
@@ -909,7 +915,8 @@ impl BackgroundWorker {
     /// See [`Queue::cancel()`] for more details.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
-        let tx = self.shared.stash.transaction().await?;
+        let mut tether = self.shared.stash.connection();
+        let tx = tether.transaction().await?;
         let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
         tx.commit().await?;
         Ok(cancelled_actions)
@@ -923,13 +930,14 @@ impl BackgroundWorker {
 
 /// Shared snippet to execute actions locally.
 async fn execute_action_local<T: Action>(
-    stash: &Stash,
+    shared: &Shared,
     context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
     metadata: Metadata,
 ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
-    let tx = stash.transaction().await?;
+    let mut tether = shared.stash.connection();
+    let tx = tether.transaction().await?;
 
     let local_output = handler
         .apply_local(context, action, &tx)
@@ -966,7 +974,7 @@ async fn execute_action_remote<T: Action>(
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
     let result = handler.apply_remote(context, action, &shared.stash).await;
-    let tether = shared.stash.connection();
+    let mut tether = shared.stash.connection();
     let bond = tether.transaction().await?;
     let result = match result {
         Ok(result) => {
@@ -995,7 +1003,7 @@ async fn execute_action_remote<T: Action>(
 /// Cancel
 async fn cancel_action_with_dependees(
     shared: &Shared,
-    bond: &Bond,
+    bond: &Bond<'_>,
     action_id: Id,
 ) -> QueuedResult<Vec<Id>> {
     let mut remaining_actions = vec![action_id];

@@ -9,9 +9,9 @@ use stash::params;
 
 #[tokio::test]
 async fn test_full_contact() {
-    let stash = new_core_test_connection().await;
+    let mut tether = new_core_test_connection().await.connection();
     let mut full_contact = create_test_full_contact();
-    let tx = stash
+    let tx = tether
         .transaction()
         .await
         .expect("failed to start transaction");
@@ -31,12 +31,12 @@ async fn test_full_contact() {
     assert_eq!(id, 1);
     assert_eq!(id, id_second);
     // Query the full contact with cards
-    let mut contact_with_cards = Contact::load(local_id, &stash)
+    let mut contact_with_cards = Contact::load(local_id, &tether)
         .await
         .expect("query contact with cards failed")
         .expect("expected to find contact");
     let cards = contact_with_cards
-        .cards(&stash)
+        .cards(&tether)
         .await
         .expect("Failed to query cards");
     assert_eq!(cards.len(), full_contact.cards.len());
@@ -44,10 +44,10 @@ async fn test_full_contact() {
 
 #[tokio::test]
 async fn test_partial_contact() {
-    let stash = new_core_test_connection().await;
+    let mut tether = new_core_test_connection().await.connection();
     let mut partial_contacts = create_test_partial_contacts();
     let mut contact_emails = create_test_contact_emails();
-    let tx = stash
+    let tx = tether
         .transaction()
         .await
         .expect("failed to start transaction");
@@ -72,7 +72,7 @@ async fn test_partial_contact() {
     let mail = ContactEmail::find_first(
         "WHERE canonical_email = ?",
         params!["contact_email_1@contact.test"],
-        &stash,
+        &tether,
     )
     .await
     .expect("failed to query email")
@@ -80,13 +80,13 @@ async fn test_partial_contact() {
     assert_eq!(mail.canonical_email, "contact_email_1@contact.test");
 
     // Query all test contact mails.
-    let mails = ContactEmail::find("LIMIT 100", vec![], &stash, None)
+    let mails = ContactEmail::find("LIMIT 100", vec![], &tether, None)
         .await
         .expect("failed to query email");
     assert_eq!(mails.len(), contact_emails.len());
 
     // Query all contacts.
-    let mut contacts = Contact::find("LIMIT 100", vec![], &stash, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], &tether, None)
         .await
         .expect("failed to query contacts");
     let contact = contacts.first_mut().unwrap();
@@ -95,21 +95,21 @@ async fn test_partial_contact() {
         Some(RemoteId::from("a29olIjFv0rnXxBhSMw=="))
     );
     assert_eq!(
-        contact.emails(&stash).await.unwrap().len(),
+        contact.emails(&tether).await.unwrap().len(),
         contact_emails.len()
     );
 
     // Query specific contact.
-    let mut contact_single = Contact::load(contact.local_id.unwrap(), &stash)
+    let mut contact_single = Contact::load(contact.local_id.unwrap(), &tether)
         .await
         .expect("failed to query contacts")
         .expect("expected to find contact");
     contact_single
-        .cards(&stash)
+        .cards(&tether)
         .await
         .expect("failed to query cards");
     contact_single
-        .emails(&stash)
+        .emails(&tether)
         .await
         .expect("failed to query emails");
     assert_eq!(&contact_single, contact);

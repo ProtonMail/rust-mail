@@ -54,7 +54,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
@@ -105,7 +105,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
@@ -143,7 +143,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
-        let tether = stash.connection();
+        let mut tether = stash.connection();
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, &tether)
             .await
             .inspect_err(|e| {
@@ -202,7 +202,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err}"))?;
-        let tether = tx.commit().await?;
+        tx.commit().await?;
 
         // Unlock sender address keys
         let address_keys = context

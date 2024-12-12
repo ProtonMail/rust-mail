@@ -11,7 +11,7 @@ use stash::exports::{SqliteError, ToSql, Value};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Interface, Stash, StashError};
+use stash::stash::{Bond, Stash, StashError};
 use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -85,7 +85,7 @@ impl SenderImage {
     ///
     pub async fn batch_delete(
         values: impl IntoIterator<Item = Self>,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for value in values {
             value.delete(bond).await?;
@@ -98,7 +98,7 @@ impl SenderImage {
     /// # Error
     /// * If the database request fail.
     ///
-    pub(crate) async fn delete(&self, bond: &Bond) -> Result<(), StashError> {
+    pub(crate) async fn delete(&self, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
             r"DELETE FROM sender_image_cache WHERE local_id = ?",
             params![self.local_id],
@@ -115,7 +115,7 @@ impl SenderImage {
     pub(crate) async fn set_metadata(
         &mut self,
         metadata: &SenderImageMetadata,
-        bond: &Bond,
+        bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         self.received_format = Some(metadata.received_format);
         self.is_empty = metadata.is_empty;
@@ -187,7 +187,7 @@ impl SenderImage {
     /// Returns error if a database request fail.
     ///
     #[allow(clippy::missing_panics_doc)]
-    pub async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let (query, params) = self.build_query();
         let mut values = Self::find(query, params, bond, None).await?;
 
@@ -275,13 +275,15 @@ impl CacheConfig for SenderImage {
     type ExtraMetadata = SenderImageMetadata;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
-        Self::all(&stash, None)
+        let conn = stash.connection();
+        Self::all(&conn, None)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
     async fn handle_failed(failed: Vec<Self::Key>, stash: Stash) -> CacheResult<()> {
-        let tx = stash.transaction().await?;
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
         Self::batch_delete(failed, &tx).await?;
         tx.commit().await?;
 
@@ -310,7 +312,8 @@ impl CacheKey for SenderImage {
     fn after_evict<R: CacheResource>(&self, resource: R) {
         block_on(async {
             // TODO: This block on may be trublesome as it may hit on Database is blocked as was the case in event loop
-            let tx = resource.stash().unwrap().transaction().await.unwrap();
+            let mut conn = resource.stash().unwrap().connection();
+            let tx = conn.transaction().await.unwrap();
             let _ = self
                 .delete(&tx)
                 .await

@@ -10,7 +10,7 @@ use proton_mail_test_utils::attachment::{
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface};
+use stash::stash::Tether;
 use std::fs;
 
 #[tokio::test]
@@ -38,9 +38,9 @@ async fn test_load_attachment_buffer() {
 
     // Sync mails.
     mailbox.sync(1).await.expect("mailbox sync failed");
-
+    let tether = user_ctx.user_stash().connection();
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
+    let local_conversation = Conversation::find_first("", vec![], &tether)
         .await
         .expect("failed to load conversation")
         .unwrap();
@@ -91,9 +91,9 @@ async fn load_attachment_from_cache() {
 
     // Sync mails.
     mailbox.sync(1).await.expect("mailbox sync failed");
-
+    let tether = user_ctx.user_stash().connection();
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
+    let local_conversation = Conversation::find_first("", vec![], &tether)
         .await
         .expect("failed to load conversation")
         .unwrap();
@@ -128,7 +128,8 @@ async fn load_attachment_content_first_time() {
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
-    let tx = user_ctx.user_stash().transaction().await.unwrap();
+    let mut tether = user_ctx.user_stash().connection();
+    let tx = tether.transaction().await.unwrap();
     attachment.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
@@ -170,8 +171,8 @@ async fn load_attachment_content_from_cache() {
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let attachment_local_id = 42.into();
-    let attachment =
-        get_attachment(attachment_local_id, test_attachment, user_ctx.user_stash()).await;
+    let tether = user_ctx.user_stash().connection();
+    let attachment = get_attachment(attachment_local_id, test_attachment, &tether).await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -202,10 +203,11 @@ async fn load_attachment_content_from_cache() {
     );
 }
 
-async fn get_attachment<A>(id: LocalId, attachment: &ApiAttachment, _interface: &A) -> Attachment
-where
-    A: Into<AgnosticInterface> + Interface,
-{
+async fn get_attachment(
+    id: LocalId,
+    attachment: &ApiAttachment,
+    _interface: &Tether,
+) -> Attachment {
     Attachment {
         local_id: Some(id),
         remote_id: Some(attachment.id.clone().into()),

@@ -14,7 +14,7 @@ impl Migration for V0 {
         "proton_core_v0"
     }
 
-    async fn migrate(&self, tx: &Bond) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
         addresses::create_tables(tx)?;
         user_settings::create_tables(tx)?;
         user::create_tables(tx)?;

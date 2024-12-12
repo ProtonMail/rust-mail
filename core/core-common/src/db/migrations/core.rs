@@ -13,8 +13,9 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     const VERSION_TABLE_NAME: &str = "proton_core_version";
     let migrations = vec![V0 {}];
 
+    let mut tether = stash.connection();
     let migrator = Migrator::new();
     migrator
-        .migrate(stash, VERSION_TABLE_NAME, &migrations)
+        .migrate(&mut tether, VERSION_TABLE_NAME, &migrations)
         .await
 }

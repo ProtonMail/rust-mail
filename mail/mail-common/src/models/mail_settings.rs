@@ -11,7 +11,7 @@ use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use tracing::debug;
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -226,26 +226,21 @@ impl MailSettings {
         let mut settings = MailSettings::from(api.get_settings().await.map(|r| r.mail_settings)?);
         debug!("Storing labels into database");
 
-        let tx = stash.transaction().await?;
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
         settings.save(&tx).await?;
         tx.commit().await?;
         Ok(())
     }
 
     /// Get the mail settings from database
-    pub async fn get<A>(interface: &A) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Self::load(MAIL_SETTINGS_ID.into(), interface).await
+    pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
+        Self::load(MAIL_SETTINGS_ID.into(), tether).await
     }
 
     /// Get the mail settings from database, fallback on default
-    pub async fn get_or_default<A>(interface: &A) -> Self
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Self::get(interface)
+    pub async fn get_or_default(tether: &Tether) -> Self {
+        Self::get(tether)
             .await
             .unwrap_or_default()
             .unwrap_or_default()

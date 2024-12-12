@@ -69,7 +69,8 @@ async fn get_sender_image_from_cache() {
 
     // Add an item into cache
     let mut key = create_test_key(TEST_ADDRESS, Some(ReceivedFormat::Png));
-    let tx = user_ctx.stash().transaction().await.unwrap();
+    let mut tether = user_ctx.stash().connection();
+    let tx = tether.transaction().await.unwrap();
     key.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
     let extra_metadata = SenderImageMetadata {
@@ -132,7 +133,8 @@ async fn concurrent_request() {
     };
 
     let (query, params) = key.build_query();
-    let items = SenderImage::find(query, params, user_ctx.stash(), None)
+    let tether = user_ctx.stash().connection();
+    let items = SenderImage::find(query, params, &tether, None)
         .await
         .unwrap();
     assert_eq!(items.len(), 1);
@@ -158,10 +160,8 @@ async fn image_extension(bytes: &[u8], expected: &str) {
         .unwrap();
 
     assert_eq!(image_path.extension().unwrap(), expected);
-    let sender_image = SenderImage::load(1.into(), user_ctx.stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let tether = user_ctx.stash().connection();
+    let sender_image = SenderImage::load(1.into(), &tether).await.unwrap().unwrap();
     let received_format = sender_image.received_format.unwrap();
     assert_eq!(format!("{received_format}"), expected);
 }

@@ -72,7 +72,7 @@ use stash::exports::{
 use stash::macros::DbRecord;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{StashError, Tether};
 use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::repeat;
@@ -232,54 +232,49 @@ impl From<&RemoteId> for AgnosticId {
 impl Id for AgnosticId {
     type Counterpart = AgnosticId;
 
-    async fn counterpart<T, A>(
-        &self,
-        interface: &A,
-    ) -> Result<Option<Self::Counterpart>, StashError>
+    async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
         match self {
             Self::Local(id) => id
-                .counterpart::<T, A>(interface)
+                .counterpart::<T>(tether)
                 .await
                 .map(|id| id.map(Self::Remote)),
             Self::Remote(id) => id
-                .counterpart::<T, A>(interface)
+                .counterpart::<T>(tether)
                 .await
                 .map(|id| id.map(Self::Local)),
         }
     }
 
-    async fn counterparts<T, A>(
+    async fn counterparts<T>(
         ids: Vec<Self>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Vec<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
         match ids.first() {
-            Some(Self::Local(_)) => LocalId::counterparts::<T, A>(
+            Some(Self::Local(_)) => LocalId::counterparts::<T>(
                 ids.into_iter()
                     .map(|id| match id {
                         Self::Local(id) => id,
                         Self::Remote(_) => unreachable!(),
                     })
                     .collect(),
-                interface,
+                tether,
             )
             .await
             .map(|ids| ids.into_iter().map(Self::Remote).collect()),
-            Some(Self::Remote(_)) => RemoteId::counterparts::<T, A>(
+            Some(Self::Remote(_)) => RemoteId::counterparts::<T>(
                 ids.into_iter()
                     .map(|id| match id {
                         Self::Local(_) => unreachable!(),
                         Self::Remote(id) => id,
                     })
                     .collect(),
-                interface,
+                tether,
             )
             .await
             .map(|ids| ids.into_iter().map(Self::Local).collect()),
@@ -287,14 +282,13 @@ impl Id for AgnosticId {
         }
     }
 
-    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
         match self {
-            Self::Local(id) => id.load(interface).await,
-            Self::Remote(id) => id.load(interface).await,
+            Self::Local(id) => id.load(tether).await,
+            Self::Remote(id) => id.load(tether).await,
         }
     }
 }
@@ -855,13 +849,12 @@ pub trait Id: Clone + Send + Sync {
     ///
     /// * [`Model::load()`]
     ///
-    async fn counterpart<T, A>(
+    async fn counterpart<T>(
         &self,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Option<Self::Counterpart>, StashError>
     where
-        T: Model,
-        A: Into<AgnosticInterface> + Interface;
+        T: Model;
 
     /// Obtain the counterparts of a list of IDs.
     ///
@@ -885,13 +878,12 @@ pub trait Id: Clone + Send + Sync {
     ///
     /// * [`Model::find()`]
     ///
-    async fn counterparts<T, A>(
+    async fn counterparts<T>(
         ids: Vec<Self>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Vec<Self::Counterpart>, StashError>
     where
-        T: Model,
-        A: Into<AgnosticInterface> + Interface;
+        T: Model;
 
     /// Loads a record from the database by ID.
     ///
@@ -914,10 +906,9 @@ pub trait Id: Clone + Send + Sync {
     ///
     /// * [`Model::load()`]
     ///
-    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
-        T: Model,
-        A: Into<AgnosticInterface> + Interface;
+        T: Model;
 }
 
 /// Extension of functionality shared by both [`LocalId`] and [`RemoteId`].
@@ -1342,15 +1333,11 @@ impl FromSql for LocalId {
 impl Id for LocalId {
     type Counterpart = RemoteId;
 
-    async fn counterpart<T, A>(
-        &self,
-        interface: &A,
-    ) -> Result<Option<Self::Counterpart>, StashError>
+    async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
-        Ok(interface
+        Ok(tether
             .query::<_, QueryResultRemoteId>(
                 formatdoc!(
                     "
@@ -1372,13 +1359,12 @@ impl Id for LocalId {
             .map(|r| r.id))
     }
 
-    async fn counterparts<T, A>(
+    async fn counterparts<T>(
         ids: Vec<Self>,
-        interface: &A,
+        tether: &Tether,
     ) -> Result<Vec<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
         let placeholders = repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
         #[allow(trivial_casts)]
@@ -1386,7 +1372,7 @@ impl Id for LocalId {
             .into_iter()
             .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect();
-        Ok(interface
+        Ok(tether
             .query::<_, QueryResultRemoteId>(
                 formatdoc!(
                     "
@@ -1408,12 +1394,11 @@ impl Id for LocalId {
             .collect())
     }
 
-    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
-        T::find_first("WHERE local_id = ?", params![*self], interface).await
+        T::find_first("WHERE local_id = ?", params![*self], tether).await
     }
 }
 
@@ -1647,15 +1632,11 @@ impl FromSql for RemoteId {
 impl Id for RemoteId {
     type Counterpart = LocalId;
 
-    async fn counterpart<T, A>(
-        &self,
-        interface: &A,
-    ) -> Result<Option<Self::Counterpart>, StashError>
+    async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
-        match interface
+        match tether
             .query_value::<_, u64>(
                 formatdoc!(
                     "
@@ -1687,13 +1668,12 @@ impl Id for RemoteId {
         }
     }
 
-    async fn counterparts<T, A>(
+    async fn counterparts<T>(
         ids: Vec<Self>,
-        interface: &A,
+        tehter: &Tether,
     ) -> Result<Vec<Self::Counterpart>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
         let placeholders = repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
         #[allow(trivial_casts)]
@@ -1701,7 +1681,7 @@ impl Id for RemoteId {
             .into_iter()
             .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect();
-        Ok(interface
+        Ok(tehter
             .query_values::<_, u64>(
                 formatdoc!(
                     "
@@ -1723,12 +1703,11 @@ impl Id for RemoteId {
             .collect())
     }
 
-    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
         T: Model,
-        A: Into<AgnosticInterface> + Interface,
     {
-        T::find_first("WHERE remote_id = ?", params![self.clone()], interface).await
+        T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
     }
 }
 

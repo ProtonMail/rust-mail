@@ -31,7 +31,8 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             SubscriberError::Other(e)
         })?;
 
-        let tx = ctx.user_context.stash().transaction().await?;
+        let mut tether = ctx.user_context.stash().connection();
+        let tx = tether.transaction().await?;
 
         {
             for event in events {

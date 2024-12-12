@@ -9,11 +9,10 @@ use proton_crypto_account::keys::{
 };
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Interface;
 
 #[tokio::test]
 async fn test_address_create() {
-    let conn = new_core_test_connection().await;
+    let mut conn = new_core_test_connection().await.connection();
     let tx = conn
         .transaction()
         .await
@@ -30,7 +29,7 @@ async fn test_address_create() {
 
 #[tokio::test]
 async fn test_address_update() {
-    let conn = new_core_test_connection().await;
+    let mut conn = new_core_test_connection().await.connection();
     let tx = conn
         .transaction()
         .await
@@ -52,7 +51,7 @@ async fn test_address_update() {
 
 #[tokio::test]
 async fn test_address_delete() {
-    let conn = new_core_test_connection().await;
+    let mut conn = new_core_test_connection().await.connection();
     let tx = conn
         .transaction()
         .await

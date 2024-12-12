@@ -3,11 +3,11 @@ use crate::models::Conversation;
 use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
-use stash::stash::{Bond, Interface};
+use stash::stash::Bond;
 use tracing::warn;
 
 pub async fn handle_conversation_events(
-    tx: &Bond,
+    tx: &Bond<'_>,
     conversation_events: &[ConversationEvent],
 ) -> Result<(), AppError> {
     for conversation_event in conversation_events {

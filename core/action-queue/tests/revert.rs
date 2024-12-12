@@ -98,7 +98,8 @@ async fn revert_cancels_all_dependent_actions() {
     let value4 = 400_u32;
 
     {
-        let tx = queue.stash().transaction().await.unwrap();
+        let mut conn = queue.stash().connection();
+        let tx = conn.transaction().await.unwrap();
         tx.ext_insert_value(key, value).await.unwrap();
         tx.commit().await.unwrap();
     }
@@ -201,7 +202,7 @@ impl Handler for RevertActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(tx.ext_insert_value(&action.key, action.value).await?)
     }
@@ -210,7 +211,7 @@ impl Handler for RevertActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Ok(tx.ext_delete_value(&action.key).await?)
     }
@@ -255,7 +256,7 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let old_value = tx.ext_get_value(&action.key).await?.unwrap();
         action.old_value = old_value;
@@ -266,7 +267,7 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let current_value = tx.ext_get_value(&action.key).await?.unwrap();
         assert_eq!(current_value, action.value);

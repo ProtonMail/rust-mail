@@ -26,7 +26,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> Result<<T as Action>::LocalOutput, T::Error> {
         Ok(<T as Action>::LocalOutput::default())
     }
@@ -35,7 +35,7 @@ where
         &self,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Bond,
+        _: &Bond<'_>,
     ) -> impl Future<Output = Result<(), T::Error>> + Send {
         std::future::ready(Ok(()))
     }

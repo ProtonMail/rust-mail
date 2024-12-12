@@ -103,7 +103,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     // * Create all conversations in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
     let mut params = Params::default_basic();
     params.conversation_count[0].total = conversations.len() as u64;
@@ -135,16 +135,16 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
     inbox.unread_conv = inbox.total_conv;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     inbox.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation_ids = RemoteId::counterparts::<Conversation, _>(to_mark, stash)
+    let conversation_ids = RemoteId::counterparts::<Conversation>(to_mark, &tether)
         .await
         .unwrap();
     Conversation::action_mark_read(user_ctx.queue(), inbox.local_id.unwrap(), conversation_ids)
@@ -152,7 +152,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .unwrap();
 
     // Validation
-    let conversations = Conversation::find("WHERE num_unread = ?", params![0], stash, None)
+    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether, None)
         .await
         .unwrap();
     assert_eq!(conversations.len(), expected_read);
@@ -168,7 +168,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     // * Create all conversations in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let stash = user_ctx.user_stash();
+    let mut tether = user_ctx.user_stash().connection();
 
     let mut params = Params::default_basic();
     params.conversation_count[0].total = conversations.len() as u64;
@@ -200,16 +200,16 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
+    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
     inbox.unread_conv = inbox.total_conv;
-    let tx = stash.transaction().await.unwrap();
+    let tx = tether.transaction().await.unwrap();
     inbox.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation_ids = RemoteId::counterparts::<Conversation, _>(to_mark, stash)
+    let conversation_ids = RemoteId::counterparts::<Conversation>(to_mark, &tether)
         .await
         .unwrap();
     Conversation::action_mark_unread(user_ctx.queue(), inbox.local_id.unwrap(), conversation_ids)
@@ -217,7 +217,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .unwrap();
 
     // Validation
-    let conversations = Conversation::find("WHERE num_unread = ?", params![0], stash, None)
+    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether, None)
         .await
         .unwrap();
     assert_eq!(conversations.len(), expected_read);

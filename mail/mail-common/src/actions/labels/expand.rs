@@ -62,7 +62,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         _: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let mut label = Label::load(action.local_id, tx)
             .await?
@@ -98,7 +98,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        tx: &Bond,
+        tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let Some(original_state) = action
             .original_state

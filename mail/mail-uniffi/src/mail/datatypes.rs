@@ -98,7 +98,7 @@ use proton_mail_common::models::{
 use proton_mail_common::AppError;
 use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
-use stash::stash::{AgnosticInterface, Interface, StashError};
+use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
 pub use system_label::*;
 
@@ -1043,16 +1043,13 @@ impl ConversationCount {
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the records.
     ///
-    pub async fn try_from_real<A>(
+    pub async fn try_from_real(
         value: RealConversationCount,
-        interface: &A,
-    ) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<Self, AppError> {
         Ok(Self {
             label_id: RealRemoteId::from(value.label_id.clone())
-                .counterpart::<RealLabel, _>(interface)
+                .counterpart::<RealLabel>(tether)
                 .await?
                 .ok_or_else(|| {
                     AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
@@ -1151,19 +1148,16 @@ impl ConversationSearchOptions {
     /// An error will be returned if there are problems running the queries to
     /// look up the remote IDs for the local IDs specified.
     ///
-    pub async fn into_api_options<A>(
+    pub async fn into_api_options(
         self,
-        interface: &A,
-    ) -> Result<GetConversationsOptions, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+        tether: &Tether,
+    ) -> Result<GetConversationsOptions, StashError> {
         let ids = match self.ids {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
                     if let Some(resolved_id) = RealLocalId::from(*id)
-                        .counterpart::<RealConversation, _>(interface)
+                        .counterpart::<RealConversation>(tether)
                         .await?
                     {
                         ids.push(resolved_id.into());
@@ -1181,7 +1175,7 @@ impl ConversationSearchOptions {
         Ok(GetConversationsOptions {
             address_id: match self.address_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealAddress, _>(interface)
+                    .counterpart::<RealAddress>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1191,7 +1185,7 @@ impl ConversationSearchOptions {
             begin: self.begin,
             begin_id: match self.begin_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation, _>(interface)
+                    .counterpart::<RealConversation>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1200,7 +1194,7 @@ impl ConversationSearchOptions {
             end: self.end,
             end_id: match self.end_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation, _>(interface)
+                    .counterpart::<RealConversation>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1211,7 +1205,7 @@ impl ConversationSearchOptions {
             keyword: self.keyword,
             label_id: match self.label_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealLabel, _>(interface)
+                    .counterpart::<RealLabel>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1913,13 +1907,10 @@ impl MessageCount {
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the records.
     ///
-    pub async fn try_from_real<A>(value: RealMessageCount, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
             label_id: RealRemoteId::from(value.label_id.clone())
-                .counterpart::<RealLabel, _>(interface)
+                .counterpart::<RealLabel>(tether)
                 .await?
                 .ok_or_else(|| {
                     AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
@@ -2048,16 +2039,13 @@ impl MessageSearchOptions {
     /// An error will be returned if there are problems running the queries to
     /// look up the remote IDs for the local IDs specified.
     ///
-    pub async fn into_api_options<A>(self, interface: &A) -> Result<GetMessagesOptions, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    pub async fn into_api_options(self, tether: &Tether) -> Result<GetMessagesOptions, StashError> {
         let ids = match self.ids {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
                     if let Some(resolved_id) = RealLocalId::from(*id)
-                        .counterpart::<RealMessage, _>(interface)
+                        .counterpart::<RealMessage>(tether)
                         .await?
                     {
                         ids.push(resolved_id.into());
@@ -2076,7 +2064,7 @@ impl MessageSearchOptions {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
                     if let Some(resolved_id) = RealLocalId::from(*id)
-                        .counterpart::<RealLabel, _>(interface)
+                        .counterpart::<RealLabel>(tether)
                         .await?
                     {
                         ids.push(resolved_id.into());
@@ -2094,7 +2082,7 @@ impl MessageSearchOptions {
         Ok(GetMessagesOptions {
             address_id: match self.address_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealAddress, _>(interface)
+                    .counterpart::<RealAddress>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -2105,7 +2093,7 @@ impl MessageSearchOptions {
             begin: self.begin,
             begin_id: match self.address_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealMessage, _>(interface)
+                    .counterpart::<RealMessage>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -2113,7 +2101,7 @@ impl MessageSearchOptions {
             cc: self.cc,
             conversation_id: match self.conversation_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation, _>(interface)
+                    .counterpart::<RealConversation>(tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -2122,7 +2110,7 @@ impl MessageSearchOptions {
             end: self.end,
             end_id: match self.address_id {
                 Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealMessage, _>(interface)
+                    .counterpart::<RealMessage>(tether)
                     .await?
                     .map(Into::into),
                 None => None,

@@ -13,7 +13,7 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{AgnosticInterface, Bond, Interface, Notification, Stash, StashError};
+use crate::stash::{Bond, Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::error::Error;
 use core::fmt::{Debug, Display};
@@ -434,17 +434,16 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    fn find<Q, A>(
+    fn find<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &A,
+        tether: &Tether,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
     {
-        async move { perform_find(query_logic, params, &interface.clone().into(), queue).await }
+        async move { perform_find(query_logic, params, tether, queue).await }
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -488,20 +487,19 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    fn find_first<Q, A>(
+    fn find_first<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &A,
+        tether: &Tether,
     ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send
     where
         Q: Into<String> + Send,
-        A: Into<AgnosticInterface> + Interface,
     {
         async move {
             Ok(perform_find(
                 format!("{} LIMIT 1", query_logic.into()),
                 params,
-                &interface.clone().into(),
+                tether,
                 None,
             )
             .await?
@@ -700,11 +698,8 @@ where
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load<A>(id: Self::IdType, interface: &A) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        perform_load(id, &interface.clone().into()).await
+    async fn load(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
+        perform_load(id, tether).await
     }
 
     /// Gets the record's unique row ID.
@@ -779,7 +774,7 @@ where
     /// * [`StashError::NoRowIdReturned`]
     /// * [`StashError::NoRowsUpdated`]
     ///
-    async fn save(&mut self, bond: &Bond) -> Result<(), StashError> {
+    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         perform_save(self, bond).await
     }
 
@@ -944,7 +939,7 @@ pub fn from_rows<T: DbRecord>(
 pub async fn perform_find<Q, T>(
     query_logic: Q,
     params: Vec<Box<dyn ToSql + Send>>,
-    interface: &AgnosticInterface,
+    tether: &Tether,
     queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
 ) -> Result<Vec<T>, StashError>
 where
@@ -963,7 +958,7 @@ where
         T::table_name(),
         query_logic.into(),
     );
-    let records = interface.query(query, params).await?;
+    let records = tether.query(query, params).await?;
 
     // Set up listener for changes to the result set, if requested.
     #[allow(clippy::shadow_reuse)]
@@ -976,8 +971,8 @@ where
                 Ok((row_id, id))
             })
             .collect::<Result<HashMap<u64, T::IdType>, StashError>>()?;
-        let receiver = interface.stash().subscribe_to(T::table_name()).await?;
-        let stash = interface.stash().clone();
+        let receiver = tether.stash().subscribe_to(T::table_name()).await?;
+        let stash = tether.stash().clone();
 
         // Spawn a task to listen for notifications
         drop(spawn_async(async move {
@@ -1047,10 +1042,7 @@ where
 /// * [`Stash::load()`]
 /// * [`Tether::load()`]
 ///
-pub async fn perform_load<T, I>(
-    id: I,
-    interface: &AgnosticInterface,
-) -> Result<Option<T>, StashError>
+pub async fn perform_load<T, I>(id: I, tether: &Tether) -> Result<Option<T>, StashError>
 where
     T: Model,
     I: ToSql + Send + 'static,
@@ -1071,7 +1063,7 @@ where
         T::id_field_name(),
     );
     #[allow(trivial_casts)]
-    Ok(interface
+    Ok(tether
         .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
         .await?
         .into_iter()
@@ -1102,7 +1094,7 @@ where
 /// * [`Model::save()`]
 ///
 #[allow(clippy::too_many_lines)]
-pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond) -> Result<(), StashError> {
+pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.
     let (fields, values) = if M::id_is_autoincrementing() {
