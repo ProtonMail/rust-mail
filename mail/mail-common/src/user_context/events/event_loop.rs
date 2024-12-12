@@ -24,9 +24,7 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 #[async_trait]
 impl Store for MailUserContext {
     async fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
-        dbg!("Acquiring connection");
         let tether = self.user_context.stash().connection();
-        dbg!("Executing query");
         match {
             tether
                 .query_value::<_, String>(

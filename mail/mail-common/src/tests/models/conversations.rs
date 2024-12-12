@@ -2745,8 +2745,6 @@ async fn test_conversation_expiration() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
 
-    dbg!(state.conversations.len());
-
     // Delete all expired, no matches
     let res = Conversation::delete_expired(&mut tether).await.unwrap();
     assert_eq!(res, 0);
