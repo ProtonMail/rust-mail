@@ -81,6 +81,30 @@ y0u1k8OmDane8wD+Nn/GEgLHtcgx6xhyZVKc3lmJD49u0XDREUsCQXeocQo=
 -----END PGP PRIVATE KEY BLOCK-----
 ";
 
+/// Recipient private address key v6 to validate test output.
+const RECIPIENT_INTERNAL_DECRYPTION_KEY_V6: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xX0GZ1HqGRsAAAAgsLRL1RXfGij8JJAsHHhYE78buH4smu2/7Ht9X6NXnRb+
+HQkLAwiiGHXGG8+W9WAAAAAAAAAAAAAAAAAAAAAAwtnL2dF74WBQi3MIOxWV
+zCDq3cc39mt8gsEauYeA7rccYtdct3sjDLQ7q0g3V8X/ZXafE8KtBh8bCgAA
+AD4FgmdR6hkDCwkHBRUKCA4MBBYAAgECmwMCHgEioQZB9IyvzsJ+jWGlvVgM
+gFy1qqF1QbuEL8Q/sVjB4SOhEwAAAAAKzCBjCWPa05vTQuXrwRXOItXW2xHF
+ZyztjkAMPMOHmYFrwLKwLAHjIYX//8cbpbmSJ11tj1/Il72UJXAnjdo9Ha3S
+sXsna3SH+uhUWMu/ox/0GQh9gzDz6QiUYtqzyfBHgwfNPXBxYy1hY2NvdW50
+LWtleXNAcHJvdG9uLmJsYWNrIDxwcWMtYWNjb3VudC1rZXlzQHByb3Rvbi5i
+bGFjaz7CmwYTGwoAAAAsBYJnUeoZAhkBIqEGQfSMr87Cfo1hpb1YDIBctaqh
+dUG7hC/EP7FYweEjoRMAAAAAUfUgdNPsyt8s63D0hSYh5MyhIOSAgLk6Itqc
+KWd2BIrRmFe8uLsmgThttHyMIjFQsRnW3xVXVh1Ledh5yCpacGQGx5qH/OWt
+N9Ez3vjEHoIbfhzVTfc0xcQ3hMZ7KU2m37gFx30GZ1HqGRkAAAAgvY33Bo60
+cRmgiNhZf3q6LEhacrNrHuJgUb0ZXGX/gHX+HQkLAwjZk27ShJ8ooWAAAAAA
+AAAAAAAAAAAAAAAAuBxzVs8E2iNjnkeKTQmcWMKmxwUvzrBCSvDhgDc93yvK
+M+F014Qa4wJTnE9XD2BHr3FBi8KbBhgbCgAAACwFgmdR6hkCmwwioQZB9Iyv
+zsJ+jWGlvVgMgFy1qqF1QbuEL8Q/sVjB4SOhEwAAAAAdZCClLiEqTQJeJNou
++8kBM7X9vvpGJMJZWNd1YwsF4MfPFo6WaAK4jWUUO6FJBP/inoyI/WMM8UG4
+z8OEpXTwjkn+fOTv0gNTMjhAJCCVKpj7BTDGFlswL0zJt6pWzLnz1gE=
+-----END PGP PRIVATE KEY BLOCK-----
+";
+
 /// Recipient private address key to validate test output.
 const RECIPIENT_EXTERNAL_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -159,6 +183,45 @@ fn send_internal() {
     validate_decryption(
         &package,
         RECIPIENT_INTERNAL_DECRYPTION_KEY,
+        EXPECTED_MESSAGE_INTERNAL,
+    );
+}
+
+/// Simulates sending an email internally from a single sender to a single recipient with v6 keys.
+/// Assumes the email draft content is in HTML format and the recipient wants HTML-formatted emails.
+#[test]
+fn send_internal_v6() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
+    let recipient_preferences = send_logic::create_send_preferences(
+        &pgp_provider,
+        mail_settings,
+        recipient_keys::load_recipient_public_key_internal_v6,
+        PackageMimeType::Html,
+    );
+    let encrypted_body = EncryptedPackageBody::new_with_draft(
+        &pgp_provider,
+        &draft,
+        PackageMimeType::Html,
+        &sender_keys,
+    )
+    .expect("Failed to create encrypted package body");
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(
+        &package,
+        RECIPIENT_INTERNAL_DECRYPTION_KEY_V6,
         EXPECTED_MESSAGE_INTERNAL,
     );
 }
@@ -563,6 +626,48 @@ mod recipient_keys {
         api_keys.import(provider).unwrap()
     }
 
+    pub fn load_recipient_public_key_internal_v6<Provider: PGPProviderSync>(
+        provider: &Provider,
+    ) -> PublicAddressKeys<Provider::PublicKey> {
+        let address_keys = vec![APIPublicKey {
+            source: APIPublicKeySource::Proton,
+            flags: KeyFlag::from(3_u32),
+            primary: true,
+            public_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxjMEZ1Gt1BYJKwYBBAHaRw8BAQdAxKiYR++GZGOrNQApcd4T5IsQOahcgqf6\n7mfHai+BaHXNPXBxYy1hY2NvdW50LWtleXNAcHJvdG9uLmJsYWNrIDxwcWMt\nYWNjb3VudC1rZXlzQHByb3Rvbi5ibGFjaz7CwBEEExYKAIMFgmdRrdQDCwkH\nCZBMEsE4/XND4EUUAAAAAAAcACBzYWx0QG5vdGF0aW9ucy5vcGVucGdwanMu\nb3JnceYp+VpXsE/UFEZX06Snp/NA0s+wSTDBGFqWvodvSvoDFQoIBBYAAgEC\nGQECmwMCHgEWIQQVMa0O7aKLGj3ucD9MEsE4/XND4AAAdJIBAKhHoebqye62\nYzfgVKX86G/ENOMVi9L2ckBt7uOo3DKHAQCKAM3Jp7OwUtdPsRI1b/EyGDJw\nfieuWyPIAsYssjtDCcLAHgQQFggAkAWCZ1GuIAWDAO1OAAmQ1NIaBVGnsuw1\nFAAAAAAAHAAQc2FsdEBub3RhdGlvbnMub3BlbnBncGpzLm9yZznFEvC6iWyk\nf6w44W4tiDssHFRlc3QgT3BlblBHUCBDQSA8dGVzdC1vcGVucGdwLWNhQHBy\nb3Rvbi5tZT4WIQQ2FUO/DaVtpgyz2pTU0hoFUaey7AAAG4ABAIB9hYnJ2aCO\ncNtLBq7O2b/8bLzcD29JiV4J83sDrbq7AQCz9kKkL6Hm/Oh0SQRQ0oRaYEfK\nBt6Nd8Y7orU5hoBLAM44BGdRrdQSCisGAQQBl1UBBQEBB0DeKNu9ZFv4bMy0\nOVNcWy2W4XOrBHuVC7rEgka+njfhQgMBCAfCvgQYFgoAcAWCZ1Gt1AmQTBLB\nOP1zQ+BFFAAAAAAAHAAgc2FsdEBub3RhdGlvbnMub3BlbnBncGpzLm9yZ4Rb\ntzjVe2M7c+75bsOB0xeeQoLhVhGjkrigIbSeoJpdApsMFiEEFTGtDu2iixo9\n7nA/TBLBOP1zQ+AAADqMAQCW1kCU4xCEv513iA5DcdhnpboyrjRgZiwp+jQH\nBXXIaAEAp26qhBe4FJYrM0tyXzj70vAE//4GSc/09vNw8YYM9ww=\n=X6z+\n-----END PGP PUBLIC KEY BLOCK-----\n".to_owned(),
+        }, APIPublicKey {
+            source: APIPublicKeySource::Proton,
+            flags: KeyFlag::from(3_u32),
+            primary: true,
+            public_key: "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxioGZ1HqGRsAAAAgsLRL1RXfGij8JJAsHHhYE78buH4smu2/7Ht9X6NXnRbC\nrQYfGwoAAAA+BYJnUeoZAwsJBwUVCggODAQWAAIBApsDAh4BIqEGQfSMr87C\nfo1hpb1YDIBctaqhdUG7hC/EP7FYweEjoRMAAAAACswgYwlj2tOb00Ll68EV\nziLV1tsRxWcs7Y5ADDzDh5mBa8CysCwB4yGF///HG6W5kiddbY9fyJe9lCVw\nJ43aPR2t0rF7J2t0h/roVFjLv6Mf9BkIfYMw8+kIlGLas8nwR4MHzT1wcWMt\nYWNjb3VudC1rZXlzQHByb3Rvbi5ibGFjayA8cHFjLWFjY291bnQta2V5c0Bw\ncm90b24uYmxhY2s+wpsGExsKAAAALAWCZ1HqGQIZASKhBkH0jK/Own6NYaW9\nWAyAXLWqoXVBu4QvxD+xWMHhI6ETAAAAAFH1IHTT7MrfLOtw9IUmIeTMoSDk\ngIC5OiLanClndgSK0ZhXvLi7JoE4bbR8jCIxULEZ1t8VV1YdS3nYecgqWnBk\nBseah/zlrTfRM974xB6CG34c1U33NMXEN4TGeylNpt+4BcLAHgQQFggAkAWC\nZ1HqZAWDAO1OAAmQ1NIaBVGnsuw1FAAAAAAAHAAQc2FsdEBub3RhdGlvbnMu\nb3BlbnBncGpzLm9yZzdm9OlYOIUI84+RcGeDiLosHFRlc3QgT3BlblBHUCBD\nQSA8dGVzdC1vcGVucGdwLWNhQHByb3Rvbi5tZT4WIQQ2FUO/DaVtpgyz2pTU\n0hoFUaey7AAAZCUBAKs29RLbxsPOZyQqWC6F9kXN1LS9W6De4buqKn/F0Wm/\nAP4lXIRE0QW5n5QugNBhl2l0Vp9m37/H7CtG3H0PCVidB84qBmdR6hkZAAAA\nIL2N9waOtHEZoIjYWX96uixIWnKzax7iYFG9GVxl/4B1wpsGGBsKAAAALAWC\nZ1HqGQKbDCKhBkH0jK/Own6NYaW9WAyAXLWqoXVBu4QvxD+xWMHhI6ETAAAA\nAB1kIKUuISpNAl4k2i77yQEztf2++kYkwllY13VjCwXgx88WjpZoAriNZRQ7\noUkE/+KejIj9YwzxQbjPw4SldPCOSf585O/SA1MyOEAkIJUqmPsFMMYWWzAv\nTMm3qlbMufPWAQ==\n=osVR\n-----END PGP PUBLIC KEY BLOCK-----\n".to_owned(),
+        },
+        ];
+
+        let skl = SignedKeyList {
+            min_epoch_id: Some(19),
+            max_epoch_id: Some(31),
+            expected_min_epoch_id: None,
+            data: Some(SKLDataJson::from(r#"[{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"1531ad0eeda28b1a3dee703f4c12c138fd7343e0\",\"SHA256Fingerprints\":[\"d57141c407d73870968842ca4898398897f49999c740495862f0039ffd978d7c\",\"2dcbe9648eaa7bec07bdb466c8c9934469851c808c26e80b4bf03476a7e09d51\"]},{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"SHA256Fingerprints\":[\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"ba6610eaeb34f2fbd8e9aadf6df59202adb9a8627bd901d3200a3ab2208f77b1\"]}]"#)),
+            obsolescence_token: None,
+            revision: 7,
+            signature: Some(SKLSignature::from("-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwsAvBAEWCgChBYJnUepmCZBMEsE4/XND4DMUgAAAAAARABljb250ZXh0QHBy\nb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3RFFAAAAAAAHAAgc2Fs\ndEBub3RhdGlvbnMub3BlbnBncGpzLm9yZzCfASjbrFGVAE7c6Jzb28nrmc0K\n+s8OiBHrDnoAnEztFiEEFTGtDu2iixo97nA/TBLBOP1zQ+AAAGEHAQCjxEzK\n3oeMYrvzejqZW0LTZf5Qz+rKgGjKG/Ep3BUjEwEAxdRX20z9SwDv3tB2JEDW\neH8zAvwMfSMkI6J3M5xDyQHCwAwGARsKAAAAXQWCZ1HqZjMUgAAAAAARABlj\nb250ZXh0QHByb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3QioQZB\n9IyvzsJ+jWGlvVgMgFy1qqF1QbuEL8Q/sVjB4SOhEwAAAADa5CCfgtMLYqz3\n2WSbiW5nu6Hlzcl+xK4vL4ssUl4mQ9UsDmioI6HHyJ1Pe1aPq1dw6lNjBOJn\nltYkIw4ePM7SXZ7UDzxOPXGqk0VA2gLbgLh8NHDrNEjmMzHy2MX7cR7ePwU=\n=Pfkv\n-----END PGP SIGNATURE-----\n")),
+        };
+
+        let address_key_keygroup = APIPublicAddressKeyGroup {
+            keys: address_keys,
+            signed_key_list: Some(skl),
+        };
+
+        let api_keys = APIPublicAddressKeys {
+            address_keys: address_key_keygroup,
+            catch_all_keys: None,
+            unverified_keys: None,
+            warnings: vec![],
+            proton_mx: true,
+            is_proton: false,
+        };
+        api_keys.import(provider).unwrap()
+    }
+
     pub fn load_recipient_public_key_external<Provider: PGPProviderSync>(
         provider: &Provider,
     ) -> PublicAddressKeys<Provider::PublicKey> {
@@ -646,7 +751,7 @@ mod send_logic {
         let recipient_preferences = SendPreferences::new(
             recipient_keys,
             None,
-            UnixTimestamp::new(1_726_502_569),
+            UnixTimestamp::new(1_734_001_426),
             &mail_settings,
             ComposerPreference::default(),
         )
