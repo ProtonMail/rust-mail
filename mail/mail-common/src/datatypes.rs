@@ -1304,6 +1304,12 @@ pub struct MessageRecipients {
     pub value: Vec<MessageRecipient>,
 }
 
+impl From<Vec<MessageRecipient>> for MessageRecipients {
+    fn from(value: Vec<MessageRecipient>) -> Self {
+        Self { value }
+    }
+}
+
 sql_using_serde!(MessageRecipients);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]

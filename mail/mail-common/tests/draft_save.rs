@@ -459,6 +459,7 @@ async fn create_draft_reply_impl(
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
@@ -684,7 +685,7 @@ fn expected_create_reply_draft_params(
         },
         to_list: vec![DraftRecipient {
             address: message.sender.address.clone(),
-            name: message.sender.address.clone(),
+            name: message.sender.name.clone(),
             group: None,
         }],
         cc_list: vec![],
