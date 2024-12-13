@@ -15,7 +15,7 @@ serde_repr = "0.1"
 serde_json = "1"
 thiserror = { workspace = true }
 zeroize = { workspace = true }
-rusqlite = { version = "0.31.0", features = [
+rusqlite = { version = "0.32.1", features = [
     "bundled",
     "chrono",
     "functions",
