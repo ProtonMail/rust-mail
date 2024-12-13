@@ -8,9 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Draft recipient validation.
+
 ### Changed
 
   - Fixed some bugs regarding embedded attachments not showing.
+  - Mutating the `Draft` now auto triggers save.
+
+### Fixed
+
+  - Queued actions not executing.
 
 ## [0.25.0] - 2024-12-13
 
