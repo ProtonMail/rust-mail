@@ -16,7 +16,6 @@
 //!         - the returned value is stored in that file
 //!         - the path to this file is returned.
 
-use anyhow::Context;
 use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use quick_cache::{DefaultHashBuilder, Lifecycle, OptionsBuilder, Weighter};
@@ -68,7 +67,7 @@ pub enum CacheError {
 
     /// Error from IO
     #[error("IO Error: {0}")]
-    IO(anyhow::Error),
+    IO(#[from] io::Error),
 
     /// Error from `QuickCache`
     #[error("QuickCache Error: {0}")]
@@ -304,14 +303,10 @@ where
         );
 
         // create file directory
-        create_dir_all(&cache_buf)
-            .with_context(|| format!("could not create dir {cache_buf:?}"))
-            .map_err(CacheError::IO)?;
+        create_dir_all(&cache_buf)?;
         // TODO: ET-296 Do windows counterpart
         if cfg!(unix) {
-            set_permissions(&cache_buf, Permissions::from_mode(0o700))
-                .with_context(|| format!("could not set permissions for {cache_buf:?}"))
-                .map_err(CacheError::IO)?;
+            set_permissions(&cache_buf, Permissions::from_mode(0o700))?;
         }
 
         Ok(Self {
@@ -443,14 +438,11 @@ where
     /// # Errors
     /// * Can't open file containing value
     pub fn get_item(&self, key: &Config::Key) -> CacheResult<Option<impl Read>> {
-        self.cache
+        Ok(self
+            .cache
             .get(key)
-            .map(|m| {
-                File::open(&m.file_path)
-                    .with_context(|| format!("could not open file {:?} for {key:?}", &m.file_path))
-                    .map_err(CacheError::IO)
-            })
-            .transpose()
+            .map(|m| File::open(&m.file_path))
+            .transpose()?)
     }
 
     /// Retrieve a path toward the file containing the value
@@ -544,9 +536,7 @@ where
         // Eviction is not called in this case
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
-            remove_file(&path)
-                .with_context(|| format!("could not remove file {path:?} for {key:?}"))
-                .map_err(CacheError::IO)?;
+            remove_file(&path)?;
             key.after_evict(self.resource.clone());
         }
         self.cache.remove(key);
@@ -616,26 +606,21 @@ where
     ) -> CacheResult<Metadata<Config::ExtraMetadata>> {
         let file_path = self.path_from_key(key, extra)?;
         // Poor's man try block
-        (|| {
-            // TODO: ET-296 Do windows counterpart
-            let mut file = if cfg!(unix) {
-                OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .mode(0o600)
-                    .open(&file_path)?
-            } else {
-                File::create(&file_path)?
-            };
-            file.write_all(value)?;
-            Ok::<_, io::Error>(Metadata {
-                file_path: file_path.clone(),
-                size: file.metadata()?.len(),
-                extra: extra.cloned(),
-            })
-        })()
-        .with_context(|| format!("could not create file {file_path:?} for key {key:?}"))
-        .map_err(CacheError::IO)
+        let mut file = if cfg!(unix) {
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(&file_path)?
+        } else {
+            File::create(&file_path)?
+        };
+        file.write_all(value)?;
+        Ok(Metadata {
+            file_path: file_path.clone(),
+            size: file.metadata()?.len(),
+            extra: extra.cloned(),
+        })
     }
 }

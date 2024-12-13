@@ -738,12 +738,7 @@ impl Message {
             let find = Message::message_body(&mailbox.user_context(), id)
                 .await?
                 .pgp_attachments
-                .and_then(|x| {
-                    x.into_iter().find(|at| {
-                        info!("{}", at.name);
-                        cid_match(&at.content_id)
-                    })
-                });
+                .and_then(|x| x.into_iter().find(|at| cid_match(&at.content_id)));
             match find {
                 Some(at) => {
                     return Ok(EmbeddedAttachmentInfo {
@@ -765,6 +760,7 @@ impl Message {
 
         // PERF: Optimize this part
         let path = mailbox.get_attachment_content(&att).await?;
+        debug!("Path for cid {cid}: {path:?}");
         let data = tokio::fs::read(&path).await?;
         Ok(EmbeddedAttachmentInfo {
             data,

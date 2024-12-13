@@ -54,8 +54,6 @@ pub enum MailboxError {
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
-    #[error("Error: {0}")]
-    Other(#[from] anyhow::Error),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
