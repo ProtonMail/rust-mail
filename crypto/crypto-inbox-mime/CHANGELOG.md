@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.4.1] - 2024-12-13
+
+### Changed
+- Update `proton-crypto` to 0.4.11
+
 ## [0.4.0] - 2024-11-22
 
 ### Changed
 - Mime writer takes ownership of attachments
 - Update `proton-crypto` to 0.4.10
-- 
+
 ## [0.3.3] - 2024-11-19
 
 ### Changed
