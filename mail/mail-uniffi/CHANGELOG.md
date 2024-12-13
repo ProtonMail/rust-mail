@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - Fixed some bugs regarding embedded attachments not showing.
+
 ## [0.25.0] - 2024-12-13
 
 ### Added
