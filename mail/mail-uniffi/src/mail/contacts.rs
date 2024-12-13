@@ -1,5 +1,12 @@
+use super::MailUserSession;
+use crate::errors::{ActionError, VoidActionResult};
+use crate::{
+    core::datatypes::{GroupedContacts, Id},
+    uniffi_async, WatchHandle,
+};
 use crate::{utils::DAMPENING_PERIOD, watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContextError;
 use std::{
     sync::{
@@ -10,46 +17,41 @@ use std::{
 };
 use tokio::{task, time::interval};
 
-use crate::{
-    core::datatypes::{GroupedContacts, Id},
-    uniffi_async, WatchHandle,
-};
-
-use super::{MailSessionError, MailUserSession, MailboxError};
-
 /// Returns grouped contacts by the first grapheme of the name.
 ///
 #[allow(clippy::missing_panics_doc)]
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
-) -> Result<Vec<GroupedContacts>, MailboxError> {
+) -> Result<Vec<GroupedContacts>, ActionError> {
     uniffi_async(async move {
         let tether = session.user_stash().connection();
-        Ok(RealContact::contact_list(&tether)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        Result::<_, RealProtonMailError>::Ok(
+            RealContact::contact_list(&tether)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        )
     })
     .await
+    .map_err(ActionError::from)
 }
 
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
-pub async fn delete_contact(
-    contact_id: Id,
-    session: Arc<MailUserSession>,
-) -> Result<(), MailSessionError> {
+pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
         RealContact::action_delete(user_context.queue(), vec![contact_id.into()])
             .await
             .map_err(MailContextError::from)?;
 
-        Ok(())
+        Result::<_, RealProtonMailError>::Ok(())
     })
     .await
+    .map_err(ActionError::from)
+    .into()
 }
 
 /// A callback interface for live queries.
@@ -74,11 +76,11 @@ pub struct WatchedContactList {
     handle: Arc<WatchHandle>,
 }
 
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn watch_contact_list(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> Result<WatchedContactList, MailboxError> {
+) -> Result<WatchedContactList, ActionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
@@ -88,12 +90,13 @@ pub async fn watch_contact_list(
 
         watch_channel_inner(&watcher, channel, callback);
 
-        Ok(WatchedContactList {
+        Result::<_, RealProtonMailError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
             handle: Arc::new(watcher),
         })
     })
     .await
+    .map_err(ActionError::from)
 }
 
 /// Obtains dampening function.
@@ -122,17 +125,21 @@ pub fn damp_contacts_callback(
             if must_update.swap(false, Ordering::Relaxed) {
                 let contact_list = contact_list(session.clone()).await;
 
-                if contact_list.is_err() {
-                    return;
-                }
+                match contact_list {
+                    ContactListResult::Ok(contact_list) => {
+                        let callback_clone = callback.clone();
 
-                let callback_clone = callback.clone();
-
-                if task::spawn_blocking(move || callback_clone.on_update(contact_list.unwrap()))
-                    .await
-                    .is_err()
-                {
-                    return;
+                        if task::spawn_blocking(move || callback_clone.on_update(contact_list))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    ContactListResult::Error(e) => {
+                        tracing::error!("Failed to get contact list: {:?}", e);
+                        return;
+                    }
                 }
             }
         }

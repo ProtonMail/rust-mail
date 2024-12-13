@@ -383,19 +383,24 @@ impl AppStateHandler for AppState {
 }
 
 fn app_tracing_env_filter() -> EnvFilter {
-    let directives = read_to_string("log_directives").unwrap_or_else(|_| {
-        "info,\
-        proton_mail_tui=debug,\
-        proton_api_core=debug,\
-        proton_mail_db=trace,\
-        proton_sqlite3=trace,\
-        proton_core_db=trace,\
-        proton_core_common=trace,\
-        proton_mail_common=trace,\
-        proton_event_loop=trace,\
-        proton_action_queue=trace"
-            .to_owned()
-    });
+    let directives = read_to_string("log_directives");
+    let directives: String = directives
+        .as_deref()
+        .unwrap_or(
+            "info,
+        proton_mail_tui=debug,
+        proton_api_core=debug,
+        proton_mail_db=trace,
+        proton_sqlite3=trace,
+        proton_core_db=trace,
+        proton_core_common=trace,
+        proton_mail_common=trace,
+        proton_event_loop=trace,
+        proton_action_queue=trace",
+        )
+        .split_inclusive(',')
+        .map(str::trim)
+        .collect();
     EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
         .parse(directives)

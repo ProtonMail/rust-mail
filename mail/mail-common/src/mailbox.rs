@@ -24,8 +24,6 @@ pub enum MailboxError {
     LabelNotFound(LocalId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(LocalId),
-    #[error("No exclusive location found for message '{0}'")]
-    NoExclusiveLocationFound(LocalId),
     #[error("Attachment '{0}' not found")]
     AttachmentNotFound(LocalId),
     #[error("Attachment decryption failed: {0}")]
@@ -34,18 +32,6 @@ pub enum MailboxError {
     AttachmentDecryptionIO(String),
     #[error("Attachment '{0}' does not have a remote id")]
     AttachmentDoesNotHaveRemoteId(LocalId),
-    #[error("Conversation '{0}' not found")]
-    ConversationNotFound(LocalId),
-    #[error("Conversation '{0}' does not have a remote id")]
-    ConversationDoesNotHaveRemoteId(LocalId),
-    #[error("Message '{0}' does not have a remote id")]
-    MessageDoesNotHaveRemoteId(LocalId),
-    #[error("Could not find message with local id '{0}'")]
-    MessageNotFound(LocalId),
-    #[error("Problem with conversation with local ID: '{0}'")]
-    ConversationError(LocalId),
-    #[error("Conversation '{0}' has no messages")]
-    ConversationHasNoMessages(LocalId),
     #[error("App error: {0}")]
     AppError(#[from] AppError),
     #[error("API request failed with error: '{0}'")]
@@ -58,8 +44,6 @@ pub enum MailboxError {
     ),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::queue::Error),
-    #[error("Mailbox is not in the right view mode for the current operation")]
-    InvalidViewMode,
     #[error("Action is not valid: {0}")]
     InvalidAction(anyhow::Error),
     #[error("Stash Error: {0}")]
@@ -88,17 +72,6 @@ pub struct Mailbox {
     label_id: LocalId,
     view_mode: ViewMode,
 }
-
-// TODO: Work out why this isn't used
-// pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
-//     fn on_background_result(&self, result: MailboxResult<T>);
-// }
-//
-// impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> for F {
-//     fn on_background_result(&self, result: MailboxResult<T>) {
-//         (self)(result);
-//     }
-// }
 
 impl Mailbox {
     pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {

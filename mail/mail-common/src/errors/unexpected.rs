@@ -24,6 +24,8 @@ pub enum Unexpected {
     Crypto,
     /// Error related to the database
     Database,
+    /// Error related to draft
+    Draft,
     /// Error related to an operation on file system
     FileSystem,
     /// Error related to an internal operation

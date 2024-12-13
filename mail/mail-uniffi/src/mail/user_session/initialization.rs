@@ -1,7 +1,8 @@
-use proton_mail_common::MailUserContext;
-
-use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
+use crate::errors::{UserSessionError, VoidSessionResult};
+use crate::mail::MailUserSession;
 use crate::uniffi_async;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailUserContext;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -12,18 +13,19 @@ impl MailUserSession {
     pub async fn initialize(
         &self,
         cb: Box<dyn MailUserSessionInitializationCallback>,
-    ) -> MailSessionResult<()> {
+    ) -> VoidSessionResult {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
             let cb_ref = cb.as_ref();
             if let Err((_, e)) = MailUserContext::initialize_async(ctx, cb_ref).await {
-                return Err(MailSessionError::from(e));
+                return Err(RealProtonMailError::from(e));
             }
             Ok(())
         })
-        .await?;
-        Ok(())
+        .await
+        .map_err(UserSessionError::from)
+        .into()
     }
 }
 

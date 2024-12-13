@@ -5,7 +5,7 @@ use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::StorableMessageBody;
 use proton_mail_common::models::Message;
-use proton_mail_common::Mailbox;
+use proton_mail_common::{AppError, Mailbox, MailboxError};
 use proton_mail_test_utils::message_body::{
     message_body_test_message_mime, message_body_test_message_simple, message_body_test_params,
     message_body_test_user_secret, TEST_MESSAGE_BODY_DECRYPTED, TEST_MESSAGE_BODY_MIME_DECRYPTED,
@@ -139,6 +139,17 @@ async fn mailbox_message_body_mime() {
         .await
         .unwrap();
 
+    let Err(MailboxError::AppError(AppError::UnknownCid(_, cids))) =
+        Message::get_embedded_attachment(&mailbox, saved_message.id().unwrap(), "fail").await
+    else {
+        panic!("Expected error when passing bad cid");
+    };
+
+    for cid in cids {
+        Message::get_embedded_attachment(&mailbox, saved_message.id().unwrap(), &cid)
+            .await
+            .unwrap();
+    }
     // Validation:
     assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
     let pgp_attachments = decrypted_message.pgp_attachments.unwrap();

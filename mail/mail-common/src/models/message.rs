@@ -695,51 +695,73 @@ impl Message {
     /// * `id`       - The id of the message
     /// * `cid`      - The cid of the attachment
     ///
+    #[tracing::instrument(skip(mailbox))]
     pub async fn get_embedded_attachment(
         mailbox: &Mailbox,
         id: LocalId,
         cid: &str,
     ) -> Result<EmbeddedAttachmentInfo, MailboxError> {
+        // We use this for logging if no embedded image was found.
+        let mut available_cids = vec![];
+        let mut cid_match = |x: &str| {
+            // If the cid is provided in the `<foo@bar>` format
+            let x = if x.starts_with('<') && x.ends_with('>') {
+                &x[1..x.len() - 1]
+            } else {
+                // We leave this warning here to check if we need to support other cases in
+                // the future.
+                // TODO: remove me at some point.
+                warn!("Weird cid format: {x}");
+                x
+            };
+
+            if x == cid {
+                true
+            } else {
+                available_cids.push(x.to_owned());
+                false
+            }
+        };
+
         let tether = mailbox.stash().connection();
         let mdata = MessageBodyMetadata::for_message(id, &tether)
             .await?
             .ok_or(AppError::MessageBodyMetadataMissing(id))?;
 
-        let inline_att = mdata
+        let Some(att) = mdata
             .attachments
             .into_iter()
-            .filter(|at| matches!(at.disposition, Disposition::Inline));
-
-        let Some(att) = inline_att.clone().find(|at| {
-            at.content_id
-                .as_deref()
-                .map(|x| {
-                    // If the cid is provided in the `<foo@bar>` format
-                    if x.starts_with('<') && x.ends_with('>') {
-                        &x[1..x.len() - 1]
-                    } else {
-                        // We leave this warning here to check if we need to support other cases in
-                        // the future.
-                        // TODO: remove me at some point.
-                        warn!("Weird cid format: {x}");
-                        x
-                    }
-                })
-                .expect("Disposition inline but no content id!")
-                == cid
-        }) else {
-            let available_cids = inline_att
-                .map(|at| {
-                    at.content_id
-                        .expect("Disposition inline but no content id!")
-                })
-                .join(", ");
-            Err(AppError::UnknownCid(cid.to_string(), available_cids))?
+            // Notice that we don't check for the disposition, this is intentional.
+            .find(|at| at.content_id.as_deref().is_some_and(&mut cid_match))
+        else {
+            // No correct cid found in the db... Let's check if it's a pgp attachment
+            let find = Message::message_body(&mailbox.user_context(), id)
+                .await?
+                .pgp_attachments
+                .and_then(|x| x.into_iter().find(|at| cid_match(&at.content_id)));
+            match find {
+                Some(at) => {
+                    return Ok(EmbeddedAttachmentInfo {
+                        data: at.data,
+                        mime: at.mime_type,
+                        height: None,
+                        width: None,
+                    });
+                }
+                None => {
+                    return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());
+                }
+            }
         };
+
+        if matches!(att.disposition, Disposition::Attachment) {
+            warn!("inline attachment used with Disposition::Attachment");
+        }
 
         // PERF: Optimize this part
         let path = mailbox.get_attachment_content(&att).await?;
-        let data = tokio::fs::read(path).await?;
+        debug!("Path for cid {cid}: {path:?}");
+        let data = tokio::fs::read(&path).await?;
         Ok(EmbeddedAttachmentInfo {
             data,
             mime: att.mime_type.to_string(),
@@ -2837,18 +2859,9 @@ impl Message {
             .cloned()
             .collect()
     }
-
-    /// Only get Disposition::Inline attachments
-    #[allow(dead_code)] // Will get used later on
-    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
-        self.attachments_metadata
-            .iter()
-            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
-            .cloned()
-            .collect()
-    }
 }
 
+#[derive(Debug, Clone)]
 pub struct EmbeddedAttachmentInfo {
     pub data: Vec<u8>,
     pub mime: String,

@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
+use crate::errors::UserSessionError;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::MailSettings as RealSettings;
 use stash::orm::Model;
 use tokio::task::JoinError;
 
-use super::{datatypes::MailSettings, MailSessionError, MailUserSession};
+use super::{datatypes::MailSettings, MailUserSession};
 
 /// Gets the latest settings or a default if it can't find it.
 #[uniffi::export]
@@ -26,11 +28,11 @@ pub struct SettingsWatcher {
 }
 
 /// Calls on_update with the new mail settings every time the mail settings change.
-#[uniffi::export]
+#[proton_uniffi_macros::export_result]
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<SettingsWatcher, MailSessionError> {
+) -> Result<SettingsWatcher, UserSessionError> {
     let stash = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
@@ -44,10 +46,11 @@ pub async fn watch_mail_settings(
 
         let watcher = watch_channel(rx, callback).await;
 
-        Ok(SettingsWatcher {
+        Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,
             settings,
         })
     })
     .await
+    .map_err(UserSessionError::from)
 }

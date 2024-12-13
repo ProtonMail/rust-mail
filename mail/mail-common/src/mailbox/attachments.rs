@@ -74,19 +74,19 @@ impl Mailbox {
 
     /// Get decrypted attachment content
     ///
-    /// Content is cached in file system
+    /// Fetches, decrypts and caches the attachment in the filesystem if it's not there.
     pub async fn get_attachment_content(&self, attachment: &Attachment) -> MailboxResult<PathBuf> {
         let user_context = self.user_context();
         let cache = user_context.attachements_cache();
         let key = CacheAttachmentKey::from(attachment);
 
         Ok(cache
-            .get_path_or_insert(&key, self.store_attachment(attachment))
+            .get_path_or_insert(&key, self.fetch_attachment(attachment))
             .await?)
     }
 
-    /// Fetch and store Attachment data
-    async fn store_attachment(&self, attachment: &Attachment) -> CacheResult<Vec<u8>> {
+    /// Fetches attachment data
+    async fn fetch_attachment(&self, attachment: &Attachment) -> CacheResult<Vec<u8>> {
         let attachment_id = attachment.local_id.expect("Should be set");
         let user_context = self.user_context();
         let pgp_provider = new_pgp_provider();
