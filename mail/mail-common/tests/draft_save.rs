@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -9,7 +10,6 @@ use proton_api_mail::services::proton::request_data::{
 use proton_api_mail::services::proton::response_data::{AttachmentMetadata, MessageFlags};
 use proton_api_mail::services::proton::response_data::{
     Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
-    MessageRecipient as ApiMessageRecipient,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
@@ -22,6 +22,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
+use proton_mail_common::draft::recipients::{RecipientEntry, RecipientList};
 use proton_mail_common::draft::{Draft, Error, ReplyMode};
 use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
 use proton_mail_common::MailContextError;
@@ -134,35 +135,26 @@ async fn create_empty_draft_and_save_twice() {
 
     let new_subject = "My New Subject";
     let new_body = "Hello world";
-    let new_to_list = vec!["to@list.info".to_owned()];
-    let new_cc_list = vec!["cc@list.info".to_owned()];
-    let new_bcc_list = vec!["bcc@list.info".to_owned()];
+    let new_to_list = new_recipient_list_with_single_address("to@list.info".to_owned());
+    let new_cc_list = new_recipient_list_with_single_address("cc@list.info".to_owned());
+    let new_bcc_list = new_recipient_list_with_single_address("bcc@list.info".to_owned());
 
     let mut updated_message = message.clone();
     updated_message.metadata.subject = new_subject.into();
     updated_message.metadata.to_list = new_to_list
-        .iter()
-        .cloned()
-        .map(|v| ApiMessageRecipient {
-            address: v,
-            ..Default::default()
-        })
+        .to_message_recipients()
+        .into_iter()
+        .map_into()
         .collect();
     updated_message.metadata.cc_list = new_cc_list
-        .iter()
-        .cloned()
-        .map(|v| ApiMessageRecipient {
-            address: v,
-            ..Default::default()
-        })
+        .to_message_recipients()
+        .into_iter()
+        .map_into()
         .collect();
     updated_message.metadata.bcc_list = new_bcc_list
-        .iter()
-        .cloned()
-        .map(|v| ApiMessageRecipient {
-            address: v,
-            ..Default::default()
-        })
+        .to_message_recipients()
+        .into_iter()
+        .map_into()
         .collect();
 
     let expected_draft_params = expected_create_draft_params();
@@ -170,30 +162,30 @@ async fn create_empty_draft_and_save_twice() {
         let mut params = expected_create_draft_params();
         params.subject = new_subject.to_owned();
         params.to_list = new_to_list
-            .iter()
-            .cloned()
+            .to_message_recipients()
+            .into_iter()
             .map(|v| DraftRecipient {
-                address: v,
-                name: String::new(),
-                group: None,
+                address: v.address,
+                name: v.name,
+                group: v.group,
             })
             .collect();
         params.cc_list = new_cc_list
-            .iter()
-            .cloned()
+            .to_message_recipients()
+            .into_iter()
             .map(|v| DraftRecipient {
-                address: v,
-                name: String::new(),
-                group: None,
+                address: v.address,
+                name: v.name,
+                group: v.group,
             })
             .collect();
         params.bcc_list = new_bcc_list
-            .iter()
-            .cloned()
+            .to_message_recipients()
+            .into_iter()
             .map(|v| DraftRecipient {
-                address: v,
-                name: String::new(),
-                group: None,
+                address: v.address,
+                name: v.name,
+                group: v.group,
             })
             .collect();
         params
@@ -467,6 +459,7 @@ async fn create_draft_reply_impl(
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
@@ -692,7 +685,7 @@ fn expected_create_reply_draft_params(
         },
         to_list: vec![DraftRecipient {
             address: message.sender.address.clone(),
-            name: message.sender.address.clone(),
+            name: message.sender.name.clone(),
             group: None,
         }],
         cc_list: vec![],
@@ -768,4 +761,14 @@ fn gen_normal_attachment() -> MessageAttachment {
         signature: None,
         size: 1024,
     }
+}
+
+fn new_recipient_list_with_single_address(email: String) -> RecipientList {
+    let mut list = RecipientList::new();
+    list.add_single(RecipientEntry {
+        email,
+        display_name: None,
+    })
+    .unwrap();
+    list
 }

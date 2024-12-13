@@ -1,14 +1,18 @@
+mod recipients;
+
 use crate::core::datatypes::Id;
 use crate::errors::{DraftError, VoidDraftResult};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::MailUserSession;
-use crate::uniffi_async;
+use crate::{async_runtime, uniffi_async};
 use parking_lot::RwLock;
+use proton_mail_common::actions::draft;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::MailUserContext;
-use std::sync::Arc;
+use proton_mail_common::{MailContextError, MailUserContext};
+use recipients::ComposerRecipientList;
+use std::sync::{Arc, Weak};
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -27,10 +31,34 @@ pub enum DraftCreateMode {
 /// to an existing message.
 #[derive(uniffi::Object)]
 pub struct Draft {
-    draft: RwLock<RealDraft>,
+    instance: RwLock<RealDraft>,
     ctx: Arc<MailUserContext>,
+    to_recipient_list: Arc<ComposerRecipientList>,
+    bcc_recipient_list: Arc<ComposerRecipientList>,
+    cc_recipient_list: Arc<ComposerRecipientList>,
 }
-
+impl Draft {
+    fn new_impl(ctx: Arc<MailUserContext>, draft: proton_mail_common::draft::Draft) -> Arc<Self> {
+        let to_list = draft.to_list.clone();
+        let cc_list = draft.cc_list.clone();
+        let bcc_list = draft.bcc_list.clone();
+        Arc::new_cyclic(|weak| Self {
+            instance: RwLock::new(draft),
+            ctx: Arc::clone(&ctx),
+            to_recipient_list: ComposerRecipientList::new_to_list(
+                Arc::clone(&ctx),
+                Weak::clone(weak),
+                to_list,
+            ),
+            bcc_recipient_list: ComposerRecipientList::new_bcc_list(
+                Arc::clone(&ctx),
+                Weak::clone(weak),
+                bcc_list,
+            ),
+            cc_recipient_list: ComposerRecipientList::new_cc_list(ctx, Weak::clone(weak), cc_list),
+        })
+    }
+}
 export_typed_result!(NewDraftResult, Arc<Draft>, DraftError);
 
 /// Create a new draft with the given `create_mode`.
@@ -57,10 +85,7 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
         }
         .map_err(RealProtonMailError::from)?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Draft {
-            draft: RwLock::new(draft),
-            ctx,
-        }))
+        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
     })
     .await
     .map_err(DraftError::from)
@@ -77,10 +102,8 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Draft {
-            draft: RwLock::new(RealDraft::open(&ctx, message_id.into()).await?),
-            ctx,
-        }))
+        let draft = RealDraft::open(&ctx, message_id.into()).await?;
+        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
     })
     .await
     .map_err(DraftError::from)
@@ -91,62 +114,71 @@ pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftRe
 impl Draft {
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
-        self.draft.read().sender.clone()
+        self.instance.read().sender.clone()
     }
 
     /// Get the To recipients of the draft.
-    pub fn to_recipients(&self) -> Vec<String> {
-        self.draft.read().to_list.clone()
+    pub fn to_recipients(&self) -> Arc<ComposerRecipientList> {
+        Arc::clone(&self.to_recipient_list)
     }
 
     /// Get the Cc recipients of the draft.
-    pub fn cc_recipients(&self) -> Vec<String> {
-        self.draft.read().cc_list.clone()
+    pub fn cc_recipients(&self) -> Arc<ComposerRecipientList> {
+        Arc::clone(&self.cc_recipient_list)
     }
 
     /// Get the Bcc recipients of the draft.
-    pub fn bcc_recipients(&self) -> Vec<String> {
-        self.draft.read().bcc_list.clone()
+    pub fn bcc_recipients(&self) -> Arc<ComposerRecipientList> {
+        Arc::clone(&self.bcc_recipient_list)
     }
 
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
-        self.draft.read().subject.clone()
+        self.instance.read().subject.clone()
     }
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        self.draft.read().body.clone()
-    }
-
-    /// Set the To `recipients` of the draft.
-    pub fn set_to_recipients(&self, recipients: Vec<String>) {
-        self.draft.write().to_list = recipients;
-    }
-
-    /// Set the Cc `recipients` of the draft.
-    pub fn set_cc_recipients(&self, recipients: Vec<String>) {
-        self.draft.write().cc_list = recipients;
-    }
-
-    /// Set the Bcc `recipients` of the draft.
-    pub fn set_bcc_recipients(&self, recipients: Vec<String>) {
-        self.draft.write().bcc_list = recipients;
+        self.instance.read().body.clone()
     }
 
     /// Set the draft's `subject`.
-    pub fn set_subject(&self, subject: String) {
-        self.draft.write().subject = subject;
+    pub fn set_subject(&self, subject: String) -> VoidDraftResult {
+        let action = {
+            let mut draft = self.instance.write();
+            draft.subject = subject;
+            draft.to_save_action()
+        };
+        async_runtime()
+            .block_on(async {
+                save_draft(&self.ctx, action)
+                    .await
+                    .map_err(RealProtonMailError::from)
+            })
+            .map_err(DraftError::from)
+            .into()
     }
 
     /// Set the draft's `body`.
-    pub fn set_body(&self, body: String) {
-        self.draft.write().body = body;
+    pub fn set_body(&self, body: String) -> VoidDraftResult {
+        let action = {
+            let mut draft = self.instance.write();
+            draft.body = body;
+            draft.to_save_action()
+        };
+        async_runtime()
+            .block_on(async {
+                save_draft(&self.ctx, action)
+                    .await
+                    .map_err(RealProtonMailError::from)
+            })
+            .map_err(DraftError::from)
+            .into()
     }
 
     /// Get the draft's attachments
     pub fn attachments(&self) -> Vec<AttachmentMetadata> {
-        self.draft
+        self.instance
             .read()
             .attachments
             .clone()
@@ -157,7 +189,7 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        self.draft.read().mime_type.into()
+        self.instance.read().mime_type.into()
     }
 }
 
@@ -172,7 +204,7 @@ impl Draft {
     /// Returns error if the query failed.
     pub async fn save(&self) -> VoidDraftResult {
         let action = {
-            let draft = self.draft.read();
+            let draft = self.instance.read();
             draft.to_save_action()
         };
         let ctx = Arc::clone(&self.ctx);
@@ -197,7 +229,7 @@ impl Draft {
     /// Returns error if the query failed.
     pub async fn send(&self) -> VoidDraftResult {
         let (save_action, send_action) = {
-            let draft = self.draft.read();
+            let draft = self.instance.read();
             (draft.to_save_action(), draft.to_send_action())
         };
         let ctx = Arc::clone(&self.ctx);
@@ -213,4 +245,12 @@ impl Draft {
         .map_err(DraftError::from)
         .into()
     }
+}
+
+async fn save_draft(ctx: &MailUserContext, action: draft::Save) -> Result<(), MailContextError> {
+    ctx.queue()
+        .queue_action(action)
+        .await
+        .map_err(MailContextError::from)?;
+    Ok(())
 }

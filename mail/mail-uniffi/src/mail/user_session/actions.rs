@@ -1,19 +1,27 @@
 use super::MailUserSession;
-use crate::errors::VoidSessionResult;
+use crate::errors::{UserSessionError, VoidSessionResult};
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 #[uniffi::export]
 impl MailUserSession {
     /// Execute exactly one pending action.
     #[must_use]
-    pub fn execute_pending_action(&self) -> VoidSessionResult {
-        drop(self.ctx.execute_pending_action());
-        VoidSessionResult::Ok
+    pub async fn execute_pending_action(&self) -> VoidSessionResult {
+        self.ctx
+            .execute_pending_actions()
+            .await
+            .map_err(RealProtonMailError::from)
+            .map_err(UserSessionError::from)
+            .into()
     }
 
     /// Execute exactly all pending actions.
-    #[must_use]
-    pub fn execute_pending_actions(&self) -> VoidSessionResult {
-        drop(self.ctx.execute_pending_actions());
-        VoidSessionResult::Ok
+    pub async fn execute_pending_actions(&self) -> VoidSessionResult {
+        self.ctx
+            .execute_pending_actions()
+            .await
+            .map_err(RealProtonMailError::from)
+            .map_err(UserSessionError::from)
+            .into()
     }
 }

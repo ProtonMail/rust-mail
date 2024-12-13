@@ -10,6 +10,7 @@ async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+email_address = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
@@ -17,6 +18,7 @@ itertools = { workspace = true }
 html2text = { workspace = true }
 lazy_static = { workspace = true }
 mime = { workspace = true }
+parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }

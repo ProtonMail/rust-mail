@@ -1237,9 +1237,31 @@ impl From<ApiMessageRecipient> for MessageRecipient {
     }
 }
 
+impl From<MessageRecipient> for ApiMessageRecipient {
+    fn from(value: MessageRecipient) -> Self {
+        Self {
+            address: value.address,
+            is_proton: value.is_proton,
+            name: value.name,
+            group: value.group,
+        }
+    }
+}
+
 impl From<MessageRecipient> for AvatarInformation {
     fn from(address: MessageRecipient) -> AvatarInformation {
         AvatarInformation::from(&address.name).or_else(&address.address)
+    }
+}
+
+impl From<MessageSender> for MessageRecipient {
+    fn from(value: MessageSender) -> MessageRecipient {
+        Self {
+            address: value.address,
+            is_proton: value.is_proton,
+            name: value.name,
+            group: None,
+        }
     }
 }
 
@@ -1280,6 +1302,12 @@ impl From<ApiMessageReplyTo> for MessageReplyTo {
 #[serde(transparent)]
 pub struct MessageRecipients {
     pub value: Vec<MessageRecipient>,
+}
+
+impl From<Vec<MessageRecipient>> for MessageRecipients {
+    fn from(value: Vec<MessageRecipient>) -> Self {
+        Self { value }
+    }
 }
 
 sql_using_serde!(MessageRecipients);

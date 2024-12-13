@@ -1,3 +1,5 @@
+use crate::test_context::TestContext;
+use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, KeyFlag, SKLDataJson, SKLSignature,
@@ -7,8 +9,6 @@ use wiremock::{
     matchers::{method, path, query_param},
     Mock, ResponseTemplate,
 };
-
-use crate::test_context::TestContext;
 
 pub const TEST_OTHER_USER_EMAIL: &str = "rust_test2@proton.black";
 pub const TEST_OTHER_USER_ADDRESS_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: ProtonMail\n\nxjMEZkX+zBYJKwYBBAHaRw8BAQdAWduKPt5zBtc+9DqBQLoc3zlqIF8jOUPI\nsFwx9Jy2P9jNMXJ1c3RfdGVzdDJAcHJvdG9uLmJsYWNrIDxydXN0X3Rlc3Qy\nQHByb3Rvbi5ibGFjaz7CjAQQFgoAPgWCZkX+zAQLCQcICZBdyhjQnv7YbAMV\nCAoEFgACAQIZAQKbAwIeARYhBE/4qNMBuldcY8XfjF3KGNCe/thsAAB3BgEA\nh7CjEeXYnIkTHq8/r/Ez6BY/rULlzJ5AdQcAjRb9AdEBAOgC2cvq1iTTHIyI\nqaZbSw4BJaLL40Gak3qcrl7h0KkHwqgEEBYIAFoFAmZF/wkJENTSGgVRp7Ls\nFiEENhVDvw2lbaYMs9qU1NIaBVGnsuwsHFRlc3QgT3BlblBHUCBDQSA8dGVz\ndC1vcGVucGdwLWNhQHByb3Rvbi5tZT4FgwDtTgAAAJtWAPkBxJiQ3NSE9o5l\n+38bkvYvPf4vbjwXI+q35E00cX6/nAEApnu8EZsDjBUdGASjbJXav/QvTuSe\nb5cL31u+BkSpyAfOOARmRf7MEgorBgEEAZdVAQUBAQdA8mtOle2xn1hxJX+f\nuujODfm3DSpJNQ4i/3o2ND6UJngDAQgHwngEGBYKACoFgmZF/swJkF3KGNCe\n/thsApsMFiEET/io0wG6V1xjxd+MXcoY0J7+2GwAAFLgAP9PWtGDtDcebw2U\noD0wfFBaiv5ciHonMvExh9COaFoeQAEAs4CVpapPBM7TfVfztTEGi3fEthvh\nDwN8/F95ArvAIAo=\n=SEhN\n-----END PGP PUBLIC KEY BLOCK-----\n";
@@ -55,10 +55,58 @@ impl TestContext {
     /// * `response`           - The response to mock.
     ///
     pub async fn mock_get_keys_all(&self, email: &str, response: GetKeysAllResponse) {
-        Mock::given(method("GET"))
+        self.mock_get_keys_all_with_internal_param(email, None, response)
+            .await;
+    }
+
+    /// Generates a mock response for retrieving another user's public address keys.
+    ///
+    /// This function creates a mock response to simulate the retrieval of
+    /// public address keys for a specified user.
+    ///
+    /// # Parameters
+    ///
+    /// * `email`              - The email of the other user to retrieve the keys for.
+    /// * `internal_only`      - Whether the search should be performed only for proton addresses.
+    /// * `response`           - The response to mock.
+    ///
+    pub async fn mock_get_keys_all_with_internal_param(
+        &self,
+        email: &str,
+        internal_only: Option<bool>,
+        response: GetKeysAllResponse,
+    ) {
+        let mut mock = Mock::given(method("GET"))
             .and(path("/api/core/v4/keys/all"))
-            .and(query_param("Email", email))
-            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .and(query_param("Email", email));
+        if let Some(value) = internal_only {
+            mock = mock.and(query_param("InternalOnly", u8::from(value).to_string()));
+        }
+        mock.respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generates a mock failure response for retrieving another user's public address keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `email`              - The email of the other user to retrieve the keys for.
+    /// * `response`           - The response to mock.
+    ///
+    pub async fn mock_get_keys_all_failure(
+        &self,
+        email: &str,
+        internal_only: Option<bool>,
+        response: ApiErrorInfo,
+    ) {
+        let mut mock = Mock::given(method("GET"))
+            .and(path("/api/core/v4/keys/all"))
+            .and(query_param("Email", email));
+        if let Some(value) = internal_only {
+            mock = mock.and(query_param("InternalOnly", u8::from(value).to_string()));
+        }
+        mock.respond_with(ResponseTemplate::new(422).set_body_json(response))
             .mount(self.mock_server())
             .await;
     }

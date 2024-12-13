@@ -7,6 +7,7 @@ use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
     prepare_html_reply, prepare_plain_text_reply,
 };
+use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
@@ -33,6 +34,7 @@ use stash::stash::{Stash, StashError, Tether};
 use tracing::{debug, error};
 
 pub mod compose;
+pub mod recipients;
 pub(crate) mod send;
 
 /// Potential draft specific errors.
@@ -89,6 +91,12 @@ pub enum PackageError {
     NoRecipientKey,
     #[error("Primary key not found")]
     PrimaryKeyNotFound,
+    #[error("Invalid Recipient Email: {0}")]
+    RecipientEmailInvalid(String),
+    #[error("Proton Email {0} does not exist")]
+    ProtonRecipientDoesNotExist(String),
+    #[error("Unknown error occurred while validating the recipient {0}")]
+    UnknownRecipientValidationError(String),
 }
 
 /// Draft reply mode.
@@ -142,18 +150,18 @@ impl From<ReplyMode> for DraftAction {
 ///
 /// This metadata is kept alive as long as the message it references is alive
 /// or the draft is discarded/deleted.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Draft {
     /// Id of the associated metadata.
     pub metadata_id: MetadataId,
     /// Sender email address
     pub sender: String,
     /// To Recipients addresses
-    pub to_list: Vec<String>,
+    pub to_list: RecipientList,
     /// CC Recipients addresses
-    pub cc_list: Vec<String>,
+    pub cc_list: RecipientList,
     /// BCC recipients addresses
-    pub bcc_list: Vec<String>,
+    pub bcc_list: RecipientList,
     /// Address used to send the message
     pub address_id: RemoteId,
     /// Draft subject
@@ -222,24 +230,9 @@ impl Draft {
         Ok(Self {
             metadata_id,
             sender: message.sender.address,
-            to_list: message
-                .to_list
-                .value
-                .into_iter()
-                .map(|v| v.address)
-                .collect(),
-            cc_list: message
-                .cc_list
-                .value
-                .into_iter()
-                .map(|v| v.address)
-                .collect(),
-            bcc_list: message
-                .bcc_list
-                .value
-                .into_iter()
-                .map(|v| v.address)
-                .collect(),
+            to_list: RecipientList::from_message_recipients(context, message.to_list.value).await,
+            cc_list: RecipientList::from_message_recipients(context, message.cc_list.value).await,
+            bcc_list: RecipientList::from_message_recipients(context, message.bcc_list.value).await,
             address_id: message.remote_address_id,
             subject: message.subject,
             body: body.body,
@@ -296,11 +289,11 @@ impl Draft {
         Self {
             metadata_id,
             sender: address.email.clone(),
-            to_list: Vec::new(),
-            cc_list: Vec::new(),
-            bcc_list: Vec::new(),
+            to_list: RecipientList::new(),
+            cc_list: RecipientList::new(),
+            bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
-            subject: compose::DEFAULT_SUBJECT.to_owned(),
+            subject: String::new(),
             body,
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
@@ -391,6 +384,7 @@ impl Draft {
         tx.commit().await?;
 
         Ok(Self::new_draft_reply(
+            context,
             metadata.id.unwrap(),
             reply_mode,
             &address,
@@ -399,7 +393,8 @@ impl Draft {
             source_body_metadata,
             source_body,
             use_utc,
-        ))
+        )
+        .await)
     }
 
     /// Create a draft reply.
@@ -416,7 +411,8 @@ impl Draft {
     ///
     /// Note: This function is separate so it is easier to test.
     #[allow(clippy::too_many_arguments)]
-    fn new_draft_reply(
+    async fn new_draft_reply(
+        contact_group_resolver: &impl ContactGroupResolver,
         metadata_id: MetadataId,
         reply_mode: ReplyMode,
         address: &Address,
@@ -443,9 +439,9 @@ impl Draft {
         let mut draft = Self {
             metadata_id,
             sender: address.email.clone(),
-            to_list: vec![],
-            cc_list: vec![],
-            bcc_list: vec![],
+            to_list: RecipientList::new(),
+            cc_list: RecipientList::new(),
+            bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             body,
@@ -461,7 +457,13 @@ impl Draft {
             mime_type: mail_settings.draft_mime_type,
         };
 
-        patch_draft_with_reply_mode(&mut draft, source_message, reply_mode);
+        patch_draft_with_reply_mode(
+            contact_group_resolver,
+            &mut draft,
+            source_message,
+            reply_mode,
+        )
+        .await;
 
         draft
     }

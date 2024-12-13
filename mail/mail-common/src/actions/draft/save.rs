@@ -1,11 +1,9 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
-use crate::datatypes::{
-    AttachmentMetadata, Disposition, MessageRecipient, MessageRecipients, MessageSender,
-    MessageSenders, MimeType,
-};
+use crate::datatypes::{AttachmentMetadata, Disposition, MessageSender, MessageSenders, MimeType};
 use crate::decrypted_message::StorableMessageBody;
-use crate::draft::{Draft, Error, ReplyMode};
+use crate::draft::recipients::RecipientList;
+use crate::draft::{compose, Draft, Error, ReplyMode};
 use crate::models::{
     Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
 };
@@ -31,11 +29,11 @@ use tracing::{debug, error};
 pub struct Save {
     metadata_id: MetadataId,
     /// To Recipients - only email to preserve display name privacy
-    to_list: Vec<String>,
+    to_list: RecipientList,
     /// CC Recipients - only email to preserve display name privacy
-    cc_list: Vec<String>,
+    cc_list: RecipientList,
     /// BCC recipients - only email to preserve display name privacy
-    bcc_list: Vec<String>,
+    bcc_list: RecipientList,
     /// Local id of the message this conversation belongs to
     message_id: Option<LocalId>,
     /// Local id of the conversation this message belongs to
@@ -75,7 +73,11 @@ impl Save {
             message_id: None,
             conversation_id: None,
             address_id: draft.address_id.clone(),
-            subject: draft.subject.clone(),
+            subject: if draft.subject.is_empty() {
+                compose::DEFAULT_SUBJECT.to_owned()
+            } else {
+                draft.subject.clone()
+            },
             body: draft.body.clone(),
             attachments: draft
                 .attachments
@@ -160,6 +162,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
+                action.subject.clone(),
             );
             conversation
                 .save(tether)
@@ -454,8 +457,8 @@ impl Save {
             local_address_id: address.local_id.unwrap(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
-            cc_list: to_message_recipients(&self.cc_list),
-            bcc_list: to_message_recipients(&self.bcc_list),
+            cc_list: self.cc_list.to_message_recipients().into(),
+            bcc_list: self.bcc_list.to_message_recipients().into(),
             deleted: false,
             exclusive_location: None,
             expiration_time: 0,
@@ -480,7 +483,7 @@ impl Save {
             snooze_time: 0,
             subject: self.subject.clone(),
             time,
-            to_list: to_message_recipients(&self.to_list),
+            to_list: self.to_list.to_message_recipients().into(),
             unread: false,
             custom_labels: vec![],
             row_id: None,
@@ -499,9 +502,9 @@ impl Save {
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
-        message.to_list = to_message_recipients(&self.to_list);
-        message.cc_list = to_message_recipients(&self.cc_list);
-        message.bcc_list = to_message_recipients(&self.bcc_list);
+        message.to_list = self.to_list.to_message_recipients().into();
+        message.cc_list = self.cc_list.to_message_recipients().into();
+        message.bcc_list = self.bcc_list.to_message_recipients().into();
         message.num_attachments = num_attachments.try_into().unwrap_or_default();
         message.sender = MessageSender {
             address: address.email.clone(),
@@ -522,6 +525,7 @@ impl Save {
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
+        subject: String,
     ) -> Conversation {
         Conversation {
             local_id: None,
@@ -546,7 +550,7 @@ impl Save {
                 }],
             },
             size: body_len,
-            subject: self.subject.clone(),
+            subject,
             is_known: false,
             custom_labels: vec![],
             has_messages: false,
@@ -563,23 +567,6 @@ impl Save {
             .filter(|attachment| attachment.disposition == Disposition::Attachment)
             .map(|attachment| AttachmentMetadata::from(attachment.clone()))
             .collect()
-    }
-}
-
-fn to_message_recipients<'a>(addresses: impl IntoIterator<Item = &'a String>) -> MessageRecipients {
-    MessageRecipients {
-        value: addresses
-            .into_iter()
-            .map(|email| {
-                //TODO(ET-1416): Resolve contact info.
-                MessageRecipient {
-                    address: email.clone(),
-                    is_proton: false,
-                    name: String::new(),
-                    group: None,
-                }
-            })
-            .collect(),
     }
 }
 
