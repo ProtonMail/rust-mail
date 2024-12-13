@@ -3,14 +3,12 @@ use super::{MailSessionError, MailUserSession};
 #[uniffi::export]
 impl MailUserSession {
     /// Execute exactly one pending action.
-    pub fn execute_pending_action(&self) -> Result<(), MailSessionError> {
-        drop(self.ctx.execute_pending_action());
-        Ok(())
+    pub async fn execute_pending_action(&self) -> Result<(), MailSessionError> {
+        Ok(self.ctx.execute_pending_actions().await?)
     }
 
     /// Execute exactly all pending actions.
-    pub fn execute_pending_actions(&self) -> Result<(), MailSessionError> {
-        drop(self.ctx.execute_pending_actions());
-        Ok(())
+    pub async fn execute_pending_actions(&self) -> Result<(), MailSessionError> {
+        Ok(self.ctx.execute_pending_actions().await?)
     }
 }

@@ -786,6 +786,28 @@ enum Command {
     Delete(Id, oneshot::Sender<QueuedResult<()>>),
 }
 
+impl Debug for Command {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Command::Apply(_) => {
+                write!(f, "Command::Apply")
+            }
+            Command::ExecuteOne(_) => {
+                write!(f, "Command::ExecuteOne")
+            }
+            Command::ExecuteAll(_) => {
+                write!(f, "Command::ExecuteAll")
+            }
+            Command::Cancel(id, _) => {
+                write!(f, "Command::Cancel({id}")
+            }
+            Command::Delete(id, _) => {
+                write!(f, "Command::Delete({id})")
+            }
+        }
+    }
+}
+
 /// The background worker enforces a single execution scope.
 ///
 /// While it is safe to queue action in parallel with queued action execution,
@@ -823,6 +845,7 @@ impl BackgroundWorker {
         // set complete to prevent picking up actions that are already
         // running.
         while let Ok(cmd) = self.receiver.recv_async().await {
+            debug!("Received command: {cmd:?}");
             match cmd {
                 // return channel is embedded in the future due to type erasure.
                 Command::Apply(future) => {
@@ -866,7 +889,7 @@ impl BackgroundWorker {
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
-    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = Level::DEBUG, skip(self, tether))]
     async fn execute_impl(&self, tether: &Tether) -> QueuedResult<Option<Id>> {
         let Some(action) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
