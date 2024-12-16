@@ -79,12 +79,12 @@ path = "core/action-queue"
 registry = "proton"
 
 [workspace.dependencies.proton-api-core]
-version = "0.8"
+version = "0.9"
 path = "core/core-api"
 registry = "proton"
 
 [workspace.dependencies.proton-core-common]
-version = "0.9"
+version = "0.10"
 path = "core/core-common"
 registry = "proton"
 
@@ -119,12 +119,12 @@ path = "core/stash-macros"
 registry = "proton"
 
 [workspace.dependencies.proton-api-mail]
-version = "0.5"
+version = "0.6"
 path = "mail/mail-api"
 registry = "proton"
 
 [workspace.dependencies.proton-mail-common]
-version = "0.8"
+version = "0.9"
 path = "mail/mail-common"
 registry = "proton"
 

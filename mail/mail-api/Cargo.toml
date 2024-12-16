@@ -1,6 +1,6 @@
 [package]
 name = "proton-api-mail"
-version = "0.5.0"
+version = "0.6.0"
 edition.workspace = true
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
