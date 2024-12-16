@@ -118,7 +118,7 @@ async fn test_store_and_delete_remote_items(
     tx.commit().await.unwrap();
 
     let expected = expected.unwrap_or(input);
-    let actual = RollbackItem::all(&tether, None).await.unwrap();
+    let actual = RollbackItem::all(&tether).await.unwrap();
 
     assert_eq!(expected, actual);
 
@@ -130,7 +130,7 @@ async fn test_store_and_delete_remote_items(
     RollbackItem::sync_all(&api, &stash, 2).await.unwrap();
 
     // * RollbackItems are correctly deleted during sync *
-    let actual = RollbackItem::all(&tether, None).await.unwrap();
+    let actual = RollbackItem::all(&tether).await.unwrap();
 
     assert_eq!(actual.len(), 0);
 

@@ -1,7 +1,10 @@
 #![allow(clippy::print_stdout)]
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
+use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::stash::Stash;
 use tokio::spawn as spawn_async;
 
@@ -15,6 +18,19 @@ pub struct Foo {
     #[RowIdField]
     #[serde(skip)]
     row_id: Option<u64>,
+}
+
+struct FooWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for FooWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![Foo::table_name().to_string()]
+    }
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender.send(()).expect("failed to send");
+    }
 }
 
 #[tokio::test]
@@ -31,20 +47,21 @@ async fn test_tracker() {
     .await
     .expect("failed to create table");
 
-    let (sender, receiver) = flume::unbounded::<ResultsetChange<Foo, u64>>();
-    let results = Foo::find(String::new(), vec![], &conn, Some(sender))
-        .await
-        .expect("Failed to run query");
-    println!(">> {results:?}");
+    let receiver = stash
+        .subscribe_to(|sender| Box::new(FooWatcher { sender }))
+        .unwrap()
+        .receiver;
 
     let mut join_handles = Vec::new();
     for _ in 0..3 {
         let stash_clone = stash.clone();
         let h = spawn_async(async move {
-            let conn = stash_clone.connection();
-            conn.execute("INSERT INTO foo VALUES (null, 10)", vec![])
+            let mut conn = stash_clone.connection();
+            let tx = conn.transaction().await.expect("failed tx");
+            tx.execute("INSERT INTO foo VALUES (null, 10)", vec![])
                 .await
                 .expect("failed tx");
+            tx.commit().await.expect("failed commit");
         });
 
         join_handles.push(h);
@@ -58,8 +75,7 @@ async fn test_tracker() {
     });
 
     let mut count = 0;
-    while let Ok(change) = receiver.recv_async().await {
-        println!(">> {change:?}");
+    while receiver.recv_async().await.is_ok() {
         count += 1;
         if count >= 3 {
             break;

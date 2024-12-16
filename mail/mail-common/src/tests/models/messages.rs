@@ -1132,9 +1132,7 @@ async fn test_message_counts() {
         .await
         .expect("failed to creat counters");
     tx.commit().await.unwrap();
-    let db_labels = Label::all(&tether, None)
-        .await
-        .expect("failed to get counters");
+    let db_labels = Label::all(&tether).await.expect("failed to get counters");
     let db_counters = db_labels
         .iter()
         .map(|c| MessageCount {
@@ -1311,7 +1309,6 @@ pub async fn test_delete_local_message() {
             "WHERE local_id = ? AND deleted = 0",
             params![local_conv_id],
             &conn,
-            None
         )
         .await
         .unwrap()
@@ -1327,9 +1324,7 @@ pub async fn test_message_metadata_list() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut conn, &mut state.addresses).await;
     let (_, _state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
-    let messages = Message::all(&conn, None)
-        .await
-        .expect("failed to get messages");
+    let messages = Message::all(&conn).await.expect("failed to get messages");
     assert_eq!(messages.len(), 3);
     assert!(messages[0].time > messages[1].time);
     assert!(messages[1].time > messages[2].time);
@@ -2598,22 +2593,26 @@ async fn watch_messages_in_label() {
         .expect("failed to label");
     tx.commit().await.unwrap();
 
-    let (_, watch_result) = Message::watch_in_label(local_msg_id1, &conn).await.unwrap();
+    let watch_result = Message::watch(&stash).unwrap().receiver;
 
     tokio::spawn(async move {
         //bypass model to only execute exactly 2 queries.
-        conn.execute(
+        let tx = conn.transaction().await.unwrap();
+        tx.execute(
             "UPDATE messages SET unread=1 WHERE local_id=?",
             params![local_msg_id1],
         )
         .await
         .unwrap();
-        conn.execute(
+        tx.commit().await.unwrap();
+        let tx = conn.transaction().await.unwrap();
+        tx.execute(
             "UPDATE labels SET color='OxFFFFFF' WHERE local_id=?",
             params![local_label_id1],
         )
         .await
         .unwrap();
+        tx.commit().await.unwrap();
     });
 
     // first update when modifying message

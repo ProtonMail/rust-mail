@@ -297,43 +297,31 @@ pub fn message_counts_for_conversation(
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, ConversationCount> {
-    BTreeMap::from_iter(
-        Label::all(tether, None)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|c| {
-                (
-                    c.local_id.unwrap(),
-                    ConversationCount {
-                        label_id: c.remote_id.clone().unwrap(),
-                        total: c.total_conv,
-                        unread: c.unread_conv,
-                    },
-                )
-            }),
-    )
+    BTreeMap::from_iter(Label::all(tether).await.unwrap().into_iter().map(|c| {
+        (
+            c.local_id.unwrap(),
+            ConversationCount {
+                label_id: c.remote_id.clone().unwrap(),
+                total: c.total_conv,
+                unread: c.unread_conv,
+            },
+        )
+    }))
 }
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, MessageCount> {
-    BTreeMap::from_iter(
-        Label::all(tether, None)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|c| {
-                (
-                    c.local_id.unwrap(),
-                    MessageCount {
-                        label_id: c.remote_id.clone().unwrap(),
-                        total: c.total_msg,
-                        unread: c.unread_msg,
-                    },
-                )
-            }),
-    )
+    BTreeMap::from_iter(Label::all(tether).await.unwrap().into_iter().map(|c| {
+        (
+            c.local_id.unwrap(),
+            MessageCount {
+                label_id: c.remote_id.clone().unwrap(),
+                total: c.total_msg,
+                unread: c.unread_msg,
+            },
+        )
+    }))
 }
 
 /// # Panics

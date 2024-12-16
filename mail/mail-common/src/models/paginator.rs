@@ -1,37 +1,32 @@
-use crate::datatypes::LabelType;
-use crate::AppError;
 use proton_core_common::paginator::{DataSource, Paginator};
-use stash::params;
-use stash::stash::StashError;
-use stash::{orm::Model, stash::Tether};
+use stash::orm::Model;
+use stash::stash::{StashError, WatcherHandle};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::models::Label;
-
 /// Gets a watcher for move_to actions. This works for both messages and conversations.
-pub async fn watch_available_move_to_actions(
-    sender: flume::Sender<()>,
-    tether: &Tether,
-) -> Result<(), AppError> {
-    let (tx, rx) = flume::unbounded();
-    _ = Label::find(
-        "WHERE label_type = ?",
-        params![LabelType::Folder],
-        tether,
-        Some(tx),
-    )
-    .await?;
+// pub async fn watch_available_move_to_actions(
+//     sender: flume::Sender<()>,
+//     tether: &Tether,
+// ) -> Result<(), AppError> {
+//     let (tx, rx) = flume::unbounded();
+//     _ = Label::find(
+//         "WHERE label_type = ?",
+//         params![LabelType::Folder],
+//         tether,
+//         Some(tx),
+//     )
+//     .await?;
 
-    tokio::spawn(async move {
-        while rx.recv_async().await.is_ok() {
-            if sender.send(()).is_err() {
-                return;
-            };
-        }
-    });
+//     tokio::spawn(async move {
+//         while rx.recv_async().await.is_ok() {
+//             if sender.send(()).is_err() {
+//                 return;
+//             };
+//         }
+//     });
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 /// Compatibility layer to map new behavior over old paginator code.
 ///
@@ -81,6 +76,10 @@ impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
     #[inline]
     pub async fn reload(&self) -> Result<Vec<T>, StashError> {
         self.paginator.reload().await
+    }
+
+    pub fn watch(&self) -> Result<WatcherHandle, StashError> {
+        self.paginator.watch()
     }
 }
 

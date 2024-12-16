@@ -84,11 +84,11 @@ pub async fn watch_contact_list(
     let user_context = session.ctx();
     uniffi_async(async move {
         let callback = damp_contacts_callback(session.clone(), callback);
-        let watcher = WatchHandle::new();
-        let (contact_list, channel) =
+        let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
+        let watcher = WatchHandle::new(user_context.user_stash(), handle.handle);
 
-        watch_channel_inner(&watcher, channel, callback);
+        watch_channel_inner(&watcher, handle.receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),

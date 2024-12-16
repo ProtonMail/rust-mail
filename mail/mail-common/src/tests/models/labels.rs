@@ -532,10 +532,11 @@ async fn test_watch_label() {
     label.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &tether)
+    let db_label = Label::load(label.local_id.unwrap(), &tether)
         .await
         .unwrap()
         .unwrap();
+    let watcher = Label::watch(tether.stash()).unwrap().receiver;
 
     assert_eq!(db_label, label);
 
@@ -554,9 +555,7 @@ async fn compare_remote_labels_with_local(tether: &Tether, remote_labels: Vec<Ap
 }
 
 async fn compare_remote_label_with_local(tether: &Tether, remote_label: ApiLabel) {
-    let local_labels = Label::all(tether, None)
-        .await
-        .expect("failed to get labels");
+    let local_labels = Label::all(tether).await.expect("failed to get labels");
     let find_label = |id: &LabelId| -> &Label {
         local_labels
             .iter()

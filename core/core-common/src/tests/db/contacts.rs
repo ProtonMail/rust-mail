@@ -80,13 +80,13 @@ async fn test_partial_contact() {
     assert_eq!(mail.canonical_email, "contact_email_1@contact.test");
 
     // Query all test contact mails.
-    let mails = ContactEmail::find("LIMIT 100", vec![], &tether, None)
+    let mails = ContactEmail::find("LIMIT 100", vec![], &tether)
         .await
         .expect("failed to query email");
     assert_eq!(mails.len(), contact_emails.len());
 
     // Query all contacts.
-    let mut contacts = Contact::find("LIMIT 100", vec![], &tether, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], &tether)
         .await
         .expect("failed to query contacts");
     let contact = contacts.first_mut().unwrap();

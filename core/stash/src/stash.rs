@@ -383,7 +383,9 @@
 //!
 
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
+use core::fmt;
 use core::fmt::Debug;
+use core::future::Future;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::null;
@@ -398,6 +400,13 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
+use sqlite_watcher::connection::SqlConnectionAsync;
+use sqlite_watcher::connection::SqlExecutorAsync;
+use sqlite_watcher::connection::SqlTransactionAsync;
+use sqlite_watcher::connection::State;
+use sqlite_watcher::watcher::TableObserver;
+use sqlite_watcher::watcher::TableObserverHandle;
+use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
@@ -635,6 +644,11 @@ pub enum StashError {
     /// has ended up in the wrong place. This should never happen in practice.
     #[error("Subscription error")]
     SubscriptionError,
+
+    /// There was a problem with subscriptions. For some reason the subscription
+    /// has ended up in the wrong place. This should never happen in practice.
+    #[error("Watcher error: `{0}`")]
+    WatcherError(String),
 
     /// There was a problem establishing a tether to the [`Stash`], which could
     /// be to do with creating the actual stash, or connecting to the service.
@@ -1197,7 +1211,7 @@ impl OperationLogic for Query {
 /// not return any rows of data. Note, however, that this method may be removed
 /// in future if it does not prove to be useful in practice.
 ///
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Stash {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify an individual stash. The handle is an atomic counter,
@@ -1210,8 +1224,24 @@ pub struct Stash {
     /// thread-safe.
     queue: QueueSender<Operation>,
 
+    /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
+    /// database for changes and notify subscribers. This is used to provide
+    /// real-time updates to any subscribers that have registered interest in
+    /// changes to the database for given tables.
+    watcher: Arc<Watcher>,
+
     /// Statistics gathered over the lifetime of the [`Stash`].
     stats: Arc<Mutex<Stats>>,
+}
+
+impl Debug for Stash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Stash")
+            .field("handle", &self.handle)
+            .field("queue", &self.queue)
+            .field("stats", &self.stats)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Stash {
@@ -1255,6 +1285,7 @@ impl Stash {
         let stash = Self {
             handle: Arc::new(()),
             queue: sender,
+            watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
             stats: Arc::new(Mutex::new(Stats::default())),
         };
         Worker::start(path, receiver, stash.clone())?;
@@ -1401,6 +1432,7 @@ impl Stash {
             queue: self.queue.clone(),
             start_time: Arc::new(Instant::now()),
             stash: self.clone(),
+            state: Some(State::new()),
         }
     }
 
@@ -1462,11 +1494,16 @@ impl Stash {
     /// # Errors
     ///
     /// See [`Stash::subscribe()`].
-    pub async fn subscribe_to(
-        &self,
-        table: &str,
-    ) -> Result<QueueReceiver<Notification>, StashError> {
-        self.subscribe_internal(Some(table.to_owned())).await
+    pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
+    where
+        F: Fn(flume::Sender<()>) -> Box<dyn TableObserver>,
+    {
+        let (sender, receiver) = flume::unbounded();
+        let handle = self.watcher.add_observer(observer(sender)).map_err(|e| {
+            StashError::Custom(format!("Could not observe requested table, details: `{e}`"))
+        })?;
+
+        Ok(WatcherHandle { receiver, handle })
     }
 
     /// Internal helper method to handle database change subscriptions.
@@ -1509,6 +1546,17 @@ impl Stash {
     pub fn stats(&self) -> Stats {
         self.stats.lock().clone()
     }
+
+    /// Unsubscribes from notifications of changes to the database.
+    ///
+    /// ### Errors
+    /// Will return a [`StashError::WatcherError`] if the removal of the observer fails.
+    ///
+    pub fn unsubscribe_to(&self, handle: TableObserverHandle) -> Result<(), StashError> {
+        self.watcher
+            .remove_observer(handle)
+            .map_err(|e| StashError::WatcherError(e.to_string()))
+    }
 }
 
 impl Eq for Stash {}
@@ -1517,6 +1565,16 @@ impl PartialEq for Stash {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.handle, &other.handle)
     }
+}
+
+/// A handle to a database connection watcher.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct WatcherHandle {
+    /// The receiver for the notifications.
+    pub receiver: flume::Receiver<()>,
+    /// The handle to stop the watcher.
+    pub handle: TableObserverHandle,
 }
 
 /// Statistics about the current state of the [`Stash`] instance.
@@ -1733,7 +1791,6 @@ impl OperationLogic for Subscription {
 ///
 /// * [`Stash::connection()`]
 ///
-#[derive(Debug)]
 pub struct Tether {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify and specify the associated connection when any database
@@ -1750,6 +1807,21 @@ pub struct Tether {
 
     /// The associated [`Stash`] instance.
     stash: Stash,
+
+    /// State needed for the connection to be updated on transaction start and
+    /// published at the end.
+    state: Option<State>,
+}
+
+impl Debug for Tether {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tether")
+            .field("handle", &self.handle)
+            .field("queue", &self.queue)
+            .field("start_time", &self.start_time)
+            .field("stash", &self.stash)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Tether {
@@ -2101,6 +2173,16 @@ impl Tether {
     /// * [`Stash::connection()`]
     ///
     pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
+        self.listen_for_changes().await?;
+        self.transaction_().await
+    }
+
+    /// Internal helper method to start a transaction.
+    ///
+    /// This method is used to start a transaction without listening for changes.
+    /// It is needed for internal implementation of the watch mechanism.
+    ///
+    async fn transaction_(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
             &self.stash,
@@ -2116,6 +2198,97 @@ impl Tether {
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
 
         Ok(Bond::new(self))
+    }
+
+    /// Listens for changes to the database.
+    async fn listen_for_changes(&mut self) -> Result<(), StashError> {
+        let Some(mut state) = self.state.take() else {
+            tracing::error!(
+                "No state found for Tether, something is very wrong with notification system"
+            );
+            return Err(StashError::Custom("No state found for Tether".into()));
+        };
+        let watcher = Arc::clone(&self.stash.watcher);
+
+        state.sync_tables_async(self, &watcher).await?;
+        self.state = Some(state);
+
+        Ok(())
+    }
+
+    /// Publishes changes to the database.
+    async fn publish_changes(&mut self) -> Result<(), StashError> {
+        let Some(mut state) = self.state.take() else {
+            tracing::error!(
+                "No state found for Tether, something is very wrong with notification system"
+            );
+            return Err(StashError::Custom("No state found for Tether".into()));
+        };
+        let watcher = Arc::clone(&self.stash.watcher);
+
+        state.publish_changes_async(self, &watcher).await?;
+        self.state = Some(state);
+
+        Ok(())
+    }
+}
+
+impl SqlExecutorAsync for Tether {
+    type Error = StashError;
+    #[allow(clippy::indexing_slicing)]
+    #[allow(clippy::manual_async_fn)]
+    fn sql_query_values(
+        &mut self,
+        query: &str,
+    ) -> impl Future<Output = Result<Vec<usize>, Self::Error>> + Send {
+        async {
+            let query_parts = query.split(" FROM ").collect::<Vec<&str>>();
+            if query_parts.len() != 2 {
+                return Err(StashError::Custom(
+                    "Invalid query format. Expected 'SELECT ... FROM ...'".into(),
+                ));
+            }
+            let new_query = format!("{} as value FROM {}", query_parts[0], query_parts[1]);
+            self.query_values::<_, usize>(new_query, vec![]).await
+        }
+    }
+
+    #[allow(unused_results)]
+    #[allow(clippy::manual_async_fn)]
+    fn sql_execute(&mut self, query: &str) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        async {
+            self.execute(query.to_owned(), vec![]).await?;
+            Ok(())
+        }
+    }
+}
+
+impl SqlConnectionAsync for Tether {
+    fn sql_transaction(
+        &mut self,
+    ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
+           + Send {
+        self.transaction_()
+    }
+}
+
+impl SqlExecutorAsync for Bond<'_> {
+    type Error = StashError;
+    fn sql_query_values(
+        &mut self,
+        query: &str,
+    ) -> impl Future<Output = Result<Vec<usize>, Self::Error>> + Send {
+        self.tether.sql_query_values(query)
+    }
+
+    fn sql_execute(&mut self, query: &str) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        self.tether.sql_execute(query)
+    }
+}
+
+impl SqlTransactionAsync for Bond<'_> {
+    fn sql_commit_transaction(self) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        self.commit_(false)
     }
 }
 
@@ -2213,8 +2386,17 @@ impl<'tether> Bond<'tether> {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem
     ///     committing the transaction.
     ///
-    #[allow(clippy::mem_forget)]
     pub async fn commit(self) -> Result<(), StashError> {
+        self.commit_(true).await
+    }
+
+    #[allow(clippy::mem_forget)]
+    /// Internal commit implementation.
+
+    /// This method is used to commit a transaction without publishing changes.
+    /// It is needed for internal implementation of the watch mechanism.
+    ///
+    async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
             &self.tether.stash,
@@ -2229,6 +2411,10 @@ impl<'tether> Bond<'tether> {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
+
+        if publish_changes {
+            self.tether.publish_changes().await?;
+        }
 
         // Transaction commited, skip the drop logic
         mem::forget(self);
@@ -2794,11 +2980,18 @@ impl TetheredWorker {
                             PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
                             PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
                             PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
+                            PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
+                            PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
                         ", BUSY_TIMEOUT.as_millis()))
                         .inspect_err(|err| {
                             error!("Failed to set configuration on connection: {:?}", err);
                         }),
                 );
+                let conn = connection.as_mut().unwrap();
+                drop(State::start_tracking(&mut **conn).inspect_err(|err| {
+                    error!("Failed to set watcher on the connection: {:?}", err);
+                }));
+
                 transaction = Self::handle_operation(
                     operation,
                     connection.as_ref().unwrap(),

@@ -46,6 +46,7 @@ rusqlite = { version = "0.32.1", features = [
     "trace",
     "uuid",
 ] }
+sqlite-watcher = { version = "0.2.1", features = ["rusqlite"] }
 scraper = "0.19.0"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -200,4 +201,3 @@ debug = true
 
 [profile.release]
 panic = "abort"
-

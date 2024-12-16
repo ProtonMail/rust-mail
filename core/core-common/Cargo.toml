@@ -38,6 +38,7 @@ uuid = { workspace = true }
 zeroize = { workspace = true }
 itertools = { workspace = true }
 pretty_assertions = { workspace = true }
+sqlite-watcher = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

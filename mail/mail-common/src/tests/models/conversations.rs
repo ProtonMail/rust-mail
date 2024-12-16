@@ -1038,14 +1038,9 @@ async fn test_unknown_conversation_messages_returns_error() {
     create_address(&mut tether).await;
     let id = 1024;
     assert_eq!(
-        Message::find(
-            "WHERE local_conversation_id = ?",
-            params![id],
-            &tether,
-            None
-        )
-        .await
-        .expect("failed to get messages"),
+        Message::find("WHERE local_conversation_id = ?", params![id], &tether,)
+            .await
+            .expect("failed to get messages"),
         vec![]
     );
 }
@@ -1633,7 +1628,7 @@ async fn test_conversation_delete_all_mail() {
         .expect("failed to mark conv as deleted");
     tx.commit().await.expect("failed to commit");
 
-    for count in Label::all(&tether, None).await.unwrap() {
+    for count in Label::all(&tether).await.unwrap() {
         assert_eq!(
             count.total_msg, 0,
             "Label {:?} does not have 0 total count",
@@ -1945,9 +1940,7 @@ async fn test_conversation_counts() {
         .expect("failed to creat counters");
     tx.commit().await.expect("failed to commit");
 
-    let db_labels = Label::all(&tether, None)
-        .await
-        .expect("failed to get counters");
+    let db_labels = Label::all(&tether).await.expect("failed to get counters");
     let db_counters = db_labels
         .iter()
         .map(|c| ConversationCount {
@@ -2227,7 +2220,6 @@ async fn test_conversation_mark_unread() {
                 AND unread=1",
         params![local_conv_id],
         &tether,
-        None,
     )
     .await
     .unwrap();
@@ -2801,22 +2793,23 @@ async fn test_conversation_watcher() {
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let (_, watch_result) = ContextualConversation::watch_in_label(local_label_id1, &tether)
-        .await
-        .unwrap();
+    let watch_result = ContextualConversation::watch(&stash).unwrap().receiver;
 
     tokio::spawn(async move {
         //bypass model to only execute exactly 2 queries.
-        tether.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
+        let tx = tether.transaction().await.unwrap();
+        tx.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
                    params![30, local_label_id1, local_conv_id],
         ).await.unwrap();
-        tether
-            .execute(
-                "UPDATE conversations SET num_unread=? WHERE local_id=?",
-                params![10, local_conv_id],
-            )
-            .await
-            .unwrap();
+        tx.commit().await.unwrap();
+        let tx = tether.transaction().await.unwrap();
+        tx.execute(
+            "UPDATE conversations SET num_unread=? WHERE local_id=?",
+            params![10, local_conv_id],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
     });
 
     // first update when modifying label
@@ -2840,10 +2833,7 @@ async fn test_contextual_conversation_messages() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
 
-    let watch_result =
-        ContextualConversation::watch_conversation_and_messages(local_conv_id, &tether)
-            .await
-            .unwrap();
+    let watch_result = ContextualConversation::watch(&stash).unwrap().receiver;
 
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)

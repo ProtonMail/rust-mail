@@ -137,20 +137,21 @@
 //!      Check if there's a previous page available.
 //!
 
+use crate::models::ModelExtension;
 use core::error::Error;
 use core::future::Future;
 use core::num::NonZeroU32;
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
-use proton_sqlite3::rusqlite::hooks::Action;
+use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
 use stash::orm::{perform_find, Model, ResultsetChange};
-use stash::stash::{Stash, StashError, Tether};
-use std::collections::{HashMap, HashSet};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
-use tracing::{error, warn};
+use tracing::error;
 
 #[cfg(test)]
 #[path = "tests/paginator/paginator.rs"]
@@ -242,6 +243,10 @@ pub trait DataSource: Send + Sync {
         elements: Vec<Self::Item>,
         tether: &mut Tether,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
+
+    fn watch_tables(&self) -> Vec<String> {
+        vec![Self::Item::table_name().to_string()]
+    }
 }
 
 /// Represents a paginated view of a result set.
@@ -280,6 +285,26 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// The [`DataSource`] from where pagination data will be synced
     /// from.
     remote: Arc<R>,
+}
+
+pub struct PaginatorWatcher<T: Model, R: DataSource<Item = T> + 'static> {
+    sender: flume::Sender<()>,
+    remote: Arc<R>,
+}
+
+impl<T: Model, R: DataSource<Item = T>> TableObserver for PaginatorWatcher<T, R> {
+    fn tables(&self) -> Vec<String> {
+        self.remote.watch_tables()
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for PaginatorWatcher: {}", e);
+            })
+            .ok();
+    }
 }
 
 /// Shared state between the [`Paginator`] and the background watcher.
@@ -355,7 +380,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         page_size: NonZeroU32,
         remote: R,
         local_first: bool,
-        queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
+        _queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<Self, R::Error>
     where
         Q: Into<String> + Send,
@@ -377,9 +402,18 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
         paginator.initialize(local_first).await?;
 
-        paginator.start_update_listener(queue);
+        paginator.start_update_listener();
 
         Ok(paginator)
+    }
+
+    pub fn watch(&self) -> Result<WatcherHandle, StashError> {
+        self.stash.subscribe_to(|sender| {
+            Box::new(PaginatorWatcher {
+                sender,
+                remote: self.remote.clone(),
+            })
+        })
     }
 
     /// Initializes the paginator by fetching the initial set of records.
@@ -409,7 +443,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
             &tether,
-            None,
         )
         .await?;
 
@@ -435,92 +468,38 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     }
 
     /// Starts the update listener to handle live updates.
-    fn start_update_listener(&self, sender: Option<QueueSender<ResultsetChange<T, T::IdType>>>) {
+    fn start_update_listener(&self) {
         let stash = self.stash.clone();
         let query_logic = self.query_logic.clone();
         let params = self.params.clone();
         let shared_cloned = Arc::clone(&self.shared);
         let remote_cloned = Arc::clone(&self.remote);
+        let page_size = self.page_size;
+        let watcher = self.watch().unwrap();
 
         drop(spawn(async move {
-            let changed_query = formatdoc!(
-                "
-                    SELECT
-                        {}.rowid AS rowid, *
-                    FROM
-                        {}
-                    WHERE
-                        rowid = ?
-                    LIMIT
-                        1
-                ",
-                T::table_name(),
-                T::table_name(),
-            );
-            // For now this is blanket subscriber — this will be optimised later to
-            // only listen for changes that are relevant to the current query.
-            if let Ok(receiver) = stash.subscribe().await {
-                loop {
-                    match receiver.recv_async().await {
-                        Ok(notification) => {
-                            if notification.table != T::table_name() {
-                                continue;
-                            }
-
-                            let mut shared = shared_cloned.lock().await;
-
-                            // Update initial synced records
-
-                            match notification.action {
-                                Action::SQLITE_DELETE => {
-                                    // Always handle delete, but we still need to remove
-                                    // the element.
-                                    shared.recently_synced.remove(&notification.row);
-                                }
-                                Action::SQLITE_INSERT => {
-                                    // If a record is inserted and matches a recently synced id
-                                    // we can ignore this notification.
-                                    if shared.recently_synced.remove(&notification.row) {
-                                        continue;
-                                    }
-                                }
-                                Action::SQLITE_UPDATE => {
-                                    // Always handle update
-                                }
-                                _ => {
-                                    warn!("Unknown action");
-                                }
-                            }
-
-                            if let Some(change) = T::handle_notification(
-                                notification,
-                                // We don't use this in the same way here
-                                &mut HashMap::new(),
-                                &stash,
-                                &changed_query,
-                            )
-                            .await
-                            {
-                                if let Err(e) = Self::handle_change(
-                                    &change,
-                                    &query_logic,
-                                    params.clone(),
-                                    &mut shared,
-                                    &remote_cloned,
-                                    &stash,
-                                    sender.as_ref(),
-                                )
-                                .await
-                                {
-                                    error!("Error handling change: {:?}", e);
-                                }
-                            }
+            let receiver = &watcher.receiver;
+            loop {
+                match receiver.recv_async().await {
+                    Ok(()) => {
+                        let mut shared = shared_cloned.lock().await;
+                        if let Err(e) = Self::handle_change(
+                            &query_logic,
+                            params.clone(),
+                            &mut shared,
+                            &remote_cloned,
+                            &stash,
+                            page_size,
+                        )
+                        .await
+                        {
+                            error!("Error handling change: {:?}", e);
                         }
-                        Err(error) => {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Lost connection to change feed: {error}");
-                            break;
-                        }
+                    }
+                    Err(e) => {
+                        // In theory this should never happen, but we also can't do anything with it
+                        error!("Lost connection to change feed: {e}");
+                        break;
                     }
                 }
             }
@@ -545,117 +524,104 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     #[allow(clippy::too_many_arguments)]
     async fn handle_change(
-        change: &ResultsetChange<T, T::IdType>,
         query_logic: &str,
         params: Vec<Param>,
         shared: &mut Shared,
         remote: &Arc<R>,
         stash: &Stash,
-        sender: Option<&flume::Sender<ResultsetChange<T, T::IdType>>>,
+        page_size: NonZeroU32,
     ) -> Result<(), StashError> {
         let tether = stash.connection();
-        match *change {
-            ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
-                // Re-run the query to check if the cursor position needs to change. This
-                // gets the first record at the offset of the cursor, and if doesn't have
-                // the same ID as the current cursor record, we need to adjust the cursor.
-                let cursor_record: Option<T> = perform_find(
-                    #[allow(clippy::unwrap_used)]
-                    &paging_query(
-                        query_logic,
-                        shared.cursor_index,
-                        NonZeroU32::new(1).unwrap(),
-                    ),
-                    convert_params(&params),
-                    &tether,
-                    None,
-                )
-                .await?
-                .into_iter()
-                .next();
+        // Re-run the query to check if the cursor position needs to change. This
+        // gets the first record at the offset of the cursor, and if doesn't have
+        // the same ID as the current cursor record, we need to adjust the cursor.
+        let cursor_record: Option<T> = perform_find(
+            #[allow(clippy::unwrap_used)]
+            &paging_query(
+                query_logic,
+                shared.cursor_index,
+                NonZeroU32::new(1).unwrap(),
+            ),
+            convert_params(&params),
+            &tether,
+        )
+        .await?
+        .into_iter()
+        .next();
 
-                match cursor_record {
-                    Some(record) => {
-                        if let Some(cursor_row_id) = shared.cursor_row_id {
-                            #[allow(clippy::cast_lossless, clippy::unwrap_used)]
-                            if cursor_row_id != record.row_id().unwrap() {
-                                // The change was made before the cursor position
-                                if let ResultsetChange::Inserted(_) = *change {
-                                    shared.cursor_index = shared.cursor_index.saturating_add(1);
-                                } else if let ResultsetChange::Deleted(_) = *change {
-                                    shared.cursor_index = shared.cursor_index.saturating_sub(1);
-                                }
-                            }
-                        }
+        match cursor_record {
+            Some(record) => {
+                if let Some(cursor_row_id) = shared.cursor_row_id {
+                    let loaded_items_count = shared.cursor_index.saturating_add(page_size.into());
+
+                    #[allow(clippy::cast_lossless, clippy::unwrap_used)]
+                    if cursor_row_id != record.row_id().unwrap() {
+                        // The change was made before the cursor position
+                        let new_cursor_index = T::count(
+                            paging_query(
+                                query_logic,
+                                0,
+                                NonZeroU32::new(loaded_items_count).unwrap(),
+                            ),
+                            convert_params(&params),
+                            &tether,
+                        )
+                        .await?;
+
+                        // TODO: should we check modulo?
+                        let new_cursor_index = u32::try_from(new_cursor_index)
+                            .unwrap()
+                            .saturating_sub(page_size.into())
+                            .saturating_sub(1);
                         // Update cursor
                         shared.cursor_row_id = record.row_id();
-                    }
-                    None => {
-                        // We've reached the end of the result set, meaning a deletion before the
-                        // cursor position
-                        if let ResultsetChange::Deleted(_) = *change {
-                            // try to find something a valid element for the cursor.
-                            loop {
-                                shared.cursor_index = shared.cursor_index.saturating_sub(1);
-                                if let Some(cursor_record) = perform_find::<_, T>(
-                                    #[allow(clippy::unwrap_used)]
-                                    &paging_query(
-                                        query_logic,
-                                        shared.cursor_index,
-                                        NonZeroU32::new(1).unwrap(),
-                                    ),
-                                    convert_params(&params),
-                                    &tether,
-                                    None,
-                                )
-                                .await?
-                                .into_iter()
-                                .next()
-                                {
-                                    shared.cursor_row_id = Some(cursor_record.row_id().unwrap());
-                                    break;
-                                }
-
-                                // if we reach this point and we still don't
-                                // have an element then there is nothing left.
-                                if shared.cursor_index == 0 {
-                                    shared.cursor_row_id = None;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                match remote.total(&tether).await {
-                    Ok(v) => {
-                        if let Ok(v) = v.try_into() {
-                            shared.row_count = v;
-                        }
-                    }
-                    Err(_) => {
-                        // fallback
-                        if let ResultsetChange::Inserted(_) = *change {
-                            shared.row_count = shared.row_count.saturating_add(1);
-                        } else if let ResultsetChange::Deleted(_) = *change {
-                            shared.row_count = shared.row_count.saturating_sub(1);
-                        }
+                        shared.cursor_index = std::cmp::max(new_cursor_index, shared.cursor_index);
                     }
                 }
             }
-            ResultsetChange::Updated(_) => {
-                // No change to cursor or count for updates
-            }
-            _ => {
-                error!("Pattern not covered");
+            None => {
+                // We've reached the end of the result set, meaning a deletion before the
+                // cursor position
+                // try to find something a valid element for the cursor.
+                loop {
+                    shared.cursor_index = shared.cursor_index.saturating_sub(1);
+                    if let Some(cursor_record) = perform_find::<_, T>(
+                        #[allow(clippy::unwrap_used)]
+                        &paging_query(
+                            query_logic,
+                            shared.cursor_index,
+                            NonZeroU32::new(1).unwrap(),
+                        ),
+                        convert_params(&params),
+                        &tether,
+                    )
+                    .await?
+                    .into_iter()
+                    .next()
+                    {
+                        shared.cursor_row_id = Some(cursor_record.row_id().unwrap());
+                        break;
+                    }
+
+                    // if we reach this point and we still don't
+                    // have an element then there is nothing left.
+                    if shared.cursor_index == 0 {
+                        shared.cursor_row_id = None;
+                        break;
+                    }
+                }
             }
         }
 
-        // Notify the client of the change if they have subscribed.
-        if let Some(sender) = sender {
-            sender
-                .send(change.clone())
-                .map_err(|_err| StashError::Custom("Failed to send update".into()))?;
+        match remote.total(&tether).await {
+            Ok(v) => {
+                if let Ok(v) = v.try_into() {
+                    shared.row_count = v;
+                }
+            }
+            Err(_) => {
+                tracing::error!("Failed to get total count");
+            }
         }
 
         Ok(())
@@ -691,7 +657,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             paging_query(&self.query_logic, cursor_index, self.page_size),
             convert_params(&self.params),
             tether,
-            None,
         )
         .await
     }
@@ -726,7 +691,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             paging_query(&self.query_logic, next_index, NonZeroU32::new(1).unwrap()),
             convert_params(&self.params),
             &tether,
-            None,
         )
         .await?
         .into_iter()
@@ -785,7 +749,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             ),
             convert_params(&self.params),
             &tether,
-            None,
         )
         .await
     }

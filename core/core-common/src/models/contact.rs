@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
@@ -11,10 +13,11 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
+use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, error};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -126,7 +129,6 @@ impl Contact {
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
             tether,
-            None,
         )
         .await?;
 
@@ -147,7 +149,6 @@ impl Contact {
             "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
             tether,
-            None,
         )
         .await?;
         Ok(&self.contact_emails)
@@ -361,7 +362,7 @@ impl Contact {
     /// when querying the database fails.
     ///
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
-        let mut contacts = Contact::find("WHERE deleted = 0", vec![], tether, None).await?;
+        let mut contacts = Contact::find("WHERE deleted = 0", vec![], tether).await?;
 
         for contact in &mut contacts {
             contact.emails(tether).await?;
@@ -415,42 +416,12 @@ impl Contact {
 
     pub async fn watch_contact_list(
         stash: &Stash,
-    ) -> Result<(Vec<GroupedContacts>, flume::Receiver<()>), StashError> {
-        let (contact_sender, contact_receiver) = flume::unbounded();
-        let (contact_email_sender, contact_email_receiver) = flume::unbounded();
-        let (cb_sender, cb_receiver) = flume::unbounded();
+    ) -> Result<(Vec<GroupedContacts>, WatcherHandle), StashError> {
+        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
         let tether = stash.connection();
+        let contacts = Contact::contact_list(&tether).await?;
 
-        let (contacts, _, _) = futures::try_join!(
-            Self::contact_list(&tether),
-            Contact::find("WHERE deleted = 0", vec![], &tether, Some(contact_sender)),
-            ContactEmail::find("", vec![], &tether, Some(contact_email_sender))
-        )?;
-
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                    contact_result = contact_receiver.recv_async() => {
-                        if contact_result.is_err() {
-                            return;
-                        }
-                        if cb_sender.send_async(()).await.is_err() {
-                            return;
-                        }
-                    }
-                    contact_email_result = contact_email_receiver.recv_async() => {
-                        if contact_email_result.is_err() {
-                            return;
-                        }
-                        if cb_sender.send_async(()).await.is_err() {
-                            return;
-                        }
-                    }
-                }
-            }
-        });
-
-        Ok((contacts, cb_receiver))
+        Ok((contacts, handle))
     }
 
     // pub async fn vcard<Provider: PGPProviderSync>(
@@ -524,5 +495,25 @@ impl From<ApiContactFull> for Contact {
             deleted: false,
             row_id: None,
         }
+    }
+}
+
+pub struct ContactListWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for ContactListWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![
+            Contact::table_name().to_string(),
+            ContactEmail::table_name().to_string(),
+        ]
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| error!("Failed to send notification for ContactListWatcher: {e}"))
+            .ok();
     }
 }

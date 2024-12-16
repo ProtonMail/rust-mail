@@ -189,7 +189,6 @@ impl Attachment {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
                 params![conversation_id],
                    tether,
-                   None
         )
         .await.map(|v| v.into_iter().map(Into::into).collect())
     }
@@ -206,7 +205,6 @@ impl Attachment {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
                    params![message_id],
                    tether,
-                   None
         )
         .await.map(|v| v.into_iter().map(Into::into).collect())
     }
@@ -380,7 +378,6 @@ impl Attachment {
         "},
             params![local_message_id],
             tether,
-            None,
         )
         .await
     }
@@ -408,7 +405,6 @@ impl Attachment {
             format!("WHERE local_id IN ({})", vec!["?"; params.len()].join(","),),
             params,
             tether,
-            None,
         )
         .await
     }

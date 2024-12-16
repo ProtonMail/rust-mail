@@ -154,7 +154,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
         .unwrap();
 
     // Validation
-    let messages = Message::find("WHERE unread = ?", params![true], &tether, None)
+    let messages = Message::find("WHERE unread = ?", params![true], &tether)
         .await
         .unwrap();
     assert_eq!(messages.len(), expected_unread);
@@ -219,7 +219,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
         .unwrap();
 
     // Validation
-    let messages = Message::find("WHERE unread = ?", params![true], &tether, None)
+    let messages = Message::find("WHERE unread = ?", params![true], &tether)
         .await
         .unwrap();
     assert_eq!(messages.len(), expected_unread);

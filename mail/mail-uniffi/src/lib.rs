@@ -141,6 +141,8 @@
 //! crates that are the subject of the translations.*
 //!
 
+use sqlite_watcher::watcher::TableObserverHandle;
+use stash::stash::{Stash, WatcherHandle};
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -188,25 +190,27 @@ pub trait LiveQueryCallback: Send + Sync {
 pub struct WatchHandle {
     /// A flag to indicate if the live query should be stopped.
     stop_flag: Arc<AtomicBool>,
-}
-
-impl Default for WatchHandle {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// The handle to unsubscribe from the live query.
+    handle: TableObserverHandle,
+    /// Stash instance to access unsubscribe method.
+    stash: Stash,
 }
 
 impl Drop for WatchHandle {
     fn drop(&mut self) {
         self.disconnect();
+        let _ = self.stash.unsubscribe_to(self.handle);
     }
 }
 
 impl WatchHandle {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(stash: &Stash, handle: TableObserverHandle) -> Self {
+        let stash = stash.clone();
         Self {
             stop_flag: Arc::new(AtomicBool::new(false)),
+            handle,
+            stash,
         }
     }
 
@@ -264,13 +268,14 @@ where
 /// The callback is "dampened" to avoid excessive invocations to the callback.
 ///
 #[must_use]
-pub async fn watch_channel<T: Send + 'static>(
-    channel: flume::Receiver<T>,
+pub async fn watch_channel(
+    stash: &Stash,
+    handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new();
+    let watcher = WatchHandle::new(stash, handle.handle);
 
-    watch_channel_inner(&watcher, channel, damp(callback).await);
+    watch_channel_inner(&watcher, handle.receiver, damp(callback).await);
 
     Arc::new(watcher)
 }
@@ -283,13 +288,14 @@ pub async fn watch_channel<T: Send + 'static>(
 /// See [`watch_channel()`] for a dampened version.
 ///
 #[must_use]
-pub fn watch_channel_nodamp<T: Send + 'static>(
-    channel: flume::Receiver<T>,
+pub fn watch_channel_nodamp(
+    stash: &Stash,
+    handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new();
+    let watcher = WatchHandle::new(stash, handle.handle);
 
-    watch_channel_inner(&watcher, channel, move || callback.on_update());
+    watch_channel_inner(&watcher, handle.receiver, move || callback.on_update());
 
     Arc::new(watcher)
 }

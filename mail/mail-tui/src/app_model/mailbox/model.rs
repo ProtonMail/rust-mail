@@ -22,7 +22,6 @@ use proton_mail_common::{
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
-use stash::orm::ResultsetChange;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
@@ -135,31 +134,33 @@ impl Model {
         let label_id = self.label.local_id.unwrap();
         Command::task(async move {
             let tether = ctx.user_stash().connection();
-            match Label::watch(label_id, &tether).await {
-                Ok(receiver) => {
-                    if let Some((label, receiver)) = receiver {
-                        let (watcher, background_command) =
-                            WatchHandle::new(receiver, move |change| {
+            let label = Label::find_by_id(label_id, &tether).await;
+            let receiver = Label::watch(ctx.user_stash());
+            let label_and_recevier = label.and_then(|l| receiver.map(|r| (l, r.receiver)));
+            match label_and_recevier {
+                Ok((label, receiver)) => {
+                    if let Some(label) = label {
+                        let (watcher, background_command) = WatchHandle::new(receiver, move |()| {
+                            let ctx_clone = ctx.clone();
+                            async move {
+                                let tether = ctx_clone.user_stash().connection();
                                 let label_id = label.local_id.unwrap();
-                                async move {
-                                    match change {
-                                        ResultsetChange::Deleted(id) => {
-                                            if label_id == id {
-                                                tracing::warn!("Received delete on current label");
-                                            }
-                                            None
-                                        }
-                                        ResultsetChange::Inserted(label)
-                                        | ResultsetChange::Updated(label) => {
-                                            Some(Message::LabelRefreshed(label).into())
-                                        }
-                                        _ => {
-                                            panic!("unhandled pattern")
-                                        }
-                                    }
-                                }
-                                .boxed()
-                            });
+
+                                Label::find_by_id(label_id, &tether)
+                                    .await
+                                    .inspect_err(|e| tracing::error!("Failed to get label: `{e}`"))
+                                    .ok()
+                                    .flatten()
+                                    .map(|label| Message::LabelRefreshed(label).into())
+                                    .or_else(|| {
+                                        tracing::warn!(
+                                            "Received change which deleted current label"
+                                        );
+                                        None
+                                    })
+                            }
+                            .boxed()
+                        });
                         Command::batch([
                             Command::message(Message::NewLabelWatcher(watcher).into()),
                             background_command,
