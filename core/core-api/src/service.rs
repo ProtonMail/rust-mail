@@ -2,6 +2,7 @@
 
 use crate::services::proton::prelude::*;
 use crate::store::StoreError;
+use muon::{Method, Status};
 use serde_json::Error as JsonError;
 use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
@@ -78,7 +79,7 @@ pub enum ApiServiceError {
     /// An internal Reqwest error has occurred. This could be due to a network
     /// error, or a misconfiguration, causing the request to fail.
     #[error("Network error: {0}")]
-    NetworkError(#[from] muon::Error),
+    NetworkError(#[source] muon::Error),
 
     /// An internal Reqwest error has occurred, specifically, we have been
     /// redirected.
@@ -133,7 +134,7 @@ pub enum ApiServiceError {
 
     /// Any other HTTP error which is not currently handled.
     #[error("HTTP error {0}: {1}. {2}")]
-    OtherHttpError(muon::Status, String, String),
+    OtherHttpError(Status, String, String),
 
     //  DATA ERRORS
     //==========================================================================
@@ -167,7 +168,7 @@ pub enum ApiServiceError {
 
     /// An unsupported HTTP method was specified.
     #[error("Unsupported HTTP method: {0}")]
-    UnsupportedHttpMethod(muon::Method),
+    UnsupportedHttpMethod(Method),
 
     /// Authentication store operation failed.
     #[error("Authentication Store error: {0}")]

@@ -1,6 +1,7 @@
 use bytes::Bytes;
-use muon::serde_to_query;
+use muon::error::ErrorKind as MuonErrorKind;
 use muon::util::ProtonRequestExt;
+use muon::{serde_to_query, Status};
 use muon::{GET, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use serde::Deserialize;
@@ -157,8 +158,41 @@ impl ProtonCore for Proton {
     }
 }
 
+impl From<muon::Error> for ApiServiceError {
+    fn from(e: muon::Error) -> Self {
+        match e.kind() {
+            MuonErrorKind::Auth => todo!(),
+            MuonErrorKind::Tls => todo!(),
+            MuonErrorKind::Resolve => todo!(),
+            MuonErrorKind::Dial => todo!(),
+            MuonErrorKind::Connect => todo!(),
+            MuonErrorKind::Send => todo!(),
+            MuonErrorKind::Closed => todo!(),
+            MuonErrorKind::Req => todo!(),
+            MuonErrorKind::Res => todo!(),
+            MuonErrorKind::Other => todo!(),
+        }
+    }
+}
+
 impl From<muon::StatusErr> for ApiServiceError {
-    fn from(_: muon::StatusErr) -> Self {
-        todo!()
+    fn from(ref e @ muon::StatusErr(ref c, ref r): muon::StatusErr) -> Self {
+        let text = match String::from_utf8(r.body().to_owned()) {
+            Ok(b) => b,
+            Err(e) => return Self::Utf8DecodingError(e),
+        };
+
+        match (e.to_string(), c) {
+            (e, &Status::BAD_REQUEST) => Self::BadGateway(e, text),
+            (e, &Status::UNAUTHORIZED) => Self::Unauthorized(e, text),
+            (e, &Status::NOT_FOUND) => Self::NotFound(e, text),
+            (e, &Status::UNPROCESSABLE_ENTITY) => Self::UnprocessableEntity(e, text),
+            (e, &Status::TOO_MANY_REQUESTS) => Self::TooManyRequest(e, text),
+            (e, &Status::INTERNAL_SERVER_ERROR) => Self::InternalServerError(e, text),
+            (e, &Status::NOT_IMPLEMENTED) => Self::NotImplemented(e, text),
+            (e, &Status::BAD_GATEWAY) => Self::BadGateway(e, text),
+            (e, &Status::SERVICE_UNAVAILABLE) => Self::ServiceUnavailable(e, text),
+            (e, &other) => Self::OtherHttpError(other, e, text),
+        }
     }
 }
