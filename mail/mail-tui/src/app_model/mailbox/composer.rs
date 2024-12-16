@@ -100,7 +100,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::open(&context, message_id).await {
+                    match Draft::open(context, message_id).await {
                         Ok(draft) => {
                             Command::message(Message::OpenComposer(Composer::new(draft)).into())
                         }

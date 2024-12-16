@@ -4,12 +4,18 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::errors::{UserSessionError, VoidSessionResult};
-use crate::{core::datatypes::User, uniffi_async};
+use crate::errors::{ActionError, UserSessionError, VoidSessionResult};
+use crate::MapIntoResult;
+use crate::{
+    core::datatypes::{Id, User},
+    uniffi_async,
+};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
 use std::sync::Arc;
+
+use super::datatypes::AttachmentMetadata;
 
 /// [`MailUserSession`] represents an active user session.
 ///
@@ -108,6 +114,57 @@ impl MailUserSession {
         .await
         .map_err(UserSessionError::from)
     }
+
+    /// Loads the metadata and file path for the given local [`attachment_id`]
+    /// into a [`DecryptedAttachment`].
+    ///
+    /// If the attachment is not present on the device it is retrieved from
+    /// the server, decrypted and stored in the cache.
+    ///
+    /// Additionally, attempts to verify any attached signatures with the
+    /// sender's keys. The result can be accessed via the [`VerificationResult`]
+    /// result return type.
+    ///
+    /// # Warning
+    ///
+    /// Signature verification is currently always failing since no sender keys
+    /// are fetched yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the encrypted attachment fetching or decryption fails.
+    /// Signature verification failures are not returned as errors.
+    pub async fn get_attachment(
+        &self,
+        local_attachment_id: Id,
+    ) -> Result<DecryptedAttachment, ActionError> {
+        let ctx = self.ctx();
+        uniffi_async(async move {
+            ctx.get_attachment(local_attachment_id.into())
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_into()
+    }
+}
+
+impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
+    fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
+        Self {
+            attachment_metadata: value.attachment_metadata.into(),
+            data_path: value.data_path.to_str().expect("valid path").to_owned(),
+        }
+    }
+}
+
+/// Returned by [`Mailbox::get_attachment`].
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DecryptedAttachment {
+    /// Metadata of the decrypted attachment.
+    pub attachment_metadata: AttachmentMetadata,
+    /// The attachment content.
+    pub data_path: String,
 }
 
 impl MailUserSession {

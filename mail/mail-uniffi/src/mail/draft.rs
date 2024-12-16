@@ -102,8 +102,8 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        let draft = RealDraft::open(&ctx, message_id.into()).await?;
-        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
+        let draft = RealDraft::open(ctx.clone(), message_id.into()).await?;
+        Ok::<_, RealProtonMailError>(Draft::new_impl(ctx, draft))
     })
     .await
     .map_err(DraftError::from)

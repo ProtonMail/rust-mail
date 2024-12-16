@@ -1,30 +1,8 @@
 use crate::core::datatypes::Id;
 use crate::errors::ActionError;
-use crate::mail::datatypes::AttachmentMetadata;
-use crate::mail::Mailbox;
+use crate::mail::{DecryptedAttachment, Mailbox};
 use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-
-/// Returned by [`Mailbox::get_attachment`].
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct DecryptedAttachment {
-    /// Metadata of the decrypted attachment.
-    pub attachment_metadata: AttachmentMetadata,
-    /// The attachment content.
-    pub data_path: String,
-    // /// The result of the signature verification.
-    // pub verification_result: Arc<SignatureVerificationResult>,
-}
-
-impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
-    fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
-        Self {
-            attachment_metadata: value.attachment_metadata.into(),
-            data_path: value.data_path.to_str().expect("valid path").to_owned(),
-            //            verification_result: Arc::new(value.verification_result.into()),
-        }
-    }
-}
 
 #[proton_uniffi_macros::export_result]
 impl Mailbox {
@@ -53,7 +31,8 @@ impl Mailbox {
     ) -> Result<DecryptedAttachment, ActionError> {
         let mbox = self.mbox.clone();
         uniffi_async(async move {
-            mbox.get_attachment(local_attachment_id.into())
+            mbox.user_context()
+                .get_attachment(local_attachment_id.into())
                 .await
                 .map(Into::into)
                 .map_err(RealProtonMailError::from)

@@ -495,6 +495,41 @@ where
     }
 
     /// Try to get the cached value, if it's not exist, insert it using the given function.
+    /// Use this instead of `get_path_or_insert` if you need the actual bytes.
+    ///
+    /// # params:
+    /// * `key`  - unique identifier for the item.
+    /// * `with` - function to call to get the value to insert.
+    ///
+    /// # Errors
+    /// * if `with` call failed.
+    /// * if file can't be created.
+    /// * if insert in inner cache failed.
+    ///
+    pub async fn get_path_or_insert_data<F, W>(
+        &self,
+        key: &Config::Key,
+        // TODO: use an `impl AsyncFnOnce` instead https://github.com/rust-lang/rust/pull/132706
+        with: W,
+    ) -> CacheResult<CacheData>
+    where
+        W: FnOnce() -> F,
+        F: Future<Output = CacheResult<Vec<u8>>>,
+    {
+        match self.cache.get_value_or_guard_async(key).await {
+            Ok(metadata) => Ok(CacheData::Unloaded(metadata.file_path)),
+            Err(guard) => {
+                let value = with().await?;
+                let metadata = self.create_file(key, &value, None)?;
+                guard
+                    .insert(metadata)
+                    .map_err(|_| CacheError::InsertFailed(format!("{key:?}")))?;
+                Ok(CacheData::Loaded(value))
+            }
+        }
+    }
+
+    /// Try to get the cached value, if it's not exist, insert it using the given function.
     ///
     /// # params:
     /// * `key`  - unique identifier for the item.
@@ -622,5 +657,24 @@ where
             size: file.metadata()?.len(),
             extra: extra.cloned(),
         })
+    }
+}
+
+/// This is an enum that represents a key existing or not.
+/// This is used for efficiency, the first time we request the data we can just return it directly
+/// instead of serializing it, writing it to disk and deserializing it.
+///
+/// In order to get the actual data you just call [`CacheData::load`]
+pub enum CacheData {
+    Loaded(Vec<u8>),
+    Unloaded(PathBuf),
+}
+
+impl CacheData {
+    pub async fn load(self) -> io::Result<Vec<u8>> {
+        match self {
+            CacheData::Loaded(bytes) => Ok(bytes),
+            CacheData::Unloaded(path) => tokio::fs::read(path).await,
+        }
     }
 }

@@ -89,9 +89,10 @@ async fn create_empty_draft() {
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let message_body_metadata = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
-        .await
-        .unwrap();
+    let message_body_metadata =
+        Message::message_body(user_ctx.clone(), draft_message.local_id.unwrap())
+            .await
+            .unwrap();
 
     assert!(message_body_metadata.metadata.attachments.is_empty());
 
@@ -113,7 +114,7 @@ async fn create_empty_draft() {
         .any(|l| { l.remote_label_id == LabelId::drafts().into() }));
 
     // Opening this draft should work;
-    Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    Draft::open(user_ctx, draft_message_id).await.unwrap();
 }
 
 #[tokio::test]
@@ -230,7 +231,7 @@ async fn create_empty_draft_and_save_twice() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening the draft and check if all the information is up to date
-    let draft = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    let draft = Draft::open(user_ctx, draft_message_id).await.unwrap();
     assert_eq!(draft.body, new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
@@ -368,7 +369,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     );
 
     // Create draft.
-    let draft = Draft::open(&user_ctx, message.local_id.unwrap())
+    let draft = Draft::open(user_ctx.clone(), message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -380,7 +381,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     drop(draft);
 
     // Opening this draft again should not create new metadata;
-    let draft = Draft::open(&user_ctx, message.local_id.unwrap())
+    let draft = Draft::open(user_ctx, message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -518,7 +519,7 @@ async fn create_draft_reply_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(&user_ctx, existing_message.local_id.unwrap())
+    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -561,7 +562,7 @@ async fn create_draft_reply_impl(
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let draft_body = Message::message_body(user_ctx.clone(), draft_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -578,7 +579,7 @@ async fn create_draft_reply_impl(
     );
 
     // Opening this draft should work;
-    Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    Draft::open(user_ctx, draft_message_id).await.unwrap();
 
     draft_body
 }

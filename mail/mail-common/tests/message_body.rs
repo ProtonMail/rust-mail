@@ -1,4 +1,3 @@
-use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_common::cache::CacheMessageKey;
@@ -59,9 +58,13 @@ async fn mailbox_message_body_simple() {
         .unlocked_address_keys(&pgp_provider, &address_id)
         .await
         .unwrap();
-    let api = user_ctx.session().api();
     let decrypted_body = saved_message
-        .fetch_message_body(cache, address_keys.clone(), pgp_provider, api, &mut tether)
+        .fetch_message_body(
+            address_keys.clone(),
+            pgp_provider,
+            user_ctx.clone(),
+            &mut tether,
+        )
         .await
         .unwrap();
 
@@ -79,7 +82,7 @@ async fn mailbox_message_body_simple() {
     let pgp_provider = new_pgp_provider();
     // Only one call to API is done
     saved_message
-        .fetch_message_body(cache, address_keys, pgp_provider, api, &mut tether)
+        .fetch_message_body(address_keys, pgp_provider, user_ctx.clone(), &mut tether)
         .await
         .unwrap();
     assert_eq!(cache.len(), 1);
@@ -130,23 +133,29 @@ async fn mailbox_message_body_mime() {
         .unlocked_address_keys(&pgp_provider, &address_id)
         .await
         .unwrap();
-    let api = user_ctx.session().api();
 
     // Action:
     //   * Get message body and PGP attachments
     let decrypted_message = saved_message
-        .fetch_message_body(cache, address_keys.clone(), pgp_provider, api, &mut tether)
+        .fetch_message_body(
+            address_keys.clone(),
+            pgp_provider,
+            user_ctx.clone(),
+            &mut tether,
+        )
         .await
         .unwrap();
 
-    let Err(MailboxError::AppError(AppError::UnknownCid(_, cids))) =
-        Message::get_embedded_attachment(&mailbox, saved_message.id().unwrap(), "fail").await
+    let Err(MailboxError::AppError(AppError::UnknownCid(_, cids))) = decrypted_message
+        .get_embedded_attachment(&user_ctx, "fail")
+        .await
     else {
         panic!("Expected error when passing bad cid");
     };
 
     for cid in cids {
-        Message::get_embedded_attachment(&mailbox, saved_message.id().unwrap(), &cid)
+        decrypted_message
+            .get_embedded_attachment(&user_ctx, &cid)
             .await
             .unwrap();
     }
