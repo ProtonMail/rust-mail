@@ -50,7 +50,7 @@ impl SubmitTotp for WantTfa {
     async fn submit_totp(self, code: String) -> Result<State, LoginError> {
         let client = match self.flow.totp(&code).await {
             Ok(client) => client,
-            Err(_) => return Err(todo!()),
+            Err(err) => return Err(LoginError::FlowTotp(err.into())),
         };
 
         let state = if let Some(pass) = self.pass {

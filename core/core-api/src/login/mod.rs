@@ -26,6 +26,14 @@ pub enum LoginError {
     #[error("Operation is not valid in the current state")]
     InvalidState,
 
+    /// Returned if the initial auth request fails.
+    #[error("Failed to login: {0}")]
+    FlowLogin(#[source] ApiServiceError),
+
+    /// Returned if the 2FA code submission fails.
+    #[error("Failed to submit 2FA code: {0}")]
+    FlowTotp(#[source] ApiServiceError),
+
     /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
     UserFetch(#[source] ApiServiceError),

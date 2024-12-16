@@ -68,7 +68,9 @@ impl From<LoginError> for ProtonMailError {
                 LoginErrorReason::HumanVerificationChallenge(human_verification_challenge),
             ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
-            LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
+            LoginError::FlowLogin(api_service_error)
+            | LoginError::FlowTotp(api_service_error)
+            | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
             LoginError::MissingPrimaryKey
             | LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption

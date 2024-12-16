@@ -44,8 +44,8 @@ impl WantLogin {
                 }
             }
 
-            LoginFlow::Failed { .. } => {
-                return Err(todo!());
+            LoginFlow::Failed { reason, .. } => {
+                return Err(LoginError::FlowLogin(muon::Error::from(reason).into()));
             }
         };
 
