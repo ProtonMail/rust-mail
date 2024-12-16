@@ -426,6 +426,7 @@ impl Default for TestCoreEvent {
     }
 }
 
+#[must_use]
 #[derive(Debug)]
 pub struct MockApiEnv {
     host: Endpoint,
@@ -433,6 +434,11 @@ pub struct MockApiEnv {
 }
 
 impl MockApiEnv {
+    /// Create a new `MockApiEnv` with the given host.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given host is not a valid URL.
     pub fn new(host: impl AsRef<str>) -> Self {
         Self {
             host: host.as_ref().parse().expect("URL must be valid"),

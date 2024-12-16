@@ -137,10 +137,9 @@ impl MailSession {
     pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, LoginError> {
         let ctx = self.ctx.clone();
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            Ok(ctx
-                .new_login_flow()
+            ctx.new_login_flow()
                 .map(|flow| LoginFlow::new(flow, ctx))
-                .map_err(RealProtonMailError::from)?)
+                .map_err(RealProtonMailError::from)
         })
         .await
         .map_err(LoginError::from)
