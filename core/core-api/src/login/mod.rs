@@ -26,6 +26,10 @@ pub enum LoginError {
     #[error("Operation is not valid in the current state")]
     InvalidState,
 
+    /// Returned if we fail to fetch the user info.
+    #[error("Failed to fetch user info: {0}")]
+    UserFetch(#[source] ApiServiceError),
+
     /// TODO: Document this variant.
     #[error("Failed to store the key secret in the authentication state: {0}")]
     KeySecretAuthUpdate(String),
@@ -36,11 +40,11 @@ pub enum LoginError {
 
     /// TODO: Document this variant.
     #[error("Failed to derive the key secret from the password: {0}")]
-    KeySecretDerivation(#[from] SaltError),
+    KeySecretDerivation(#[source] SaltError),
 
     /// TODO: Document this variant.
     #[error("Failed to fetch salt to derive the key secret: {0}")]
-    KeySecretSaltFetch(#[from] ApiServiceError),
+    KeySecretSaltFetch(#[source] ApiServiceError),
 
     /// TODO: Document this variant.
     #[error("Server SRP proof verification failed: {0}")]
