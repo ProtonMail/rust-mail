@@ -1,6 +1,7 @@
 use crate::login::state::{HasAuthId, HasUserId, SubmitFido, SubmitTotp};
 use crate::login::{state::State, LoginError};
 use crate::services::proton::common::RemoteId;
+use crate::session::Config;
 use crate::store::DynStore;
 use muon::client::flow::LoginTwoFactorFlow;
 use tracing::info;
@@ -8,6 +9,7 @@ use tracing::info;
 /// Represents the login flow state where the user must provide their two-factor authentication code.
 pub struct WantTfa {
     flow: LoginTwoFactorFlow,
+    config: Config,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,
@@ -17,6 +19,7 @@ pub struct WantTfa {
 impl WantTfa {
     pub fn new(
         flow: LoginTwoFactorFlow,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
@@ -26,6 +29,7 @@ impl WantTfa {
 
         Self {
             flow,
+            config,
             store,
             user_id,
             auth_id,
@@ -48,15 +52,24 @@ impl HasAuthId for WantTfa {
 
 impl SubmitTotp for WantTfa {
     async fn submit_totp(self, code: String) -> Result<State, LoginError> {
-        let client = match self.flow.totp(&code).await {
+        let Self {
+            flow,
+            config,
+            store,
+            user_id,
+            auth_id,
+            pass,
+        } = self;
+
+        let client = match flow.totp(&code).await {
             Ok(client) => client,
             Err(err) => return Err(LoginError::FlowTotp(err.into())),
         };
 
-        let state = if let Some(pass) = self.pass {
-            State::finalize(client, self.store, self.user_id, self.auth_id, pass).await?
+        let state = if let Some(pass) = pass {
+            State::finalize(client, config, store, user_id, auth_id, pass).await?
         } else {
-            State::want_mbp(client, self.store, self.user_id, self.auth_id)
+            State::want_mbp(client, config, store, user_id, auth_id)
         };
 
         Ok(state)

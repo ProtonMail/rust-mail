@@ -3,7 +3,7 @@ use crate::login::state::HasAuthId;
 use crate::login::{state::HasUserId, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::{Proton, ProtonCore};
-use crate::session::Session;
+use crate::session::{Config, Session, SessionParts};
 use crate::store::DynStore;
 use derive_more::Into;
 use futures::TryFutureExt;
@@ -15,6 +15,7 @@ use tracing::info;
 /// Represents a completed login flow.
 pub struct Complete {
     client: Proton,
+    config: Config,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,
@@ -23,6 +24,7 @@ pub struct Complete {
 impl Complete {
     pub async fn new(
         client: Proton,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
@@ -75,6 +77,7 @@ impl Complete {
 
         Ok(Self {
             client,
+            config,
             store,
             user_id,
             auth_id,
@@ -82,7 +85,11 @@ impl Complete {
     }
 
     pub fn into_session(self) -> Session {
-        Session::from_parts(self.client, self.store)
+        Session::from_parts(SessionParts {
+            client: self.client,
+            config: self.config,
+            store: self.store,
+        })
     }
 }
 
