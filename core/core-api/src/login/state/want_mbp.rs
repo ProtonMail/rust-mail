@@ -7,14 +7,14 @@ use crate::services::proton::Proton;
 use crate::store::DynStore;
 
 /// Represents the login flow state where the user must provide their mailbox password.
-pub struct WantMbp {
+pub struct WantMboxPass {
     client: Proton,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,
 }
 
-impl WantMbp {
+impl WantMboxPass {
     pub fn new(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
         info!(%user_id, %auth_id, "Login flow wants mailbox password");
 
@@ -27,19 +27,19 @@ impl WantMbp {
     }
 }
 
-impl HasUserId for WantMbp {
+impl HasUserId for WantMboxPass {
     fn user_id(&self) -> &RemoteId {
         &self.user_id
     }
 }
 
-impl HasAuthId for WantMbp {
+impl HasAuthId for WantMboxPass {
     fn auth_id(&self) -> &RemoteId {
         &self.auth_id
     }
 }
 
-impl SubmitMbp for WantMbp {
+impl SubmitMbp for WantMboxPass {
     async fn submit_mbp(self, pass: String) -> Result<State, LoginError> {
         State::finalize(self.client, self.store, self.user_id, self.auth_id, pass).await
     }
