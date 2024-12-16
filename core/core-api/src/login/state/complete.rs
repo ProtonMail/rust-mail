@@ -60,14 +60,14 @@ impl Complete {
                 .salt_for_key(&srp, &key.id, pass.as_bytes())
                 .map_err(LoginError::KeySecretDerivation)?
         } else {
-            return Err(todo!());
+            return Err(LoginError::MissingPrimaryKey);
         };
 
         // Check if the key secret can unlock the user keys.
         let secret = if !user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
             UserKeySecret(secret)
         } else {
-            return Err(todo!());
+            return Err(LoginError::KeySecretDecryption);
         };
 
         // Save the derived user secret in the auth store.

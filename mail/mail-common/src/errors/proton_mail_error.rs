@@ -69,7 +69,8 @@ impl From<LoginError> for ProtonMailError {
             ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
             LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
-            LoginError::KeySecretAuthUpdate(_)
+            LoginError::MissingPrimaryKey
+            | LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
                 Self::reason(LoginErrorReason::CantUnlockUserKey)

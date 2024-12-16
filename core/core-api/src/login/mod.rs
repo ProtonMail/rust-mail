@@ -26,9 +26,13 @@ pub enum LoginError {
     #[error("Operation is not valid in the current state")]
     InvalidState,
 
-    /// Returned if we fail to fetch the user info.
+    /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
     UserFetch(#[source] ApiServiceError),
+
+    /// Returned if the user keyring is invalid.
+    #[error("Failed to find primary key in user keyring")]
+    MissingPrimaryKey,
 
     /// TODO: Document this variant.
     #[error("Failed to store the key secret in the authentication state: {0}")]
