@@ -14,8 +14,8 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
+use proton_api_core::session::{Config as ApiConfig, ParseAppVersionErr};
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
@@ -31,6 +31,8 @@ use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
+    #[error("Invalid app version: {0}")]
+    AppVersion(#[from] ParseAppVersionErr),
     #[error("Login error: {0}")]
     Login(#[from] LoginError),
     #[error("API error: {0}")]
@@ -68,12 +70,6 @@ impl From<VcardValidationError> for CoreContextError {
 impl From<JoinError> for CoreContextError {
     fn from(e: JoinError) -> Self {
         CoreContextError::Other(anyhow!(e))
-    }
-}
-
-impl From<proton_api_core::session::SessionError> for CoreContextError {
-    fn from(_: proton_api_core::session::SessionError) -> Self {
-        todo!()
     }
 }
 
