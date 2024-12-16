@@ -2135,6 +2135,7 @@ impl Message {
         let ids = ids.into_iter();
 
         let mut updated: Vec<IdPair> = Vec::with_capacity(ids.size_hint().1.unwrap_or(0));
+        let mut conversation_count_changed = HashMap::new();
 
         // update unread flag
         for id in ids {
@@ -2151,6 +2152,20 @@ impl Message {
                     local_message_id: message.local_id.unwrap(),
                     local_conversation_id: message.local_conversation_id.unwrap(),
                 });
+                *conversation_count_changed
+                    .entry(message.local_conversation_id.expect("Should be set"))
+                    .or_insert(0) += 1;
+            }
+        }
+
+        for (conversation_id, count) in conversation_count_changed {
+            if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
+                if mark_read {
+                    conversation.num_unread -= count;
+                } else {
+                    conversation.num_unread += count;
+                }
+                conversation.save(bond).await?;
             }
         }
 
