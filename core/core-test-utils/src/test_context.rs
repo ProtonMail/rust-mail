@@ -1,5 +1,5 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
-use futures::executor::block_on;
+use async_trait::async_trait;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -299,9 +299,11 @@ impl TestContext {
     }
 }
 
+#[async_trait]
 impl CoreEventSubscriberConnectionProvider for TestContext {
-    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
-        let user_ctx = block_on(async { self.user_context().await });
+    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
+        let user_ctx = self.user_context().await;
+
         Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
     }
 }
@@ -426,6 +428,7 @@ impl Default for TestCoreEvent {
     }
 }
 
+#[must_use]
 #[derive(Debug)]
 pub struct MockApiEnv {
     host: Endpoint,
@@ -433,6 +436,11 @@ pub struct MockApiEnv {
 }
 
 impl MockApiEnv {
+    /// Create a new `MockApiEnv` with the given host.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given host is not a valid URL.
     pub fn new(host: impl AsRef<str>) -> Self {
         Self {
             host: host.as_ref().parse().expect("URL must be valid"),

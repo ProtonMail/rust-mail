@@ -4,10 +4,13 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use futures::TryFutureExt;
 use muon::client::flow::ForkFlowResult;
-use muon::common::{BoxFut, Sender, SenderLayer};
+use muon::common::{BoxFut, IntoDyn, Sender, SenderLayer, ServiceType};
+use muon::dns::{GoogleDoh, Quad9Doh};
+use muon::Result as MuonResult;
 use muon::{App, ProtonRequest, ProtonResponse};
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
@@ -102,7 +105,10 @@ impl Session {
         };
 
         let client = Proton::builder(app, MuonStore::new(&config.env_id, &store))
-            .layer_front(SetCryptoClockLayer)
+            .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
+            .layer_back(SetCryptoClockLayer)
+            .layer_back(SetDefaultServiceTypeLayer)
+            .layer_back(SetDefaultTimeoutLayer)
             .build()
             .expect("Proton client must be built successfully");
 
@@ -228,12 +234,11 @@ impl<S: Store + 'static> muon::store::Store for MuonStore<S> {
 struct SetCryptoClockLayer;
 
 impl SetCryptoClockLayer {
-    async fn on_send(
-        &self,
-        inner: &dyn Sender<ProtonRequest, ProtonResponse>,
-        request: ProtonRequest,
-    ) -> muon::Result<ProtonResponse> {
-        let response = inner.send(request).await?;
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        let response = inner.send(req).await?;
 
         if let Some(date) = response
             .headers()
@@ -255,7 +260,66 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for SetCryptoClockLayer {
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, muon::Result<ProtonResponse>> {
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
+    }
+}
+
+struct SetDefaultServiceTypeLayer;
+
+impl SetDefaultServiceTypeLayer {
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        let req = if req.get_service_type().is_none() {
+            req.service_type(ServiceType::default(), true)
+        } else {
+            req
+        };
+
+        inner.send(req).await
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultServiceTypeLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
+    }
+}
+
+struct SetDefaultTimeoutLayer;
+
+impl SetDefaultTimeoutLayer {
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
+        // NOTE: This is not a bug! Muon logs a warning if no timeout is explicitly set;
+        // this workaround sets the timeout explicitly if it was not already set to a
+        // non-default value earlier in the layer stack.
+        let req = if req.get_allowed_time() == &DEFAULT_TIMEOUT {
+            req.allowed_time(DEFAULT_TIMEOUT)
+        } else {
+            req
+        };
+
+        inner.send(req).await
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultTimeoutLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }

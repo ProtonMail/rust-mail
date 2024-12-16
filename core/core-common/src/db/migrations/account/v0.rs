@@ -79,10 +79,7 @@ async fn create_table_core_sessions(tx: &Bond<'_>) -> Result<(), StashError> {
                 refresh_token BLOB NOT NULL,
 
                 -- The API scope(s) the session has access to
-                auth_scope TEXT NOT NULL,
-
-                -- The session's auth state
-                auth_state INTEGER NOT NULL,
+                auth_scopes TEXT NOT NULL,
 
                 -- Secret used for unlocking the PGP key(s)
                 key_secret BLOB

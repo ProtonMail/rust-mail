@@ -56,6 +56,9 @@ use serde::Deserialize;
 use crate::service::ApiServiceResult;
 use crate::services::proton::prelude::*;
 
+/// Re-export muon for downstream convenience.
+pub extern crate muon;
+
 pub mod common;
 pub mod prelude;
 pub mod request_data;

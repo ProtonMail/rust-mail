@@ -1,9 +1,9 @@
 use bytes::Bytes;
-use muon::serde_to_query;
-use muon::util::ProtonRequestExt;
-use muon::{DELETE, GET, PATCH, POST, PUT};
 
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
+use proton_api_core::services::proton::muon::serde_to_query;
+use proton_api_core::services::proton::muon::util::ProtonRequestExt;
+use proton_api_core::services::proton::muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::CORE_V4;
