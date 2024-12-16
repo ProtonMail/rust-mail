@@ -2,7 +2,9 @@
 
 use crate::services::proton::prelude::*;
 use crate::store::StoreError;
+use muon::{Method, Status};
 use serde_json::Error as JsonError;
+use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;
 use thiserror::Error;
@@ -69,23 +71,20 @@ pub type ApiServiceResult<T, E = ApiServiceError> = Result<T, E>;
 pub enum ApiServiceError {
     //  NETWORK ERRORS
     //==========================================================================
-    /// An internal Reqwest error has occurred, specifically when attempting to
-    /// make a connection.
+    /// An internal muon error has occurred, specifically when attempting to make a connection.
     #[error("Network connection error: {0}")]
     ConnectionError(String),
 
-    /// An internal Reqwest error has occurred. This could be due to a network
+    /// An internal muon error has occurred. This could be due to a network
     /// error, or a misconfiguration, causing the request to fail.
     #[error("Network error: {0}")]
-    NetworkError(#[from] muon::Error),
+    NetworkError(String),
 
-    /// An internal Reqwest error has occurred, specifically, we have been
-    /// redirected.
+    /// An internal muon error has occurred, specifically, we have been redirected.
     #[error("Redirect error for {0}: {1}")]
     Redirect(String, String),
 
-    /// An internal Reqwest error has occurred, specifically, the HTTP request
-    /// has timed out.
+    /// An internal muon error has occurred, specifically, the HTTP request has timed out.
     #[error("Timeout: {0}")]
     Timeout(String),
 
@@ -132,7 +131,7 @@ pub enum ApiServiceError {
 
     /// Any other HTTP error which is not currently handled.
     #[error("HTTP error {0}: {1}. {2}")]
-    OtherHttpError(muon::Status, String, String),
+    OtherHttpError(Status, String, String),
 
     //  DATA ERRORS
     //==========================================================================
@@ -140,6 +139,11 @@ pub enum ApiServiceError {
     /// external API into the appropriate structs.
     #[error("JSON deserialization error: {0}, context: {1}")]
     JsonError(JsonError, String),
+
+    /// There has been a failure in encoding the query parameters to be sent with
+    /// an outgoing HTTP request.
+    #[error("Query encoding error: {0}")]
+    QueryStringError(#[from] QueryStringError),
 
     /// There has been a failure in compositing the HTTP request to send. Note
     /// that this is not a network error, but an error in the request itself.
@@ -161,7 +165,7 @@ pub enum ApiServiceError {
 
     /// An unsupported HTTP method was specified.
     #[error("Unsupported HTTP method: {0}")]
-    UnsupportedHttpMethod(muon::Method),
+    UnsupportedHttpMethod(Method),
 
     /// Authentication store operation failed.
     #[error("Authentication Store error: {0}")]

@@ -43,7 +43,7 @@ impl SubmitTotp for WantResumeTfa {
     async fn submit_totp(self, code: String) -> Result<State, LoginError> {
         let client = match self.client.auth().from_totp(code).await {
             Ok(client) => client,
-            Err(_) => return Err(todo!()),
+            Err(err) => return Err(LoginError::FlowTotp(err.into())),
         };
 
         Ok(State::want_mbp(

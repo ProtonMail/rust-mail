@@ -93,6 +93,7 @@ pub struct GetEventOptions {
 
 impl GetEventOptions {
     /// Return an instance of `GetEventOptions` with all counts set to `true`.
+    #[must_use]
     pub fn all() -> Self {
         Self {
             conversation_counts: true,

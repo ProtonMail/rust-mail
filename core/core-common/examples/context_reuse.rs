@@ -45,7 +45,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = context.new_login_flow().await.unwrap();
+    let mut flow = context.new_login_flow().unwrap();
 
     flow.login(username.clone(), password.clone())
         .await
@@ -57,7 +57,7 @@ async fn main() {
         .unwrap();
 
     // Create a new login for this context will fail.
-    let mut flow = context.new_login_flow().await.unwrap();
+    let mut flow = context.new_login_flow().unwrap();
 
     flow.login(username, password).await.unwrap();
 

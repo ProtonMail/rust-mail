@@ -20,6 +20,8 @@ pub enum Unexpected {
     Api,
     /// Error related to cryptography
     Crypto,
+    /// Error related to internal app configuration
+    Config,
     /// Error related to the database
     Database,
     /// Error related to draft

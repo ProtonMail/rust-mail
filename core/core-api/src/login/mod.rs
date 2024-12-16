@@ -9,7 +9,7 @@ use futures::{TryFuture, TryFutureExt};
 use std::fmt::Debug;
 use thiserror::Error;
 
-/// Alias the SaltError as our own.
+/// Alias the `SaltError` as our own.
 pub type SaltError = proton_crypto_account::salts::SaltError;
 
 /// Implements the possible states that the login flow can be in.
@@ -26,6 +26,22 @@ pub enum LoginError {
     #[error("Operation is not valid in the current state")]
     InvalidState,
 
+    /// Returned if the initial auth request fails.
+    #[error("Failed to login: {0}")]
+    FlowLogin(#[source] ApiServiceError),
+
+    /// Returned if the 2FA code submission fails.
+    #[error("Failed to submit 2FA code: {0}")]
+    FlowTotp(#[source] ApiServiceError),
+
+    /// Returned if we fail to fetch the user info after login.
+    #[error("Failed to fetch user info: {0}")]
+    UserFetch(#[source] ApiServiceError),
+
+    /// Returned if the user keyring is invalid.
+    #[error("Failed to find primary key in user keyring")]
+    MissingPrimaryKey,
+
     /// TODO: Document this variant.
     #[error("Failed to store the key secret in the authentication state: {0}")]
     KeySecretAuthUpdate(String),
@@ -36,11 +52,11 @@ pub enum LoginError {
 
     /// TODO: Document this variant.
     #[error("Failed to derive the key secret from the password: {0}")]
-    KeySecretDerivation(#[from] SaltError),
+    KeySecretDerivation(#[source] SaltError),
 
     /// TODO: Document this variant.
     #[error("Failed to fetch salt to derive the key secret: {0}")]
-    KeySecretSaltFetch(#[from] ApiServiceError),
+    KeySecretSaltFetch(#[source] ApiServiceError),
 
     /// TODO: Document this variant.
     #[error("Server SRP proof verification failed: {0}")]

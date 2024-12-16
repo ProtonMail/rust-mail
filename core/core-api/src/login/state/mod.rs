@@ -1,6 +1,6 @@
 use crate::login::state::complete::Complete;
-use crate::login::state::want_mbp::WantMbp;
-use crate::login::state::want_resume_mbp::WantResumeMbp;
+use crate::login::state::want_mbp::WantMboxPass;
+use crate::login::state::want_resume_mbp::WantResumeMboxPass;
 use crate::login::state::want_resume_tfa::WantResumeTfa;
 use crate::login::state::want_tfa::WantTfa;
 use crate::login::{state::want_login::WantLogin, LoginError};
@@ -34,10 +34,10 @@ pub enum State {
     WantTfaResume(WantResumeTfa),
 
     /// The flow is waiting for the user to provide their mailbox password.
-    WantMbp(WantMbp),
+    WantMbp(WantMboxPass),
 
     /// The flow is waiting for the user to provide their mailbox password (resumed).
-    WantMbpResume(WantResumeMbp),
+    WantMbpResume(WantResumeMboxPass),
 
     /// The flow has been completed.
     Complete(Complete),
@@ -75,7 +75,7 @@ impl State {
 
     /// Create a `WantMbp` state.
     pub fn want_mbp(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
-        WantMbp::new(client, store, user_id, auth_id).into()
+        WantMboxPass::new(client, store, user_id, auth_id).into()
     }
 
     /// Create a `WantMbpResume` state.
@@ -85,7 +85,7 @@ impl State {
         user_id: RemoteId,
         auth_id: RemoteId,
     ) -> Self {
-        WantResumeMbp::new(client, store, user_id, auth_id).into()
+        WantResumeMboxPass::new(client, store, user_id, auth_id).into()
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
@@ -152,7 +152,7 @@ impl State {
     /// Attempt to take the completed session from the flow.
     pub fn into_session(self) -> Result<Session, LoginError> {
         let session = match self {
-            Self::Complete(state) => state.into_session()?,
+            Self::Complete(state) => state.into_session(),
             _ => return Err(LoginError::InvalidState),
         };
 

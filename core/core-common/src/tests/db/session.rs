@@ -81,7 +81,7 @@ async fn test_session_store_load() {
     let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
-    let mut session = CoreSession::new(auth, &key).unwrap();
+    let mut session = CoreSession::new(&auth, &key).unwrap();
 
     {
         let tx = tether
@@ -114,7 +114,7 @@ async fn test_session_update() {
     let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
-    let mut session = CoreSession::new(auth, &key)
+    let mut session = CoreSession::new(&auth, &key)
         .unwrap()
         .with_key_secret(&UserKeySecret::from(vec![1, 2, 3, 4]), &key)
         .unwrap();
@@ -167,7 +167,7 @@ async fn test_session_delete_user_id() {
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
-    let mut session = CoreSession::new(auth, &key).unwrap();
+    let mut session = CoreSession::new(&auth, &key).unwrap();
 
     {
         let tx = tether
@@ -205,7 +205,7 @@ async fn test_session_delete_session_id() {
     let account = new_test_account(&mut tether).await.unwrap();
     let auth = new_test_auth(&account);
 
-    let mut session = CoreSession::new(auth, &key).unwrap();
+    let mut session = CoreSession::new(&auth, &key).unwrap();
 
     {
         let tx = tether

@@ -46,7 +46,7 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
     /// Set the name or address used to authenticate.
     fn set_name_or_addr(&mut self, name_or_addr: &str) {
-        self.deref_mut().set_name_or_addr(name_or_addr)
+        self.deref_mut().set_name_or_addr(name_or_addr);
     }
 
     async fn get_auth(&self) -> Auth {

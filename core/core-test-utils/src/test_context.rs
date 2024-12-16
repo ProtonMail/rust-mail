@@ -233,7 +233,7 @@ impl TestContext {
             );
 
             // Create a fake session.
-            let session = CoreSession::new(auth, &encryption_key)
+            let session = CoreSession::new(&auth, &encryption_key)
                 .expect("session should be created")
                 .with_key_secret(&user_key_secret, &encryption_key)
                 .expect("key secret should be set")

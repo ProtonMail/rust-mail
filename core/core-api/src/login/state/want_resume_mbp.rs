@@ -8,14 +8,14 @@ use crate::store::DynStore;
 
 /// Represents the login flow state where the user must provide their mailbox password
 /// (resumed from a previous login attempt).
-pub struct WantResumeMbp {
+pub struct WantResumeMboxPass {
     client: Proton,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,
 }
 
-impl WantResumeMbp {
+impl WantResumeMboxPass {
     pub fn new(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
         info!(%user_id, %auth_id, "Login flow wants to resume from mailbox password");
 
@@ -28,19 +28,19 @@ impl WantResumeMbp {
     }
 }
 
-impl HasUserId for WantResumeMbp {
+impl HasUserId for WantResumeMboxPass {
     fn user_id(&self) -> &RemoteId {
         &self.user_id
     }
 }
 
-impl HasAuthId for WantResumeMbp {
+impl HasAuthId for WantResumeMboxPass {
     fn auth_id(&self) -> &RemoteId {
         &self.auth_id
     }
 }
 
-impl SubmitMbp for WantResumeMbp {
+impl SubmitMbp for WantResumeMboxPass {
     async fn submit_mbp(self, pass: String) -> Result<State, LoginError> {
         State::finalize(self.client, self.store, self.user_id, self.auth_id, pass).await
     }

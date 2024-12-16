@@ -32,7 +32,7 @@ async fn main() {
         ..Default::default()
     };
 
-    let session = Session::new(api_env_config, None).await.unwrap();
+    let session = Session::new(api_env_config, None).unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow.login(user_email, user_password).await.unwrap();

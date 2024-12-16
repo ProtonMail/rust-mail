@@ -4,11 +4,9 @@ use async_trait::async_trait;
 use chrono::DateTime;
 use futures::TryFutureExt;
 use muon::common::{BoxFut, Sender, SenderLayer};
-use muon::error::ParseAppVersionErr;
 use muon::{App, ProtonRequest, ProtonResponse};
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
 use std::sync::Arc;
-use thiserror::Error;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
@@ -20,6 +18,7 @@ use crate::store::{DynStore, Store, TempStore};
 pub use muon::app::AppVersion;
 pub use muon::common::{Endpoint, Server};
 pub use muon::env::{Env, EnvId};
+pub use muon::error::ParseAppVersionErr;
 pub use muon::tls::TlsPinSet;
 
 /// Core session trait which provides access to the API.
@@ -32,14 +31,6 @@ impl CoreSession for Session {
     fn api(&self) -> &Proton {
         &self.client
     }
-}
-
-/// An error that can occur when creating or using a session.
-#[derive(Debug, Error)]
-#[error(transparent)]
-pub enum SessionError {
-    Muon(#[from] muon::Error),
-    AppVersion(#[from] ParseAppVersionErr),
 }
 
 /// A session configuration.
@@ -56,6 +47,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub fn atlas() -> Self {
         Self {
             app_version: String::from("Other"),
@@ -88,7 +80,11 @@ impl Session {
     /// # Errors
     ///
     /// Returns error if the API service failed to initialize.
-    pub async fn new(cfg: Config, store: Option<Box<dyn Store>>) -> Result<Self, SessionError> {
+    ///
+    /// # Panics
+    ///
+    /// Panics if the Proton client fails to build.
+    pub fn new(cfg: Config, store: Option<Box<dyn Store>>) -> Result<Self, ParseAppVersionErr> {
         init_server_crypto_clock();
 
         let app = if let Some(agent) = cfg.user_agent {
@@ -103,9 +99,10 @@ impl Session {
             Arc::new(RwLock::new(TempStore::boxed()))
         };
 
-        let wrapped = MuonStore(cfg.env_id, Arc::clone(&store));
-        let builder = Proton::builder(app, wrapped);
-        let client = builder.layer_front(SetCryptoClockLayer).build()?;
+        let client = Proton::builder(app, MuonStore::new(cfg.env_id, &store))
+            .layer_front(SetCryptoClockLayer)
+            .build()
+            .expect("Proton client must be built successfully");
 
         Ok(Self { client, store })
     }
@@ -124,6 +121,7 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
+    #[allow(clippy::unused_async)]
     pub async fn fork(&self) -> ApiServiceResult<String> {
         todo!()
     }
@@ -136,6 +134,7 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
+    #[allow(clippy::unused_async)]
     pub async fn fork_with_version(&self, _: String) -> ApiServiceResult<String> {
         todo!()
     }
@@ -176,6 +175,12 @@ impl Session {
 /// Implements the muon store trait for our store type.
 struct MuonStore<S>(EnvId, Arc<RwLock<S>>);
 
+impl<S> MuonStore<S> {
+    fn new(env_id: EnvId, store: &Arc<RwLock<S>>) -> Self {
+        Self(env_id, Arc::clone(store))
+    }
+}
+
 #[async_trait]
 impl<S: Store + 'static> muon::store::Store for MuonStore<S> {
     fn env(&self) -> EnvId {
@@ -204,11 +209,11 @@ impl SetCryptoClockLayer {
     async fn on_send(
         &self,
         inner: &dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
+        request: ProtonRequest,
     ) -> muon::Result<ProtonResponse> {
-        let res = inner.send(req).await?;
+        let response = inner.send(request).await?;
 
-        if let Some(date) = res
+        if let Some(date) = response
             .headers()
             .get("date")
             .and_then(|response_time_header| response_time_header.to_str().ok())
@@ -219,7 +224,7 @@ impl SetCryptoClockLayer {
             server_crypto_clock().update_clock(date);
         }
 
-        Ok(res)
+        Ok(response)
     }
 }
 

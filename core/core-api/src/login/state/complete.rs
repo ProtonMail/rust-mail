@@ -35,7 +35,11 @@ impl Complete {
         let pgp = proton_crypto::new_pgp_provider();
 
         // Fetch user info to trigger HV.
-        let user = client.get_users().map_ok(|res| res.user).await?;
+        let user = client
+            .get_users()
+            .map_ok(|res| res.user)
+            .map_err(LoginError::UserFetch)
+            .await?;
 
         // Fetch the user's key salts.
         let salts = client
@@ -52,16 +56,18 @@ impl Complete {
 
         // Derive the key secret to unlock the user keys.
         let secret = if let Some(key) = user.keys.primary() {
-            salts.salt_for_key(&srp, &key.id, pass.as_bytes())?
+            salts
+                .salt_for_key(&srp, &key.id, pass.as_bytes())
+                .map_err(LoginError::KeySecretDerivation)?
         } else {
-            return Err(todo!());
+            return Err(LoginError::MissingPrimaryKey);
         };
 
         // Check if the key secret can unlock the user keys.
-        let secret = if !user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
-            UserKeySecret(secret)
+        let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
+            return Err(LoginError::KeySecretDecryption);
         } else {
-            return Err(todo!());
+            UserKeySecret(secret)
         };
 
         // Save the derived user secret in the auth store.
@@ -75,8 +81,8 @@ impl Complete {
         })
     }
 
-    pub fn into_session(self) -> Result<Session, LoginError> {
-        Ok(Session::from_parts(self.client, self.store))
+    pub fn into_session(self) -> Session {
+        Session::from_parts(self.client, self.store)
     }
 }
 

@@ -78,7 +78,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = ctx.new_login_flow().await.unwrap();
+    let mut flow = ctx.new_login_flow().unwrap();
 
     flow.login(username, password).await.unwrap();
 

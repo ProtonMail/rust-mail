@@ -68,7 +68,11 @@ impl From<LoginError> for ProtonMailError {
                 LoginErrorReason::HumanVerificationChallenge(human_verification_challenge),
             ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
-            LoginError::KeySecretAuthUpdate(_)
+            LoginError::FlowLogin(api_service_error)
+            | LoginError::FlowTotp(api_service_error)
+            | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
+            LoginError::MissingPrimaryKey
+            | LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
                 Self::reason(LoginErrorReason::CantUnlockUserKey)
@@ -169,6 +173,9 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(draft_error) => Self::from(draft_error),
+            MailContextError::AppVersion(_parse_app_version_error) => {
+                Self::Unexpected(Unexpected::Config)
+            }
             MailContextError::PGPKeySelection(_encryption_preferences_error) => {
                 Self::Unexpected(Unexpected::Crypto)
             }

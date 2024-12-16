@@ -108,7 +108,7 @@ impl AppStateHandler for Model {
                         "Performing Login ...".to_owned(),
                     )),
                     Command::task(async move {
-                        let mut flow = match ctx.new_login_flow().await {
+                        let mut flow = match ctx.new_login_flow() {
                             Ok(f) => f,
                             Err(e) => {
                                 return Command::message(e.into());

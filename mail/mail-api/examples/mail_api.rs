@@ -33,7 +33,6 @@ async fn main() {
         },
         None,
     )
-    .await
     .unwrap();
 
     let mut login_flow = Flow::new(session.clone());

@@ -154,11 +154,11 @@ impl Store for AuthStore {
 
         // Load or create the session.
         if let Some(session) = CoreSession::find_by_id(session_id.clone(), &tx).await? {
-            session.with_auth(auth, &key)?.save(&tx).await?;
+            session.with_auth(&auth, &key)?.save(&tx).await?;
         } else {
             info!("creating session for {user_id}");
 
-            CoreSession::new(auth, &key)?
+            CoreSession::new(&auth, &key)?
                 .save(&tx)
                 .inspect_err(|e| error!("failed to save session: {e}"))
                 .await?;
