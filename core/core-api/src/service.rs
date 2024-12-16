@@ -3,6 +3,7 @@
 use crate::services::proton::prelude::*;
 use crate::store::StoreError;
 use serde_json::Error as JsonError;
+use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;
 use thiserror::Error;
@@ -140,6 +141,11 @@ pub enum ApiServiceError {
     /// external API into the appropriate structs.
     #[error("JSON deserialization error: {0}, context: {1}")]
     JsonError(JsonError, String),
+
+    /// There has been a failure in encoding the query parameters to be sent with
+    /// an outgoing HTTP request.
+    #[error("Query encoding error: {0}")]
+    QueryStringError(#[from] QueryStringError),
 
     /// There has been a failure in compositing the HTTP request to send. Note
     /// that this is not a network error, but an error in the request itself.

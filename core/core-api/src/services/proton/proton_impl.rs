@@ -162,9 +162,3 @@ impl From<muon::StatusErr> for ApiServiceError {
         todo!()
     }
 }
-
-impl From<serde_qs::Error> for ApiServiceError {
-    fn from(_: serde_qs::Error) -> Self {
-        todo!()
-    }
-}

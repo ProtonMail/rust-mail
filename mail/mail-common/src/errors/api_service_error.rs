@@ -61,6 +61,7 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
             | ApiServiceError::Timeout(_) => Err(Unexpected::Network),
 
             ApiServiceError::JsonError(_, _)
+            | ApiServiceError::QueryStringError(_)
             | ApiServiceError::RequestError(_)
             | ApiServiceError::Utf8DecodingError(_)
             | ApiServiceError::ServiceError(_)
