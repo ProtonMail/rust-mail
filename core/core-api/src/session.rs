@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use futures::TryFutureExt;
+use muon::client::flow::ForkFlowResult;
 use muon::common::{BoxFut, Sender, SenderLayer};
 use muon::{App, ProtonRequest, ProtonResponse};
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
@@ -71,6 +72,7 @@ impl Default for Config {
 #[derive(Clone)]
 pub struct Session {
     client: Proton,
+    config: Config,
     store: DynStore,
 }
 
@@ -84,13 +86,13 @@ impl Session {
     /// # Panics
     ///
     /// Panics if the Proton client fails to build.
-    pub fn new(cfg: Config, store: Option<Box<dyn Store>>) -> Result<Self, ParseAppVersionErr> {
+    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, ParseAppVersionErr> {
         init_server_crypto_clock();
 
-        let app = if let Some(agent) = cfg.user_agent {
-            App::new(&cfg.app_version)?.with_user_agent(agent)
+        let app = if let Some(agent) = &config.user_agent {
+            App::new(&config.app_version)?.with_user_agent(agent)
         } else {
-            App::new(&cfg.app_version)?
+            App::new(&config.app_version)?
         };
 
         let store = if let Some(store) = store {
@@ -99,12 +101,16 @@ impl Session {
             Arc::new(RwLock::new(TempStore::boxed()))
         };
 
-        let client = Proton::builder(app, MuonStore::new(cfg.env_id, &store))
+        let client = Proton::builder(app, MuonStore::new(&config.env_id, &store))
             .layer_front(SetCryptoClockLayer)
             .build()
             .expect("Proton client must be built successfully");
 
-        Ok(Self { client, store })
+        Ok(Self {
+            client,
+            config,
+            store,
+        })
     }
 
     /// Fork the current session.
@@ -121,9 +127,8 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
-    #[allow(clippy::unused_async)]
     pub async fn fork(&self) -> ApiServiceResult<String> {
-        todo!()
+        self.fork_with_version(&self.config.app_version).await
     }
 
     /// Fork the current session with a user and a version.
@@ -134,9 +139,11 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
-    #[allow(clippy::unused_async)]
-    pub async fn fork_with_version(&self, _: String) -> ApiServiceResult<String> {
-        todo!()
+    pub async fn fork_with_version(&self, version: impl AsRef<str>) -> ApiServiceResult<String> {
+        match self.client.clone().fork(version.as_ref()).send().await {
+            ForkFlowResult::Success(_, selector) => Ok(selector),
+            ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
+        }
     }
 
     /// Exposes the user key secret from the auth store to unlock user keys.
@@ -162,13 +169,28 @@ impl Session {
     }
 }
 
+/// The parts of a session.
+pub(crate) struct SessionParts {
+    pub(crate) client: Proton,
+    pub(crate) config: Config,
+    pub(crate) store: DynStore,
+}
+
 impl Session {
-    pub(crate) fn into_parts(self) -> (Proton, DynStore) {
-        (self.client, self.store)
+    pub(crate) fn into_parts(self) -> SessionParts {
+        SessionParts {
+            client: self.client,
+            config: self.config,
+            store: self.store,
+        }
     }
 
-    pub(crate) fn from_parts(client: Proton, store: DynStore) -> Self {
-        Self { client, store }
+    pub(crate) fn from_parts(parts: SessionParts) -> Self {
+        Self {
+            client: parts.client,
+            config: parts.config,
+            store: parts.store,
+        }
     }
 }
 
@@ -176,8 +198,8 @@ impl Session {
 struct MuonStore<S>(EnvId, Arc<RwLock<S>>);
 
 impl<S> MuonStore<S> {
-    fn new(env_id: EnvId, store: &Arc<RwLock<S>>) -> Self {
-        Self(env_id, Arc::clone(store))
+    fn new(env_id: &EnvId, store: &Arc<RwLock<S>>) -> Self {
+        Self(env_id.to_owned(), Arc::clone(store))
     }
 }
 

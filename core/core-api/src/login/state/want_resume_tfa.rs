@@ -2,6 +2,7 @@ use crate::login::state::{HasAuthId, HasUserId, SubmitFido, SubmitTotp};
 use crate::login::{state::State, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::Proton;
+use crate::session::Config;
 use crate::store::DynStore;
 use tracing::info;
 
@@ -9,17 +10,25 @@ use tracing::info;
 /// (resumed from a previous login attempt).
 pub struct WantResumeTfa {
     client: Proton,
+    config: Config,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,
 }
 
 impl WantResumeTfa {
-    pub fn new(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
+    pub fn new(
+        client: Proton,
+        config: Config,
+        store: DynStore,
+        user_id: RemoteId,
+        auth_id: RemoteId,
+    ) -> Self {
         info!(%user_id, %auth_id, "Login flow wants to resume from 2FA");
 
         Self {
             client,
+            config,
             store,
             user_id,
             auth_id,
@@ -48,6 +57,7 @@ impl SubmitTotp for WantResumeTfa {
 
         Ok(State::want_mbp(
             client,
+            self.config,
             self.store,
             self.user_id,
             self.auth_id,

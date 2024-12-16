@@ -3,7 +3,7 @@
 use crate::login::state::State;
 use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
-use crate::session::Session;
+use crate::session::{Session, SessionParts};
 use crate::store::StoreError;
 use futures::{TryFuture, TryFutureExt};
 use std::fmt::Debug;
@@ -91,9 +91,13 @@ pub struct Flow(State);
 impl Flow {
     #[must_use]
     pub fn new(session: Session) -> Self {
-        let (client, store) = session.into_parts();
+        let SessionParts {
+            client,
+            config,
+            store,
+        } = session.into_parts();
 
-        Self(State::want_login(client, store))
+        Self(State::want_login(client, config, store))
     }
 
     /// Resume the login flow at the 2FA step.
@@ -104,9 +108,15 @@ impl Flow {
         session_id: RemoteId,
         _: TfaStatus,
     ) -> Self {
-        let (client, store) = session.into_parts();
+        let SessionParts {
+            client,
+            config,
+            store,
+        } = session.into_parts();
 
-        Self(State::want_tfa_resume(client, store, user_id, session_id))
+        Self(State::want_tfa_resume(
+            client, config, store, user_id, session_id,
+        ))
     }
 
     /// Resume the login flow at the mailbox password step.
@@ -117,9 +127,15 @@ impl Flow {
         session_id: RemoteId,
         _: PasswordMode,
     ) -> Self {
-        let (client, store) = session.into_parts();
+        let SessionParts {
+            client,
+            config,
+            store,
+        } = session.into_parts();
 
-        Self(State::want_mbp_resume(client, store, user_id, session_id))
+        Self(State::want_mbp_resume(
+            client, config, store, user_id, session_id,
+        ))
     }
 
     /// Start login with credentials. The `human_verification` parameter only needs to be submitted

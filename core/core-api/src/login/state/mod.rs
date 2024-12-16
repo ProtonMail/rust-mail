@@ -6,7 +6,7 @@ use crate::login::state::want_tfa::WantTfa;
 use crate::login::{state::want_login::WantLogin, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::Proton;
-use crate::session::Session;
+use crate::session::{Config, Session};
 use crate::store::DynStore;
 use derive_more::From;
 use futures::TryFutureExt;
@@ -48,55 +48,65 @@ pub enum State {
 
 impl State {
     /// Create a `WantLogin` state.
-    pub fn want_login(client: Proton, store: DynStore) -> Self {
-        WantLogin::new(client, store).into()
+    pub fn want_login(client: Proton, config: Config, store: DynStore) -> Self {
+        WantLogin::new(client, config, store).into()
     }
 
     /// Create a `WantTfa` state.
     pub fn want_tfa(
         flow: LoginTwoFactorFlow,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
         pass: Option<String>,
     ) -> Self {
-        WantTfa::new(flow, store, user_id, auth_id, pass).into()
+        WantTfa::new(flow, config, store, user_id, auth_id, pass).into()
     }
 
     /// Create a `WantTfaResume` state.
     pub fn want_tfa_resume(
         client: Proton,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
     ) -> Self {
-        WantResumeTfa::new(client, store, user_id, auth_id).into()
+        WantResumeTfa::new(client, config, store, user_id, auth_id).into()
     }
 
     /// Create a `WantMbp` state.
-    pub fn want_mbp(client: Proton, store: DynStore, user_id: RemoteId, auth_id: RemoteId) -> Self {
-        WantMboxPass::new(client, store, user_id, auth_id).into()
+    pub fn want_mbp(
+        client: Proton,
+        config: Config,
+        store: DynStore,
+        user_id: RemoteId,
+        auth_id: RemoteId,
+    ) -> Self {
+        WantMboxPass::new(client, config, store, user_id, auth_id).into()
     }
 
     /// Create a `WantMbpResume` state.
     pub fn want_mbp_resume(
         client: Proton,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
     ) -> Self {
-        WantResumeMboxPass::new(client, store, user_id, auth_id).into()
+        WantResumeMboxPass::new(client, config, store, user_id, auth_id).into()
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
     pub async fn finalize(
         client: Proton,
+        config: Config,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
         pass: String,
     ) -> Result<Self, LoginError> {
-        Complete::new(client, store, user_id, auth_id, pass)
+        Complete::new(client, config, store, user_id, auth_id, pass)
             .ok_into()
             .await
     }
