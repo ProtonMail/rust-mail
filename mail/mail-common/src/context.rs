@@ -191,8 +191,8 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
-        Ok(self.core_context.new_login_flow().await?)
+    pub fn new_login_flow(&self) -> MailContextResult<Flow> {
+        Ok(self.core_context.new_login_flow()?)
     }
 
     /// Resume a partially completed login flow.

@@ -161,6 +161,7 @@ impl ProtonCore for Proton {
     }
 }
 
+#[allow(clippy::redundant_closure_for_method_calls)]
 impl From<muon::Error> for ApiServiceError {
     fn from(e: muon::Error) -> Self {
         // Check if the error is the result of a timeout.
@@ -169,33 +170,33 @@ impl From<muon::Error> for ApiServiceError {
         }
 
         // Otherwise, match on the kind of error we received.
-        match (e.kind(), e.to_string()) {
-            (MuonErrorKind::Tls, e)
-            | (MuonErrorKind::Resolve, e)
-            | (MuonErrorKind::Dial, e)
-            | (MuonErrorKind::Connect, e) => Self::ConnectionError(e),
+        match e.kind() {
+            MuonErrorKind::Tls
+            | MuonErrorKind::Resolve
+            | MuonErrorKind::Dial
+            | MuonErrorKind::Connect => Self::ConnectionError(e.to_string()),
 
-            (MuonErrorKind::Auth, e)
-            | (MuonErrorKind::Send, e)
-            | (MuonErrorKind::Closed, e)
-            | (MuonErrorKind::Req, e)
-            | (MuonErrorKind::Res, e) => Self::NetworkError(e),
+            MuonErrorKind::Auth
+            | MuonErrorKind::Send
+            | MuonErrorKind::Closed
+            | MuonErrorKind::Req
+            | MuonErrorKind::Res => Self::NetworkError(e.to_string()),
 
-            (MuonErrorKind::Other, e) => Self::UnknownError(e),
+            MuonErrorKind::Other => Self::UnknownError(e.to_string()),
         }
     }
 }
 
 impl From<muon::StatusErr> for ApiServiceError {
-    fn from(ref e @ muon::StatusErr(c, ref r): muon::StatusErr) -> Self {
-        let text = match String::from_utf8(r.body().to_owned()) {
+    fn from(e: muon::StatusErr) -> Self {
+        let text = match String::from_utf8(e.1.body().to_owned()) {
             Ok(b) => b,
             Err(e) => return Self::Utf8DecodingError(e),
         };
 
-        match (c, e.to_string()) {
+        match (e.0, e.to_string()) {
             (s, e) if s.is_redirection() => Self::Redirect(e, text),
-            (Status::BAD_REQUEST, e) => Self::BadGateway(e, text),
+            (Status::BAD_REQUEST, e) => Self::BadRequest(e, text),
             (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, text),
             (Status::NOT_FOUND, e) => Self::NotFound(e, text),
             (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, text),

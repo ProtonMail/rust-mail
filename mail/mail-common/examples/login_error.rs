@@ -18,7 +18,7 @@ struct Args {
 async fn main() {
     let Args { username, password } = Args::parse();
 
-    let session = Session::new(Config::default(), None).await.unwrap();
+    let session = Session::new(Config::default(), None).unwrap();
     let mut login_flow = Flow::new(session);
     let result = login_flow.login(username, password).await;
 

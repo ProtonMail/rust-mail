@@ -55,7 +55,7 @@ async fn new_mail_ctx(
 }
 
 async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
-    let mut flow = ctx.new_login_flow().await?;
+    let mut flow = ctx.new_login_flow()?;
 
     flow.login(read("username")?, read("password")?)
         .inspect_err(|err| error!("failed to login: {err}"))

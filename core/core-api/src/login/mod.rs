@@ -9,7 +9,7 @@ use futures::{TryFuture, TryFutureExt};
 use std::fmt::Debug;
 use thiserror::Error;
 
-/// Alias the SaltError as our own.
+/// Alias the `SaltError` as our own.
 pub type SaltError = proton_crypto_account::salts::SaltError;
 
 /// Implements the possible states that the login flow can be in.

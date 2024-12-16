@@ -152,7 +152,7 @@ impl State {
     /// Attempt to take the completed session from the flow.
     pub fn into_session(self) -> Result<Session, LoginError> {
         let session = match self {
-            Self::Complete(state) => state.into_session()?,
+            Self::Complete(state) => state.into_session(),
             _ => return Err(LoginError::InvalidState),
         };
 

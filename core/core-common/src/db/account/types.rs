@@ -236,7 +236,7 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn new(auth: Auth, key: &SessionEncryptionKey) -> Result<Self, CoreSessionError> {
+    pub fn new(auth: &Auth, key: &SessionEncryptionKey) -> Result<Self, CoreSessionError> {
         let uid = auth.uid().ok_or(CoreSessionError::AuthUid)?;
         let user_id = auth.user_id().ok_or(CoreSessionError::AuthUserId)?;
         let acc_tok = auth.acc_tok().ok_or(CoreSessionError::AccTok)?;
@@ -261,22 +261,22 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn with_auth(self, auth: Auth, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+    ///
+    /// # Panics
+    ///
+    /// Panics if the UID in the auth does not match the session's remote ID.
+    pub fn with_auth(
+        self,
+        auth: &Auth,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, CoreSessionError> {
         if let Some(uid) = auth.uid() {
             assert_eq!(self.remote_id, RemoteId::from(uid));
         };
 
-        let Some(acc_tok) = auth.acc_tok() else {
-            todo!("expected acc_tok in auth")
-        };
-
-        let Some(ref_tok) = auth.ref_tok() else {
-            todo!("expected ref_tok in auth")
-        };
-
-        let Some(scopes) = auth.scopes() else {
-            todo!("expected scopes in auth")
-        };
+        let acc_tok = auth.acc_tok().ok_or(CoreSessionError::AccTok)?;
+        let ref_tok = auth.ref_tok().ok_or(CoreSessionError::RefTok)?;
+        let scopes = auth.scopes().ok_or(CoreSessionError::Scopes)?;
 
         Ok(Self {
             access_token: EncryptedAccessToken::new(acc_tok, key)?,

@@ -227,7 +227,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api = Session::new(api_config, None).await.unwrap();
+    let api = Session::new(api_config, None).unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,

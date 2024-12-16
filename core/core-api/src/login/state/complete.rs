@@ -64,10 +64,10 @@ impl Complete {
         };
 
         // Check if the key secret can unlock the user keys.
-        let secret = if !user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
-            UserKeySecret(secret)
-        } else {
+        let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
             return Err(LoginError::KeySecretDecryption);
+        } else {
+            UserKeySecret(secret)
         };
 
         // Save the derived user secret in the auth store.
@@ -81,8 +81,8 @@ impl Complete {
         })
     }
 
-    pub fn into_session(self) -> Result<Session, LoginError> {
-        Ok(Session::from_parts(self.client, self.store))
+    pub fn into_session(self) -> Session {
+        Session::from_parts(self.client, self.store)
     }
 }
 

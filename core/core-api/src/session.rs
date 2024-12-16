@@ -47,6 +47,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub fn atlas() -> Self {
         Self {
             app_version: String::from("Other"),
@@ -79,10 +80,11 @@ impl Session {
     /// # Errors
     ///
     /// Returns error if the API service failed to initialize.
-    pub async fn new(
-        cfg: Config,
-        store: Option<Box<dyn Store>>,
-    ) -> Result<Self, ParseAppVersionErr> {
+    ///
+    /// # Panics
+    ///
+    /// Panics if the Proton client fails to build.
+    pub fn new(cfg: Config, store: Option<Box<dyn Store>>) -> Result<Self, ParseAppVersionErr> {
         init_server_crypto_clock();
 
         let app = if let Some(agent) = cfg.user_agent {
@@ -119,6 +121,7 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
+    #[allow(clippy::unused_async)]
     pub async fn fork(&self) -> ApiServiceResult<String> {
         todo!()
     }
@@ -131,6 +134,7 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
+    #[allow(clippy::unused_async)]
     pub async fn fork_with_version(&self, _: String) -> ApiServiceResult<String> {
         todo!()
     }
@@ -205,11 +209,11 @@ impl SetCryptoClockLayer {
     async fn on_send(
         &self,
         inner: &dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
+        request: ProtonRequest,
     ) -> muon::Result<ProtonResponse> {
-        let res = inner.send(req).await?;
+        let response = inner.send(request).await?;
 
-        if let Some(date) = res
+        if let Some(date) = response
             .headers()
             .get("date")
             .and_then(|response_time_header| response_time_header.to_str().ok())
@@ -220,7 +224,7 @@ impl SetCryptoClockLayer {
             server_crypto_clock().update_clock(date);
         }
 
-        Ok(res)
+        Ok(response)
     }
 }
 
