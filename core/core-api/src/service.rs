@@ -71,23 +71,20 @@ pub type ApiServiceResult<T, E = ApiServiceError> = Result<T, E>;
 pub enum ApiServiceError {
     //  NETWORK ERRORS
     //==========================================================================
-    /// An internal Reqwest error has occurred, specifically when attempting to
-    /// make a connection.
+    /// An internal muon error has occurred, specifically when attempting to make a connection.
     #[error("Network connection error: {0}")]
     ConnectionError(String),
 
-    /// An internal Reqwest error has occurred. This could be due to a network
+    /// An internal muon error has occurred. This could be due to a network
     /// error, or a misconfiguration, causing the request to fail.
     #[error("Network error: {0}")]
-    NetworkError(#[source] muon::Error),
+    NetworkError(String),
 
-    /// An internal Reqwest error has occurred, specifically, we have been
-    /// redirected.
+    /// An internal muon error has occurred, specifically, we have been redirected.
     #[error("Redirect error for {0}: {1}")]
     Redirect(String, String),
 
-    /// An internal Reqwest error has occurred, specifically, the HTTP request
-    /// has timed out.
+    /// An internal muon error has occurred, specifically, the HTTP request has timed out.
     #[error("Timeout: {0}")]
     Timeout(String),
 

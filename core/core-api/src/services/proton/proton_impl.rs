@@ -1,4 +1,7 @@
+use std::error::Error;
+
 use bytes::Bytes;
+use muon::common::Timeout;
 use muon::error::ErrorKind as MuonErrorKind;
 use muon::util::ProtonRequestExt;
 use muon::{serde_to_query, Status};
@@ -160,39 +163,48 @@ impl ProtonCore for Proton {
 
 impl From<muon::Error> for ApiServiceError {
     fn from(e: muon::Error) -> Self {
-        match e.kind() {
-            MuonErrorKind::Auth => todo!(),
-            MuonErrorKind::Tls => todo!(),
-            MuonErrorKind::Resolve => todo!(),
-            MuonErrorKind::Dial => todo!(),
-            MuonErrorKind::Connect => todo!(),
-            MuonErrorKind::Send => todo!(),
-            MuonErrorKind::Closed => todo!(),
-            MuonErrorKind::Req => todo!(),
-            MuonErrorKind::Res => todo!(),
-            MuonErrorKind::Other => todo!(),
+        // Check if the error is the result of a timeout.
+        if e.source().is_some_and(|s| s.is::<Timeout>()) {
+            return Self::Timeout(e.to_string());
+        }
+
+        // Otherwise, match on the kind of error we received.
+        match (e.kind(), e.to_string()) {
+            (MuonErrorKind::Tls, e)
+            | (MuonErrorKind::Resolve, e)
+            | (MuonErrorKind::Dial, e)
+            | (MuonErrorKind::Connect, e) => Self::ConnectionError(e),
+
+            (MuonErrorKind::Auth, e)
+            | (MuonErrorKind::Send, e)
+            | (MuonErrorKind::Closed, e)
+            | (MuonErrorKind::Req, e)
+            | (MuonErrorKind::Res, e) => Self::NetworkError(e),
+
+            (MuonErrorKind::Other, e) => Self::UnknownError(e),
         }
     }
 }
 
 impl From<muon::StatusErr> for ApiServiceError {
-    fn from(ref e @ muon::StatusErr(ref c, ref r): muon::StatusErr) -> Self {
+    fn from(ref e @ muon::StatusErr(c, ref r): muon::StatusErr) -> Self {
         let text = match String::from_utf8(r.body().to_owned()) {
             Ok(b) => b,
             Err(e) => return Self::Utf8DecodingError(e),
         };
 
-        match (e.to_string(), c) {
-            (e, &Status::BAD_REQUEST) => Self::BadGateway(e, text),
-            (e, &Status::UNAUTHORIZED) => Self::Unauthorized(e, text),
-            (e, &Status::NOT_FOUND) => Self::NotFound(e, text),
-            (e, &Status::UNPROCESSABLE_ENTITY) => Self::UnprocessableEntity(e, text),
-            (e, &Status::TOO_MANY_REQUESTS) => Self::TooManyRequest(e, text),
-            (e, &Status::INTERNAL_SERVER_ERROR) => Self::InternalServerError(e, text),
-            (e, &Status::NOT_IMPLEMENTED) => Self::NotImplemented(e, text),
-            (e, &Status::BAD_GATEWAY) => Self::BadGateway(e, text),
-            (e, &Status::SERVICE_UNAVAILABLE) => Self::ServiceUnavailable(e, text),
-            (e, &other) => Self::OtherHttpError(other, e, text),
+        match (c, e.to_string()) {
+            (s, e) if s.is_redirection() => Self::Redirect(e, text),
+            (Status::BAD_REQUEST, e) => Self::BadGateway(e, text),
+            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, text),
+            (Status::NOT_FOUND, e) => Self::NotFound(e, text),
+            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, text),
+            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequest(e, text),
+            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, text),
+            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, text),
+            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, text),
+            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, text),
+            (other, e) => Self::OtherHttpError(other, e, text),
         }
     }
 }
