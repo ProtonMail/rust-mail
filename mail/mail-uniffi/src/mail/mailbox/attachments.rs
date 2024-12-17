@@ -34,8 +34,8 @@ impl Mailbox {
             mbox.user_context()
                 .get_attachment(local_attachment_id.into())
                 .await
-                .map(Into::into)
                 .map_err(RealProtonMailError::from)
+                .map(Into::into)
         })
         .await
         .map_err(ActionError::from)

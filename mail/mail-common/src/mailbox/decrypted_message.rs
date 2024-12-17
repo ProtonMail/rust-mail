@@ -74,7 +74,24 @@ pub struct DecryptedMessageBody {
 }
 
 impl DecryptedMessageBody {
-    pub fn request_attachments(
+    pub fn new(
+        body: String,
+        metadata: MessageBodyMetadata,
+        pgp_attachments: Option<Vec<ProcessedAttachment>>,
+        pgp_subject: Option<String>,
+        ctx: Arc<MailUserContext>,
+    ) -> Self {
+        let in_flight = Mutex::new(Self::request_attachments(ctx, metadata.attachments.clone()));
+        Self {
+            body,
+            metadata,
+            pgp_attachments,
+            pgp_subject,
+            in_flight,
+        }
+    }
+
+    fn request_attachments(
         ctx: Arc<MailUserContext>,
         atts: Vec<Attachment>,
     ) -> InFlightAttachments {
@@ -247,14 +264,13 @@ impl DecryptedMessageBody {
         metadata: MessageBodyMetadata,
         ctx: Arc<MailUserContext>,
     ) -> Self {
-        let in_flight = Mutex::new(Self::request_attachments(ctx, metadata.attachments.clone()));
-        Self {
-            body: stored.body,
+        Self::new(
+            stored.body,
             metadata,
-            pgp_attachments: stored.pgp_attachments,
-            pgp_subject: stored.pgp_subject,
-            in_flight,
-        }
+            stored.pgp_attachments,
+            stored.pgp_subject,
+            ctx,
+        )
     }
 }
 

@@ -16,7 +16,6 @@ use crate::actions::{
 use crate::find_in_query;
 use crate::models::*;
 use indoc::{formatdoc, indoc};
-use parking_lot::Mutex;
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue,
 };
@@ -1397,31 +1396,26 @@ impl Message {
                 )
             })?;
 
-        let in_flight = DecryptedMessageBody::request_attachments(
-            ctx,
-            encrypted_msg.metadata.attachments.clone(),
-        );
-        let in_flight = Mutex::new(in_flight);
         match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody {
-                metadata: encrypted_msg.metadata,
+            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody::new(
                 body,
-                pgp_attachments: None,
-                pgp_subject: None,
-                in_flight,
-            }),
+                encrypted_msg.metadata,
+                None,
+                None,
+                ctx,
+            )),
             DecryptedBody::Mime(ProcessedMessage {
                 body,
                 attachments,
                 encrypted_subject,
                 ..
-            }) => Ok(DecryptedMessageBody {
-                metadata: encrypted_msg.metadata,
+            }) => Ok(DecryptedMessageBody::new(
                 body,
-                pgp_attachments: Some(attachments),
-                pgp_subject: encrypted_subject,
-                in_flight,
-            }),
+                encrypted_msg.metadata,
+                Some(attachments),
+                encrypted_subject,
+                ctx,
+            )),
         }
     }
 
