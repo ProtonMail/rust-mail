@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Make API PQC ready with OpenPGP v6 keys support.
+- Encryption preferences consider v6 public keys.
 
 ### Changed
 

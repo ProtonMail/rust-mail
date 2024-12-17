@@ -4,7 +4,7 @@ use std::{
 };
 
 use proton_crypto_account::{
-    keys::PrimaryDecryptedAddressKey,
+    keys::PrimaryUnlockedAddressKey,
     proton_crypto::{
         crypto::{
             ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
@@ -84,7 +84,7 @@ pub trait EncryptableAttachment {
     fn attachment_encrypt_and_sign<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        primary_address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+        primary_address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
         encrypt(pgp_provider, primary_address_key, self.attachment_data())
     }
@@ -106,7 +106,7 @@ pub trait EncryptableAttachment {
 /// One of encryption, signing, or encoding steps fails.
 pub fn encrypt<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    primary_address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+    primary_address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     attachment_data: impl AsRef<[u8]>,
 ) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
     encrypt_helper(
@@ -199,7 +199,7 @@ fn encrypt_helper<Provider: PGPProviderSync>(
 /// One of encryption, signing, or encoding steps fails.
 pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     pgp_provider: &'a Provider,
-    primary_address_key: &'a PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+    primary_address_key: &'a PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     attachment_data: W,
 ) -> Result<
     SigncryptedAttachmentWriter<'a, W, Provider, Provider::Encryptor<'a>>,

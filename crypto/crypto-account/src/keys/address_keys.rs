@@ -113,15 +113,15 @@ impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
     /// - If there is only a primary v4 address key, the v4 address key is returned.
     ///
     /// In the v6 case, data has to be signed with both primary keys for backwards compatibility.
-    /// The returned type offers a helper to retrieve the keys for encryption [`PrimaryDecryptedAddressKey::for_encryption`]
-    /// and signing [`PrimaryDecryptedAddressKey::for_signing`], which takes care of this logic.
+    /// The returned type offers a helper to retrieve the keys for encryption [`PrimaryUnlockedAddressKey::for_encryption`]
+    /// and signing [`PrimaryUnlockedAddressKey::for_signing`], which takes care of this logic.
     ///
     /// # Warning
     /// Only use this function for e-mail. If you are unsure what to use, ask the crypto team.
     pub fn primary_for_mail(
         &self,
     ) -> Result<
-        PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+        PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
         AddressKeySelectionError,
     > {
         // Select the first v4 key in the list as the flag can not be trusted (legacy).
@@ -130,21 +130,21 @@ impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
         let primary_v6_opt = self.0.iter().find(|key| key.is_v6 && key.primary);
         match (primary_v4_opt, primary_v6_opt) {
             (None, None) => Err(AddressKeySelectionError::NoPrimaryAddressKey),
-            (None, Some(primary_v6)) => Ok(PrimaryDecryptedAddressKey {
+            (None, Some(primary_v6)) => Ok(PrimaryUnlockedAddressKey {
                 id: primary_v6.id.clone(),
                 flags: primary_v6.flags,
                 is_v6: true,
                 encrypt: primary_v6.public_key.clone(),
                 sign: Vec::from([primary_v6.private_key.clone()]),
             }),
-            (Some(primary_v4), None) => Ok(PrimaryDecryptedAddressKey {
+            (Some(primary_v4), None) => Ok(PrimaryUnlockedAddressKey {
                 id: primary_v4.id.clone(),
                 flags: primary_v4.flags,
                 is_v6: false,
                 encrypt: primary_v4.public_key.clone(),
                 sign: Vec::from([primary_v4.private_key.clone()]),
             }),
-            (Some(primary_v4), Some(primary_v6)) => Ok(PrimaryDecryptedAddressKey {
+            (Some(primary_v4), Some(primary_v6)) => Ok(PrimaryUnlockedAddressKey {
                 id: primary_v6.id.clone(),
                 flags: primary_v6.flags,
                 is_v6: true,
@@ -160,7 +160,7 @@ impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
 
 /// Type that represent and primary address key for e-mail encryption and signing.
 #[derive(Debug, Clone)]
-pub struct PrimaryDecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
+pub struct PrimaryUnlockedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
     /// The key id of the primary key.
     pub id: KeyId,
 
@@ -175,7 +175,7 @@ pub struct PrimaryDecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
 }
 
 impl<Priv: PrivateKey, Pub: PublicKey> TryFrom<DecryptedAddressKey<Priv, Pub>>
-    for PrimaryDecryptedAddressKey<Priv, Pub>
+    for PrimaryUnlockedAddressKey<Priv, Pub>
 {
     type Error = AddressKeySelectionError;
 
@@ -193,7 +193,7 @@ impl<Priv: PrivateKey, Pub: PublicKey> TryFrom<DecryptedAddressKey<Priv, Pub>>
     }
 }
 
-impl<Priv: PrivateKey, Pub: PublicKey> PrimaryDecryptedAddressKey<Priv, Pub> {
+impl<Priv: PrivateKey, Pub: PublicKey> PrimaryUnlockedAddressKey<Priv, Pub> {
     /// Return a reference to the primary key for encryption.
     pub fn for_encryption(&self) -> &Pub {
         &self.encrypt

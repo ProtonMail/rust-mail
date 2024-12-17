@@ -2,7 +2,7 @@
 use std::{fmt, str::FromStr};
 
 use proton_crypto_account::{
-    keys::{EmailMimeType, PrimaryDecryptedAddressKey},
+    keys::{EmailMimeType, PrimaryUnlockedAddressKey},
     proton_crypto::{
         crypto::{DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, SessionKeyAlgorithm},
         utils::remove_trailing_spaces,
@@ -136,7 +136,7 @@ pub trait EncryptablePackage {
     fn package_body_encrypt<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+        address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<EncryptedPackageBody, MessageError> {
         package_body_encrypt(
             pgp_provider,
@@ -165,7 +165,7 @@ pub trait EncryptablePackage {
 /// Returns a [`MessageError::Encryption`] error if the encryption fails.
 pub fn package_body_encrypt<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    address_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+    address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     mime_type: PackageMimeType,
     body: &[u8],
 ) -> Result<EncryptedPackageBody, MessageError> {

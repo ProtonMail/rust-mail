@@ -8,7 +8,7 @@ use proton_crypto::crypto::{
 use serde::{Deserialize, Serialize};
 
 use super::{
-    bool_from_integer, bool_to_integer, DecryptedAddressKey, KeyFlag, PrimaryDecryptedAddressKey,
+    bool_from_integer, bool_to_integer, DecryptedAddressKey, KeyFlag, PrimaryUnlockedAddressKey,
     UnlockedAddressKeys,
 };
 
@@ -93,7 +93,7 @@ impl SKLData {
     pub fn encode_and_sign<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        primary_key: &PrimaryDecryptedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+        primary_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     ) -> Result<(SKLDataJson, SKLSignature), SKLError> {
         let encoded_data = serde_json::to_string(&self.0)?;
         let signing_context =
