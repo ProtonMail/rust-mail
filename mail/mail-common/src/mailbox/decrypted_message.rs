@@ -3,13 +3,22 @@
 //! Everything related to processing a decrypted message.
 
 use crate::datatypes::MimeType;
-use crate::models::{MailSettings, MessageBodyMetadata};
+use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext, MailboxError};
+use parking_lot::Mutex;
+use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use stash::orm::Model;
+use std::collections::HashMap;
 use std::io::Read;
+use std::sync::Arc;
+use tokio::task::JoinHandle;
+use tracing::warn;
+
+use super::MailboxResult;
 
 /// Enable or disable remote content (images).
 /// The default behaviour is Default.
@@ -36,8 +45,9 @@ pub enum ParsedHeaderValue {
     Array(Vec<String>),
 }
 
+type InFlightAttachments = HashMap<LocalId, JoinHandle<MailboxResult<Vec<u8>>>>;
+
 /// Consists of the message's body metadata and decrypted content.
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecryptedMessageBody {
     /// The decrypted message contents.
     pub body: String,
@@ -51,6 +61,127 @@ pub struct DecryptedMessageBody {
     /// The subject that comes from a multipart message.
     // TODO: Figure this out
     pub pgp_subject: Option<String>,
+
+    /// Since the clients are holding on to this, we can request the attachments when we are
+    /// decrypyting the message so that the data is ready for when they request it.
+    ///
+    /// Eventually we will want to move to some sort of globally syncrhonized download manager but
+    /// for now this will be enough.
+    ///
+    /// This is necessary because it seems that in iOS the webview is requesting the attachments
+    /// one by one.
+    pub in_flight: Mutex<InFlightAttachments>,
+}
+
+impl DecryptedMessageBody {
+    pub fn new(
+        body: String,
+        metadata: MessageBodyMetadata,
+        pgp_attachments: Option<Vec<ProcessedAttachment>>,
+        pgp_subject: Option<String>,
+        ctx: Arc<MailUserContext>,
+    ) -> Self {
+        let in_flight = Mutex::new(Self::request_attachments(ctx, metadata.attachments.clone()));
+        Self {
+            body,
+            metadata,
+            pgp_attachments,
+            pgp_subject,
+            in_flight,
+        }
+    }
+
+    fn request_attachments(
+        ctx: Arc<MailUserContext>,
+        atts: Vec<Attachment>,
+    ) -> InFlightAttachments {
+        atts.into_iter()
+            .map(|att| {
+                let id = att.id().unwrap();
+                let ctx = ctx.clone();
+                let fut = tokio::spawn(async move {
+                    let data = ctx
+                        .get_attachment_content_data(&att)
+                        .await?
+                        // We load this in the future so that it's there even if this has been cached before
+                        .load()
+                        .await?;
+                    Ok(data)
+                });
+                (id, fut)
+            })
+            .collect()
+    }
+
+    pub async fn get_embedded_attachment(
+        &self,
+        ctx: &MailUserContext,
+        cid: &str,
+    ) -> MailboxResult<EmbeddedAttachmentInfo> {
+        // We use this for logging if no embedded image was found.
+        let mut available_cids = vec![];
+        let mut cid_match = |x: &str| {
+            // If the cid is provided in the `<foo@bar>` format
+            let x = if x.starts_with('<') && x.ends_with('>') {
+                &x[1..x.len() - 1]
+            } else {
+                // We leave this warning here to check if we need to support other cases in
+                // the future.
+                // TODO: remove me at some point.
+                warn!("Weird cid format: {x}");
+                x
+            };
+
+            if x == cid {
+                true
+            } else {
+                available_cids.push(x.to_string());
+                false
+            }
+        };
+
+        let Some(att) = self
+            .metadata
+            .attachments
+            .iter()
+            // Notice that we don't check for the disposition, this is intentional.
+            .find(|at| at.content_id.as_deref().is_some_and(&mut cid_match))
+        else {
+            // No correct cid found in the db... Let's check if it's a pgp attachment
+            let find = self
+                .pgp_attachments
+                .as_ref()
+                .and_then(|x| x.iter().find(|at| cid_match(&at.content_id)));
+            match find {
+                Some(at) => {
+                    return Ok(EmbeddedAttachmentInfo {
+                        data: at.data.clone(),
+                        mime: at.mime_type.clone(),
+                        height: None,
+                        width: None,
+                    })
+                }
+                None => {
+                    return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());
+                }
+            }
+        };
+
+        let data = {
+            // We first remove the task from the mutex to avoid locking other threads.
+            let task_handle = { self.in_flight.lock().remove(&att.id().unwrap()) };
+            match task_handle {
+                Some(p) => p.await.unwrap()?,
+                None => ctx.get_attachment_content_data(att).await?.load().await?,
+            }
+        };
+        Ok(EmbeddedAttachmentInfo {
+            data,
+            mime: att.mime_type.to_string(),
+            height: att.image_height.clone(),
+            width: att.image_width.clone(),
+        })
+    }
 }
 
 impl DecryptedMessageBody {
@@ -131,13 +262,15 @@ impl DecryptedMessageBody {
     pub(crate) fn from_storable(
         stored: StorableMessageBody,
         metadata: MessageBodyMetadata,
+        ctx: Arc<MailUserContext>,
     ) -> Self {
-        Self {
-            body: stored.body,
+        Self::new(
+            stored.body,
             metadata,
-            pgp_attachments: stored.pgp_attachments,
-            pgp_subject: stored.pgp_subject,
-        }
+            stored.pgp_attachments,
+            stored.pgp_subject,
+            ctx,
+        )
     }
 }
 

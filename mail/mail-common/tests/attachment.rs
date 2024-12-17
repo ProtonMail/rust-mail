@@ -51,7 +51,7 @@ async fn test_load_attachment_buffer() {
     assert!(user_ctx.attachements_cache().is_empty());
 
     // Load and decrypt attachment.
-    let decryption_result = mailbox
+    let decryption_result = user_ctx
         .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
@@ -61,7 +61,7 @@ async fn test_load_attachment_buffer() {
         "attachments should be equal"
     );
     assert_eq!(user_ctx.attachements_cache().len(), 1);
-    mailbox
+    user_ctx
         .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
@@ -107,7 +107,7 @@ async fn load_attachment_from_cache() {
         .unwrap();
 
     // Load and decrypt attachment.
-    let decryption_result = mailbox
+    let decryption_result = user_ctx
         .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
@@ -137,18 +137,16 @@ async fn load_attachment_content_first_time() {
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
         .await;
     ctx.init_user(user_ctx.clone()).await;
-
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .unwrap();
-
     ctx.catch_all().await;
 
     assert!(user_ctx.attachements_cache().is_empty());
 
     // Action:
     //   * Get attachment
-    let data_path = mailbox.get_attachment_content(&attachment).await.unwrap();
+    let data_path = user_ctx
+        .get_attachment_content_path(&attachment)
+        .await
+        .unwrap();
 
     // Validate:
     //   * attachment is the decrypted one
@@ -178,10 +176,6 @@ async fn load_attachment_content_from_cache() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .unwrap();
-
     ctx.catch_all().await;
 
     let key = CacheAttachmentKey::new(attachment_local_id, &attachment.filename);
@@ -192,7 +186,10 @@ async fn load_attachment_content_from_cache() {
 
     // Action:
     //   * Get attachment
-    let data_path = mailbox.get_attachment_content(&attachment).await.unwrap();
+    let data_path = user_ctx
+        .get_attachment_content_path(&attachment)
+        .await
+        .unwrap();
 
     // Validate:
     //   * attachment is the same as the one in cache

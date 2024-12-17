@@ -196,7 +196,7 @@ impl MessagesState {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: anyhow::Result<_> = (|| async move {
                 let decrypted =
-                    MailMessage::message_body(&mbox.user_context(), metadata.local_id.unwrap())
+                    MailMessage::message_body(mbox.user_context(), metadata.local_id.unwrap())
                         .await
                         .context("Failed to get message body")?;
                 let html = decrypted

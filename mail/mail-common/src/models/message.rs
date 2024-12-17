@@ -13,14 +13,15 @@ use crate::actions::{
     filter_responses, ActionError, AllBottomBarMessageActions, BottomBarActions,
     MovableSystemFolderAction,
 };
+use crate::find_in_query;
 use crate::models::*;
-use crate::{find_in_query, Mailbox};
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue,
 };
 use stash::exports::SqliteError;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
@@ -32,9 +33,9 @@ use crate::datatypes::{
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
-use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
+use crate::user_context::cache::CacheMessageKey;
 use crate::MailContextResult;
-use crate::{AppError, MailUserContext, MailboxError};
+use crate::{AppError, MailUserContext};
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
@@ -49,7 +50,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::cache::{CacheError, CacheResult, ProtonCache};
+use proton_core_common::cache::{CacheError, CacheResult};
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
@@ -685,89 +686,6 @@ impl Message {
     ) -> Result<Vec<Self>, StashError> {
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", message_ids);
         Message::find(query, params, tether, None).await
-    }
-
-    /// Gets the embedded attachment by cid for a message.
-    ///
-    /// # Parameters
-    ///
-    /// * `mailbox`  - The current Mailbox.
-    /// * `id`       - The id of the message
-    /// * `cid`      - The cid of the attachment
-    ///
-    #[tracing::instrument(skip(mailbox))]
-    pub async fn get_embedded_attachment(
-        mailbox: &Mailbox,
-        id: LocalId,
-        cid: &str,
-    ) -> Result<EmbeddedAttachmentInfo, MailboxError> {
-        // We use this for logging if no embedded image was found.
-        let mut available_cids = vec![];
-        let mut cid_match = |x: &str| {
-            // If the cid is provided in the `<foo@bar>` format
-            let x = if x.starts_with('<') && x.ends_with('>') {
-                &x[1..x.len() - 1]
-            } else {
-                // We leave this warning here to check if we need to support other cases in
-                // the future.
-                // TODO: remove me at some point.
-                warn!("Weird cid format: {x}");
-                x
-            };
-
-            if x == cid {
-                true
-            } else {
-                available_cids.push(x.to_owned());
-                false
-            }
-        };
-
-        let tether = mailbox.stash().connection();
-        let mdata = MessageBodyMetadata::for_message(id, &tether)
-            .await?
-            .ok_or(AppError::MessageBodyMetadataMissing(id))?;
-
-        let Some(att) = mdata
-            .attachments
-            .into_iter()
-            // Notice that we don't check for the disposition, this is intentional.
-            .find(|at| at.content_id.as_deref().is_some_and(&mut cid_match))
-        else {
-            // No correct cid found in the db... Let's check if it's a pgp attachment
-            let find = Message::message_body(&mailbox.user_context(), id)
-                .await?
-                .pgp_attachments
-                .and_then(|x| x.into_iter().find(|at| cid_match(&at.content_id)));
-            match find {
-                Some(at) => {
-                    return Ok(EmbeddedAttachmentInfo {
-                        data: at.data,
-                        mime: at.mime_type,
-                        height: None,
-                        width: None,
-                    });
-                }
-                None => {
-                    return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());
-                }
-            }
-        };
-
-        if matches!(att.disposition, Disposition::Attachment) {
-            warn!("inline attachment used with Disposition::Attachment");
-        }
-
-        // PERF: Optimize this part
-        let path = mailbox.get_attachment_content(&att).await?;
-        debug!("Path for cid {cid}: {path:?}");
-        let data = tokio::fs::read(&path).await?;
-        Ok(EmbeddedAttachmentInfo {
-            data,
-            mime: att.mime_type.to_string(),
-            height: att.image_height.clone(),
-            width: att.image_width.clone(),
-        })
     }
 
     /// Get the available actions from bottom bar for given messages
@@ -1458,15 +1376,15 @@ impl Message {
     }
 
     /// Get message from remote and decrypt it
-    pub async fn decrypt_from_remote<P: PgpProviderSync, PM: ProtonMail>(
+    pub async fn decrypt_from_remote<P: PgpProviderSync>(
         &self,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
-        api: &PM,
+        ctx: Arc<MailUserContext>,
         tether: &mut Tether,
     ) -> Result<DecryptedMessageBody, AppError> {
         // Fetch metadata first to sync contents and cache.
-        let encrypted_msg = self.sync_message_body(api, tether).await?;
+        let encrypted_msg = self.sync_message_body(ctx.api(), tether).await?;
 
         // TODO: Verify signature.
         let (decrypted_body, _) = encrypted_msg
@@ -1479,23 +1397,25 @@ impl Message {
             })?;
 
         match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody {
-                metadata: encrypted_msg.metadata,
+            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody::new(
                 body,
-                pgp_attachments: None,
-                pgp_subject: None,
-            }),
+                encrypted_msg.metadata,
+                None,
+                None,
+                ctx,
+            )),
             DecryptedBody::Mime(ProcessedMessage {
                 body,
                 attachments,
                 encrypted_subject,
                 ..
-            }) => Ok(DecryptedMessageBody {
-                metadata: encrypted_msg.metadata,
+            }) => Ok(DecryptedMessageBody::new(
                 body,
-                pgp_attachments: Some(attachments),
-                pgp_subject: encrypted_subject,
-            }),
+                encrypted_msg.metadata,
+                Some(attachments),
+                encrypted_subject,
+                ctx,
+            )),
         }
     }
 
@@ -1987,12 +1907,11 @@ impl Message {
     /// - if a message with the given id could not be found
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
     pub async fn message_body(
-        user_context: &MailUserContext,
+        user_context: Arc<MailUserContext>,
         id: LocalId,
     ) -> MailContextResult<DecryptedMessageBody> {
-        let cache = user_context.messages_cache();
-        let mut tether = user_context.user_stash().connection();
-        let saved_message = Message::load(id, &tether)
+        let tether = &mut user_context.user_stash().connection();
+        let saved_message = Message::load(id, tether)
             .await?
             .ok_or(AppError::MessageMissing(id))?;
 
@@ -2001,10 +1920,8 @@ impl Message {
         let address_keys = user_context
             .unlocked_address_keys(&pgp_provider, &address_id)
             .await?;
-        let api = user_context.session().api();
-
         Ok(saved_message
-            .fetch_message_body(cache, address_keys, pgp_provider, api, &mut tether)
+            .fetch_message_body(address_keys, pgp_provider, user_context.clone(), tether)
             .await?)
     }
 
@@ -2027,22 +1944,23 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    pub async fn fetch_message_body<P: PgpProviderSync, PM: ProtonMail>(
+    pub async fn fetch_message_body<P: PgpProviderSync>(
         &self,
-        cache: &ProtonCache<CacheMessageConfig>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
-        api: &PM,
+        ctx: Arc<MailUserContext>,
         tether: &mut Tether,
     ) -> Result<DecryptedMessageBody, AppError> {
         let key = CacheMessageKey::from(self);
+        let cache = ctx.messages_cache();
 
         // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
         // Recover from cache issues by requesting the data again.
+        // TODO: Use get_path_or_insert_data instead
         let file_path: PathBuf = cache
             .get_path_or_insert(
                 &key,
-                self.store_message_body(address_keys, pgp_provider, api, tether),
+                self.store_message_body(address_keys, pgp_provider, ctx.clone(), tether),
             )
             .await?;
 
@@ -2051,19 +1969,19 @@ impl Message {
         let metadata = self.get_message_body_metadata(tether).await?.ok_or(
             AppError::MessageBodyMetadataMissing(self.local_id.expect("Should be set")),
         )?;
-        Ok(DecryptedMessageBody::from_storable(message, metadata))
+        Ok(DecryptedMessageBody::from_storable(message, metadata, ctx))
     }
 
     /// Fetch, decrypt and store message body in cache.
-    async fn store_message_body<P: PgpProviderSync, PM: ProtonMail>(
+    async fn store_message_body<P: PgpProviderSync>(
         &self,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
-        api: &PM,
+        ctx: Arc<MailUserContext>,
         tether: &mut Tether,
     ) -> CacheResult<Vec<u8>> {
         let decrypted_message_body = self
-            .decrypt_from_remote(address_keys, pgp_provider, api, tether)
+            .decrypt_from_remote(address_keys, pgp_provider, ctx, tether)
             .await
             .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
 

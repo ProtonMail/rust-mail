@@ -3,6 +3,7 @@ use crate::export_void_result;
 use crate::UniffiEnum;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailContextError;
 
 export_void_result!(VoidActionResult, ActionError);
 
@@ -29,5 +30,12 @@ impl From<RealMailErrorReason> for ActionError {
             RealMailErrorReason::ActionReason(reason) => ActionError::Reason(reason.into()),
             other_reason => ActionError::Other(ProtonError::from(other_reason)),
         }
+    }
+}
+
+impl From<MailContextError> for ActionError {
+    fn from(value: MailContextError) -> Self {
+        let v = RealProtonMailError::from(value);
+        Self::from(v)
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::actions::draft;
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
@@ -183,10 +185,10 @@ impl Draft {
     /// or the message is not a draft.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn open(
-        context: &MailUserContext,
+        context: Arc<MailUserContext>,
         message_id: LocalId,
     ) -> Result<Self, MailContextError> {
-        let mut tether = context.user_stash().connection();
+        let tether = context.user_stash().connection();
         let Some(message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
@@ -195,14 +197,15 @@ impl Draft {
             return Err(Error::MessageNotADraft(message_id).into());
         }
 
-        let body = Message::message_body(context, message_id)
+        let tether = &mut context.user_stash().connection();
+        let body = Message::message_body(context.clone(), message_id)
             .await
             .inspect_err(|e| {
                 error!("Failed to get message body from cache: {e}");
             })?;
 
         let metadata_id = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e}"))?
         {
@@ -227,6 +230,7 @@ impl Draft {
             metadata.id.unwrap()
         };
 
+        let context = &*context;
         Ok(Self {
             metadata_id,
             sender: message.sender.address,
