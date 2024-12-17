@@ -27,7 +27,8 @@ cargo run \
     --no-format
 
 # Strip symbols
-STRIP_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
+OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
+STRIP_BIN=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/${OS_NAME}-x86_64/bin/llvm-strip
 $STRIP_BIN target/aarch64-linux-android/release/$LIB_NAME -o $OUT_DIR/jniLibs/arm64-v8a/$LIB_NAME
 $STRIP_BIN target/armv7-linux-androideabi/release/$LIB_NAME -o $OUT_DIR/jniLibs/armeabi-v7a/$LIB_NAME
 $STRIP_BIN target/x86_64-linux-android/release/$LIB_NAME -o $OUT_DIR/jniLibs/x86_64/$LIB_NAME
