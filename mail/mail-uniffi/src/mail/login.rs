@@ -1,7 +1,9 @@
-use crate::errors::{LoginError, VoidLoginResult};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{LoginError, ProtonError, VoidLoginResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_api_core::login::Flow as CoreLoginFlow;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -39,13 +41,31 @@ impl LoginFlow {
 
 #[uniffi::export]
 impl LoginFlow {
-    /// Login with user and password.
-    pub async fn login(&self, email: String, password: String) -> VoidLoginResult {
+    /// Login with user, password and optional fingerprints payload (for anti-abuse).
+    /// * `fingerprint_payload` - a JSON array of objects serialized to a `String`.
+    pub async fn login(
+        &self,
+        email: String,
+        password: String,
+        fingerprint_payload: Option<String>,
+    ) -> VoidLoginResult {
         let flow = self.flow.clone();
+
+        let fingerprint_result = fingerprint_payload.as_ref().map(|f| f.parse()).transpose();
+        let extra_info = match fingerprint_result {
+            Ok(Some(f)) => LoginExtraInfo::builder().with_fingerprint(f).build(),
+            Ok(None) => LoginExtraInfo::default(),
+            Err(_) => {
+                return VoidLoginResult::Error(LoginError::Other(ProtonError::Unexpected(
+                    UnexpectedError::InvalidArgument,
+                )))
+            }
+        };
+
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .login(email, password)
+                .login(email, password, extra_info)
                 .await
                 .map_err(RealProtonMailError::from)
         })

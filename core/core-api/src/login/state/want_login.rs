@@ -29,7 +29,12 @@ impl WantLogin {
         }
     }
 
-    pub async fn login(self, user: String, pass: String) -> Result<State, LoginError> {
+    pub async fn login(
+        self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<State, LoginError> {
         let Self {
             client,
             config,
@@ -40,7 +45,7 @@ impl WantLogin {
 
         let state = match client
             .auth()
-            .login_with_extra(&user, &pass, LoginExtraInfo::default())
+            .login_with_extra(&user, &pass, extra_info)
             .await
         {
             LoginFlow::Ok(client, flow_data) => {
