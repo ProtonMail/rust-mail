@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.27.0] - 2024-12-17
+
 ### Added
 
   - Added `Draft::message_id`.
@@ -15,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Message marked a read are no more displayed when coming back in conversation list while filtering read.
+  - Embedded attachments are faster
+  - Fixed some bugs regarding embedded attachments not showing.
+
+### Changed
+
+  - `get_embedded_attachment` must be called from `DecryptedMessageBody`
 
 ## [0.26.0] - 2024-12-13
 
