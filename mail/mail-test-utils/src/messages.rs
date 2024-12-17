@@ -27,12 +27,25 @@ use wiremock::{Mock, ResponseTemplate};
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
     pub async fn mock_get_message(&self, message_id: &ApiRemoteId, message: ApiMessage) {
+        self.mock_get_message_with_expected(message_id, message, 1)
+            .await;
+    }
+
+    /// Generate new mock expectations for message fetch request for `message_id`.
+    ///
+    /// This mock is expected to be called `expected` number of times.
+    pub async fn mock_get_message_with_expected(
+        &self,
+        message_id: &ApiRemoteId,
+        message: ApiMessage,
+        expected: u64,
+    ) {
         let resp = GetMessageResponse { message };
 
         Mock::given(method("GET"))
             .and(path(format!("/api/mail/v4/messages/{message_id}")))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-            .expect(1)
+            .expect(expected)
             .mount(self.mock_server())
             .await;
     }

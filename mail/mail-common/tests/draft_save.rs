@@ -56,6 +56,9 @@ async fn create_empty_draft() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -157,6 +160,21 @@ async fn create_empty_draft_and_save_twice() {
         .into_iter()
         .map_into()
         .collect();
+    updated_message.body.body = r"
+-----BEGIN PGP MESSAGE-----
+
+wV4DGS71hsmM2EQSAQdApsxU764ePCfQ/bwfVTrxYKCvQIyxjIjaOQqg1lfn5VAw
+yuGKKmEIA2WMImYHzbN8S2ZTPWuXRfckWme8E+OkuWSVWiPKnAxMHzjwrH3V944J
+0sBIAY1Ckxnz3zkWyEebOupvGGj8257b+MrzPw9UyiQ+ND5bT7nKESgMtTlA2f0s
+XpgZ4uycHvmtocbNR49E/tazWFidaIf1ZNAnpv6va8uxZZ2ddOf5u1SWY34D30Bu
+f8Y3F9U7piAUl2gd1ZeZEsTsoIW95UKa+BY0THXFivcLKmoUcYNRrugLk6TlJhEX
+beORgaHsf+TBYuXKvN1dtYmwzSifsi8pdMsK1WebfDQjdWRRSCs3FKi4yH9PkVUg
+dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
+3HM6yy1bT6WQy/xGG9YZeeYZbuzC8tO8WqS/
+=1xQJ
+-----END PGP MESSAGE-----
+"
+    .to_owned();
 
     let expected_draft_params = expected_create_draft_params();
     let expected_update_draft_params = {
@@ -208,6 +226,9 @@ async fn create_empty_draft_and_save_twice() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&updated_message.metadata.id, updated_message.clone())
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -347,7 +368,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     message.metadata.label_ids.push(LabelId::drafts().into());
 
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_message(&message.metadata.id, message.clone())
+    ctx.mock_get_message_with_expected(&message.metadata.id, message.clone(), 2)
         .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -516,6 +537,14 @@ async fn create_draft_reply_impl(
         key_packets,
     )
     .await;
+    // Decrypted message downloads attachments.
+    for attachment in &message.body.attachments {
+        ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
+            .await;
+    }
+    // Opening a draft always syncs the message.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
