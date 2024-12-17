@@ -294,15 +294,13 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
         encryption_time: UnixTimestamp,
     ) -> Result<Self, EncryptionPreferencesError> {
         // Select a valid primary key in the address.
-        let Some(selected_key_v4) = address_keys.iter().find(|address_key| {
+        let selected_key_v4_opt = address_keys.iter().find(|address_key| {
             address_key.primary
                 && !address_key.flags.is_compromised()
                 && !address_key.flags.is_obsolete()
                 && address_key.public_key.can_encrypt(encryption_time)
                 && !address_key.is_v6
-        }) else {
-            return Err(EncryptionPreferencesError::NoPrimaryKey);
-        };
+        });
 
         // If there is a valid v6 primary key, prefer it for encryption.
         let selected_key_v6_opt = address_keys.iter().find(|address_key| {
@@ -312,9 +310,10 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
                 && address_key.public_key.can_encrypt(encryption_time)
                 && address_key.is_v6
         });
-        let selected_key = match selected_key_v6_opt {
-            Some(selected_key_v6) => &selected_key_v6.public_key,
-            None => &selected_key_v4.public_key,
+        let selected_key = match (selected_key_v4_opt, selected_key_v6_opt) {
+            (None, None) => return Err(EncryptionPreferencesError::NoPrimaryKey),
+            (None | Some(_), Some(selected_key_v6)) => &selected_key_v6.public_key,
+            (Some(selected_key_v4), None) => &selected_key_v4.public_key,
         };
 
         Ok(EncryptionPreferences {
