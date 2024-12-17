@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.9.0] - 2024-12-17
+
 ### Added
 - Make API PQC ready with OpenPGP v6 keys support.
 - Encryption preferences consider v6 public keys.
@@ -15,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Refactor attachment encryption API allowing encryption with the `PrimaryAddressKey` only.
 - Refactor draft encryption API allowing encryption with the `PrimaryAddressKey` only.
+- Update `proton-crypto-account` to 0.8.0
 
 ## [0.8.2] - 2024-12-13
 
