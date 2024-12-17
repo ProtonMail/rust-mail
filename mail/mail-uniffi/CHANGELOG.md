@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+  - Message marked a read are no more displayed when coming back in conversation list while filtering read. 
+
 ## [0.26.0] - 2024-12-13
 
 ### Added
