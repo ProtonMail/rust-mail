@@ -19,8 +19,6 @@ pub enum KeyError {
 pub enum AddressKeySelectionError {
     #[error("No valid primary address key found")]
     NoPrimaryAddressKey,
-    #[error("Only a v6 primary key found")]
-    OnlyV6PrimaryAddressKey,
     #[error("Cannot transform address key to primary address key: {0}")]
     InvalidPrimaryTransform(KeyId),
 }

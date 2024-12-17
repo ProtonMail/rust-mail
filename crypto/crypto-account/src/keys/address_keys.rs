@@ -130,7 +130,13 @@ impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
         let primary_v6_opt = self.0.iter().find(|key| key.is_v6 && key.primary);
         match (primary_v4_opt, primary_v6_opt) {
             (None, None) => Err(AddressKeySelectionError::NoPrimaryAddressKey),
-            (None, Some(_)) => Err(AddressKeySelectionError::OnlyV6PrimaryAddressKey),
+            (None, Some(primary_v6)) => Ok(PrimaryDecryptedAddressKey {
+                id: primary_v6.id.clone(),
+                flags: primary_v6.flags,
+                is_v6: true,
+                encrypt: primary_v6.public_key.clone(),
+                sign: Vec::from([primary_v6.private_key.clone()]),
+            }),
             (Some(primary_v4), None) => Ok(PrimaryDecryptedAddressKey {
                 id: primary_v4.id.clone(),
                 flags: primary_v4.flags,
