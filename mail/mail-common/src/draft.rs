@@ -189,7 +189,7 @@ impl Draft {
         message_id: LocalId,
     ) -> Result<Self, MailContextError> {
         let tether = context.user_stash().connection();
-        let Some(message) = Message::find_by_id(message_id, &tether).await? else {
+        let Some(mut message) = Message::find_by_id(message_id, &tether).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
@@ -197,15 +197,61 @@ impl Draft {
             return Err(Error::MessageNotADraft(message_id).into());
         }
 
-        let tether = &mut context.user_stash().connection();
-        let body = Message::message_body(context.clone(), message_id)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to get message body from cache: {e}");
-            })?;
+        let (body, body_metadata) = if let Some(remote_id) = message.remote_id.clone() {
+            match Message::force_sync_message_and_body(Arc::clone(&context), remote_id).await {
+                Ok((metadata, body_metadata, body)) => {
+                    message = metadata;
+                    (Some(body), Some(body_metadata))
+                }
+                Err(e) => {
+                    if let MailContextError::Api(api_err) = &e {
+                        // Handle offline mode case.
+                        if api_err.is_network_failure() {
+                            (None, None)
+                        } else {
+                            return Err(e);
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        } else {
+            (None, None)
+        };
+
+        let mut tether = context.user_stash().connection();
+
+        // Load body metadata if not re-synced.
+        let body_metadata = if let Some(body_metadata) = body_metadata {
+            body_metadata
+        } else {
+            let Some(body_metadata) =
+                MessageBodyMetadata::for_message(message.local_id.unwrap(), &tether).await?
+            else {
+                return Err(AppError::MessageMissing(message_id).into());
+            };
+
+            body_metadata
+        };
+
+        // Load body from cache if not resynced.
+        let body = if let Some(body) = body {
+            body
+        } else {
+            let key = CacheMessageKey::from(&message);
+            let Some(message_body_reader) = context.messages_cache().get_item(&key)? else {
+                return Err(AppError::MessageBodyMissing(message.local_id.unwrap()).into());
+            };
+
+            let body = StorableMessageBody::from_reader(message_body_reader)
+                .inspect_err(|e| error!("Failed to load message body: {e}"))?;
+
+            body.body
+        };
 
         let metadata_id = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e}"))?
         {
@@ -239,9 +285,9 @@ impl Draft {
             bcc_list: RecipientList::from_message_recipients(context, message.bcc_list.value).await,
             address_id: message.remote_address_id,
             subject: message.subject,
-            body: body.body,
-            attachments: body.metadata.attachments,
-            mime_type: body.metadata.mime_type,
+            body,
+            attachments: body_metadata.attachments,
+            mime_type: body_metadata.mime_type,
         })
     }
 
