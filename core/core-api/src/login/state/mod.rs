@@ -185,6 +185,7 @@ impl State {
     /// Get the session ID that has been (or is in the process of) being created.
     pub fn auth_id(&self) -> Result<&RemoteId, LoginError> {
         let state: &dyn HasAuthId = match self {
+            Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
             Self::Complete(state) => state,
 
