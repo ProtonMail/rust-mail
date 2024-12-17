@@ -1,10 +1,12 @@
 use super::{DraftErrorReason, ProtonError};
-use crate::export_void_result;
+use crate::core::datatypes::Id;
 use crate::UniffiEnum;
+use crate::{export_typed_result, export_void_result};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 export_void_result!(VoidDraftResult, DraftError);
+export_typed_result!(OptIdDraftResult, Option<Id>, DraftError);
 
 #[derive(Debug, UniffiEnum)]
 pub enum DraftError {

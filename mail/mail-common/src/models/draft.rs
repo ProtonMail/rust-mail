@@ -164,4 +164,23 @@ impl DraftMetadata {
         )
         .await
     }
+
+    /// Get the message id associated with a draft.
+    ///
+    /// This method can return `None` if the message has not been
+    /// created yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn message_id(
+        id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Option<LocalId>, StashError> {
+        let Some(metadata) = DraftMetadata::find_by_id(id, tether).await? else {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
+
+        Ok(metadata.local_message_id)
+    }
 }

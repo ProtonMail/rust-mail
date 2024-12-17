@@ -655,11 +655,7 @@ impl Draft {
     ///
     /// Returns error if the query failed.
     pub async fn message_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
-        let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, tether).await? else {
-            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-        };
-
-        Ok(metadata.local_message_id)
+        DraftMetadata::message_id(self.metadata_id, tether).await
     }
 
     /// Get the conversation id associated with this draft.
