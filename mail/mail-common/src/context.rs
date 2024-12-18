@@ -149,6 +149,7 @@ impl MailContext {
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
+
         let core_context = Context::new(
             session_db_path,
             user_db_path,
