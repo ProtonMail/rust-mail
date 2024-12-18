@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.28.0] - 2024-12-18
+
  - Opening a Draft now always syncs the contents from the server.
  - SQL debug logs are only enabled when `STASH_SQL_DEBUG` environment variable is present.
 
