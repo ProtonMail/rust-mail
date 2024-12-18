@@ -1,10 +1,10 @@
 use crate::events::MessageEvent;
-use crate::models::{ConversationLabel, Message};
+use crate::models::{ConversationLabel, DraftMetadata, Message};
 use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
 use stash::stash::Bond;
-use tracing::warn;
+use tracing::{debug, warn};
 
 pub async fn handle_message_events(
     tx: &Bond<'_>,
@@ -33,6 +33,15 @@ pub async fn handle_message_events(
                 }
             }
             Action::Update | Action::UpdateFlags => {
+                if DraftMetadata::exists_for_message_with_remote_id(&message_event.remote_id, tx)
+                    .await?
+                {
+                    debug!(
+                        "Skipping message update for {} due to draft metadata",
+                        message_event.remote_id
+                    );
+                    continue;
+                }
                 if let Some(message) = &message_event.message {
                     ConversationLabel::create_or_update_from_message_metadata(
                         &[message.clone()],
