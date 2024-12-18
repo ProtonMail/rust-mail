@@ -23,7 +23,7 @@ use tracing::warn;
 /// The data contained in the [`ConversationLabel`] is superimposed over the
 /// data in the [`Conversation`] to produce the correct information that needs
 /// to be displayed to the client.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct ContextualConversation {
     /// Local id of the conversation.
     pub local_id: LocalId,

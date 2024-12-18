@@ -77,12 +77,8 @@ async fn basic_send_check() {
         }],
         num_attachments: 0,
         num_messages: 1,
-        num_unread: 0,
-        order: 0,
-        recipients: vec![],
-        senders: vec![],
-        size: 0,
         subject: sent_message.metadata.subject.clone(),
+        ..Default::default()
     };
 
     let expected_draft_params = expected_create_draft_params();

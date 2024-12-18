@@ -12,6 +12,7 @@ pub mod sidebar;
 mod user_context;
 
 pub mod draft;
+pub mod mail_scroller;
 #[cfg(test)]
 mod tests;
 

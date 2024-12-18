@@ -5,6 +5,7 @@ mod events;
 mod labels;
 mod messages;
 mod rollback_actions;
+mod scroller;
 mod settings;
 
 use stash::stash::{Bond, StashError};
@@ -45,6 +46,10 @@ impl proton_sqlite3::Migration for MigrationV0 {
         let span = debug_span!("rollback_actions");
         let entered = span.enter();
         rollback_actions::create_rollback_action_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("paginator");
+        let entered = span.enter();
+        scroller::create_paginator_tables(tx).await?;
         drop(entered);
         Ok(())
     }

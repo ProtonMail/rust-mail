@@ -181,6 +181,7 @@ impl Params {
                 display_snooze_reminder: false,
                 attachments_metadata: vec![testdata_attachment_metadata()],
                 attachment_info: BTreeMap::default(),
+                context_time: None,
             }],
             attachments: vec![testdata_attachment_metadata_complete(
                 ApiRemoteId::from("mymessage "),

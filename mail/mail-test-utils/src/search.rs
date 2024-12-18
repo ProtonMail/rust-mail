@@ -350,5 +350,6 @@ pub fn test_conversation(
         display_snooze_reminder: false,
         attachments_metadata: Vec::from_iter(attachments),
         attachment_info: BTreeMap::default(),
+        context_time: None,
     }
 }

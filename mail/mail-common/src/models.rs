@@ -41,11 +41,13 @@ pub use attachment::*;
 pub use conversation::*;
 pub use draft::*;
 pub use labels::*;
+pub use mail_scroller::*;
 pub use mail_settings::*;
 pub use message::*;
 pub use network::*;
 pub use paginator::*;
 pub use rollback_item::*;
 
+mod mail_scroller;
 #[path = "tests/models.rs"]
 mod tests;
