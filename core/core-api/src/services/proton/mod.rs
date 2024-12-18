@@ -48,13 +48,27 @@
 //! other functionality, and would get saved to the database.
 //!
 
+use std::sync::Arc;
+
 use bytes::Bytes;
+use muon::client::middleware::DisplayLogger;
+use muon::common::IntoDyn;
+use muon::dns::{GoogleDoh, Quad9Doh};
+use muon::error::ParseAppVersionErr;
+use muon::App;
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use responses::{GetAddressResponse, PutDeleteContactsResponse};
 use serde::Deserialize;
+use thiserror::Error;
+use tokio::sync::RwLock;
 
 use crate::service::ApiServiceResult;
 use crate::services::proton::prelude::*;
+use crate::services::proton::proton_impl::{
+    MuonStoreImpl, SetCryptoClockLayer, SetDefaultServiceTypeLayer, SetDefaultTimeoutLayer,
+};
+use crate::session::Config;
+use crate::store::Store;
 
 /// Re-export muon for downstream convenience.
 pub extern crate muon;
@@ -71,14 +85,39 @@ mod proton_impl;
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";
 
-/// The Proton Core API base path (v5).
-///
-/// NOTE: The API docs say that the events route should use `v5`,
-/// but it returns an error; this is defined here for future use.
-pub const CORE_V5: &str = "/core/v5";
-
 /// The Proton type is just an alias for the muon client.
 pub type Proton = muon::Client;
+
+/// An error that can occur when building a Proton client.
+#[derive(Debug, Error)]
+pub enum BuildError {
+    /// The app version could not be parsed.
+    #[error(transparent)]
+    ParseAppVersion(#[from] ParseAppVersionErr),
+
+    /// The client could not be built.
+    #[error(transparent)]
+    Build(#[from] muon::Error),
+}
+
+/// Builds a new Proton client.
+pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, BuildError> {
+    let app = if let Some(agent) = &config.user_agent {
+        App::new(config.app_version)?.with_user_agent(agent)
+    } else {
+        App::new(config.app_version)?
+    };
+
+    let client = Proton::builder(app, MuonStoreImpl::new(config.env_id, store))
+        .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
+        .layer_back(SetCryptoClockLayer)
+        .layer_back(SetDefaultServiceTypeLayer)
+        .layer_back(SetDefaultTimeoutLayer)
+        .layer_back(DisplayLogger::debug())
+        .build()?;
+
+    Ok(client)
+}
 
 #[allow(async_fn_in_trait)]
 pub trait ProtonCore {

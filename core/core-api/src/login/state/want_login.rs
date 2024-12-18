@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
 use crate::services::proton::common::RemoteId;
@@ -12,12 +14,12 @@ use tracing::info;
 /// the user must call `login` to proceed.
 pub struct WantLogin {
     client: Proton,
-    config: Config,
+    config: Arc<Config>,
     store: DynStore,
 }
 
 impl WantLogin {
-    pub fn new(client: Proton, config: Config, store: DynStore) -> Self {
+    pub fn new(client: Proton, config: Arc<Config>, store: DynStore) -> Self {
         info!("Login flow wants login");
 
         Self {

@@ -1,29 +1,18 @@
 #![allow(clippy::module_name_repetitions)]
 
-use async_trait::async_trait;
-use chrono::DateTime;
-use futures::TryFutureExt;
 use muon::client::flow::ForkFlowResult;
-use muon::common::{BoxFut, IntoDyn, Sender, SenderLayer, ServiceType};
-use muon::dns::{GoogleDoh, Quad9Doh};
-use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
-use muon::Result as MuonResult;
-use muon::{App, ProtonRequest, ProtonResponse};
-use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 
-use crate::auth::{Auth, UserKeySecret};
-use crate::crypto_clock::{init_server_crypto_clock, server_crypto_clock};
+use crate::auth::UserKeySecret;
+use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
-use crate::services::proton::Proton;
+use crate::services::proton::{self, BuildError, Proton};
 use crate::store::{DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
 pub use muon::common::{Endpoint, Server};
 pub use muon::env::{Env, EnvId};
-pub use muon::error::ParseAppVersionErr;
 pub use muon::tls::TlsPinSet;
 
 /// Core session trait which provides access to the API.
@@ -76,7 +65,7 @@ impl Default for Config {
 #[derive(Clone)]
 pub struct Session {
     client: Proton,
-    config: Config,
+    config: Arc<Config>,
     store: DynStore,
 }
 
@@ -90,28 +79,12 @@ impl Session {
     /// # Panics
     ///
     /// Panics if the Proton client fails to build.
-    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, ParseAppVersionErr> {
+    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, BuildError> {
         init_server_crypto_clock();
 
-        let app = if let Some(agent) = &config.user_agent {
-            App::new(&config.app_version)?.with_user_agent(agent)
-        } else {
-            App::new(&config.app_version)?
-        };
-
-        let store = if let Some(store) = store {
-            Arc::new(RwLock::new(store))
-        } else {
-            Arc::new(RwLock::new(TempStore::boxed()))
-        };
-
-        let client = Proton::builder(app, MuonStoreImpl::new(&config.env_id, &store))
-            .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
-            .layer_back(SetCryptoClockLayer)
-            .layer_back(SetDefaultServiceTypeLayer)
-            .layer_back(SetDefaultTimeoutLayer)
-            .build()
-            .expect("Proton client must be built successfully");
+        let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
+        let client = proton::build(Config::clone(&config), Arc::clone(&store))?;
+        let config = Arc::new(config);
 
         Ok(Self {
             client,
@@ -179,7 +152,7 @@ impl Session {
 /// The parts of a session.
 pub(crate) struct SessionParts {
     pub(crate) client: Proton,
-    pub(crate) config: Config,
+    pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
 }
 
@@ -198,135 +171,5 @@ impl Session {
             config: parts.config,
             store: parts.store,
         }
-    }
-}
-
-/// Implements the muon store trait for our store type.
-struct MuonStoreImpl<S> {
-    env_id: EnvId,
-    store: Arc<RwLock<S>>,
-}
-
-impl<S> MuonStoreImpl<S> {
-    fn new(env_id: &EnvId, store: &Arc<RwLock<S>>) -> Self {
-        Self {
-            env_id: env_id.to_owned(),
-            store: Arc::clone(store),
-        }
-    }
-}
-
-#[async_trait]
-impl<S: Store + 'static> MuonStore for MuonStoreImpl<S> {
-    fn env(&self) -> EnvId {
-        self.env_id.clone()
-    }
-
-    async fn get_auth(&self) -> Auth {
-        self.store.read().await.get_auth().await
-    }
-
-    async fn set_auth(&mut self, auth: Auth) -> Result<Auth, MuonStoreError> {
-        self.store
-            .write()
-            .await
-            .set_auth(auth)
-            .map_err(|_| MuonStoreError)
-            .await?;
-
-        Ok(self.get_auth().await)
-    }
-}
-
-struct SetCryptoClockLayer;
-
-impl SetCryptoClockLayer {
-    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
-    where
-        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
-    {
-        let response = inner.send(req).await?;
-
-        if let Some(date) = response
-            .headers()
-            .get("date")
-            .and_then(|response_time_header| response_time_header.to_str().ok())
-            .and_then(|response_time| DateTime::parse_from_rfc2822(response_time).ok())
-            .and_then(|parsed_server_time| parsed_server_time.timestamp().try_into().ok())
-            .map(UnixTimestamp)
-        {
-            server_crypto_clock().update_clock(date);
-        }
-
-        Ok(response)
-    }
-}
-
-impl SenderLayer<ProtonRequest, ProtonResponse> for SetCryptoClockLayer {
-    fn on_send<'a: 'fut, 'fut>(
-        &'a self,
-        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
-        Box::pin(self.on_send(inner, req))
-    }
-}
-
-struct SetDefaultServiceTypeLayer;
-
-impl SetDefaultServiceTypeLayer {
-    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
-    where
-        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
-    {
-        let req = if req.get_service_type().is_none() {
-            req.service_type(ServiceType::default(), true)
-        } else {
-            req
-        };
-
-        inner.send(req).await
-    }
-}
-
-impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultServiceTypeLayer {
-    fn on_send<'a: 'fut, 'fut>(
-        &'a self,
-        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
-        Box::pin(self.on_send(inner, req))
-    }
-}
-
-struct SetDefaultTimeoutLayer;
-
-impl SetDefaultTimeoutLayer {
-    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
-    where
-        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
-    {
-        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
-
-        // NOTE: This is not a bug! Muon logs a warning if no timeout is explicitly set;
-        // this workaround sets the timeout explicitly if it was not already set to a
-        // non-default value earlier in the layer stack.
-        let req = if req.get_allowed_time() == &DEFAULT_TIMEOUT {
-            req.allowed_time(DEFAULT_TIMEOUT)
-        } else {
-            req
-        };
-
-        inner.send(req).await
-    }
-}
-
-impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultTimeoutLayer {
-    fn on_send<'a: 'fut, 'fut>(
-        &'a self,
-        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
-        Box::pin(self.on_send(inner, req))
     }
 }

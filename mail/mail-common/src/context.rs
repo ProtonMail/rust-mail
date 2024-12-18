@@ -5,7 +5,8 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::session::{Config, ParseAppVersionErr};
+use proton_api_core::services::proton::BuildError;
+use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -31,8 +32,8 @@ use tokio::task::JoinError;
 pub enum MailContextError {
     #[error("A Cryptography error occurred")]
     Crypto,
-    #[error("Invalid App Version: {0}")]
-    AppVersion(#[from] ParseAppVersionErr),
+    #[error("Build Error: {0}")]
+    Build(#[from] BuildError),
     #[error("Keychain Error: {0}")]
     KeyChain(#[from] KeyChainError),
     #[error("IO Error: {0}")]
@@ -86,7 +87,7 @@ impl proton_action_queue::action::Error for MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
-            CoreContextError::AppVersion(err) => MailContextError::AppVersion(err),
+            CoreContextError::Build(err) => MailContextError::Build(err),
             CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,

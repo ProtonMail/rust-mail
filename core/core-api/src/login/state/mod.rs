@@ -12,6 +12,7 @@ use derive_more::From;
 use futures::TryFutureExt;
 use muon::client::flow::LoginTwoFactorFlow;
 use std::fmt::{Debug, Formatter, Result as FmtResult};
+use std::sync::Arc;
 
 mod complete;
 mod want_login;
@@ -136,14 +137,14 @@ impl State {
 /// Public entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    pub fn want_login(client: Proton, config: Config, store: DynStore) -> Self {
+    pub fn want_login(client: Proton, config: Arc<Config>, store: DynStore) -> Self {
         WantLogin::new(client, config, store).into()
     }
 
     /// Create a `WantResumeTfa` state.
     pub fn want_resume_tfa(
         client: Proton,
-        config: Config,
+        config: Arc<Config>,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
@@ -161,7 +162,7 @@ impl State {
     /// Create a `WantResumeMboxPass` state.
     pub fn want_resume_mbp(
         client: Proton,
-        config: Config,
+        config: Arc<Config>,
         store: DynStore,
         user_id: RemoteId,
         auth_id: RemoteId,
@@ -210,7 +211,7 @@ impl Debug for State {
 }
 
 pub(crate) struct StateData {
-    config: Config,
+    config: Arc<Config>,
     store: DynStore,
     user_id: RemoteId,
     auth_id: RemoteId,

@@ -173,7 +173,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(draft_error) => Self::from(draft_error),
-            MailContextError::AppVersion(_parse_app_version_error) => {
+            MailContextError::Build(_parse_app_version_error) => {
                 Self::Unexpected(Unexpected::Config)
             }
             MailContextError::PGPKeySelection(_encryption_preferences_error) => {
