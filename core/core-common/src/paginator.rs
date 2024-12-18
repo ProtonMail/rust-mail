@@ -653,9 +653,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
         // Notify the client of the change if they have subscribed.
         if let Some(sender) = sender {
-            sender
-                .send(change.clone())
-                .map_err(|_err| StashError::Custom("Failed to send update".into()))?;
+            drop(sender.send(change.clone()));
         }
 
         Ok(())
