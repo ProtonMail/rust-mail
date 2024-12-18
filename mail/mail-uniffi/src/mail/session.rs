@@ -8,7 +8,6 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
-use proton_api_core::services::proton::Proton;
 use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use proton_core_common::db::ChangeReceiver;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -138,11 +137,9 @@ impl MailSession {
     pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, LoginError> {
         let ctx = self.ctx.clone();
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let flow = ctx
-                .new_login_flow()
-                .await
-                .map_err(RealProtonMailError::from)?;
-            Ok(LoginFlow::new(flow, ctx))
+            ctx.new_login_flow()
+                .map(|flow| LoginFlow::new(flow, ctx))
+                .map_err(RealProtonMailError::from)
         })
         .await
         .map_err(LoginError::from)
@@ -601,12 +598,6 @@ impl MailSession {
     #[must_use]
     pub fn ctx(&self) -> &MailContext {
         &self.ctx
-    }
-
-    /// Get the API service.
-    #[must_use]
-    pub fn api(&self) -> &Proton {
-        self.ctx.api()
     }
 
     /// Get the session database connection.

@@ -1,20 +1,19 @@
 //! Implementation of the [`AuthStore`](proton-api-core::auth::Store) over the database.
 
-use crate::datatypes::{PasswordMode, RemoteId, TfaStatus};
+use crate::datatypes::RemoteId;
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::KeyChain;
-use futures::future::BoxFuture;
-use futures::FutureExt;
-use proton_api_core::auth::{
-    AccountInfo, AuthSession, SecretString, Store, StoreError, UserSecrets,
-};
-use secrecy::{ExposeSecret, SecretVec};
+use async_trait::async_trait;
+use futures::TryFutureExt;
+use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
+use proton_api_core::store::{AuthInfo, Store, StoreError, UserData};
+use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::ops::Deref;
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, info};
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
@@ -22,6 +21,7 @@ pub struct AuthStore {
     key_chain: Arc<dyn KeyChain>,
     user_id: Option<RemoteId>,
     session_id: Option<RemoteId>,
+    name_or_addr: Option<String>,
 }
 
 impl AuthStore {
@@ -36,23 +36,21 @@ impl AuthStore {
             user_id,
             session_id,
             stash: stash.clone(),
+            name_or_addr: None,
         }
     }
 
     fn encryption_key(&self) -> Result<SessionEncryptionKey, StoreError> {
-        let Some(key) = self.key_chain.get().map_err(|e| -> StoreError {
-            error!("Failed to load secret from key chain: {e}");
-            format!("Failed to load secret from key chain: {e}").into()
-        })?
-        else {
-            error!("Keychain has no decryption key");
-            return Err("Keychain has no decryption key".into());
-        };
+        let key = (self.key_chain.get())
+            .map_err(|e| format!("failed to load secret from key chain: {e}"))
+            .inspect_err(|e| error!(e))?
+            .ok_or("keychain has no decryption key")
+            .inspect_err(|e| error!(e))?;
 
-        SessionEncryptionKey::from_base64(&key).ok_or("Invalid encryption key".into())
+        Ok(SessionEncryptionKey::from_base64(&key).ok_or("invalid encryption key")?)
     }
 
-    async fn get_auth_session(&self) -> Result<Option<AuthSession>, StoreError> {
+    async fn try_get_auth(&self) -> Result<Auth, StoreError> {
         let key = self.encryption_key()?;
         let tether = self.stash.connection();
 
@@ -61,7 +59,7 @@ impl AuthStore {
         } else {
             None
         }) else {
-            return Ok(None);
+            return Ok(Auth::None);
         };
 
         let Some(session) = (if let Some(id) = &self.session_id {
@@ -69,67 +67,74 @@ impl AuthStore {
         } else {
             None
         }) else {
-            return Ok(None);
+            return Ok(Auth::None);
         };
 
-        Ok(Some(AuthSession {
-            uid: session.remote_id.into(),
-            name_or_addr: account.name_or_addr,
-            user_id: session.account_id.into(),
-            second_factor_mode: account.second_factor_mode.into(),
-            password_mode: account.password_mode.into(),
-            access_token: session.access_token.decrypt_to_string(&key)?,
-            refresh_token: session.refresh_token.decrypt_to_string(&key)?,
-            auth_scope: session.auth_scope.into_inner(),
-            auth_state: session.auth_state.into(),
-        }))
+        let acctok = session.access_token.decrypt_to_string(&key)?;
+        let reftok = session.refresh_token.decrypt_to_string(&key)?;
+        let scopes = session.auth_scopes.into_inner();
+
+        Ok(Auth::internal(
+            account.remote_id.into_inner(),
+            session.remote_id.into_inner(),
+            Tokens::access(acctok.expose_secret(), reftok.expose_secret(), scopes),
+        ))
     }
 
-    async fn get_user_secrets(&self) -> Result<Option<UserSecrets>, StoreError> {
+    async fn try_expose_key_secret(&self) -> Result<Option<UserKeySecret>, StoreError> {
         let key = self.encryption_key()?;
         let tether = self.stash.connection();
 
-        let Some(session) = (if let Some(id) = &self.session_id {
-            CoreSession::find_by_id(id.to_owned(), &tether).await?
-        } else {
-            None
-        }) else {
+        let Some(session_id) = self.session_id.clone() else {
             return Ok(None);
         };
 
-        let key_secret = if let Some(secret) = session.key_secret {
+        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
+            return Ok(None);
+        };
+
+        let secret = if let Some(secret) = session.key_secret {
             secret.decrypt_to_bytes(&key)?.expose_secret().to_owned()
         } else {
             return Ok(None);
         };
 
-        Ok(Some(UserSecrets::new(key_secret.into())))
+        Ok(Some(UserKeySecret::from(secret)))
+    }
+}
+
+#[async_trait]
+impl Store for AuthStore {
+    fn set_name_or_addr(&mut self, name_or_addr: &str) {
+        self.name_or_addr = Some(name_or_addr.to_owned());
     }
 
-    async fn get_account_info(&self) -> Result<Option<AccountInfo>, StoreError> {
-        let Some(user_id) = self.user_id.clone() else {
-            return Ok(None);
-        };
-        let tether = self.stash.connection();
-        let Some(account) = CoreAccount::find_by_id(user_id, &tether).await? else {
-            return Ok(None);
-        };
+    async fn get_auth(&self) -> Auth {
+        info!("getting auth from store");
 
-        Ok(Some(AccountInfo {
-            username: account.username,
-            display_name: account.display_name,
-            primary_addr: account.primary_addr,
-        }))
+        self.try_get_auth()
+            .map_err(|e| format!("failed to get auth: {e}"))
+            .inspect_err(|e| error!(e))
+            .unwrap_or_else(|_| Auth::None)
+            .await
     }
 
-    async fn set_auth_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
-        let key = self.encryption_key()?;
+    async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError> {
+        // If the auth is none, clear the store.
+        if matches!(auth, Auth::None) {
+            self.clear().await?;
+            return Ok(());
+        }
+
+        info!("setting auth in store");
 
         // Get the user and session IDs from the incoming auth session.
-        let user_id = RemoteId::from(auth.user_id.clone());
-        let session_id = RemoteId::from(auth.uid.clone());
-        let tfa_mode = TfaStatus::from(auth.second_factor_mode);
-        let mbp_mode = PasswordMode::from(auth.password_mode);
+        let user_id = RemoteId::from(auth.user_id().ok_or("missing user ID")?);
+        let session_id = RemoteId::from(auth.uid().ok_or("missing session ID")?);
+        let tokens = auth.tokens().ok_or("missing tokens")?;
+
+        // Get the encryption key.
+        let key = self.encryption_key()?;
 
         // We write twice, so do it in a transaction.
         let mut tether = self.stash.connection();
@@ -137,25 +142,34 @@ impl AuthStore {
 
         // Load or create the account.
         if (CoreAccount::find_by_id(user_id.clone(), &tx).await?).is_none() {
-            let user_id = user_id.clone();
-            let name_or_addr = auth.name_or_addr.clone();
+            info!("creating account for {user_id}");
 
-            CoreAccount::new(user_id, name_or_addr, tfa_mode, mbp_mode)
+            let name_or_addr = self.name_or_addr.take();
+            let name_or_addr = name_or_addr.ok_or("missing name or address")?;
+
+            CoreAccount::new(user_id.clone(), name_or_addr)
                 .save(&tx)
+                .inspect_err(|e| error!("failed to save account: {e}"))
                 .await?;
         }
 
         // Load or create the session.
         if let Some(session) = CoreSession::find_by_id(session_id.clone(), &tx).await? {
-            session.with_auth(&auth, &key)?.save(&tx).await?;
+            session.with_tokens(tokens, &key)?.save(&tx).await?;
         } else {
-            CoreSession::new(auth, &key)?.save(&tx).await?;
+            info!("creating session for {user_id}");
+
+            CoreSession::new(user_id.clone(), session_id.clone(), tokens, &key)?
+                .save(&tx)
+                .inspect_err(|e| error!("failed to save session: {e}"))
+                .await?;
         }
 
         // Set the user ID if it's not already set.
         if let Some(cur_user_id) = &self.user_id {
             assert_eq!(cur_user_id, &user_id);
         } else {
+            info!("setting user ID to {user_id}");
             self.user_id = Some(user_id);
         }
 
@@ -163,6 +177,7 @@ impl AuthStore {
         if let Some(cur_session_id) = &self.session_id {
             assert_eq!(cur_session_id, &session_id);
         } else {
+            info!("setting session ID to {session_id}");
             self.session_id = Some(session_id);
         }
 
@@ -171,62 +186,115 @@ impl AuthStore {
         Ok(())
     }
 
-    async fn set_user_secrets(&mut self, data: UserSecrets) -> Result<(), StoreError> {
-        let key = self.encryption_key()?;
+    async fn set_auth_info(&mut self, info: AuthInfo) -> Result<(), StoreError> {
+        info!("setting auth info in store");
+
+        // Get the user and session IDs from the incoming auth info.
+        let user_id = RemoteId::from(info.user_id);
+        let session_id = RemoteId::from(info.session_id);
+        let tfa_mode = info.tfa_mode.into();
+        let mbp_mode = info.mbp_mode.into();
+
+        // We write twice, so do it in a transaction.
         let mut tether = self.stash.connection();
+        let tx = tether.transaction().await?;
+
+        // Load or create the account.
+        if let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? {
+            info!("updating account info for {user_id}");
+
+            account
+                .with_tfa_mode(tfa_mode)
+                .with_mbp_mode(mbp_mode)
+                .save(&tx)
+                .await?;
+        } else {
+            info!("creating account for {user_id}");
+
+            let name_or_addr = self.name_or_addr.take();
+            let name_or_addr = name_or_addr.ok_or("missing name or address")?;
+
+            CoreAccount::new(user_id.clone(), name_or_addr)
+                .with_tfa_mode(tfa_mode)
+                .with_mbp_mode(mbp_mode)
+                .save(&tx)
+                .inspect_err(|e| error!("failed to save account: {e}"))
+                .await?;
+        }
+
+        // Set the user ID if it's not already set.
+        if let Some(cur_user_id) = &self.user_id {
+            assert_eq!(cur_user_id, &user_id);
+        } else {
+            info!("setting user ID to {user_id}");
+            self.user_id = Some(user_id);
+        }
+
+        // Set the session ID if it's not already set.
+        if let Some(cur_session_id) = &self.session_id {
+            assert_eq!(cur_session_id, &session_id);
+        } else {
+            info!("setting session ID to {session_id}");
+            self.session_id = Some(session_id);
+        }
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
+        info!("setting user data in store");
+
+        // Get the encryption key and its secret.
+        let key = self.encryption_key()?;
         let sec = data.key_secret;
 
+        // We write twice, so do it in a transaction.
+        let mut tether = self.stash.connection();
+        let tx = tether.transaction().await?;
+
         let Some(user_id) = self.user_id.clone() else {
-            return Err("failed to set user secrets: no user ID")?;
+            return Err("failed to set user data: no user ID")?;
         };
 
-        let tx = tether.transaction().await?;
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
-            return Err(format!("failed to set user secrets: missing {user_id}"))?;
+            return Err(format!("failed to set user data: missing {user_id}"))?;
         };
 
         for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
             session.with_key_secret(&sec, &key)?.save(&tx).await?;
         }
 
-        if !account.is_ready {
-            account.with_ready().save(&tx).await?;
-        }
+        account
+            .with_username(data.username)
+            .with_display_name(data.display_name)
+            .with_primary_addr(data.primary_addr)
+            .with_ready()
+            .save(&tx)
+            .await?;
 
         tx.commit().await?;
 
         Ok(())
     }
 
-    async fn set_account_info(&mut self, info: AccountInfo) -> Result<(), StoreError> {
-        let AccountInfo {
-            username,
-            display_name,
-            primary_addr,
-        } = info;
+    async fn expose_key_secret(&self) -> Option<UserKeySecret> {
+        info!("exposing key secret from store");
 
-        let Some(user_id) = self.user_id.clone() else {
-            return Err("failed to set account info: no user ID")?;
-        };
-        let mut tether = self.stash.connection();
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(format!("failed to set account info: missing {user_id}"))?;
-        };
-
-        let tx = tether.transaction().await?;
-        account
-            .with_info(username, display_name, primary_addr)
-            .save(&tx)
-            .await?;
-        tx.commit().await?;
-
-        Ok(())
+        self.try_expose_key_secret()
+            .map_err(|e| format!("failed to expose key secret: {e}"))
+            .inspect_err(|e| error!(e))
+            .unwrap_or_else(|_| None)
+            .await
     }
 
     async fn clear(&mut self) -> Result<(), StoreError> {
-        let mut tether = self.stash.connection();
+        info!("clearing auth from store");
+
         // Clear the session if it exists.
         if let Some(id) = &self.session_id {
+            let mut tether = self.stash.connection();
             let tx = tether.transaction().await?;
             CoreSession::delete_by_remote_id(id.to_owned(), &tx).await?;
             tx.commit().await?;
@@ -237,36 +305,6 @@ impl AuthStore {
         self.session_id = None;
 
         Ok(())
-    }
-}
-
-impl Store for AuthStore {
-    fn get_auth_session(&self) -> BoxFuture<Result<Option<AuthSession>, StoreError>> {
-        self.get_auth_session().boxed()
-    }
-
-    fn get_user_secrets(&self) -> BoxFuture<Result<Option<UserSecrets>, StoreError>> {
-        self.get_user_secrets().boxed()
-    }
-
-    fn get_account_info(&self) -> BoxFuture<Result<Option<AccountInfo>, StoreError>> {
-        self.get_account_info().boxed()
-    }
-
-    fn set_auth_session(&mut self, auth: AuthSession) -> BoxFuture<Result<(), StoreError>> {
-        self.set_auth_session(auth).boxed()
-    }
-
-    fn set_user_secrets(&mut self, data: UserSecrets) -> BoxFuture<Result<(), StoreError>> {
-        self.set_user_secrets(data).boxed()
-    }
-
-    fn set_account_info(&mut self, info: AccountInfo) -> BoxFuture<Result<(), StoreError>> {
-        self.set_account_info(info).boxed()
-    }
-
-    fn clear(&mut self) -> BoxFuture<Result<(), StoreError>> {
-        self.clear().boxed()
     }
 }
 

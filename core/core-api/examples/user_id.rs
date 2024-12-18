@@ -1,9 +1,8 @@
 #![allow(clippy::print_stdout)]
 use proton_api_core::login::Flow;
-use proton_api_core::services::proton::Config as ApiConfig;
+use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::{CoreSession, Session};
-use reqwest::Url;
-pub use tokio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -32,15 +31,11 @@ async fn main() {
         app_version,
         ..Default::default()
     };
-    let _base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
 
-    let session = Session::new(api_env_config, None).await.unwrap();
+    let session = Session::new(api_env_config, None).unwrap();
 
     let mut login_flow = Flow::new(session.clone());
-    login_flow
-        .login(user_email, user_password, None)
-        .await
-        .unwrap();
+    login_flow.login(user_email, user_password).await.unwrap();
 
     if login_flow.is_awaiting_2fa() {
         let mut stdout = tokio::io::stdout();
@@ -89,7 +84,7 @@ async fn main() {
                     return;
                 };
 
-                let mailbox_pw = line.trim_end_matches('\n');
+                let mailbox_pw = line.trim_end_matches('\n').to_owned();
 
                 match login_flow.submit_mailbox_password(mailbox_pw).await {
                     Ok(()) => {
@@ -104,7 +99,7 @@ async fn main() {
         };
     }
 
-    let (user_id, session_id) = login_flow.reset_and_take_ids();
+    let (user_id, session_id) = (login_flow.user_id(), login_flow.session_id());
     println!("User ID is {}", user_id.unwrap());
     println!("Session ID is {}", session_id.unwrap());
 

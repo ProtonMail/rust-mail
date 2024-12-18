@@ -5,6 +5,8 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::prelude::GetEventOptions;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::MailEvent as ApiMailEvent;
 use proton_core_common::datatypes::RemoteId;
@@ -80,7 +82,7 @@ impl Provider<MailEvent> for MailUserContext {
         Ok(self
             .session()
             .api()
-            .get_event::<ApiMailEvent>(event_id.clone(), true, true)
+            .get_event::<ApiMailEvent>(event_id.clone(), GetEventOptions::all())
             .await?
             .into())
     }

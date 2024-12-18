@@ -1,15 +1,15 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
-use futures::executor::block_on;
-use proton_api_core::auth::{AuthSession, AuthState, SecretString, UserKeySecret};
+use async_trait::async_trait;
+use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, Address as ApiAddress, ContactEmailEvent as ApiContactEmailEvent,
     ContactEvent as ApiContactEvent, User as ApiUser, UserSettings as ApiUserSettings,
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
-use proton_api_core::services::proton::Config as ApiConfig;
+use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_core_common::datatypes::ProductUsedSpace;
-use proton_core_common::datatypes::{PasswordMode, RemoteId, TfaStatus};
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, ModelExtension, User, UserSettings};
@@ -33,7 +33,6 @@ use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{registry, EnvFilter};
-use url::Url;
 use wiremock::MockServer;
 use wiremock::{matchers::any, Mock, Request};
 
@@ -58,14 +57,14 @@ pub trait BaseTestContext {
 
     /// Generate a test access token.
     #[must_use]
-    fn test_acctok() -> SecretString {
-        SecretString::from("ACCESSTOKEN".to_owned())
+    fn test_acctok() -> String {
+        String::from("ACCESSTOKEN")
     }
 
     /// Generate a test refresh token.
     #[must_use]
-    fn test_reftok() -> SecretString {
-        SecretString::from("REFRESHTOKEN".to_owned())
+    fn test_reftok() -> String {
+        String::from("REFRESHTOKEN")
     }
 
     /// Generate test scopes.
@@ -94,15 +93,11 @@ pub trait BaseTestContext {
     }
 
     #[must_use]
-    fn api_config(mock_web_server: &MockServer) -> ApiConfig {
-        let api_config = ApiConfig {
-            base_url: format!("{}/api/", mock_web_server.uri()),
-            allow_http: true,
-            skip_srp_proof_validation: true,
-            ..Default::default()
-        };
-        _ = Url::parse(&api_config.base_url).expect("Invalid URL");
-        api_config
+    fn api_config(mock_web_server: &MockServer) -> Config {
+        Config {
+            env_id: EnvId::new_custom(MockApiEnv::new(mock_web_server.uri()).with_path("/api")),
+            ..Config::default()
+        }
     }
 }
 
@@ -172,12 +167,11 @@ impl TestContext {
         let mock_web_server = Arc::new(MockServer::start().await);
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         let keychain: Arc<InMemoryKeyChain> = Self::keychain();
-        let api_config: proton_api_core::services::proton::Config =
-            Self::api_config(&mock_web_server);
-        let encryption_key = Self::encryption_key();
+        let api_config = Self::api_config(&mock_web_server);
+        let key = Self::encryption_key();
 
         keychain
-            .store(encryption_key.to_base64())
+            .store(key.to_base64())
             .expect("failed to store in keychain");
 
         // Use the given data or fall back to the default
@@ -217,37 +211,28 @@ impl TestContext {
                 .expect("failed to create transaction");
 
             // Create a fake account.
-            let account = CoreAccount::new(
-                user_id.clone(),
-                Self::test_user_mail(),
-                TfaStatus::None,
-                PasswordMode::One,
-            )
-            .with_save(&tx)
-            .await
-            .expect("fake account should save");
+            let account = CoreAccount::new(user_id.clone(), Self::test_user_mail())
+                .with_save(&tx)
+                .await
+                .expect("fake account should save");
 
             // Create a auth session.
-            let auth = AuthSession {
-                uid: Self::test_uid().into(),
-                name_or_addr: Self::test_user_mail(),
-                user_id: user_id.clone().into(),
-                second_factor_mode: TfaStatus::None.into(),
-                password_mode: PasswordMode::One.into(),
-                access_token: Self::test_acctok(),
-                refresh_token: Self::test_reftok(),
-                auth_scope: Self::test_scopes(),
-                auth_state: AuthState::Ready,
-            };
+            let tokens = Tokens::access(
+                Self::test_acctok(),
+                Self::test_reftok(),
+                Self::test_scopes(),
+            );
 
             // Create a fake session.
-            let session = CoreSession::new(auth, &encryption_key)
+            let session = CoreSession::new(user_id.clone(), Self::test_uid(), &tokens, &key)
                 .expect("session should be created")
-                .with_key_secret(&user_key_secret, &encryption_key)
+                .with_key_secret(&user_key_secret, &key)
                 .expect("key secret should be set")
                 .with_save(&tx)
                 .await
                 .expect("fake session should save");
+
+            // Commit the transaction.
             tx.commit().await.expect("transaction should commit");
 
             (account, session)
@@ -307,9 +292,11 @@ impl TestContext {
     }
 }
 
+#[async_trait]
 impl CoreEventSubscriberConnectionProvider for TestContext {
-    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
-        let user_ctx = block_on(async { self.user_context().await });
+    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
+        let user_ctx = self.user_context().await;
+
         Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
     }
 }
@@ -433,3 +420,44 @@ impl Default for TestCoreEvent {
         }
     }
 }
+
+#[must_use]
+#[derive(Debug)]
+pub struct MockApiEnv {
+    host: Endpoint,
+    path: String,
+}
+
+impl MockApiEnv {
+    /// Create a new `MockApiEnv` with the given host.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given host is not a valid URL.
+    pub fn new(host: impl AsRef<str>) -> Self {
+        Self {
+            host: host.as_ref().parse().expect("URL must be valid"),
+            path: String::default(),
+        }
+    }
+
+    pub fn with_path(self, path: impl AsRef<str>) -> Self {
+        let path = path.as_ref().to_owned();
+
+        Self { path, ..self }
+    }
+}
+
+const _: () = {
+    use proton_api_core::session::{AppVersion, Env, Server, TlsPinSet};
+
+    impl Env for MockApiEnv {
+        fn servers(&self, _: &AppVersion) -> Vec<Server> {
+            vec![Server::new(self.host.clone(), self.path.clone())]
+        }
+
+        fn pins(&self, _: &Server) -> Option<TlsPinSet> {
+            None
+        }
+    }
+};

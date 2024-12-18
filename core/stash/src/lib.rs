@@ -65,7 +65,12 @@
 #![allow(clippy::cargo_common_metadata, clippy::multiple_crate_versions)]
 // Clippy pedantic lints
 #![deny(clippy::pub_underscore_fields)]
-#![allow(clippy::doc_markdown, clippy::module_name_repetitions)]
+// Clippy overridden allows
+#![allow(
+    clippy::doc_markdown,
+    clippy::module_name_repetitions,
+    clippy::cognitive_complexity
+)]
 // Clippy restriction lints
 #![forbid(
     // clippy::allow_attributes_without_reason,

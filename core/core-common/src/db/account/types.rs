@@ -7,9 +7,8 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use proton_api_core::auth::{AuthSession, SecretString, UserKeySecret};
+use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
@@ -21,7 +20,7 @@ use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::datatypes::{AuthScope, AuthState, PasswordMode, RemoteId, TfaStatus, Timestamp};
+use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus, Timestamp};
 use crate::db::ChangeSender;
 use crate::models::ModelExtension;
 
@@ -38,11 +37,11 @@ pub struct CoreAccount {
 
     /// The second factor auth mode of the account.
     #[DbField]
-    pub second_factor_mode: TfaStatus,
+    pub second_factor_mode: Option<TfaStatus>,
 
     /// The mailbox password mode of the account.
     #[DbField]
-    pub password_mode: PasswordMode,
+    pub password_mode: Option<PasswordMode>,
 
     /// The account's username (once known).
     #[DbField]
@@ -71,23 +70,18 @@ pub struct CoreAccount {
 impl CoreAccount {
     /// Create a new account.
     #[must_use]
-    pub fn new(
-        remote_id: RemoteId,
-        name_or_addr: String,
-        second_factor_mode: TfaStatus,
-        password_mode: PasswordMode,
-    ) -> Self {
+    pub fn new(remote_id: RemoteId, name_or_addr: String) -> Self {
         Self {
             remote_id,
             name_or_addr,
-            second_factor_mode,
-            password_mode,
             is_ready: false,
 
             // --- Optional fields ---
             username: None,
             display_name: None,
             primary_addr: None,
+            second_factor_mode: None,
+            password_mode: None,
             primary_at: None,
             row_id: None,
         }
@@ -102,18 +96,55 @@ impl CoreAccount {
         Self::find("ORDER BY primary_at DESC", vec![], tether, None).await
     }
 
-    /// Update the user info of the account.
+    /// Update the username of the account.
     #[must_use]
-    pub fn with_info(
-        self,
-        username: Option<String>,
-        display_name: Option<String>,
-        primary_addr: Option<String>,
-    ) -> Self {
+    pub fn with_username(self, username: String) -> Self {
         Self {
-            username,
-            display_name,
-            primary_addr,
+            username: Some(username),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the display name of the account.
+    #[must_use]
+    pub fn with_display_name(self, display_name: String) -> Self {
+        Self {
+            display_name: Some(display_name),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the primary email address of the account.
+    #[must_use]
+    pub fn with_primary_addr(self, primary_addr: String) -> Self {
+        Self {
+            primary_addr: Some(primary_addr),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the 2FA mode of the account.
+    #[must_use]
+    pub fn with_tfa_mode(self, mode: TfaStatus) -> Self {
+        Self {
+            second_factor_mode: Some(mode),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the mailbox password mode of the account.
+    #[must_use]
+    pub fn with_mbp_mode(self, mode: PasswordMode) -> Self {
+        Self {
+            password_mode: Some(mode),
 
             // --- preserve ---
             ..self
@@ -187,11 +218,7 @@ pub struct CoreSession {
 
     /// The scope(s) the session has access to.
     #[DbField]
-    pub auth_scope: AuthScope,
-
-    /// The state of the session's auth.
-    #[DbField]
-    pub auth_state: AuthState,
+    pub auth_scopes: AuthScopes,
 
     /// Secret used for unlocking the account's PGP key (once derived).
     #[DbField]
@@ -199,6 +226,24 @@ pub struct CoreSession {
 
     #[RowIdField]
     pub row_id: Option<u64>,
+}
+
+#[derive(Debug, Error)]
+pub enum CoreSessionError {
+    #[error("missing auth UID")]
+    AuthUid,
+
+    #[error("missing auth user ID")]
+    AuthUserId,
+
+    #[error("missing access token")]
+    AccTok,
+
+    #[error("missing auth scopes")]
+    Scopes,
+
+    #[error("AES GCM error: {0}")]
+    AesGcm(#[from] aes_gcm::Error),
 }
 
 impl CoreSession {
@@ -220,14 +265,22 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn new(auth: AuthSession, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+    pub fn new(
+        user_id: RemoteId,
+        session_id: RemoteId,
+        tokens: &Tokens,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, CoreSessionError> {
+        let ref_tok = tokens.ref_tok();
+        let acc_tok = tokens.acc_tok().ok_or(CoreSessionError::AccTok)?;
+        let scopes = tokens.scopes().ok_or(CoreSessionError::Scopes)?;
+
         Ok(Self {
-            remote_id: RemoteId::from(auth.uid),
-            account_id: RemoteId::from(auth.user_id),
-            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
-            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
-            auth_scope: AuthScope::new(auth.auth_scope),
-            auth_state: AuthState::from(auth.auth_state),
+            remote_id: session_id,
+            account_id: user_id,
+            access_token: EncryptedAccessToken::new(acc_tok, key)?,
+            refresh_token: EncryptedRefreshToken::new(ref_tok, key)?,
+            auth_scopes: AuthScopes::new(scopes),
 
             // --- Optional fields ---
             key_secret: None,
@@ -240,16 +293,23 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn with_auth(
+    ///
+    /// # Panics
+    ///
+    /// Panics if the UID in the auth does not match the session's remote ID.
+    pub fn with_tokens(
         self,
-        auth: &AuthSession,
+        tokens: &Tokens,
         key: &SessionEncryptionKey,
-    ) -> Result<Self, aes_gcm::Error> {
+    ) -> Result<Self, CoreSessionError> {
+        let ref_tok = tokens.ref_tok();
+        let acc_tok = tokens.acc_tok().ok_or(CoreSessionError::AccTok)?;
+        let scopes = tokens.scopes().ok_or(CoreSessionError::Scopes)?;
+
         Ok(Self {
-            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
-            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
-            auth_scope: AuthScope::new(&auth.auth_scope),
-            auth_state: AuthState::from(auth.auth_state),
+            access_token: EncryptedAccessToken::new(acc_tok, key)?,
+            refresh_token: EncryptedRefreshToken::new(ref_tok, key)?,
+            auth_scopes: AuthScopes::new(scopes),
 
             // --- preserve ---
             ..self
@@ -279,6 +339,7 @@ impl CoreSession {
 pub enum DecryptionError {
     #[error("Decryption failed")]
     Decryption,
+
     #[error("String Conversion: {0}")]
     String(#[from] FromUtf8Error),
 }
@@ -297,8 +358,8 @@ impl EncryptedAccessToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
-        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.as_bytes()).map(Self)
     }
 }
 impl Deref for EncryptedAccessToken {
@@ -335,8 +396,8 @@ impl EncryptedRefreshToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
-        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    pub fn new(token: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.as_bytes()).map(Self)
     }
 }
 

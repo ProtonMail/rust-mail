@@ -2,9 +2,10 @@ use crate::datatypes::MessageRecipient;
 use crate::MailUserContext;
 use email_address::EmailAddress;
 use parking_lot::{Mutex, RwLock};
-use proton_api_core::consts::CoreBundle;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::prelude::*;
 use proton_api_core::session::CoreSession;
+use proton_api_core::{consts::CoreBundle, services::proton::ProtonCore};
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::str::FromStr;
@@ -721,11 +722,16 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
 /// Network failures do not result in errors, but return [`ValidationState::Unchecked`] instead.
 ///
 async fn validate_address(ctx: &MailUserContext, email: String) -> ValidationState {
+    let options = GetKeysAllOptions {
+        email,
+        internal_only: Some(false),
+    };
+
     match ctx
         .user_context()
         .session()
         .api()
-        .get_keys_all(email.clone(), Some(false))
+        .get_keys_all(options)
         .await
     {
         Ok(response) => ValidationState::Valid(response.is_proton),
