@@ -2793,7 +2793,8 @@ async fn test_conversation_watcher() {
         .expect("failed to label");
     tx.commit().await.expect("failed to commit");
 
-    let watch_result = ContextualConversation::watch(&stash).unwrap().receiver;
+    let handle = ContextualConversation::watch(&stash).unwrap();
+    let watch_result = &handle.receiver;
 
     tokio::spawn(async move {
         //bypass model to only execute exactly 2 queries.
@@ -2833,7 +2834,8 @@ async fn test_contextual_conversation_messages() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
 
-    let watch_result = ContextualConversation::watch(&stash).unwrap().receiver;
+    let handle = ContextualConversation::watch(&stash).unwrap();
+    let watch_result = &handle.receiver;
 
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)

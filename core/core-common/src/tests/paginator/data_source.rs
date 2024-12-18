@@ -151,7 +151,6 @@ async fn data_source_sync() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -198,7 +197,6 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -225,7 +223,6 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
         NonZeroU32::new(5).unwrap(),
         SkipFirstSyncSource(source),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -249,11 +246,11 @@ async fn data_source_sync_with_callback() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        None,
     )
     .await
     .unwrap();
-    let handle = paginator.watch().unwrap().receiver;
+    let handle = paginator.watch().unwrap();
+    let receiver = &handle.receiver;
 
     assert_eq!(paginator.page_count().await, 4);
     check_page(&paginator).await;
@@ -287,7 +284,7 @@ async fn data_source_sync_with_callback() {
     drop(paginator);
     drop(tether);
 
-    handle.recv_async().await.unwrap();
+    receiver.recv_async().await.unwrap();
 }
 
 async fn init_db() -> (Stash, TempDir) {

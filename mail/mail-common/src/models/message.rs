@@ -61,7 +61,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
 use stash::exports::ToSql;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use std::collections::btree_map::Entry;
@@ -2474,131 +2474,6 @@ impl Message {
         Ok(())
     }
 
-    /// Watch a message with `local_id` for changes.
-    ///
-    /// Returns `None` if the message could not be found.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed.
-    // pub async fn watch_message(
-    //     local_id: LocalId,
-    //     tether: &Tether,
-    // ) -> Result<Option<(Message, flume::Receiver<()>)>, StashError> {
-    //     //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
-    //     let (msg_sender, msg_receiver) = flume::unbounded();
-    //     let (label_sender, label_receiver) = flume::unbounded();
-    //     let (cb_sender, cb_receiver) = flume::unbounded();
-
-    //     let (mut message, _) = futures::try_join!(
-    //         Message::find(
-    //             "WHERE local_id=? AND messages.deleted = 0",
-    //             params![local_id],
-    //             tether,
-    //             Some(msg_sender),
-    //         ),
-    //         Label::find(
-    //             formatdoc!(
-    //                 "
-    //             WHERE label_type=? AND local_id IN (
-    //                 SELECT local_label_id FROM message_labels WHERE local_message_id=?
-    //             )
-    //         "
-    //             ),
-    //             params![LabelType::Label, local_id],
-    //             tether,
-    //             Some(label_sender)
-    //         )
-    //     )?;
-
-    //     if message.is_empty() {
-    //         return Ok(None);
-    //     }
-
-    //     tokio::spawn(async move {
-    //         loop {
-    //             tokio::select! {
-    //                 label_result = label_receiver.recv_async() =>  {
-    //                     if label_result.is_err() {
-    //                         return;
-    //                     }
-    //                     if cb_sender.send_async(()).await.is_err() {
-    //                         return;
-    //                     }
-    //                 }
-    //                 msg_result = msg_receiver.recv_async() => {
-    //                     if msg_result.is_err() {
-    //                         return;
-    //                     }
-    //                     if cb_sender.send_async(()).await.is_err() {
-    //                         return;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     });
-
-    //     Ok(Some((message.swap_remove(0), cb_receiver)))
-    // }
-
-    /// Watch all messages in the label with `local_label_id` for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed.
-    // pub async fn watch_in_label(
-    //     local_label_id: LocalId,
-    //     tether: &Tether,
-    // ) -> Result<(Vec<Message>, flume::Receiver<()>), StashError> {
-    //     //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
-    //     let (msg_sender, msg_receiver) = flume::unbounded();
-    //     let (label_sender, label_receiver) = flume::unbounded();
-    //     let (cb_sender, cb_receiver) = flume::unbounded();
-
-    //     let (messages, _) = futures::try_join!(
-    //         Message::in_label(local_label_id, tether, Some(msg_sender)),
-    //         Label::find(
-    //             formatdoc!(
-    //                 "
-    //             WHERE label_type=? AND local_id IN (
-    //                 SELECT local_label_id FROM message_labels WHERE local_message_id IN (
-    //                     SELECT local_message_id FROM message_labels WHERE local_label_id=?
-    //                 )
-    //             ) ORDER BY display_order ASC
-    //         "
-    //             ),
-    //             params![LabelType::Label, local_label_id],
-    //             tether,
-    //             Some(label_sender)
-    //         )
-    //     )?;
-
-    //     tokio::spawn(async move {
-    //         loop {
-    //             tokio::select! {
-    //                 label_result = label_receiver.recv_async() =>  {
-    //                     if label_result.is_err() {
-    //                         return;
-    //                     }
-    //                     if cb_sender.send_async(()).await.is_err() {
-    //                         return;
-    //                     }
-    //                 }
-    //                 msg_result = msg_receiver.recv_async() => {
-    //                     if msg_result.is_err() {
-    //                         return;
-    //                     }
-    //                     if cb_sender.send_async(()).await.is_err() {
-    //                         return;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     });
-
-    //     Ok((messages, cb_receiver))
-    // }
-
     /// Retrieve all the messages which are in a given label.
     ///
     /// # Params
@@ -2683,7 +2558,6 @@ impl Message {
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
         local_first: bool,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
         let remote_source =
             MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
@@ -2737,7 +2611,6 @@ impl Message {
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
                 local_first,
-                queue,
             )
             .await?,
         ))

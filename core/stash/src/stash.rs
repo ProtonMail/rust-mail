@@ -404,8 +404,8 @@ use sqlite_watcher::connection::SqlConnectionAsync;
 use sqlite_watcher::connection::SqlExecutorAsync;
 use sqlite_watcher::connection::SqlTransactionAsync;
 use sqlite_watcher::connection::State;
+use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
-use sqlite_watcher::watcher::TableObserverHandle;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::collections::{hash_map::Entry, HashMap};
@@ -1499,9 +1499,14 @@ impl Stash {
         F: Fn(flume::Sender<()>) -> Box<dyn TableObserver>,
     {
         let (sender, receiver) = flume::unbounded();
-        let handle = self.watcher.add_observer(observer(sender)).map_err(|e| {
-            StashError::Custom(format!("Could not observe requested table, details: `{e}`"))
-        })?;
+        let handle = self
+            .watcher
+            .add_observer_with_drop_remove(observer(sender))
+            .map_err(|e| {
+                StashError::WatcherError(format!(
+                    "Could not observe requested table, details: `{e}`"
+                ))
+            })?;
 
         Ok(WatcherHandle { receiver, handle })
     }
@@ -1546,17 +1551,6 @@ impl Stash {
     pub fn stats(&self) -> Stats {
         self.stats.lock().clone()
     }
-
-    /// Unsubscribes from notifications of changes to the database.
-    ///
-    /// ### Errors
-    /// Will return a [`StashError::WatcherError`] if the removal of the observer fails.
-    ///
-    pub fn unsubscribe_to(&self, handle: TableObserverHandle) -> Result<(), StashError> {
-        self.watcher
-            .remove_observer(handle)
-            .map_err(|e| StashError::WatcherError(e.to_string()))
-    }
 }
 
 impl Eq for Stash {}
@@ -1574,7 +1568,7 @@ pub struct WatcherHandle {
     /// The receiver for the notifications.
     pub receiver: flume::Receiver<()>,
     /// The handle to stop the watcher.
-    pub handle: TableObserverHandle,
+    pub handle: DropRemoveTableObserverHandle,
 }
 
 /// Statistics about the current state of the [`Stash`] instance.
@@ -2209,11 +2203,11 @@ impl Tether {
             return Err(StashError::Custom("No state found for Tether".into()));
         };
         let watcher = Arc::clone(&self.stash.watcher);
+        let result = state.sync_tables_async(self, &watcher).await;
 
-        state.sync_tables_async(self, &watcher).await?;
         self.state = Some(state);
 
-        Ok(())
+        result
     }
 
     /// Publishes changes to the database.
@@ -2225,11 +2219,11 @@ impl Tether {
             return Err(StashError::Custom("No state found for Tether".into()));
         };
         let watcher = Arc::clone(&self.stash.watcher);
+        let result = state.publish_changes_async(self, &watcher).await;
 
-        state.publish_changes_async(self, &watcher).await?;
         self.state = Some(state);
 
-        Ok(())
+        result
     }
 }
 

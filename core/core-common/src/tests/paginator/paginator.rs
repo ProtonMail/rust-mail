@@ -100,7 +100,6 @@ mod basic_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -109,7 +108,6 @@ mod basic_pagination {
             NonZeroU32::new(50).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -126,7 +124,6 @@ mod basic_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "ORDER BY number ASC",
@@ -135,7 +132,6 @@ mod basic_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -165,7 +161,6 @@ mod basic_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -174,7 +169,6 @@ mod basic_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -204,7 +198,6 @@ mod basic_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -213,7 +206,6 @@ mod basic_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -244,7 +236,6 @@ mod basic_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -253,7 +244,6 @@ mod basic_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -285,7 +275,6 @@ mod basic_pagination {
         let mut tether = stash.connection();
         create_table(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -294,7 +283,6 @@ mod basic_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -316,7 +304,6 @@ mod extended_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -325,7 +312,6 @@ mod extended_pagination {
             NonZeroU32::new(10).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -428,7 +414,6 @@ mod extended_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -437,7 +422,6 @@ mod extended_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -507,7 +491,6 @@ mod extended_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -516,7 +499,6 @@ mod extended_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -591,7 +573,8 @@ mod changes_during_pagination {
     use super::*;
     use stash::params;
 
-    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn previous_page__changes_to_data_seen() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
@@ -599,7 +582,6 @@ mod changes_during_pagination {
         create_table(&mut tether).await;
         create_records(&mut tether).await;
 
-        let (msg_sender, _msg_receiver) = flume::unbounded();
         let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
@@ -608,7 +590,6 @@ mod changes_during_pagination {
             NonZeroU32::new(5).unwrap(),
             data_source,
             true,
-            Some(msg_sender),
         )
         .await
         .unwrap();
@@ -619,10 +600,11 @@ mod changes_during_pagination {
         _ = paginator.next_page().await.unwrap();
         assert_eq!(paginator.current_page_number().await, 3);
 
-        tether
-            .execute(r"DELETE FROM test_models WHERE number = ?", params![102])
+        let tx = tether.transaction().await.unwrap();
+        tx.execute(r"DELETE FROM test_models WHERE number = ?", params![102])
             .await
             .unwrap();
+        tx.commit().await.unwrap();
 
         let page2 = paginator.previous_page().await.unwrap();
         assert_eq!(paginator.current_page_number().await, 2);
@@ -655,6 +637,179 @@ mod changes_during_pagination {
                 ("Test model #104".to_owned(), 104),
                 ("Test model #105".to_owned(), 105),
                 ("Test model #106".to_owned(), 106),
+            ]
+        );
+
+        _ = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        let tx = tether.transaction().await.unwrap();
+        // Add a new record in the middle of previous page
+        let mut test = TestModel::new("Test model #102".to_string(), 102);
+        test.save(&tx).await.unwrap();
+        tx.commit().await.unwrap();
+
+        let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
+        assert_eq!(page3.len(), 5);
+        assert_eq!(
+            page3
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #111".to_owned(), 111),
+                ("Test model #112".to_owned(), 112),
+                ("Test model #113".to_owned(), 113),
+                ("Test model #114".to_owned(), 114),
+                ("Test model #115".to_owned(), 115),
+            ]
+        );
+
+        let all = paginator.reload().await.unwrap();
+        assert_eq!(
+            all.into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #101".to_owned(), 101),
+                ("Test model #102".to_owned(), 102),
+                ("Test model #103".to_owned(), 103),
+                ("Test model #104".to_owned(), 104),
+                ("Test model #105".to_owned(), 105),
+                ("Test model #106".to_owned(), 106),
+                ("Test model #107".to_owned(), 107),
+                ("Test model #108".to_owned(), 108),
+                ("Test model #109".to_owned(), 109),
+                ("Test model #110".to_owned(), 110),
+                ("Test model #111".to_owned(), 111),
+                ("Test model #112".to_owned(), 112),
+                ("Test model #113".to_owned(), 113),
+                ("Test model #114".to_owned(), 114),
+                ("Test model #115".to_owned(), 115),
+            ]
+        );
+
+        let tx = tether.transaction().await.unwrap();
+        tx.execute(
+            r"DELETE FROM test_models WHERE number in (?,?,?,?)",
+            params![103, 104, 105, 106],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let all = paginator.reload().await.unwrap();
+        assert_eq!(
+            all.into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #101".to_owned(), 101),
+                ("Test model #102".to_owned(), 102),
+                ("Test model #107".to_owned(), 107),
+                ("Test model #108".to_owned(), 108),
+                ("Test model #109".to_owned(), 109),
+                ("Test model #110".to_owned(), 110),
+                ("Test model #111".to_owned(), 111),
+                ("Test model #112".to_owned(), 112),
+                ("Test model #113".to_owned(), 113),
+                ("Test model #114".to_owned(), 114),
+                ("Test model #115".to_owned(), 115),
+                ("Test model #116".to_owned(), 116),
+                ("Test model #117".to_owned(), 117),
+                ("Test model #118".to_owned(), 118),
+                ("Test model #119".to_owned(), 119),
+            ]
+        );
+
+        let tx = tether.transaction().await.unwrap();
+        for i in 103..=106 {
+            let mut test = TestModel::new(format!("Test model #{i}"), i);
+            test.save(&tx).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+
+        let all = paginator.reload().await.unwrap();
+        assert_eq!(
+            all.into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #101".to_owned(), 101),
+                ("Test model #102".to_owned(), 102),
+                ("Test model #103".to_owned(), 103),
+                ("Test model #104".to_owned(), 104),
+                ("Test model #105".to_owned(), 105),
+                ("Test model #106".to_owned(), 106),
+                ("Test model #107".to_owned(), 107),
+                ("Test model #108".to_owned(), 108),
+                ("Test model #109".to_owned(), 109),
+                ("Test model #110".to_owned(), 110),
+                ("Test model #111".to_owned(), 111),
+                ("Test model #112".to_owned(), 112),
+                ("Test model #113".to_owned(), 113),
+                ("Test model #114".to_owned(), 114),
+                ("Test model #115".to_owned(), 115),
+            ]
+        );
+
+        let tx = tether.transaction().await.unwrap();
+        tx.execute(
+            r"DELETE FROM test_models WHERE number > ? AND number < ?",
+            params![100, 120],
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let all = paginator.reload().await.unwrap();
+        assert_eq!(
+            all.into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #120".to_owned(), 120),
+                ("Test model #121".to_owned(), 121),
+                ("Test model #122".to_owned(), 122),
+                ("Test model #123".to_owned(), 123),
+                ("Test model #124".to_owned(), 124),
+                ("Test model #125".to_owned(), 125),
+                ("Test model #126".to_owned(), 126),
+                ("Test model #127".to_owned(), 127),
+                ("Test model #128".to_owned(), 128),
+                ("Test model #129".to_owned(), 129),
+                ("Test model #130".to_owned(), 130),
+                ("Test model #131".to_owned(), 131),
+                ("Test model #132".to_owned(), 132),
+                ("Test model #133".to_owned(), 133),
+                ("Test model #134".to_owned(), 134)
+            ]
+        );
+        let tx = tether.transaction().await.unwrap();
+        for i in 100..=115 {
+            let mut test = TestModel::new(format!("Test model #{i}"), i);
+            test.save(&tx).await.unwrap();
+        }
+        tx.commit().await.unwrap();
+        let all = paginator.reload().await.unwrap();
+        assert_eq!(
+            all.into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #101".to_owned(), 101),
+                ("Test model #102".to_owned(), 102),
+                ("Test model #103".to_owned(), 103),
+                ("Test model #104".to_owned(), 104),
+                ("Test model #105".to_owned(), 105),
+                ("Test model #106".to_owned(), 106),
+                ("Test model #107".to_owned(), 107),
+                ("Test model #108".to_owned(), 108),
+                ("Test model #109".to_owned(), 109),
+                ("Test model #110".to_owned(), 110),
+                ("Test model #111".to_owned(), 111),
+                ("Test model #112".to_owned(), 112),
+                ("Test model #113".to_owned(), 113),
+                ("Test model #114".to_owned(), 114),
+                ("Test model #115".to_owned(), 115),
             ]
         );
     }

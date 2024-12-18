@@ -141,13 +141,12 @@ use crate::models::ModelExtension;
 use core::error::Error;
 use core::future::Future;
 use core::num::NonZeroU32;
-use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
-use stash::orm::{perform_find, Model, ResultsetChange};
+use stash::orm::{perform_find, Model};
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
@@ -319,10 +318,6 @@ struct Shared {
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     row_count: u32,
-    /// Recently synced record ids to filter out unnecessary create record events.
-    /// If the user is watching for change in this table they can skip these
-    /// as these events are a direct result of the user's action.
-    recently_synced: HashSet<u64>,
 }
 
 impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
@@ -380,7 +375,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         page_size: NonZeroU32,
         remote: R,
         local_first: bool,
-        _queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<Self, R::Error>
     where
         Q: Into<String> + Send,
@@ -391,7 +385,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 cursor_index: 0,
                 cursor_row_id: None,
                 row_count: 0,
-                recently_synced: HashSet::new(),
             })),
             page_size,
             params,
@@ -568,15 +561,34 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                         )
                         .await?;
 
-                        // TODO: should we check modulo?
                         let new_cursor_index = u32::try_from(new_cursor_index)
                             .unwrap()
                             .saturating_sub(page_size.into())
                             .saturating_sub(1);
+
                         // Update cursor
-                        shared.cursor_row_id = record.row_id();
-                        shared.cursor_index = std::cmp::max(new_cursor_index, shared.cursor_index);
+                        if new_cursor_index == shared.cursor_index {
+                            shared.cursor_row_id = record.row_id();
+                        } else {
+                            shared.cursor_index = new_cursor_index;
+                            let record: Option<T> = perform_find(
+                                #[allow(clippy::unwrap_used)]
+                                &paging_query(
+                                    query_logic,
+                                    shared.cursor_index,
+                                    NonZeroU32::new(1).unwrap(),
+                                ),
+                                convert_params(&params),
+                                &tether,
+                            )
+                            .await?
+                            .into_iter()
+                            .next();
+                            shared.cursor_row_id = record.and_then(|r| r.row_id());
+                        }
                     }
+                } else {
+                    shared.cursor_row_id = record.row_id();
                 }
             }
             None => {
@@ -676,14 +688,10 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
         let mut tether = self.stash.connection();
         let current_page = self.page_at(shared.cursor_index, &tether).await?;
-        let sync_elements = self
-            .remote
+
+        self.remote
             .sync_page_after(next_index, self.page_size, current_page, &mut tether)
             .await?;
-
-        for element in sync_elements {
-            shared.recently_synced.insert(element.row_id().unwrap());
-        }
 
         shared.cursor_index = next_index;
         // Get the first element of the next page to update the cursor id.

@@ -536,7 +536,8 @@ async fn test_watch_label() {
         .await
         .unwrap()
         .unwrap();
-    let watcher = Label::watch(tether.stash()).unwrap().receiver;
+    let handle = Label::watch(tether.stash()).unwrap();
+    let watcher = &handle.receiver;
 
     assert_eq!(db_label, label);
 

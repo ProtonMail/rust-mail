@@ -229,10 +229,6 @@ mod contact_watcher {
 
         assert!(list_receiver.recv_async().await.is_ok());
 
-        // let notification = stash_reciever.recv_async().await.unwrap();
-        // assert_eq!(notification.table, "contacts".to_string());
-        // assert_eq!(notification.action, Action::SQLITE_UPDATE);
-
         // Soft delete contact
         let tx = tether.transaction().await.unwrap();
         contact.deleted = true;
@@ -241,11 +237,6 @@ mod contact_watcher {
 
         assert!(list_receiver.recv_async().await.is_ok());
 
-        // let notification = stash_reciever.recv_async().await.unwrap();
-
-        // assert_eq!(notification.table, "contacts".to_string());
-        // assert_eq!(notification.action, Action::SQLITE_UPDATE);
-
         // Soft undelete contact
         let tx = tether.transaction().await.unwrap();
         contact.deleted = false;
@@ -253,11 +244,6 @@ mod contact_watcher {
         tx.commit().await.unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
-
-        // let notification = stash_reciever.recv_async().await.unwrap();
-
-        // assert_eq!(notification.table, "contacts".to_string());
-        // assert_eq!(notification.action, Action::SQLITE_UPDATE);
 
         // Hard delete contact
         let tx = tether.transaction().await.unwrap();
@@ -272,10 +258,5 @@ mod contact_watcher {
         assert_eq!(all_contacts.len(), 0);
 
         assert!(list_receiver.recv_async().await.is_ok());
-
-        // let notification = stash_reciever.recv_async().await.unwrap();
-
-        // assert_eq!(notification.table, "contacts".to_string());
-        // assert_eq!(notification.action, Action::SQLITE_DELETE);
     }
 }

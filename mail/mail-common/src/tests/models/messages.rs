@@ -2593,7 +2593,8 @@ async fn watch_messages_in_label() {
         .expect("failed to label");
     tx.commit().await.unwrap();
 
-    let watch_result = Message::watch(&stash).unwrap().receiver;
+    let handle = Message::watch(&stash).unwrap();
+    let watch_result = &handle.receiver;
 
     tokio::spawn(async move {
         //bypass model to only execute exactly 2 queries.

@@ -141,8 +141,8 @@
 //! crates that are the subject of the translations.*
 //!
 
-use sqlite_watcher::watcher::TableObserverHandle;
-use stash::stash::{Stash, WatcherHandle};
+use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
+use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -150,19 +150,16 @@ use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Weak};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tracing::debug;
-use utils::damp;
 
 pub mod core;
 #[macro_use]
 pub mod errors;
 mod log;
 pub mod mail;
-mod utils;
 
 uniffi::setup_scaffolding!();
 
@@ -186,45 +183,14 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 /// This handle can be used to disconnect from the live query.
 ///
-#[derive(Clone, uniffi::Object)]
-pub struct WatchHandle {
-    /// A flag to indicate if the live query should be stopped.
-    stop_flag: Arc<AtomicBool>,
-    /// The handle to unsubscribe from the live query.
-    handle: TableObserverHandle,
-    /// Stash instance to access unsubscribe method.
-    stash: Stash,
-}
-
-impl Drop for WatchHandle {
-    fn drop(&mut self) {
-        self.disconnect();
-        let _ = self.stash.unsubscribe_to(self.handle);
-    }
-}
+#[allow(dead_code)]
+#[derive(uniffi::Object)]
+pub struct WatchHandle(DropRemoveTableObserverHandle);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new(stash: &Stash, handle: TableObserverHandle) -> Self {
-        let stash = stash.clone();
-        Self {
-            stop_flag: Arc::new(AtomicBool::new(false)),
-            handle,
-            stash,
-        }
-    }
-
-    #[must_use]
-    pub fn should_stop(&self) -> bool {
-        self.stop_flag.load(Ordering::SeqCst)
-    }
-}
-
-#[uniffi::export]
-impl WatchHandle {
-    /// Disconnect from the live query.
-    pub fn disconnect(&self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
+    pub fn new(handle: DropRemoveTableObserverHandle) -> Self {
+        Self(handle)
     }
 }
 
@@ -265,59 +231,32 @@ where
 /// Watch a notification channel for changes and trigger the callback
 /// once a message has been received.
 ///
-/// The callback is "dampened" to avoid excessive invocations to the callback.
-///
 #[must_use]
-pub async fn watch_channel(
-    stash: &Stash,
+pub fn watch_channel(
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new(stash, handle.handle);
+    let watcher = Arc::new(WatchHandle::new(handle.handle));
 
-    watch_channel_inner(&watcher, handle.receiver, damp(callback).await);
+    watch_channel_inner(Arc::downgrade(&watcher), handle.receiver, move || {
+        callback.on_update();
+    });
 
-    Arc::new(watcher)
-}
-
-/// Watch a notification channel for changes and trigger the callback
-/// once a message has been received.
-///
-/// The callback is __not__ "dampened"; use with caution.
-///
-/// See [`watch_channel()`] for a dampened version.
-///
-#[must_use]
-pub fn watch_channel_nodamp(
-    stash: &Stash,
-    handle: WatcherHandle,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new(stash, handle.handle);
-
-    watch_channel_inner(&watcher, handle.receiver, move || callback.on_update());
-
-    Arc::new(watcher)
+    watcher
 }
 
 fn watch_channel_inner<T: Send + 'static>(
-    watcher: &WatchHandle,
+    watcher: Weak<WatchHandle>,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
 ) {
-    let should_stop = Arc::downgrade(&watcher.stop_flag);
     drop(spawn_async(async move {
         let callback = Arc::new(callback);
         loop {
-            let Some(stop_flag) = should_stop.upgrade() else {
+            let Some(_watcher) = watcher.upgrade() else {
                 debug!("Watch handle dropped, stopping watch");
                 break;
             };
-
-            if stop_flag.load(Ordering::SeqCst) {
-                debug!("Stop flag set, stopping watch");
-                break;
-            }
 
             if channel.recv_async().await.is_err() {
                 return;

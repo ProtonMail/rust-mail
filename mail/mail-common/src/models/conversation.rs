@@ -40,7 +40,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::ToSql;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use std::collections::hash_map::Entry as HmEntry;
@@ -2460,7 +2460,7 @@ impl Conversation {
 
         let handle = tether
             .stash()
-            .subscribe_to(|sender| Box::new(ConversationWatcher { sender }))?;
+            .subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
@@ -2858,7 +2858,6 @@ impl Conversation {
         page_count: u32,
         filter: PaginatorFilter,
         local_first: bool,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
         let remote_source =
             ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
@@ -2901,7 +2900,6 @@ impl Conversation {
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
                 local_first,
-                queue,
             )
             .await?,
         ))
@@ -3022,11 +3020,11 @@ impl From<ApiConversation> for Conversation {
     }
 }
 
-pub struct ConversationWatcher {
+pub struct ConversationActionWatcher {
     sender: flume::Sender<()>,
 }
 
-impl TableObserver for ConversationWatcher {
+impl TableObserver for ConversationActionWatcher {
     fn tables(&self) -> Vec<String> {
         vec![
             Conversation::table_name().to_string(),

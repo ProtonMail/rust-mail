@@ -43,7 +43,7 @@ pub async fn watch_mail_settings(
             .unwrap_or_default()
             .into();
 
-        let watcher = watch_channel(&stash, handle, callback).await;
+        let watcher = watch_channel(handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,

@@ -113,7 +113,6 @@ async fn paginate_conversations() {
         page_size.try_into().unwrap(),
         PaginatorFilter::default(),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -220,7 +219,6 @@ async fn paginate_messages() {
         PaginatorFilter::default(),
         PaginatorSearchOptions::default(),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -426,16 +424,10 @@ async fn paginate_conversations_for_label_with_filter() {
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
-    let paginator = Conversation::paginate_in_label(
-        &user_ctx,
-        mailbox_inbox.label_id(),
-        50,
-        filter,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let paginator =
+        Conversation::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, filter, true)
+            .await
+            .unwrap();
 
     let conversations = paginator.next_page().await.unwrap();
     assert_eq!(
@@ -450,16 +442,10 @@ async fn paginate_conversations_for_label_with_filter() {
 
     // Test without filter (should return all conversations)
     let filter = PaginatorFilter { unread: None };
-    let paginator = Conversation::paginate_in_label(
-        &user_ctx,
-        mailbox_inbox.label_id(),
-        50,
-        filter,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let paginator =
+        Conversation::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, filter, true)
+            .await
+            .unwrap();
 
     let conversations = paginator.next_page().await.unwrap();
     assert_eq!(conversations.len(), 5, "Expected all 5 conversations");
@@ -468,16 +454,10 @@ async fn paginate_conversations_for_label_with_filter() {
     let filter = PaginatorFilter {
         unread: Some(false),
     };
-    let paginator = Conversation::paginate_in_label(
-        &user_ctx,
-        mailbox_inbox.label_id(),
-        50,
-        filter,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let paginator =
+        Conversation::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, filter, true)
+            .await
+            .unwrap();
 
     let conversations = paginator.next_page().await.unwrap();
     assert_eq!(
@@ -555,7 +535,6 @@ async fn paginate_messages_for_label_with_filter() {
         filter,
         PaginatorSearchOptions::default(),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -576,7 +555,6 @@ async fn paginate_messages_for_label_with_filter() {
         filter,
         PaginatorSearchOptions::default(),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -595,7 +573,6 @@ async fn paginate_messages_for_label_with_filter() {
         filter,
         PaginatorSearchOptions::default(),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -674,7 +651,6 @@ async fn paginate_search() {
         PaginatorFilter::default(),
         options,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -691,7 +667,6 @@ async fn paginate_search() {
         PaginatorFilter::default(),
         options,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -710,7 +685,6 @@ async fn paginate_search() {
         PaginatorFilter::default(),
         options,
         true,
-        None,
     )
     .await
     .unwrap();

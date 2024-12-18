@@ -29,6 +29,7 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
+use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
@@ -70,7 +71,7 @@ impl MessagesState {
         label_id: LocalId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let (paginator, command) = Paginator::new(
-            |sender| {
+            || {
                 async move {
                     Ok(MailMessage::paginate_in_label(
                         &ctx,
@@ -79,7 +80,6 @@ impl MessagesState {
                         PaginatorFilter::default(),
                         PaginatorSearchOptions::default(),
                         true,
-                        Some(sender),
                     )
                     .await?)
                 }
@@ -144,23 +144,26 @@ impl MessagesState {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let receiver = ContextualConversation::watch(ctx.user_stash())?.receiver;
-        let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
-            let tether = ctx.user_stash().connection();
-            async move {
-                Some(
-                    match MailMessage::in_conversation(conversation_id, &tether).await {
-                        Ok(m) => MessageMessage::Refreshed(m).into(),
-                        Err(e) => {
-                            let e = anyhow!("Message list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    },
-                )
-            }
-            .boxed()
-        });
+        let WatcherHandle {
+            handle, receiver, ..
+        } = ContextualConversation::watch(ctx.user_stash())?;
+        let (watcher, background_command) =
+            WatchHandle::new_dampened(receiver, handle, move || {
+                let tether = ctx.user_stash().connection();
+                async move {
+                    Some(
+                        match MailMessage::in_conversation(conversation_id, &tether).await {
+                            Ok(m) => MessageMessage::Refreshed(m).into(),
+                            Err(e) => {
+                                let e = anyhow!("Message list Query error: {e}");
+                                tracing::error!("{e}");
+                                e.into()
+                            }
+                        },
+                    )
+                }
+                .boxed()
+            });
 
         let index = conv_and_messages
             .messages

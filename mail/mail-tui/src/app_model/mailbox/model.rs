@@ -22,6 +22,7 @@ use proton_mail_common::{
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
+use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
@@ -135,32 +136,38 @@ impl Model {
         Command::task(async move {
             let tether = ctx.user_stash().connection();
             let label = Label::find_by_id(label_id, &tether).await;
-            let receiver = Label::watch(ctx.user_stash());
-            let label_and_recevier = label.and_then(|l| receiver.map(|r| (l, r.receiver)));
+            let handle = Label::watch(ctx.user_stash());
+            let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
-                Ok((label, receiver)) => {
+                Ok((label, handle)) => {
                     if let Some(label) = label {
-                        let (watcher, background_command) = WatchHandle::new(receiver, move |()| {
-                            let ctx_clone = ctx.clone();
-                            async move {
-                                let tether = ctx_clone.user_stash().connection();
-                                let label_id = label.local_id.unwrap();
+                        let WatcherHandle {
+                            handle, receiver, ..
+                        } = handle;
+                        let (watcher, background_command) =
+                            WatchHandle::new(receiver, handle, move |()| {
+                                let ctx_clone = ctx.clone();
+                                async move {
+                                    let tether = ctx_clone.user_stash().connection();
+                                    let label_id = label.local_id.unwrap();
 
-                                Label::find_by_id(label_id, &tether)
-                                    .await
-                                    .inspect_err(|e| tracing::error!("Failed to get label: `{e}`"))
-                                    .ok()
-                                    .flatten()
-                                    .map(|label| Message::LabelRefreshed(label).into())
-                                    .or_else(|| {
-                                        tracing::warn!(
-                                            "Received change which deleted current label"
-                                        );
-                                        None
-                                    })
-                            }
-                            .boxed()
-                        });
+                                    Label::find_by_id(label_id, &tether)
+                                        .await
+                                        .inspect_err(|e| {
+                                            tracing::error!("Failed to get label: `{e}`");
+                                        })
+                                        .ok()
+                                        .flatten()
+                                        .map(|label| Message::LabelRefreshed(label).into())
+                                        .or_else(|| {
+                                            tracing::warn!(
+                                                "Received change which deleted current label"
+                                            );
+                                            None
+                                        })
+                                }
+                                .boxed()
+                            });
                         Command::batch([
                             Command::message(Message::NewLabelWatcher(watcher).into()),
                             background_command,

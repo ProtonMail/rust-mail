@@ -141,7 +141,7 @@ impl Mailbox {
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
             let receiver = RealLabel::watch(&stash)?;
-            let watcher = watch_channel(&stash, receiver, callback).await;
+            let watcher = watch_channel(receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })

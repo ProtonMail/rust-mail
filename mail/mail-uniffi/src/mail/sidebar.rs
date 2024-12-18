@@ -11,7 +11,6 @@ use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
-use crate::utils::damp;
 use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Label as RealLabel;
@@ -172,9 +171,9 @@ impl Sidebar {
             let weak_stop_flag = Arc::downgrade(&stop_flag);
 
             spawn_async(async move {
-                let callback = damp(callback).await;
-
+                let callback = move || callback.on_update();
                 let callback = Arc::new(callback);
+
                 while receiver.recv_async().await.is_ok() {
                     let callback = callback.clone();
                     let callback = move || callback();
@@ -191,11 +190,7 @@ impl Sidebar {
                     _ = async_runtime().spawn_blocking(callback).await;
                 }
             });
-            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle {
-                handle,
-                stop_flag,
-                stash: sidebar.user_ctx.user_stash().clone(),
-            }))
+            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle(handle)))
         })
         .await
         .map_err(ActionError::from)

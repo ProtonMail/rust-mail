@@ -7,7 +7,7 @@ use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_api_core::services::proton::Proton;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -235,12 +235,7 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new(
-                ctx.session_stash(),
-                accounts,
-                rx,
-                callback,
-            ))
+            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new(accounts, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -293,12 +288,7 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(
-                ctx.session_stash(),
-                sessions,
-                rx,
-                callback,
-            ))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(sessions, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -357,12 +347,7 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(
-                ctx.session_stash(),
-                sessions,
-                rx,
-                callback,
-            ))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(sessions, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -642,12 +627,11 @@ pub struct WatchedAccounts {
 
 impl WatchedAccounts {
     fn new(
-        stash: &Stash,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        let handle = watch_channel_nodamp(stash, handle, callback);
+        let handle = watch_channel(handle, callback);
 
         WatchedAccounts { accounts, handle }
     }
@@ -665,12 +649,11 @@ pub struct WatchedSessions {
 
 impl WatchedSessions {
     fn new(
-        stash: &Stash,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        let handle = watch_channel_nodamp(stash, handle, callback);
+        let handle = watch_channel(handle, callback);
 
         WatchedSessions { sessions, handle }
     }

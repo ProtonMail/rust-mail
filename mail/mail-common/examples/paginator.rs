@@ -106,7 +106,6 @@ async fn main() {
             PaginatorFilter::default(),
             PaginatorSearchOptions::default(),
             true,
-            None,
         )
         .await
         .unwrap();
@@ -118,7 +117,6 @@ async fn main() {
             page_count,
             PaginatorFilter::default(),
             true,
-            None,
         )
         .await
         .unwrap();

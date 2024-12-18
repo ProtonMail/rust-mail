@@ -254,7 +254,7 @@ pub async fn watch_message(
             return Ok(None);
         };
         let handle = RealMessage::watch(&stash)?;
-        let handle = watch_channel(&stash, handle, callback).await;
+        let handle = watch_channel(handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
             handle,
@@ -363,13 +363,12 @@ pub async fn paginate_messages_for_label(
             RealPaginatorFilter::from(filter),
             RealPaginatorSearchOptions::default(),
             true,
-            None,
         )
         .await?;
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(context.user_stash(), handle, callback).await,
+            handle: watch_channel(handle, callback),
         }))
     })
     .await
@@ -413,13 +412,12 @@ pub async fn paginate_search(
             RealPaginatorFilter::default(),
             RealPaginatorSearchOptions::from(options),
             false,
-            None,
         )
         .await?;
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(context.user_stash(), handle, callback).await,
+            handle: watch_channel(handle, callback),
         }))
     })
     .await
@@ -556,7 +554,7 @@ pub async fn watch_available_label_as_actions_for_messages(
         )
         .await?;
         let actions = actions.into_iter().map_into().collect_vec();
-        let handle = watch_channel(mailbox.stash(), handle, callback).await;
+        let handle = watch_channel(handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
@@ -697,7 +695,7 @@ pub async fn watch_messages_for_label(
         let tether = stash.connection();
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
         let handle = RealMessage::watch(&stash)?;
-        let watcher = watch_channel(&stash, handle, callback).await;
+        let watcher = watch_channel(handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
             handle: watcher,
