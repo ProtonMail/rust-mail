@@ -1,10 +1,8 @@
 //! Cache to store values in file system
 //!
 //! It's built around `quick-cache` crate
-//! To be stored a value should have a key implementing `CacheKey` trait.
+//! To be stored a value should have a key implementing [`CacheKey`] trait.
 //! As it is a cache, value can be removed at any insertion/replacement of another value.
-//! The weight of the value is limited to an u32 (4GB) and the maximum total of values weight is
-//! defined at cache creation.
 //!
 //! A typical usage of this structure:
 //!   * Create the cache
@@ -132,9 +130,8 @@ pub trait CacheConfig: Clone {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
+pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq + Send + Sync {
     /// Callback executed after this key is evicted.
-    #[allow(clippy::unused_async)]
     fn after_evict<R: CacheResource>(&self, _resource: R) {}
 }
 
@@ -288,13 +285,13 @@ where
     /// # Errors
     /// * Can't create in memory cache
     /// * Can't create data structure on disk
-    fn _new(cache_buf: PathBuf, size: u32, resource: Config::Resource) -> CacheResult<Self> {
+    fn _new(cache_buf: PathBuf, size: u64, resource: Config::Resource) -> CacheResult<Self> {
         let pinned = Arc::new(RwLock::new(HashSet::new()));
         // create in memory cache
         let cache = Cache::with_options(
             OptionsBuilder::new()
-                .estimated_items_capacity(size as usize)
-                .weight_capacity(u64::from(size))
+                .estimated_items_capacity(usize::try_from(size).unwrap_or(usize::MAX))
+                .weight_capacity(size)
                 .build()
                 .map_err(|e| CacheError::QuickCache(e.into()))?,
             DefaultWeighter::new(),
@@ -323,7 +320,7 @@ where
     ///
     /// # Params:
     /// * `path_buf` - Path to the root of the cache.
-    /// * `size`     - Allocated space for cache.
+    /// * `size`     - Allocated space for cache, maximum size.
     ///                (Warning, don't take in account padding from FS blocks)
     /// * `existing` - List of item expected to be present.
     ///
@@ -333,7 +330,7 @@ where
     ///
     pub async fn new(
         cache_buf: PathBuf,
-        size: u32,
+        size: u64,
         resource: Config::Resource,
     ) -> CacheResult<Self> {
         let cache = Self::_new(cache_buf, size, resource.clone())?;
