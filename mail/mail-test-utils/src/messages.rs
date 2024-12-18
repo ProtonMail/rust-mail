@@ -402,7 +402,9 @@ pub struct TestDraftParams {
     pub unread: bool,
     pub sender: DraftSender,
     pub to_list: Vec<DraftRecipient>,
+    #[serde(rename = "CCList")]
     pub cc_list: Vec<DraftRecipient>,
+    #[serde(rename = "BCCList")]
     pub bcc_list: Vec<DraftRecipient>,
     pub external_id: Option<String>,
     pub draft_flags: u32,

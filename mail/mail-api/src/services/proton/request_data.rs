@@ -96,10 +96,12 @@ pub struct DraftParams {
     /// To recipients.
     pub to_list: Vec<DraftRecipient>,
 
+    #[serde(rename = "CCList")]
     /// CC recipients.
     pub cc_list: Vec<DraftRecipient>,
 
     /// BCC recipients.
+    #[serde(rename = "BCCList")]
     pub bcc_list: Vec<DraftRecipient>,
 
     /// External message id to identify the message between mail servers.
