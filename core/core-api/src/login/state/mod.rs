@@ -46,71 +46,8 @@ pub enum State {
     Invalid,
 }
 
+/// Public actions that can be taken on the state.
 impl State {
-    /// Create a `WantLogin` state.
-    pub fn want_login(client: Proton, config: Config, store: DynStore) -> Self {
-        WantLogin::new(client, config, store).into()
-    }
-
-    /// Create a `WantTfa` state.
-    pub fn want_tfa(
-        flow: LoginTwoFactorFlow,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-        pass: Option<String>,
-    ) -> Self {
-        WantTfa::new(flow, config, store, user_id, auth_id, pass).into()
-    }
-
-    /// Create a `WantTfaResume` state.
-    pub fn want_tfa_resume(
-        client: Proton,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-    ) -> Self {
-        WantResumeTfa::new(client, config, store, user_id, auth_id).into()
-    }
-
-    /// Create a `WantMbp` state.
-    pub fn want_mbp(
-        client: Proton,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-    ) -> Self {
-        WantMboxPass::new(client, config, store, user_id, auth_id).into()
-    }
-
-    /// Create a `WantMbpResume` state.
-    pub fn want_mbp_resume(
-        client: Proton,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-    ) -> Self {
-        WantResumeMboxPass::new(client, config, store, user_id, auth_id).into()
-    }
-
-    /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
-    pub async fn finalize(
-        client: Proton,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-        pass: String,
-    ) -> Result<Self, LoginError> {
-        Complete::new(client, config, store, user_id, auth_id, pass)
-            .ok_into()
-            .await
-    }
-
     /// Attempt to login with the provided credentials.
     pub async fn login(self, user: String, pass: String) -> Result<Self, LoginError> {
         let state = match self {
@@ -196,6 +133,68 @@ impl State {
     }
 }
 
+/// Public entrypoints for creating new states.
+impl State {
+    /// Create a `WantLogin` state.
+    pub fn want_login(client: Proton, config: Config, store: DynStore) -> Self {
+        WantLogin::new(client, config, store).into()
+    }
+
+    /// Create a `WantResumeTfa` state.
+    pub fn want_resume_tfa(
+        client: Proton,
+        config: Config,
+        store: DynStore,
+        user_id: RemoteId,
+        auth_id: RemoteId,
+    ) -> Self {
+        let data = StateData {
+            config,
+            store,
+            user_id,
+            auth_id,
+        };
+
+        WantResumeTfa::new(client, data).into()
+    }
+
+    /// Create a `WantResumeMboxPass` state.
+    pub fn want_resume_mbp(
+        client: Proton,
+        config: Config,
+        store: DynStore,
+        user_id: RemoteId,
+        auth_id: RemoteId,
+    ) -> Self {
+        let data = StateData {
+            config,
+            store,
+            user_id,
+            auth_id,
+        };
+
+        WantResumeMboxPass::new(client, data).into()
+    }
+}
+
+/// Private entrypoints for creating new states.
+impl State {
+    /// Create a `WantTfa` state.
+    fn want_tfa(flow: LoginTwoFactorFlow, data: StateData, pass: Option<String>) -> Self {
+        WantTfa::new(flow, data, pass).into()
+    }
+
+    /// Create a `WantMbp` state.
+    fn want_mbp(client: Proton, data: StateData) -> Self {
+        WantMboxPass::new(client, data).into()
+    }
+
+    /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
+    async fn finalize(client: Proton, data: StateData, pass: String) -> Result<Self, LoginError> {
+        Complete::new(client, data, pass).ok_into().await
+    }
+}
+
 impl Debug for State {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
         match self {
@@ -208,6 +207,13 @@ impl Debug for State {
             Self::Invalid => write!(f, "Invalid"),
         }
     }
+}
+
+pub(crate) struct StateData {
+    config: Config,
+    store: DynStore,
+    user_id: RemoteId,
+    auth_id: RemoteId,
 }
 
 /// A trait for states in which the user ID is known.

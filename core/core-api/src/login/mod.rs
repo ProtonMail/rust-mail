@@ -102,19 +102,14 @@ impl Flow {
 
     /// Resume the login flow at the 2FA step.
     #[must_use]
-    pub fn resume_second_factor(
-        session: Session,
-        user_id: RemoteId,
-        session_id: RemoteId,
-        _: TfaStatus,
-    ) -> Self {
+    pub fn resume_second_factor(session: Session, user_id: RemoteId, session_id: RemoteId) -> Self {
         let SessionParts {
             client,
             config,
             store,
         } = session.into_parts();
 
-        Self(State::want_tfa_resume(
+        Self(State::want_resume_tfa(
             client, config, store, user_id, session_id,
         ))
     }
@@ -125,7 +120,6 @@ impl Flow {
         session: Session,
         user_id: RemoteId,
         session_id: RemoteId,
-        _: PasswordMode,
     ) -> Self {
         let SessionParts {
             client,
@@ -133,7 +127,7 @@ impl Flow {
             store,
         } = session.into_parts();
 
-        Self(State::want_mbp_resume(
+        Self(State::want_resume_mbp(
             client, config, store, user_id, session_id,
         ))
     }

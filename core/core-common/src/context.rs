@@ -2,7 +2,7 @@
 
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::{LocalId, RemoteId};
+use crate::datatypes::{LocalId, PasswordMode, RemoteId, TfaStatus};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::db::ChangeReceiver;
@@ -132,14 +132,14 @@ impl CoreAccountState {
 
         // Does the account have any sessions that are awaiting a mailbox password?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
-            if account.password_mode.want_mbp() {
+            if account.password_mode.is_some_and(PasswordMode::want_mbp) {
                 return CoreAccountState::NeedMbp(sessions);
             }
         }
 
         // Does the account have any sessions that are awaiting a second factor?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
-            if account.second_factor_mode.want_tfa() {
+            if account.second_factor_mode.is_some_and(TfaStatus::want_tfa) {
                 return CoreAccountState::NeedTfa(sessions);
             }
         }
@@ -500,9 +500,6 @@ impl Context {
         session_id: RemoteId,
     ) -> CoreContextResult<Flow> {
         let tether = self.stash().connection();
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("account not found")));
-        };
 
         let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
             return Err(CoreContextError::Other(anyhow!("session not found")));
@@ -513,14 +510,12 @@ impl Context {
                 self.new_api_session(Some(&session))?,
                 user_id.into(),
                 session_id.into(),
-                account.second_factor_mode.into(),
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
                 self.new_api_session(Some(&session))?,
                 user_id.into(),
                 session_id.into(),
-                account.password_mode.into(),
             )),
 
             CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(

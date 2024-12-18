@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus};
+use crate::datatypes::{AuthScopes, RemoteId};
 use crate::db::account::{
     CoreAccount, CoreSession, EncryptedAccessToken, EncryptedRefreshToken, SessionEncryptionKey,
 };
 use crate::models::ModelExtension;
-use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
+use proton_api_core::auth::{Tokens, UserKeySecret};
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
@@ -34,35 +34,26 @@ async fn new_test_connection() -> Stash {
 
 async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
     let tx = tether.transaction().await?;
-    let account = CoreAccount::new(
-        RemoteId::from("user_id"),
-        String::from("name_or_addr"),
-        TfaStatus::None,
-        PasswordMode::One,
-    )
-    .with_save(&tx)
-    .await?;
+
+    let account = CoreAccount::new(RemoteId::from("user_id"), String::from("name_or_addr"))
+        .with_save(&tx)
+        .await?;
+
     tx.commit().await?;
 
     Ok(account)
 }
 
-/// Create a test auth session with dummy data.
-fn new_test_auth(account: &CoreAccount) -> Auth {
-    let uid = RemoteId::from("session_id");
-    let user_id = account.remote_id.clone();
+/// Create test auth tokens with dummy data.
+fn new_test_tokens() -> Tokens {
     let refresh_token = SecretString::from("token".to_owned());
     let access_token = SecretString::from("access".to_owned());
     let scopes = ["foo".to_owned(), "bar".to_owned()];
 
-    Auth::internal(
-        user_id.into_inner(),
-        uid.into_inner(),
-        Tokens::access(
-            access_token.expose_secret(),
-            refresh_token.expose_secret(),
-            scopes,
-        ),
+    Tokens::access(
+        access_token.expose_secret(),
+        refresh_token.expose_secret(),
+        scopes,
     )
 }
 
@@ -79,9 +70,10 @@ async fn test_session_store_load() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth = new_test_auth(&account);
+    let auth_id = RemoteId::from("remote_id");
+    let tokens = new_test_tokens();
 
-    let mut session = CoreSession::new(&auth, &key).unwrap();
+    let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();
 
     {
         let tx = tether
@@ -112,9 +104,10 @@ async fn test_session_update() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth = new_test_auth(&account);
+    let auth_id = RemoteId::from("remote_id");
+    let tokens = new_test_tokens();
 
-    let mut session = CoreSession::new(&auth, &key)
+    let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key)
         .unwrap()
         .with_key_secret(&UserKeySecret::from(vec![1, 2, 3, 4]), &key)
         .unwrap();
@@ -166,8 +159,10 @@ async fn test_session_delete_user_id() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth = new_test_auth(&account);
-    let mut session = CoreSession::new(&auth, &key).unwrap();
+    let auth_id = RemoteId::from("remote_id");
+    let tokens = new_test_tokens();
+
+    let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();
 
     {
         let tx = tether
@@ -203,9 +198,10 @@ async fn test_session_delete_session_id() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth = new_test_auth(&account);
+    let auth_id = RemoteId::from("remote_id");
+    let tokens = new_test_tokens();
 
-    let mut session = CoreSession::new(&auth, &key).unwrap();
+    let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();
 
     {
         let tx = tether

@@ -6,6 +6,7 @@ use futures::TryFutureExt;
 use muon::client::flow::ForkFlowResult;
 use muon::common::{BoxFut, IntoDyn, Sender, SenderLayer, ServiceType};
 use muon::dns::{GoogleDoh, Quad9Doh};
+use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
 use muon::Result as MuonResult;
 use muon::{App, ProtonRequest, ProtonResponse};
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
@@ -104,7 +105,7 @@ impl Session {
             Arc::new(RwLock::new(TempStore::boxed()))
         };
 
-        let client = Proton::builder(app, MuonStore::new(&config.env_id, &store))
+        let client = Proton::builder(app, MuonStoreImpl::new(&config.env_id, &store))
             .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
             .layer_back(SetCryptoClockLayer)
             .layer_back(SetDefaultServiceTypeLayer)
@@ -158,7 +159,7 @@ impl Session {
     /// stored.
     ///
     pub async fn expose_key_secret(&self) -> Option<UserKeySecret> {
-        self.store.read().await.get_key_secret().await
+        self.store.read().await.expose_key_secret().await
     }
 
     /// Logout the user and invalidate the current session.
@@ -201,33 +202,39 @@ impl Session {
 }
 
 /// Implements the muon store trait for our store type.
-struct MuonStore<S>(EnvId, Arc<RwLock<S>>);
+struct MuonStoreImpl<S> {
+    env_id: EnvId,
+    store: Arc<RwLock<S>>,
+}
 
-impl<S> MuonStore<S> {
+impl<S> MuonStoreImpl<S> {
     fn new(env_id: &EnvId, store: &Arc<RwLock<S>>) -> Self {
-        Self(env_id.to_owned(), Arc::clone(store))
+        Self {
+            env_id: env_id.to_owned(),
+            store: Arc::clone(store),
+        }
     }
 }
 
 #[async_trait]
-impl<S: Store + 'static> muon::store::Store for MuonStore<S> {
+impl<S: Store + 'static> MuonStore for MuonStoreImpl<S> {
     fn env(&self) -> EnvId {
-        self.0.clone()
+        self.env_id.clone()
     }
 
     async fn get_auth(&self) -> Auth {
-        self.1.read().await.get_auth().await
+        self.store.read().await.get_auth().await
     }
 
-    async fn set_auth(&mut self, auth: Auth) -> Result<Auth, muon::store::StoreError> {
-        let mut store = self.1.write().await;
-
-        store
+    async fn set_auth(&mut self, auth: Auth) -> Result<Auth, MuonStoreError> {
+        self.store
+            .write()
+            .await
             .set_auth(auth)
-            .map_err(|_| muon::store::StoreError)
+            .map_err(|_| MuonStoreError)
             .await?;
 
-        Ok(store.get_auth().await)
+        Ok(self.get_auth().await)
     }
 }
 

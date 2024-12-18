@@ -7,7 +7,7 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use proton_api_core::auth::{Auth, UserKeySecret};
+use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
@@ -37,11 +37,11 @@ pub struct CoreAccount {
 
     /// The second factor auth mode of the account.
     #[DbField]
-    pub second_factor_mode: TfaStatus,
+    pub second_factor_mode: Option<TfaStatus>,
 
     /// The mailbox password mode of the account.
     #[DbField]
-    pub password_mode: PasswordMode,
+    pub password_mode: Option<PasswordMode>,
 
     /// The account's username (once known).
     #[DbField]
@@ -70,23 +70,18 @@ pub struct CoreAccount {
 impl CoreAccount {
     /// Create a new account.
     #[must_use]
-    pub fn new(
-        remote_id: RemoteId,
-        name_or_addr: String,
-        second_factor_mode: TfaStatus,
-        password_mode: PasswordMode,
-    ) -> Self {
+    pub fn new(remote_id: RemoteId, name_or_addr: String) -> Self {
         Self {
             remote_id,
             name_or_addr,
-            second_factor_mode,
-            password_mode,
             is_ready: false,
 
             // --- Optional fields ---
             username: None,
             display_name: None,
             primary_addr: None,
+            second_factor_mode: None,
+            password_mode: None,
             primary_at: None,
             row_id: None,
         }
@@ -101,18 +96,55 @@ impl CoreAccount {
         Self::find("ORDER BY primary_at DESC", vec![], tether, None).await
     }
 
-    /// Update the user info of the account.
+    /// Update the username of the account.
     #[must_use]
-    pub fn with_info(
-        self,
-        username: Option<String>,
-        display_name: Option<String>,
-        primary_addr: Option<String>,
-    ) -> Self {
+    pub fn with_username(self, username: String) -> Self {
         Self {
-            username,
-            display_name,
-            primary_addr,
+            username: Some(username),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the display name of the account.
+    #[must_use]
+    pub fn with_display_name(self, display_name: String) -> Self {
+        Self {
+            display_name: Some(display_name),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the primary email address of the account.
+    #[must_use]
+    pub fn with_primary_addr(self, primary_addr: String) -> Self {
+        Self {
+            primary_addr: Some(primary_addr),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the 2FA mode of the account.
+    #[must_use]
+    pub fn with_tfa_mode(self, mode: TfaStatus) -> Self {
+        Self {
+            second_factor_mode: Some(mode),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the mailbox password mode of the account.
+    #[must_use]
+    pub fn with_mbp_mode(self, mode: PasswordMode) -> Self {
+        Self {
+            password_mode: Some(mode),
 
             // --- preserve ---
             ..self
@@ -207,9 +239,6 @@ pub enum CoreSessionError {
     #[error("missing access token")]
     AccTok,
 
-    #[error("missing refresh token")]
-    RefTok,
-
     #[error("missing auth scopes")]
     Scopes,
 
@@ -236,16 +265,19 @@ impl CoreSession {
     /// # Errors
     ///
     /// Returns an error if the encryption fails.
-    pub fn new(auth: &Auth, key: &SessionEncryptionKey) -> Result<Self, CoreSessionError> {
-        let uid = auth.uid().ok_or(CoreSessionError::AuthUid)?;
-        let user_id = auth.user_id().ok_or(CoreSessionError::AuthUserId)?;
-        let acc_tok = auth.acc_tok().ok_or(CoreSessionError::AccTok)?;
-        let ref_tok = auth.ref_tok().ok_or(CoreSessionError::RefTok)?;
-        let scopes = auth.scopes().ok_or(CoreSessionError::Scopes)?;
+    pub fn new(
+        user_id: RemoteId,
+        session_id: RemoteId,
+        tokens: &Tokens,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, CoreSessionError> {
+        let ref_tok = tokens.ref_tok();
+        let acc_tok = tokens.acc_tok().ok_or(CoreSessionError::AccTok)?;
+        let scopes = tokens.scopes().ok_or(CoreSessionError::Scopes)?;
 
         Ok(Self {
-            remote_id: RemoteId::from(uid),
-            account_id: RemoteId::from(user_id),
+            remote_id: session_id,
+            account_id: user_id,
             access_token: EncryptedAccessToken::new(acc_tok, key)?,
             refresh_token: EncryptedRefreshToken::new(ref_tok, key)?,
             auth_scopes: AuthScopes::new(scopes),
@@ -265,18 +297,14 @@ impl CoreSession {
     /// # Panics
     ///
     /// Panics if the UID in the auth does not match the session's remote ID.
-    pub fn with_auth(
+    pub fn with_tokens(
         self,
-        auth: &Auth,
+        tokens: &Tokens,
         key: &SessionEncryptionKey,
     ) -> Result<Self, CoreSessionError> {
-        if let Some(uid) = auth.uid() {
-            assert_eq!(self.remote_id, RemoteId::from(uid));
-        };
-
-        let acc_tok = auth.acc_tok().ok_or(CoreSessionError::AccTok)?;
-        let ref_tok = auth.ref_tok().ok_or(CoreSessionError::RefTok)?;
-        let scopes = auth.scopes().ok_or(CoreSessionError::Scopes)?;
+        let ref_tok = tokens.ref_tok();
+        let acc_tok = tokens.acc_tok().ok_or(CoreSessionError::AccTok)?;
+        let scopes = tokens.scopes().ok_or(CoreSessionError::Scopes)?;
 
         Ok(Self {
             access_token: EncryptedAccessToken::new(acc_tok, key)?,

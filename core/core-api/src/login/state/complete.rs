@@ -1,10 +1,10 @@
 use crate::auth::UserKeySecret;
-use crate::login::state::HasAuthId;
+use crate::login::state::{HasAuthId, StateData};
 use crate::login::{state::HasUserId, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::{Proton, ProtonCore};
-use crate::session::{Config, Session, SessionParts};
-use crate::store::DynStore;
+use crate::session::{Session, SessionParts};
+use crate::store::UserData;
 use derive_more::Into;
 use futures::TryFutureExt;
 use proton_crypto_account::keys::{LockedKey, UserKeys};
@@ -15,22 +15,12 @@ use tracing::info;
 /// Represents a completed login flow.
 pub struct Complete {
     client: Proton,
-    config: Config,
-    store: DynStore,
-    user_id: RemoteId,
-    auth_id: RemoteId,
+    data: StateData,
 }
 
 impl Complete {
-    pub async fn new(
-        client: Proton,
-        config: Config,
-        store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
-        pass: String,
-    ) -> Result<Self, LoginError> {
-        info!(%user_id, %auth_id, "Completing login flow");
+    pub async fn new(client: Proton, data: StateData, pass: String) -> Result<Self, LoginError> {
+        info!("Completing login flow");
 
         // Initialize the crypto providers.
         let srp = proton_crypto::new_srp_provider();
@@ -72,36 +62,37 @@ impl Complete {
             UserKeySecret(secret)
         };
 
-        // Save the derived user secret in the auth store.
-        store.write().await.set_key_secret(secret).await?;
+        // Save the derived user data in the auth store.
+        (data.store.write().await)
+            .set_user_data(UserData {
+                username: user.name.unwrap_or_default(),
+                display_name: user.display_name.unwrap_or_default(),
+                primary_addr: user.email,
+                key_secret: secret,
+            })
+            .await?;
 
-        Ok(Self {
-            client,
-            config,
-            store,
-            user_id,
-            auth_id,
-        })
+        Ok(Self { client, data })
     }
 
     pub fn into_session(self) -> Session {
         Session::from_parts(SessionParts {
             client: self.client,
-            config: self.config,
-            store: self.store,
+            config: self.data.config,
+            store: self.data.store,
         })
     }
 }
 
 impl HasUserId for Complete {
     fn user_id(&self) -> &RemoteId {
-        &self.user_id
+        &self.data.user_id
     }
 }
 
 impl HasAuthId for Complete {
     fn auth_id(&self) -> &RemoteId {
-        &self.auth_id
+        &self.data.auth_id
     }
 }
 

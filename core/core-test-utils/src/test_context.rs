@@ -1,6 +1,6 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use async_trait::async_trait;
-use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
+use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, Address as ApiAddress, ContactEmailEvent as ApiContactEmailEvent,
@@ -9,7 +9,7 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_core_common::datatypes::ProductUsedSpace;
-use proton_core_common::datatypes::{PasswordMode, RemoteId, TfaStatus};
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, ModelExtension, User, UserSettings};
@@ -168,10 +168,10 @@ impl TestContext {
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         let keychain: Arc<InMemoryKeyChain> = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
-        let encryption_key = Self::encryption_key();
+        let key = Self::encryption_key();
 
         keychain
-            .store(encryption_key.to_base64())
+            .store(key.to_base64())
             .expect("failed to store in keychain");
 
         // Use the given data or fall back to the default
@@ -211,35 +211,28 @@ impl TestContext {
                 .expect("failed to create transaction");
 
             // Create a fake account.
-            let account = CoreAccount::new(
-                user_id.clone(),
-                Self::test_user_mail(),
-                TfaStatus::None,
-                PasswordMode::One,
-            )
-            .with_save(&tx)
-            .await
-            .expect("fake account should save");
+            let account = CoreAccount::new(user_id.clone(), Self::test_user_mail())
+                .with_save(&tx)
+                .await
+                .expect("fake account should save");
 
             // Create a auth session.
-            let auth = Auth::internal(
-                user_id.clone(),
-                Self::test_uid(),
-                Tokens::access(
-                    Self::test_acctok(),
-                    Self::test_reftok(),
-                    Self::test_scopes(),
-                ),
+            let tokens = Tokens::access(
+                Self::test_acctok(),
+                Self::test_reftok(),
+                Self::test_scopes(),
             );
 
             // Create a fake session.
-            let session = CoreSession::new(&auth, &encryption_key)
+            let session = CoreSession::new(user_id.clone(), Self::test_uid(), &tokens, &key)
                 .expect("session should be created")
-                .with_key_secret(&user_key_secret, &encryption_key)
+                .with_key_secret(&user_key_secret, &key)
                 .expect("key secret should be set")
                 .with_save(&tx)
                 .await
                 .expect("fake session should save");
+
+            // Commit the transaction.
             tx.commit().await.expect("transaction should commit");
 
             (account, session)

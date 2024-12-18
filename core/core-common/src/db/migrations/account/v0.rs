@@ -22,17 +22,17 @@ async fn create_table_core_accounts(tx: &Bond<'_>) -> Result<(), StashError> {
                 -- Remote ID of the account (i.e. the API User ID)
                 remote_id TEXT PRIMARY KEY,
 
-                -- Second factor auth mode of the account
-                second_factor_mode INTEGER NOT NULL,
-
-                -- Mailbox password mode of the account
-                password_mode INTEGER NOT NULL,
-
                 -- The account's username or email address (used for login)
                 name_or_addr TEXT NOT NULL,
 
                 -- Whether the account is ready (i.e. login flow completed)
                 is_ready INTEGER NOT NULL,
+
+                -- Second factor auth mode of the account
+                second_factor_mode INTEGER,
+
+                -- Mailbox password mode of the account
+                password_mode INTEGER,
 
                 -- The account's username (once known)
                 username TEXT,

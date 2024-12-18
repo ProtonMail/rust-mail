@@ -61,6 +61,7 @@ use proton_api_core::services::proton::response_data::{
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
 };
+use proton_api_core::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
 use secrecy::{CloneableSecret, DebugSecret};
@@ -573,6 +574,17 @@ impl TfaStatus {
     #[must_use]
     pub fn want_tfa(self) -> bool {
         !matches!(self, Self::None)
+    }
+}
+
+impl From<TfaMode> for TfaStatus {
+    fn from(value: TfaMode) -> Self {
+        match (value.totp, value.fido) {
+            (true, true) => Self::TotpOrFido2,
+            (true, false) => Self::Totp,
+            (false, true) => Self::Fido2,
+            (false, false) => Self::None,
+        }
     }
 }
 
@@ -1827,6 +1839,15 @@ impl PasswordMode {
     #[must_use]
     pub fn want_mbp(self) -> bool {
         !matches!(self, Self::One)
+    }
+}
+
+impl From<MbpMode> for PasswordMode {
+    fn from(value: MbpMode) -> Self {
+        match value {
+            MbpMode::One => Self::One,
+            MbpMode::Two => Self::Two,
+        }
     }
 }
 

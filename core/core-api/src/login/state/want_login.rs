@@ -1,9 +1,10 @@
+use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::Proton;
 use crate::session::Config;
-use crate::store::DynStore;
-use muon::client::flow::LoginFlow;
+use crate::store::{AuthInfo, DynStore, MbpMode, TfaMode};
+use muon::client::flow::{LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
 use tracing::info;
 
@@ -36,23 +37,65 @@ impl WantLogin {
         store.write().await.set_name_or_addr(&user);
 
         let state = match client.auth().login(&user, &pass).await {
-            LoginFlow::Ok(client, data) => {
-                let user_id = RemoteId::from(data.user_id);
-                let auth_id = RemoteId::from(data.session_id);
+            LoginFlow::Ok(client, flow_data) => {
+                info!("Login flow does not require 2FA");
 
-                match data.password_mode {
-                    One => State::finalize(client, config, store, user_id, auth_id, pass).await?,
-                    Two => State::want_mbp(client, config, store, user_id, auth_id),
+                let LoginFlowData {
+                    user_id,
+                    session_id,
+                    password_mode,
+                } = flow_data;
+
+                let auth_info = AuthInfo {
+                    user_id: RemoteId::from(user_id.clone()),
+                    session_id: RemoteId::from(session_id.clone()),
+                    tfa_mode: TfaMode::none(),
+                    mbp_mode: MbpMode::from(password_mode),
+                };
+
+                store.write().await.set_auth_info(auth_info).await?;
+
+                let data = StateData {
+                    config,
+                    store,
+                    user_id: RemoteId::from(user_id),
+                    auth_id: RemoteId::from(session_id),
+                };
+
+                match password_mode {
+                    One => State::finalize(client, data, pass).await?,
+                    Two => State::want_mbp(client, data),
                 }
             }
 
-            LoginFlow::TwoFactor(flow, data) => {
-                let user_id = RemoteId::from(data.user_id);
-                let auth_id = RemoteId::from(data.session_id);
+            LoginFlow::TwoFactor(flow, flow_data) => {
+                info!("Login flow requires 2FA");
 
-                match data.password_mode {
-                    One => State::want_tfa(flow, config, store, user_id, auth_id, Some(pass)),
-                    Two => State::want_tfa(flow, config, store, user_id, auth_id, None),
+                let LoginFlowData {
+                    user_id,
+                    session_id,
+                    password_mode,
+                } = flow_data;
+
+                let auth_info = AuthInfo {
+                    user_id: RemoteId::from(user_id.clone()),
+                    session_id: RemoteId::from(session_id.clone()),
+                    tfa_mode: TfaMode::new(flow.has_totp(), flow.has_fido()),
+                    mbp_mode: MbpMode::from(password_mode),
+                };
+
+                store.write().await.set_auth_info(auth_info).await?;
+
+                let data = StateData {
+                    config,
+                    store,
+                    user_id: RemoteId::from(user_id),
+                    auth_id: RemoteId::from(session_id),
+                };
+
+                match password_mode {
+                    One => State::want_tfa(flow, data, Some(pass)),
+                    Two => State::want_tfa(flow, data, None),
                 }
             }
 

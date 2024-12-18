@@ -16,17 +16,24 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let dir = TempDir::new("login")?;
+    let dir = TempDir::new("login")?.into_path();
     let key = SessionEncryptionKey::random();
     let kch = InMemoryKeyChain::default();
     let cfg = Config::default();
 
     kch.store(key.to_base64())?;
 
-    let mail_ctx = new_mail_ctx(dir.path(), kch.into(), cfg).await?;
-    let user_ctx = new_user_ctx(mail_ctx).await?;
+    let mail_ctx = new_mail_ctx(&dir, kch.into(), cfg).await?;
+    let user_ctx = new_user_ctx(Arc::clone(&mail_ctx)).await?;
 
     println!("{:#?}", user_ctx.user().await?);
+
+    let account = mail_ctx
+        .get_account(user_ctx.user_id().to_owned())
+        .await?
+        .unwrap();
+
+    println!("{account:#?}");
 
     Ok(())
 }
