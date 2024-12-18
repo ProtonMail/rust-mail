@@ -69,13 +69,16 @@ async fn label_message() {
 
     // Actions:
     //   * Apply the label to the message
-    Message::action_apply_label(
-        user_ctx.queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_apply_label(
+                queue,
+                label.local_id.unwrap(),
+                vec![message.local_id.unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message have the label
@@ -126,7 +129,10 @@ async fn unlabel_message() {
         .await
         .unwrap()
         .unwrap();
-    Message::action_apply_label(user_ctx.queue(), label.local_id.unwrap(), vec![1.into()])
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_apply_label(queue, label.local_id.unwrap(), vec![1.into()])
+        })
         .await
         .unwrap();
 
@@ -137,13 +143,16 @@ async fn unlabel_message() {
 
     // Actions:
     //   * Apply the label to the message
-    Message::action_remove_label(
-        user_ctx.queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_remove_label(
+                queue,
+                label.local_id.unwrap(),
+                vec![message.local_id.unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message have the label
@@ -197,13 +206,16 @@ async fn message_action_read_unread() {
 
     // Actions:
     //   * Mark message unread
-    Message::action_mark_unread(
-        user_context.queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    user_context
+        .with_queue(|queue| {
+            Message::action_mark_unread(
+                queue,
+                label.local_id.unwrap(),
+                vec![message.local_id.unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message is unread
@@ -215,13 +227,16 @@ async fn message_action_read_unread() {
 
     // Actions:
     //   * Mark message read
-    Message::action_mark_read(
-        user_context.queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    user_context
+        .with_queue(|queue| {
+            Message::action_mark_read(
+                queue,
+                label.local_id.unwrap(),
+                vec![message.local_id.unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message is read
@@ -271,13 +286,16 @@ async fn message_action_delete() {
 
     // Actions:
     //   * delete message
-    Message::action_delete(
-        user_context.queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    user_context
+        .with_queue(|queue| {
+            Message::action_delete(
+                queue,
+                label.local_id.unwrap(),
+                vec![message.local_id.unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message is marked as deleted

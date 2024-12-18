@@ -136,7 +136,10 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match context.queue().queue_action(save_action).await {
+                    match context
+                        .with_queue(|queue| queue.queue_action(save_action))
+                        .await
+                    {
                         Ok(_) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e}");
@@ -178,7 +181,10 @@ impl Composer {
                 Command::task(async move {
                     Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
-                        match Draft::send(context.queue(), save_action, send_action).await {
+                        match context
+                            .with_queue(|queue| Draft::send(queue, save_action, send_action))
+                            .await
+                        {
                             Ok(()) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
                                 error!("Failed to save draft: {e}");

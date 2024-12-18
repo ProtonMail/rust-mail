@@ -53,14 +53,17 @@ pub async fn apply_label_to_conversations(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealConversation::action_apply_label(
-            user_context.queue(),
-            label_id.into(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_apply_label(
+                    queue,
+                    label_id.into(),
+                    ids.into_iter().map(Into::into).collect(),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -86,14 +89,17 @@ pub async fn delete_conversations(
     let label_id = mailbox.mbox().label_id();
     let user_context = mailbox.mbox().user_context();
     uniffi_async(async move {
-        RealConversation::action_mark_deleted(
-            user_context.queue(),
-            label_id,
-            conversation_ids.into_iter().map(Into::into),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_mark_deleted(
+                    queue,
+                    label_id,
+                    conversation_ids.into_iter().map(Into::into),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -430,14 +436,17 @@ pub async fn load_conversation(
 pub async fn mark_conversations_as_read(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> VoidActionResult {
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
-        RealConversation::action_mark_read(
-            user_context.queue(),
-            mailbox.label_id().into(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_mark_read(
+                    queue,
+                    mailbox.label_id().into(),
+                    ids.into_iter().map(Into::into).collect(),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -459,14 +468,17 @@ pub async fn mark_conversations_as_read(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> 
 pub async fn mark_conversations_as_unread(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> VoidActionResult {
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
-        RealConversation::action_mark_unread(
-            user_context.queue(),
-            mailbox.label_id().into(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_mark_unread(
+                    queue,
+                    mailbox.label_id().into(),
+                    ids.into_iter().map(Into::into).collect(),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -497,15 +509,18 @@ pub async fn move_conversations(
 ) -> VoidActionResult {
     uniffi_async(async move {
         let user_context = mailbox.mbox().user_context();
-        RealConversation::action_move(
-            user_context.queue(),
-            mailbox.label_id().into(),
-            label_id.into(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_move(
+                    queue,
+                    mailbox.label_id().into(),
+                    label_id.into(),
+                    ids.into_iter().map(Into::into).collect(),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -580,14 +595,17 @@ pub async fn remove_label_from_conversations(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealConversation::action_remove_label(
-            user_context.queue(),
-            label_id.into(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_remove_label(
+                    queue,
+                    label_id.into(),
+                    ids.into_iter().map(Into::into).collect(),
+                )
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -650,13 +668,13 @@ pub async fn search_for_conversations(
 pub async fn star_conversations(session: Arc<MailUserSession>, ids: Vec<Id>) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealConversation::action_star(
-            user_context.queue(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_star(queue, ids.into_iter().map(Into::into).collect())
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -678,13 +696,13 @@ pub async fn star_conversations(session: Arc<MailUserSession>, ids: Vec<Id>) -> 
 pub async fn unstar_conversations(session: Arc<MailUserSession>, ids: Vec<Id>) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealConversation::action_unstar(
-            user_context.queue(),
-            ids.into_iter().map(Into::into).collect(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        user_context
+            .with_queue(|queue| {
+                RealConversation::action_unstar(queue, ids.into_iter().map(Into::into).collect())
+            })
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -831,18 +849,21 @@ pub async fn label_conversations_as(
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
         Result::<_, RealProtonMailError>::Ok(
-            RealConversation::action_label_as(
-                user_context.queue(),
-                source_label_id.into(),
-                conversation_ids.into_iter().map_into().collect(),
-                selected_label_ids.into_iter().map_into().collect(),
-                partially_selected_label_ids
-                    .into_iter()
-                    .map_into()
-                    .collect(),
-                must_archive,
-            )
-            .await?,
+            user_context
+                .with_queue(|queue| {
+                    RealConversation::action_label_as(
+                        queue,
+                        source_label_id.into(),
+                        conversation_ids.into_iter().map_into().collect(),
+                        selected_label_ids.into_iter().map_into().collect(),
+                        partially_selected_label_ids
+                            .into_iter()
+                            .map_into()
+                            .collect(),
+                        must_archive,
+                    )
+                })
+                .await?,
         )
     })
     .await

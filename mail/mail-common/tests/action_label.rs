@@ -79,13 +79,16 @@ async fn test_labeling_conversation_with_custom_label() {
     let local_conversation_id = local_conversation.id().unwrap();
 
     // Apply label action
-    Conversation::action_apply_label(
-        user_ctx.queue(),
-        custom_label_local_label.local_id.unwrap(),
-        vec![local_conversation_id],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_apply_label(
+                queue,
+                custom_label_local_label.local_id.unwrap(),
+                vec![local_conversation_id],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -109,13 +112,16 @@ async fn test_labeling_conversation_with_custom_label() {
     );
 
     // Apply unlabel action
-    Conversation::action_remove_label(
-        user_ctx.queue(),
-        custom_label_local_label.local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_remove_label(
+                queue,
+                custom_label_local_label.local_id.unwrap(),
+                vec![local_conversation.id().unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -193,13 +199,16 @@ async fn test_labeling_conversation_with_starred_label() {
         .unwrap();
 
     // Apply label action
-    Conversation::action_apply_label(
-        user_ctx.queue(),
-        starred_local_label.local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_apply_label(
+                queue,
+                starred_local_label.local_id.unwrap(),
+                vec![local_conversation.id().unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -223,13 +232,16 @@ async fn test_labeling_conversation_with_starred_label() {
     );
 
     // Apply unlabel action
-    Conversation::action_remove_label(
-        user_ctx.queue(),
-        starred_local_label.clone().local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_remove_label(
+                queue,
+                starred_local_label.clone().local_id.unwrap(),
+                vec![local_conversation.id().unwrap()],
+            )
+        })
+        .await
+        .unwrap();
 
     // Verify that conversation contains label.
     assert!(

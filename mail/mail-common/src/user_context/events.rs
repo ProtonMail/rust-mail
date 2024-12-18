@@ -3,4 +3,4 @@ mod core;
 mod event_loop;
 mod labels;
 mod messages;
-mod subscriber;
+pub(crate) mod subscriber;

@@ -134,7 +134,10 @@ async fn basic_send_check() {
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    draft.save(user_ctx.queue()).await.unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -145,7 +148,8 @@ async fn basic_send_check() {
     let save_action = draft.to_save_action();
     let send_action = draft.to_send_action().unwrap();
 
-    Draft::send(user_ctx.queue(), save_action, send_action)
+    user_ctx
+        .with_queue(|queue| Draft::send(queue, save_action, send_action))
         .await
         .unwrap();
 
@@ -266,7 +270,8 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyho
     let save_action = draft.to_save_action();
     let send_action = draft.to_send_action().unwrap();
 
-    Draft::send(user_ctx.queue(), save_action, send_action)
+    user_ctx
+        .with_queue(|queue| Draft::send(queue, save_action, send_action))
         .await
         .unwrap();
 

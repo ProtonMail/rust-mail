@@ -45,8 +45,8 @@ impl MailUserContext {
         let event_loop_handle = tokio::spawn(async move {
             debug!("Syncing event id");
             ctx_clone
-                .event_loop
-                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
+                .exclusive
+                .initialize_event_loop(ctx_clone.as_ref(), ctx_clone.as_ref())
                 .await
         });
         let ctx_clone = ctx.clone();

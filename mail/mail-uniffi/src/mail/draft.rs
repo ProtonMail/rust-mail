@@ -227,8 +227,7 @@ impl Draft {
         };
         let ctx = Arc::clone(&self.ctx);
         uniffi_async(async move {
-            ctx.queue()
-                .queue_action(action)
+            ctx.with_queue(|queue| queue.queue_action(action))
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -253,7 +252,8 @@ impl Draft {
         let ctx = Arc::clone(&self.ctx);
 
         uniffi_async(async move {
-            RealDraft::send(ctx.queue(), save_action, send_action?)
+            let send_action = send_action?;
+            ctx.with_queue(|queue| RealDraft::send(queue, save_action, send_action))
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -266,8 +266,7 @@ impl Draft {
 }
 
 async fn save_draft(ctx: &MailUserContext, action: draft::Save) -> Result<(), MailContextError> {
-    ctx.queue()
-        .queue_action(action)
+    ctx.with_queue(|queue| queue.queue_action(action))
         .await
         .map_err(MailContextError::from)?;
     Ok(())

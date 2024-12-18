@@ -125,21 +125,24 @@ async fn action_label_as_without_archive() {
     assert_eq!(conversation4.labels.len(), 3);
 
     // Action
-    Conversation::action_label_as(
-        user_ctx.queue(),
-        inbox_label.local_id.unwrap(),
-        vec![
-            conversation1.local_id.unwrap(),
-            conversation2.local_id.unwrap(),
-            conversation3.local_id.unwrap(),
-            conversation4.local_id.unwrap(),
-        ],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
-        false,
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_label_as(
+                queue,
+                inbox_label.local_id.unwrap(),
+                vec![
+                    conversation1.local_id.unwrap(),
+                    conversation2.local_id.unwrap(),
+                    conversation3.local_id.unwrap(),
+                    conversation4.local_id.unwrap(),
+                ],
+                vec![label1.local_id.unwrap()],
+                vec![label2.local_id.unwrap()],
+                false,
+            )
+        })
+        .await
+        .unwrap();
 
     // Validation
     let conversation1 = Conversation::load(1.into(), &tether)
@@ -302,19 +305,22 @@ async fn action_label_as_with_archive() {
     assert_eq!(conversation2.labels.len(), 3);
 
     // Action
-    Conversation::action_label_as(
-        user_ctx.queue(),
-        inbox_label.local_id.unwrap(),
-        vec![
-            conversation1.local_id.unwrap(),
-            conversation2.local_id.unwrap(),
-        ],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
-        true,
-    )
-    .await
-    .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Conversation::action_label_as(
+                queue,
+                inbox_label.local_id.unwrap(),
+                vec![
+                    conversation1.local_id.unwrap(),
+                    conversation2.local_id.unwrap(),
+                ],
+                vec![label1.local_id.unwrap()],
+                vec![label2.local_id.unwrap()],
+                true,
+            )
+        })
+        .await
+        .unwrap();
 
     // Validation
     let archive_id = LabelId::archive()

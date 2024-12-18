@@ -43,7 +43,8 @@ pub async fn contact_list(
 pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealContact::action_delete(user_context.queue(), vec![contact_id.into()])
+        user_context
+            .with_queue(|queue| RealContact::action_delete(queue, vec![contact_id.into()]))
             .await
             .map_err(MailContextError::from)?;
 

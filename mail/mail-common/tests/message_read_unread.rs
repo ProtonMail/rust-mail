@@ -162,7 +162,8 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
         .await
         .unwrap();
-    Message::action_mark_read(user_ctx.queue(), inbox.local_id.unwrap(), message_ids)
+    user_ctx
+        .with_queue(|queue| Message::action_mark_read(queue, inbox.local_id.unwrap(), message_ids))
         .await
         .unwrap();
 
@@ -227,7 +228,10 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
         .await
         .unwrap();
-    Message::action_mark_unread(user_ctx.queue(), inbox.local_id.unwrap(), message_ids)
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_mark_unread(queue, inbox.local_id.unwrap(), message_ids)
+        })
         .await
         .unwrap();
 

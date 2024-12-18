@@ -1,16 +1,18 @@
 mod action_queue;
 pub mod cache;
 mod events;
+pub mod exclusive_updates;
 mod images;
 mod initialization;
 
 use crate::models::{Conversation, Message};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
+use crate::user_context::exclusive_updates::MailUserContextExclusive;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
-use proton_action_queue::queue::Queue;
+use proton_action_queue::queue::{Queue, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::{Proton, ProtonCore};
@@ -37,9 +39,8 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    event_loop: EventLoop,
-    action_queue: Queue,
     cache: Cache,
+    exclusive: MailUserContextExclusive,
 }
 
 impl MailUserContext {
@@ -53,18 +54,18 @@ impl MailUserContext {
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
+        let exclusive = MailUserContextExclusive::new(EventLoop::new(), action_queue);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
-            event_loop: EventLoop::new(),
-            action_queue,
             cache,
+            exclusive,
         });
 
-        this.queue()
+        this.exclusive
             .register_execution_context(Weak::clone(&this.this));
-        this.queue().register_execution_context(user_context_weak);
+        this.exclusive.register_execution_context(user_context_weak);
 
         this.init_expiration_loop();
         Ok(this)
@@ -106,8 +107,15 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    pub fn queue(&self) -> &Queue {
-        &self.action_queue
+    pub async fn execute_all_actions(&self) -> QueuedResult<()> {
+        self.exclusive.execute_all().await
+    }
+
+    pub async fn with_queue<'a, F, T>(&'a self, closure: impl FnOnce(&'a Queue) -> F) -> T
+    where
+        F: Future<Output = T> + 'a,
+    {
+        self.exclusive.with_queue(closure).await
     }
 
     /// Get the API service.
