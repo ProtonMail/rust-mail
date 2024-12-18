@@ -59,7 +59,7 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
     // TODO: once stash statistics can be disabled, remove stash=error
     EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
-        .parse(
+        .parse(format!(
             "info,\
             proton_mail_uniffi=debug,\
             proton_sqlite3=debug,\
@@ -69,15 +69,20 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_api_core=debug,\
             proton_action_queue=trace,\
             proton_api_mail=debug,\
-            stash=error",
-        )
+            stash={}",
+            if std::env::var("STASH_SQL_DEBUG").is_ok() {
+                "debug"
+            } else {
+                "error"
+            }
+        ))
         .expect("bad log directives")
 }
 
 pub fn app_tracing_env_filter_trace() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
-        .parse(
+        .parse(format!(
             "info,\
             proton_mail_uniffi=trace,\
             proton_sqlite3=trace,\
@@ -87,8 +92,13 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
             proton_api_core=trace,\
             proton_action_queue=trace,\
             proton_api_mail=trace,\
-            stash=trace",
-        )
+            stash={}",
+            if std::env::var("STASH_SQL_DEBUG").is_ok() {
+                "trace"
+            } else {
+                "error"
+            }
+        ))
         .expect("bad log directives")
 }
 
