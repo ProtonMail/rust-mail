@@ -41,7 +41,7 @@ pub struct MailSessionParams {
     /// Directory where the mail cache should be stored.
     pub mail_cache_dir: String,
     /// Size of the mail cache.
-    pub mail_cache_size: u32,
+    pub mail_cache_size: u64,
     /// Directory where the logs should be stored.
     pub log_dir: String,
     /// Whether to enable debug and trace logs.

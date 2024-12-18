@@ -1,10 +1,10 @@
 use crate::cache::CacheAttachmentKey;
 use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
-use crate::{AppError, MailContextError, Mailbox, MailboxError, MailboxResult};
+use crate::{AppError, MailContextError, MailUserContext, MailboxError, MailboxResult};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
-use proton_core_common::cache::{CacheError, CacheResult};
+use proton_core_common::cache::{CacheData, CacheError, CacheResult};
 use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
@@ -33,7 +33,7 @@ pub struct DecryptedAttachment {
     // pub verification_result: VerificationResult,
 }
 
-impl Mailbox {
+impl MailUserContext {
     /// Loads the metadata and file path for the given local [`attachment_id`]
     /// into a [`DecryptedAttachment`].
     ///
@@ -58,7 +58,7 @@ impl Mailbox {
         attachment_id: LocalId,
     ) -> MailboxResult<DecryptedAttachment> {
         let attachment = self.sync_attachment(attachment_id).await?;
-        let data_path = self.get_attachment_content(&attachment).await?;
+        let data_path = self.get_attachment_content_path(&attachment).await?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -75,9 +75,11 @@ impl Mailbox {
     /// Get decrypted attachment content
     ///
     /// Fetches, decrypts and caches the attachment in the filesystem if it's not there.
-    pub async fn get_attachment_content(&self, attachment: &Attachment) -> MailboxResult<PathBuf> {
-        let user_context = self.user_context();
-        let cache = user_context.attachements_cache();
+    pub async fn get_attachment_content_path(
+        &self,
+        attachment: &Attachment,
+    ) -> MailboxResult<PathBuf> {
+        let cache = self.attachements_cache();
         let key = CacheAttachmentKey::from(attachment);
 
         Ok(cache
@@ -85,10 +87,25 @@ impl Mailbox {
             .await?)
     }
 
+    /// Get decrypted attachment content
+    /// Use this instead of `get_attachment_content_path` if you need the actual bytes.
+    ///
+    /// Fetches, decrypts and caches the attachment in the filesystem if it's not there.
+    pub async fn get_attachment_content_data(
+        &self,
+        attachment: &Attachment,
+    ) -> MailboxResult<CacheData> {
+        let cache = self.attachements_cache();
+        let key = CacheAttachmentKey::from(attachment);
+
+        Ok(cache
+            .get_path_or_insert_data(&key, || self.fetch_attachment(attachment))
+            .await?)
+    }
+
     /// Fetches attachment data
     async fn fetch_attachment(&self, attachment: &Attachment) -> CacheResult<Vec<u8>> {
         let attachment_id = attachment.local_id.expect("Should be set");
-        let user_context = self.user_context();
         let pgp_provider = new_pgp_provider();
         let remote_attachment_id =
             attachment
@@ -98,7 +115,7 @@ impl Mailbox {
                     "Attachment without RemoteId {attachment_id}"
                 )))?;
         let encrypted_content =
-            Attachment::fetch_content(remote_attachment_id.clone(), user_context.session().api())
+            Attachment::fetch_content(remote_attachment_id.clone(), self.session().api())
                 .await
                 .map_err(|e| {
                     error!("Failed to fetch attachment({attachment_id}) from API: {e})");
@@ -117,7 +134,7 @@ impl Mailbox {
     /// Sync attachment metadata
     async fn sync_attachment(&self, attachment_id: LocalId) -> MailboxResult<Attachment> {
         let user_context = self.user_context();
-        let mut conn = user_context.user_stash().connection();
+        let mut conn = user_context.stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)
             .await
             .inspect_err(|e| error!("Failed to load attachment({attachment_id}) from DB: {e})"))?
@@ -152,12 +169,10 @@ impl Mailbox {
             )))?
         };
 
-        let user_context = self.user_context();
-
         let mut result_buffer: Vec<u8> =
             Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
-        let address_keys = user_context
+        let address_keys = self
             .unlocked_address_keys(pgp_provider, remote_address_id)
             .await?;
 

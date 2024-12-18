@@ -49,7 +49,7 @@ impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
 
     /// See [`Paginate::reload`] for more details.
     #[inline]
-    pub async fn reload(&self) -> Result<Vec<T>, StashError> {
+    pub async fn reload(&self) -> Result<Vec<T>, R::Error> {
         self.paginator.reload().await
     }
 

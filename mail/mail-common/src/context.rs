@@ -119,7 +119,7 @@ pub struct MailContext {
     core_context: Arc<Context>,
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
-    pub(crate) mail_cache_size: u32,
+    pub(crate) mail_cache_size: u64,
     active_user_contexts: Mutex<HashMap<RemoteId, Weak<MailUserContext>>>,
 }
 
@@ -137,7 +137,7 @@ impl MailContext {
         user_db_path: impl Into<PathBuf>,
         core_cache_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
-        mail_cache_size: u32,
+        mail_cache_size: u64,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
@@ -168,7 +168,7 @@ impl MailContext {
     pub async fn new_with_core_context(
         core_context: Arc<Context>,
         mail_cache_path: PathBuf,
-        mail_cache_size: u32,
+        mail_cache_size: u64,
     ) -> Result<Arc<Self>, MailContextError> {
         Ok(Arc::new(Self {
             core_context,

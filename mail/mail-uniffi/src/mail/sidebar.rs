@@ -190,7 +190,7 @@ impl Sidebar {
                     _ = async_runtime().spawn_blocking(callback).await;
                 }
             });
-            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle(handle)))
+            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle::new(handle)))
         })
         .await
         .map_err(ActionError::from)

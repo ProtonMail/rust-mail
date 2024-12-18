@@ -13,9 +13,9 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::errors::{ActionError, VoidActionResult};
+use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
@@ -44,7 +44,7 @@ pub struct TransformOpts {
     pub remote_content: RemoteContent,
 }
 
-#[derive(Clone, uniffi::Object)]
+#[derive(uniffi::Object)]
 pub struct DecryptedMessage {
     pub(crate) ctx: Arc<MailUserContext>,
     pub(crate) body: DecryptedMessageBody,
@@ -154,6 +154,27 @@ impl DecryptedMessage {
             subject,
             attachments,
         })
+    }
+
+    pub async fn get_embedded_attachment(
+        self: Arc<Self>,
+        cid: String,
+    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+        uniffi_async(async move {
+            let att = self
+                .body
+                .get_embedded_attachment(&self.ctx, &cid)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+                data: att.data,
+                mime: att.mime,
+                height: att.height,
+                width: att.width,
+            })
+        })
+        .await
+        .map_into()
     }
 }
 
@@ -650,7 +671,7 @@ pub async fn get_message_body(
 ) -> Result<Arc<DecryptedMessage>, ActionError> {
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
-        let body = models::Message::message_body(&ctx, id.into()).await?;
+        let body = models::Message::message_body(ctx.clone(), id.into()).await?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
@@ -923,34 +944,6 @@ pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> Voi
     .await
     .map_err(ActionError::from)
     .into()
-}
-
-/// Gets the embedded attachment by cid for a message.
-/// Returns None if it does not exist
-///
-/// # Parameters
-///
-/// * `mailbox`  - The current Mailbox.
-/// * `id`       - The id of the message
-/// * `cid`      - The cid of the attachment
-///
-#[proton_uniffi_macros::export_result]
-pub async fn get_embedded_attachment(
-    mailbox: Arc<Mailbox>,
-    id: Id,
-    cid: String,
-) -> Result<EmbeddedAttachmentInfo, ActionError> {
-    uniffi_async(async move {
-        let att = models::Message::get_embedded_attachment(mailbox.mbox(), id.into(), &cid).await?;
-        Result::<_, RealProtonMailError>::Ok(EmbeddedAttachmentInfo {
-            data: att.data,
-            mime: att.mime,
-            height: att.height,
-            width: att.width,
-        })
-    })
-    .await
-    .map_err(ActionError::from)
 }
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.

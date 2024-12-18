@@ -1,5 +1,6 @@
 use crate::draft::ReplyMode;
-use proton_core_common::datatypes::LocalId;
+use crate::models::Message;
+use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
@@ -163,5 +164,39 @@ impl DraftMetadata {
             params![id],
         )
         .await
+    }
+
+    /// Get the message id associated with a draft.
+    ///
+    /// This method can return `None` if the message has not been
+    /// created yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn message_id(
+        id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Option<LocalId>, StashError> {
+        let Some(metadata) = DraftMetadata::find_by_id(id, tether).await? else {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
+
+        Ok(metadata.local_message_id)
+    }
+
+    /// Check whether a given message with remote id has an active draft metadata record.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn exists_for_message_with_remote_id(
+        remote_id: &RemoteId,
+        tether: &Tether,
+    ) -> Result<bool, StashError> {
+        let Some(local_id) = remote_id.counterpart::<Message>(tether).await? else {
+            return Ok(false);
+        };
+        Ok(Self::find_by_message_id(local_id, tether).await?.is_some())
     }
 }

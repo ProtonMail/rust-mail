@@ -57,7 +57,7 @@ impl UserContext {
         user_id: RemoteId,
         session_id: RemoteId,
         cache_path: PathBuf,
-        sender_image_cache_size: u32,
+        sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
 
@@ -80,7 +80,7 @@ impl UserContext {
 
     async fn init_sender_image_cache(
         cache_path: PathBuf,
-        cache_size: u32,
+        cache_size: u64,
         user_stash: &Stash,
     ) -> CoreContextResult<Arc<ProtonCache<SenderImage>>> {
         let cache = ProtonCache::new(

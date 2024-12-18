@@ -749,6 +749,10 @@ mod changes_during_pagination {
                 ("Test model #113".to_owned(), 113),
                 ("Test model #114".to_owned(), 114),
                 ("Test model #115".to_owned(), 115),
+                ("Test model #116".to_owned(), 116),
+                ("Test model #117".to_owned(), 117),
+                ("Test model #118".to_owned(), 118),
+                ("Test model #119".to_owned(), 119),
             ]
         );
 
@@ -780,7 +784,12 @@ mod changes_during_pagination {
                 ("Test model #131".to_owned(), 131),
                 ("Test model #132".to_owned(), 132),
                 ("Test model #133".to_owned(), 133),
-                ("Test model #134".to_owned(), 134)
+                ("Test model #134".to_owned(), 134),
+                ("Test model #135".to_owned(), 135),
+                ("Test model #136".to_owned(), 136),
+                ("Test model #137".to_owned(), 137),
+                ("Test model #138".to_owned(), 138),
+                ("Test model #139".to_owned(), 139),
             ]
         );
         let tx = tether.transaction().await.unwrap();
@@ -810,6 +819,11 @@ mod changes_during_pagination {
                 ("Test model #113".to_owned(), 113),
                 ("Test model #114".to_owned(), 114),
                 ("Test model #115".to_owned(), 115),
+                ("Test model #120".to_owned(), 120),
+                ("Test model #121".to_owned(), 121),
+                ("Test model #122".to_owned(), 122),
+                ("Test model #123".to_owned(), 123),
+                ("Test model #124".to_owned(), 124),
             ]
         );
     }

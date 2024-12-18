@@ -137,20 +137,17 @@
 //!      Check if there's a previous page available.
 //!
 
-use crate::models::ModelExtension;
 use core::error::Error;
 use core::future::Future;
 use core::num::NonZeroU32;
 use indoc::formatdoc;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
-use stash::orm::{perform_find, Model};
+use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use std::collections::BTreeSet;
 use std::sync::Arc;
-use tokio::spawn;
 use tokio::sync::Mutex;
-use tracing::error;
 
 #[cfg(test)]
 #[path = "tests/paginator/paginator.rs"]
@@ -312,6 +309,8 @@ struct Shared {
     /// The current cursor position in the result set. This indicates the start
     /// of the current frame.
     cursor_index: u32,
+    /// The previous cursor position in the result set.
+    last_cursor_index: u32,
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     cursor_row_id: Option<u64>,
@@ -383,6 +382,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let paginator = Self {
             shared: Arc::new(Mutex::new(Shared {
                 cursor_index: 0,
+                last_cursor_index: 0,
                 cursor_row_id: None,
                 row_count: 0,
             })),
@@ -394,8 +394,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         };
 
         paginator.initialize(local_first).await?;
-
-        paginator.start_update_listener();
 
         Ok(paginator)
     }
@@ -460,172 +458,73 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         Ok(())
     }
 
-    /// Starts the update listener to handle live updates.
-    fn start_update_listener(&self) {
-        let stash = self.stash.clone();
-        let query_logic = self.query_logic.clone();
-        let params = self.params.clone();
-        let shared_cloned = Arc::clone(&self.shared);
-        let remote_cloned = Arc::clone(&self.remote);
-        let page_size = self.page_size;
-        let watcher = self.watch().unwrap();
-
-        drop(spawn(async move {
-            let receiver = &watcher.receiver;
-            loop {
-                match receiver.recv_async().await {
-                    Ok(()) => {
-                        let mut shared = shared_cloned.lock().await;
-                        if let Err(e) = Self::handle_change(
-                            &query_logic,
-                            params.clone(),
-                            &mut shared,
-                            &remote_cloned,
-                            &stash,
-                            page_size,
-                        )
-                        .await
-                        {
-                            error!("Error handling change: {:?}", e);
-                        }
-                    }
-                    Err(e) => {
-                        // In theory this should never happen, but we also can't do anything with it
-                        error!("Lost connection to change feed: {e}");
-                        break;
-                    }
-                }
-            }
-        }));
-    }
-
     /// Handles a change in the result set.
     ///
     /// This accepts references to shared state elements due to the listening
     /// loop not being able to operate on self.
     ///
-    /// # Parameters
-    ///
-    /// * `change`        - The change that occurred in the result set.
-    /// * `query_logic`   - The query logic used for finding records.
-    /// * `params`        - The parameters used in the query.
-    /// * `row_count`     - The total number of records in the result set.
-    /// * `cursor_index`  - The current cursor position in the result set.
-    /// * `cursor_row_id` - The current row ID of the record at the cursor.
-    /// * `stash`         - The [`Stash`] instance used for database operations.
-    /// * `sender`        - The sender for live updates.
-    ///
-    #[allow(clippy::too_many_arguments)]
-    async fn handle_change(
-        query_logic: &str,
-        params: Vec<Param>,
-        shared: &mut Shared,
-        remote: &Arc<R>,
-        stash: &Stash,
-        page_size: NonZeroU32,
-    ) -> Result<(), StashError> {
-        let tether = stash.connection();
-        // Re-run the query to check if the cursor position needs to change. This
-        // gets the first record at the offset of the cursor, and if doesn't have
-        // the same ID as the current cursor record, we need to adjust the cursor.
-        let cursor_record: Option<T> = perform_find(
-            #[allow(clippy::unwrap_used)]
-            &paging_query(
-                query_logic,
-                shared.cursor_index,
-                NonZeroU32::new(1).unwrap(),
+    #[allow(clippy::single_match_else)]
+    async fn handle_change(&self) -> Result<Vec<T>, R::Error> {
+        let mut shared = self.shared.lock().await;
+        let tether = self.stash.connection();
+        let mut current_items = T::find(
+            paging_query(
+                &self.query_logic,
+                0,
+                NonZeroU32::new(shared.cursor_index.saturating_add(self.page_size.into())).unwrap(),
             ),
-            convert_params(&params),
+            convert_params(&self.params),
             &tether,
         )
-        .await?
-        .into_iter()
-        .next();
+        .await?;
 
+        let cursor_record = current_items
+            .iter()
+            .enumerate()
+            .find(|(_idx, record)| record.row_id() == shared.cursor_row_id);
         match cursor_record {
-            Some(record) => {
-                if let Some(cursor_row_id) = shared.cursor_row_id {
-                    let loaded_items_count = shared.cursor_index.saturating_add(page_size.into());
-
-                    #[allow(clippy::cast_lossless, clippy::unwrap_used)]
-                    if cursor_row_id != record.row_id().unwrap() {
-                        // The change was made before the cursor position
-                        let new_cursor_index = T::count(
-                            paging_query(
-                                query_logic,
-                                0,
-                                NonZeroU32::new(loaded_items_count).unwrap(),
-                            ),
-                            convert_params(&params),
-                            &tether,
-                        )
-                        .await?;
-
-                        let new_cursor_index = u32::try_from(new_cursor_index)
-                            .unwrap()
-                            .saturating_sub(page_size.into())
-                            .saturating_sub(1);
-
-                        // Update cursor
-                        if new_cursor_index == shared.cursor_index {
-                            shared.cursor_row_id = record.row_id();
-                        } else {
-                            shared.cursor_index = new_cursor_index;
-                            let record: Option<T> = perform_find(
-                                #[allow(clippy::unwrap_used)]
-                                &paging_query(
-                                    query_logic,
-                                    shared.cursor_index,
-                                    NonZeroU32::new(1).unwrap(),
-                                ),
-                                convert_params(&params),
-                                &tether,
-                            )
-                            .await?
-                            .into_iter()
-                            .next();
-                            shared.cursor_row_id = record.and_then(|r| r.row_id());
-                        }
-                    }
+            Some((idx, _record)) => {
+                if shared.last_cursor_index < shared.cursor_index {
+                    // Items moved
+                    shared.last_cursor_index = shared.cursor_index;
+                    let mut next_page = self.next_page_(&mut shared).await?;
+                    next_page.pop(); // do not leak new items to the page
+                    current_items.extend(next_page);
                 } else {
-                    shared.cursor_row_id = record.row_id();
+                    // Set previous cursor index to reference if the items have moved
+                    shared.last_cursor_index = u32::try_from(idx).unwrap_or_default();
                 }
             }
             None => {
-                // We've reached the end of the result set, meaning a deletion before the
-                // cursor position
-                // try to find something a valid element for the cursor.
-                loop {
-                    shared.cursor_index = shared.cursor_index.saturating_sub(1);
-                    if let Some(cursor_record) = perform_find::<_, T>(
-                        #[allow(clippy::unwrap_used)]
-                        &paging_query(
-                            query_logic,
-                            shared.cursor_index,
-                            NonZeroU32::new(1).unwrap(),
-                        ),
-                        convert_params(&params),
-                        &tether,
-                    )
-                    .await?
-                    .into_iter()
-                    .next()
-                    {
-                        shared.cursor_row_id = Some(cursor_record.row_id().unwrap());
-                        break;
+                let next_index = shared.cursor_index.saturating_add(self.page_size.get());
+                let next_page = self.page_at(next_index, &tether).await?;
+                let cursor_record = next_page
+                    .iter()
+                    .enumerate()
+                    .find(|(_idx, record)| record.row_id() == shared.cursor_row_id);
+                match cursor_record {
+                    Some((idx, _record)) => {
+                        // Cursor record found in next page
+                        shared.cursor_index = u32::try_from(idx).unwrap_or_default();
+                        shared.last_cursor_index = shared.cursor_index;
+                        current_items.extend(next_page);
                     }
-
-                    // if we reach this point and we still don't
-                    // have an element then there is nothing left.
-                    if shared.cursor_index == 0 {
-                        shared.cursor_row_id = None;
-                        break;
+                    None => {
+                        // Cursor record not found in next page
+                        shared.cursor_index = u32::try_from(current_items.len())
+                            .unwrap_or_default()
+                            .saturating_sub(self.page_size.into());
+                        shared.last_cursor_index = shared.cursor_index;
+                        shared.cursor_row_id = current_items
+                            .get(shared.cursor_index.saturating_sub(1) as usize)
+                            .and_then(Model::row_id);
                     }
                 }
             }
         }
+        dbg!(format!("Index after {}", shared.cursor_index));
 
-        match remote.total(&tether).await {
+        match self.remote.total(&tether).await {
             Ok(v) => {
                 if let Ok(v) = v.try_into() {
                     shared.row_count = v;
@@ -636,7 +535,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             }
         }
 
-        Ok(())
+        Ok(current_items)
     }
 
     /// Retrieves the results of the current page.
@@ -685,6 +584,11 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         // Acquire lock to prevent concurrent checks from the database
         // watcher until we are done updating all the relevant data.
         let mut shared = self.shared.lock().await;
+        self.next_page_(&mut shared).await
+    }
+
+    #[allow(clippy::missing_panics_doc)]
+    async fn next_page_(&self, shared: &mut Shared) -> Result<Vec<T>, R::Error> {
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
         let mut tether = self.stash.connection();
         let current_page = self.page_at(shared.cursor_index, &tether).await?;
@@ -694,6 +598,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             .await?;
 
         shared.cursor_index = next_index;
+        shared.last_cursor_index = shared.cursor_index;
         // Get the first element of the next page to update the cursor id.
         if let Some(element) = T::find(
             paging_query(&self.query_logic, next_index, NonZeroU32::new(1).unwrap()),
@@ -721,6 +626,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     pub async fn previous_page(&self) -> Result<Vec<T>, StashError> {
         let mut guard = self.shared.lock().await;
         guard.cursor_index = guard.cursor_index.saturating_sub(u32::from(self.page_size));
+        guard.last_cursor_index = guard.cursor_index;
         drop(guard);
         self.current_page().await
     }
@@ -739,26 +645,8 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     /// Returns an error if the data could not be fetched from the database.
     ///
     #[allow(clippy::missing_panics_doc)]
-    pub async fn reload(&self) -> Result<Vec<T>, StashError> {
-        let tether = self.stash.connection();
-        #[allow(clippy::unwrap_used)]
-        T::find(
-            paging_query(
-                &self.query_logic,
-                0,
-                NonZeroU32::new(
-                    self.shared
-                        .lock()
-                        .await
-                        .cursor_index
-                        .saturating_add(self.page_size.into()),
-                )
-                .unwrap(),
-            ),
-            convert_params(&self.params),
-            &tether,
-        )
-        .await
+    pub async fn reload(&self) -> Result<Vec<T>, R::Error> {
+        self.handle_change().await
     }
 
     /// Retrieves the total number of records in the result set.

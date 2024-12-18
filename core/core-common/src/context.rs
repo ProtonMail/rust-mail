@@ -197,7 +197,7 @@ pub struct Context {
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
     active_user_contexts: Mutex<HashMap<RemoteId, Weak<UserContext>>>,
     cache_path: PathBuf,
-    sender_image_cache_size: u32,
+    sender_image_cache_size: u64,
 }
 
 impl Context {
@@ -228,7 +228,7 @@ impl Context {
         api_config: ApiConfig,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
         cache_path: impl Into<PathBuf>,
-        sender_image_cache_size: u32,
+        sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();

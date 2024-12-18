@@ -7,7 +7,7 @@ use proton_core_common::paginator::DataSource;
 use proton_mail_common::models::PaginatorCompat;
 use proton_mail_common::MailContextError;
 use stash::orm::Model;
-use stash::stash::{StashError, WatcherHandle};
+use stash::stash::WatcherHandle;
 use std::sync::Arc;
 
 /// Paginator adapter.
@@ -30,7 +30,7 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
             'static,
             Result<PaginatorCompat<T, R>, MailContextError>,
         >,
-        to_message: impl Fn(Result<Vec<T>, StashError>) -> Messages + Send + Sync + 'static,
+        to_message: impl Fn(Result<Vec<T>, R::Error>) -> Messages + Send + Sync + 'static,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let to_message = Arc::new(to_message);
         let paginator = Arc::new(creat_paginator().await?);

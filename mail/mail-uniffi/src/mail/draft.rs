@@ -1,7 +1,7 @@
 mod recipients;
 
 use crate::core::datatypes::Id;
-use crate::errors::{DraftError, VoidDraftResult};
+use crate::errors::{DraftError, OptIdDraftResult, VoidDraftResult};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
@@ -10,6 +10,7 @@ use proton_mail_common::actions::draft;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use std::sync::{Arc, Weak};
@@ -102,8 +103,8 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 pub async fn open_draft(session: &MailUserSession, message_id: Id) -> NewDraftResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        let draft = RealDraft::open(&ctx, message_id.into()).await?;
-        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
+        let draft = RealDraft::open(ctx.clone(), message_id.into()).await?;
+        Ok::<_, RealProtonMailError>(Draft::new_impl(ctx, draft))
     })
     .await
     .map_err(DraftError::from)
@@ -190,6 +191,23 @@ impl Draft {
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
         self.instance.read().mime_type.into()
+    }
+
+    /// Get the Draft's message id .
+    ///
+    /// Returns `None` if no message was created.
+    pub async fn message_id(self: Arc<Self>) -> OptIdDraftResult {
+        let metadata_id = { self.instance.read().metadata_id };
+        let tether = self.ctx.user_stash().connection();
+        uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
+            DraftMetadata::message_id(metadata_id, &tether)
+                .await
+                .map(|v| v.map(Into::into))
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(DraftError::from)
+        .into()
     }
 }
 

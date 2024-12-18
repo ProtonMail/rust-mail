@@ -141,6 +141,7 @@
 //! crates that are the subject of the translations.*
 //!
 
+use parking_lot::Mutex;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
@@ -150,10 +151,9 @@ use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
 use std::future::Future;
-use std::sync::{Arc, LazyLock, Weak};
+use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
-use tracing::debug;
 
 pub mod core;
 #[macro_use]
@@ -185,12 +185,16 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 #[allow(dead_code)]
 #[derive(uniffi::Object)]
-pub struct WatchHandle(DropRemoveTableObserverHandle);
+pub struct WatchHandle(Mutex<Option<DropRemoveTableObserverHandle>>);
 
 impl WatchHandle {
     #[must_use]
     pub fn new(handle: DropRemoveTableObserverHandle) -> Self {
-        Self(handle)
+        Self(Mutex::new(Some(handle)))
+    }
+
+    pub fn disconnect(self: Arc<Self>) {
+        self.0.lock().take();
     }
 }
 
@@ -236,28 +240,20 @@ pub fn watch_channel(
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let watcher = Arc::new(WatchHandle::new(handle.handle));
-
-    watch_channel_inner(Arc::downgrade(&watcher), handle.receiver, move || {
+    watch_channel_inner(handle.receiver, move || {
         callback.on_update();
     });
 
-    watcher
+    Arc::new(WatchHandle::new(handle.handle))
 }
 
 fn watch_channel_inner<T: Send + 'static>(
-    watcher: Weak<WatchHandle>,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
 ) {
     drop(spawn_async(async move {
         let callback = Arc::new(callback);
         loop {
-            let Some(_watcher) = watcher.upgrade() else {
-                debug!("Watch handle dropped, stopping watch");
-                break;
-            };
-
             if channel.recv_async().await.is_err() {
                 return;
             }
@@ -312,5 +308,22 @@ impl From<RealPaginatorSearchOptions> for PaginatorSearchOptions {
         PaginatorSearchOptions {
             keywords: filter.keywords,
         }
+    }
+}
+
+pub trait MapIntoResult<T, E> {
+    fn map_into<T1, E1>(self) -> Result<T1, E1>
+    where
+        T: Into<T1>,
+        E: Into<E1>;
+}
+
+impl<T, E> MapIntoResult<T, E> for Result<T, E> {
+    fn map_into<T1, E1>(self) -> Result<T1, E1>
+    where
+        T: Into<T1>,
+        E: Into<E1>,
+    {
+        self.map(Into::into).map_err(Into::into)
     }
 }

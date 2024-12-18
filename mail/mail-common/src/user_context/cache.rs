@@ -26,7 +26,7 @@ impl Cache {
     /// * `root_path`  - path to the folder that will contain the caches.
     /// * `size`       - maximum size for the caches.
     ///
-    pub async fn new(root_path: PathBuf, size: u32) -> MailContextResult<Self> {
+    pub async fn new(root_path: PathBuf, size: u64) -> MailContextResult<Self> {
         let messages_path = root_path.join("messages");
         // Since message body are weightless, any size would do the same, i.e. live forever
         let messages_cache = ProtonCache::new(messages_path.clone(), size, messages_path).await?;

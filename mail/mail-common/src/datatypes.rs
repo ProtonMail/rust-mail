@@ -52,8 +52,9 @@ use stash::stash::Tether;
 pub use system_folder::MovableSystemFolder;
 pub use system_label::SystemLabel;
 
+use crate::decrypted_message::DecryptedMessageBody;
 use crate::models::{Label, MailSettings, MessageBodyMetadata};
-use crate::AppError;
+use crate::{AppError, MailUserContext};
 use core::fmt;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
@@ -72,12 +73,18 @@ use proton_api_mail::services::proton::response_data::{
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::{AvatarInformation, LabelId, LocalId, RemoteId};
-use proton_crypto_account::keys::{EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme};
+use proton_crypto_account::keys::{
+    EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
+};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
-use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
+use proton_crypto_inbox::message::{
+    DecryptableMessage, DecryptedBody, GettablePGPMessage, MessageError,
+};
+use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -87,8 +94,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-use tracing::warn;
-
+use std::sync::Arc;
+use tracing::{error, warn};
 //  ENUMS
 //==============================================================================
 
@@ -1012,6 +1019,47 @@ pub struct EncryptedMessageBody {
 
     /// TODO: Document this field.
     pub metadata: MessageBodyMetadata,
+}
+
+impl EncryptedMessageBody {
+    /// Decrypt and convert the encrypted message into a [`DecryptedMessageBody`].
+    ///
+    /// # Errors
+    ///
+    /// Return error if the decryption failed.
+    pub fn into_decrypted_message<P: PGPProviderSync>(
+        self,
+        ctx: Arc<MailUserContext>,
+        address_keys: UnlockedAddressKeys<P>,
+        pgp_provider: P,
+    ) -> Result<DecryptedMessageBody, MessageError> {
+        // TODO: Verify signature.
+        let (decrypted_body, _) = self
+            .decrypt(&pgp_provider, &address_keys)
+            .inspect_err(|e| error!("Failed to decrypt message body: {e}"))?;
+
+        match decrypted_body {
+            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody::new(
+                body,
+                self.metadata,
+                None,
+                None,
+                ctx,
+            )),
+            DecryptedBody::Mime(ProcessedMessage {
+                body,
+                attachments,
+                encrypted_subject,
+                ..
+            }) => Ok(DecryptedMessageBody::new(
+                body,
+                self.metadata,
+                Some(attachments),
+                encrypted_subject,
+                ctx,
+            )),
+        }
+    }
 }
 
 impl GettablePGPMessage for EncryptedMessageBody {

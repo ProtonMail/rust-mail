@@ -73,7 +73,7 @@ impl MailTestContext {
 
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
         let mail_cache_path = tmp_dir.path().join("mail-cache");
-        let mail_cache_size = 100_000;
+        let mail_cache_size = 2 << 29; // 512MiB
 
         let mail_context = MailContext::new_with_core_context(
             core_test_context.context.clone(),

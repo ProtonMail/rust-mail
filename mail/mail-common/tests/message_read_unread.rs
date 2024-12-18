@@ -4,8 +4,9 @@ use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSet
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
 use proton_core_common::datatypes::{Id, LabelId, RemoteId};
+use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Label, Message};
+use proton_mail_common::models::{Conversation, Label, Message};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -104,7 +105,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
+    let mut tether = user_ctx.user_stash().connection();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
@@ -144,6 +145,18 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
         .await
         .unwrap();
     mailbox.sync(10).await.unwrap();
+
+    if !messages.is_empty() {
+        let mut conversation =
+            Conversation::find_by_id(RemoteId::from(params.conversations[0].id.clone()), &tether)
+                .await
+                .unwrap()
+                .unwrap();
+        conversation.num_unread = messages.len() as u64;
+        let bond = tether.transaction().await.unwrap();
+        conversation.save(&bond).await.unwrap();
+        bond.commit().await.unwrap();
+    }
 
     // Action
     let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)

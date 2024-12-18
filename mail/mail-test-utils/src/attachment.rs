@@ -113,4 +113,28 @@ impl MailTestContext {
             .mount(self.mock_server())
             .await;
     }
+
+    /// Generate new mock for retrieving attachment content that may or may not happen.
+    ///
+    /// This function will mock the response for the attachment content request
+    /// for the given `attachment_id`.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_id`      - The attachment id the content should correspond to.
+    /// * `attachment_content` - The attachment content the mock replies with.
+    ///
+    pub async fn mock_maybe_get_attachment_data(
+        &self,
+        attachment_id: ApiRemoteId,
+        attachment_content: Vec<u8>,
+    ) {
+        let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
+        Mock::given(method("GET"))
+            .and(path(path_for_attachment))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
+            .up_to_n_times(1)
+            .mount(self.mock_server())
+            .await;
+    }
 }

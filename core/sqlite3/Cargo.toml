@@ -41,6 +41,3 @@ workspace = true
 [features]
 default = []
 notify = ["dep:notify"]
-
-[[test]]
-name = "main"
