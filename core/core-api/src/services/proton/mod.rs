@@ -51,7 +51,7 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use muon::client::middleware::DisplayLogger;
+use muon::client::middleware::{DisplayLogger, Tagger};
 use muon::common::IntoDyn;
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
@@ -110,6 +110,7 @@ pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, 
 
     let client = Proton::builder(app, MuonStoreImpl::new(config.env_id, store))
         .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
+        .layer_front(Tagger::default())
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
