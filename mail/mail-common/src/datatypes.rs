@@ -1281,7 +1281,7 @@ impl From<ApiMessageRecipient> for MessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group.into(),
+            group: MaybeEmptyString::from_option(value.group),
         }
     }
 }
@@ -1292,7 +1292,7 @@ impl From<MessageRecipient> for ApiMessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group.0,
+            group: value.group.into_option(),
         }
     }
 }

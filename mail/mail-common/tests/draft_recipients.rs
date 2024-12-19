@@ -3,8 +3,8 @@ use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::draft::recipients::{
-    ChannelBackgroundValidationComplete, Recipient, RecipientEntry, ValidatingRecipientList,
-    ValidationState,
+    ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
+    ValidatingRecipientList, ValidationState,
 };
 use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
@@ -66,7 +66,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     list.add_single(
         Arc::clone(&user_ctx),
         RecipientEntry {
-            display_name: None,
+            display_name: MaybeEmptyString(None),
             email: email.to_owned(),
         },
     )
@@ -140,9 +140,9 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
 
     list.add_group(
         Arc::clone(&user_ctx),
-        "my_group".to_string().into(),
+        "my_group".to_owned().try_into().unwrap(),
         [RecipientEntry {
-            display_name: None,
+            display_name: MaybeEmptyString(None),
             email: email.to_owned(),
         }],
         1,

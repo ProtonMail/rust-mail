@@ -20,7 +20,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
-use proton_mail_common::draft::recipients::RecipientEntry;
+use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{MailSettings, Message, MessageBodyMetadata};
 use proton_mail_common::{draft, MailContextError};
@@ -131,7 +131,7 @@ async fn basic_send_check() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: None,
+            display_name: MaybeEmptyString(None),
         })
         .unwrap();
     draft.save(user_ctx.queue()).await.unwrap();
@@ -260,7 +260,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyho
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: None,
+            display_name: MaybeEmptyString(None),
         })
         .unwrap();
     let save_action = draft.to_save_action();

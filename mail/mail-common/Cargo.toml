@@ -9,6 +9,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+non-empty-string = { workspace = true }
 chrono = { workspace = true }
 email_address = { workspace = true }
 flume = { workspace = true }

@@ -22,7 +22,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
-use proton_mail_common::draft::recipients::{RecipientEntry, RecipientList};
+use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
 use proton_mail_common::draft::{Draft, Error, ReplyMode};
 use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
 use proton_mail_common::MailContextError;
@@ -186,7 +186,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group.0,
+                group: v.group.into_option(),
             })
             .collect();
         params.cc_list = new_cc_list
@@ -195,7 +195,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group.0,
+                group: v.group.into_option(),
             })
             .collect();
         params.bcc_list = new_bcc_list
@@ -204,7 +204,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group.0,
+                group: v.group.into_option(),
             })
             .collect();
         params
@@ -797,7 +797,7 @@ fn new_recipient_list_with_single_address(email: String) -> RecipientList {
     let mut list = RecipientList::new();
     list.add_single(RecipientEntry {
         email,
-        display_name: None,
+        display_name: MaybeEmptyString(None),
     })
     .unwrap();
     list

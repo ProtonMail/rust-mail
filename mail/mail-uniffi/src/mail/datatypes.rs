@@ -1730,7 +1730,7 @@ impl From<RealMessageRecipient> for MessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group.0,
+            group: value.group.into_option(),
         }
     }
 }

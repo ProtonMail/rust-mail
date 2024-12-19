@@ -2,7 +2,7 @@ use clap::Parser;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_mail_common::draft::recipients::RecipientEntry;
+use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -98,7 +98,7 @@ async fn main() {
     draft
         .to_list
         .add_single(RecipientEntry {
-            display_name: None,
+            display_name: MaybeEmptyString(None),
             email: recipient,
         })
         .unwrap();

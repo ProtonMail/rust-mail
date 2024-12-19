@@ -7,6 +7,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::actions::draft::Save;
 use proton_mail_common::datatypes::{Disposition, MimeType};
+use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{recipients, Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
@@ -444,7 +445,7 @@ fn recipients_value_to_list(
     for addr in recipients.split(',') {
         list.add_single(recipients::RecipientEntry {
             email: addr.to_owned(),
-            display_name: None,
+            display_name: MaybeEmptyString(None),
         })?;
     }
     Ok(list)
