@@ -11,12 +11,10 @@ use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
-use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Label as RealLabel;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::debug;
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar
 #[derive(uniffi::Object)]
@@ -164,33 +162,9 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let handle = RealLabel::watch(sidebar.user_ctx.user_stash())?;
-            let receiver = handle.receiver;
-            let handle = handle.handle;
-            // Unwrapping is safe here, as we will always have the local ID
-            let stop_flag = Arc::new(AtomicBool::new(false));
-            let weak_stop_flag = Arc::downgrade(&stop_flag);
+            let handle = watch_channel(handle, callback);
 
-            spawn_async(async move {
-                let callback = move || callback.on_update();
-                let callback = Arc::new(callback);
-
-                while receiver.recv_async().await.is_ok() {
-                    let callback = callback.clone();
-                    let callback = move || callback();
-                    let Some(stop_flag) = weak_stop_flag.upgrade() else {
-                        debug!("Watch handle dropped, stopping watch");
-                        break;
-                    };
-
-                    if stop_flag.load(Ordering::SeqCst) {
-                        debug!("Stop flag set, stopping watch");
-                        break;
-                    }
-
-                    _ = async_runtime().spawn_blocking(callback).await;
-                }
-            });
-            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle::new(handle)))
+            Result::<_, RealProtonMailError>::Ok(handle)
         })
         .await
         .map_err(ActionError::from)
