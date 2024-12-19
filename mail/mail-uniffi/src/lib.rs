@@ -153,6 +153,7 @@ use proton_mail_common::models::{
 use std::future::Future;
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
+use tokio::sync::oneshot;
 use tokio::task::JoinError;
 
 pub mod core;
@@ -185,12 +186,12 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 #[allow(dead_code)]
 #[derive(uniffi::Object)]
-pub struct WatchHandle(Mutex<Option<DropRemoveTableObserverHandle>>);
+pub struct WatchHandle(Mutex<Option<(DropRemoveTableObserverHandle, oneshot::Sender<()>)>>);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new(handle: DropRemoveTableObserverHandle) -> Self {
-        Self(Mutex::new(Some(handle)))
+    pub fn new(handle: DropRemoveTableObserverHandle, sender: oneshot::Sender<()>) -> Self {
+        Self(Mutex::new(Some((handle, sender))))
     }
 }
 
@@ -243,29 +244,39 @@ pub fn watch_channel(
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    watch_channel_inner(handle.receiver, move || {
+    let sender = watch_channel_inner(handle.receiver, move || {
         callback.on_update();
     });
 
-    Arc::new(WatchHandle::new(handle.handle))
+    Arc::new(WatchHandle::new(handle.handle, sender))
 }
 
 fn watch_channel_inner<T: Send + 'static>(
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
-) {
+) -> oneshot::Sender<()> {
+    // use a one-shot channel to act as an early exit strategy.
+    let (sender, mut receiver) = oneshot::channel();
     drop(spawn_async(async move {
         let callback = Arc::new(callback);
         loop {
-            if channel.recv_async().await.is_err() {
-                return;
-            }
+            tokio::select! {
+                _= &mut receiver => {
+                    return
+                }
+                rx = channel.recv_async() => {
+                    if rx.is_err() {
+                        return;
+                    }
 
-            let callback = callback.clone();
-            let callback = move || callback();
-            _ = async_runtime().spawn_blocking(callback).await;
+                    let callback = callback.clone();
+                    let callback = move || callback();
+                    _ = async_runtime().spawn_blocking(callback).await;
+                }
+            }
         }
     }));
+    sender
 }
 
 /// Filter options for pagination
