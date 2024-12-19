@@ -186,7 +186,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group,
+                group: v.group.0,
             })
             .collect();
         params.cc_list = new_cc_list
@@ -195,7 +195,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group,
+                group: v.group.0,
             })
             .collect();
         params.bcc_list = new_bcc_list
@@ -204,7 +204,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
             .map(|v| DraftRecipient {
                 address: v.address,
                 name: v.name,
-                group: v.group,
+                group: v.group.0,
             })
             .collect();
         params

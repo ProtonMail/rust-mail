@@ -16,6 +16,45 @@ use tracing::{error, warn};
 #[path = "../tests/draft/recipients.rs"]
 mod tests;
 
+/// Newtype where the Some(String) is never empty.
+// That statement is not true as one can always mutate the string to make it empty but don't tell anybody.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct MaybeEmptyString(pub Option<String>);
+
+impl MaybeEmptyString {
+    pub fn from_option(value: Option<String>) -> Self {
+        match value {
+            Some(value) => Self::from(value),
+            None => Self(None),
+        }
+    }
+}
+
+impl From<String> for MaybeEmptyString {
+    fn from(value: String) -> Self {
+        Self((!value.is_empty()).then_some(value))
+    }
+}
+
+impl PartialEq<str> for MaybeEmptyString {
+    fn eq(&self, other: &str) -> bool {
+        match &self.0 {
+            Some(val) => val.eq(other),
+            None => false,
+        }
+    }
+}
+
+impl PartialEq<MaybeEmptyString> for str {
+    fn eq(&self, other: &MaybeEmptyString) -> bool {
+        match &other.0 {
+            Some(val) => self.eq(val),
+            None => false,
+        }
+    }
+}
+
 /// State of the recipient validation
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ValidationState {
@@ -79,7 +118,7 @@ pub struct GroupRecipient {
     /// Recipients that compose this group
     pub recipients: Vec<SingleRecipient>,
     /// Name of the group
-    pub group_name: String,
+    pub group_name: MaybeEmptyString,
     /// Total number of addresses in this group.
     pub total_in_group: u64,
 }
@@ -108,20 +147,20 @@ pub trait ContactGroupResolver {
     /// Resolve the total number of members in a contact group.
     ///
     /// Return 0 on error or if the group can't be found.
-    fn resolve_contact_group_total(&self, name: &str) -> impl Future<Output = u64>;
+    fn resolve_contact_group_total(&self, name: &MaybeEmptyString) -> impl Future<Output = u64>;
 }
 
 /// Default contact group resolver, always returns 0
 #[derive(Default, Copy, Clone)]
 pub struct NullContactGroupResolver;
 impl ContactGroupResolver for NullContactGroupResolver {
-    async fn resolve_contact_group_total(&self, _: &str) -> u64 {
+    async fn resolve_contact_group_total(&self, _: &MaybeEmptyString) -> u64 {
         0
     }
 }
 
 impl ContactGroupResolver for MailUserContext {
-    async fn resolve_contact_group_total(&self, _: &str) -> u64 {
+    async fn resolve_contact_group_total(&self, _: &MaybeEmptyString) -> u64 {
         // TODO: resolve total contact group count - depends on ET-476
         warn!("Mail user context contact group resolving is not implemented yet");
         0
@@ -155,7 +194,7 @@ impl RecipientList {
     /// Create a list from a [`Message`]'s recipient list.
     ///
     /// This function expect the data to be valid. Errors are silently
-    /// ignore.
+    /// ignored.
     pub async fn from_message_recipients(
         contact_group_resolver: &impl ContactGroupResolver,
         recipients: impl IntoIterator<Item = MessageRecipient>,
@@ -164,16 +203,12 @@ impl RecipientList {
         for recipient in recipients {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: if recipient.name.is_empty() {
-                    None
-                } else {
-                    Some(recipient.name)
-                },
+                display_name: (!recipient.name.is_empty()).then_some(recipient.name),
             };
-            if let Some(group_name) = recipient.group {
+            if recipient.group.0.is_some() {
                 //if group is not found, assume total is the number of entries
                 //in the current group.
-                list.add_group(&group_name, [entry], 0);
+                list.add_group(recipient.group, [entry], 0);
             } else if let Err(e) = list.add_single(entry) {
                 error!("Failed to add single recipient: {e}");
             }
@@ -261,11 +296,10 @@ impl RecipientList {
     /// active members of that group.
     pub fn add_group(
         &mut self,
-        group_name: &str,
+        group_name: MaybeEmptyString,
         entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
     ) -> (&mut GroupRecipient, Vec<RecipientEntry>) {
-        assert!(!group_name.is_empty());
         self.add_group_with_state(
             group_name,
             entries,
@@ -276,7 +310,7 @@ impl RecipientList {
 
     fn add_group_with_state(
         &mut self,
-        group_name: &str,
+        group_name: MaybeEmptyString,
         entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
         state: ValidationState,
@@ -312,12 +346,16 @@ impl RecipientList {
 
     /// Remove an entire group from the recipient list.
     pub fn remove_group(&mut self, group_name: &str) {
+        assert!(
+            !group_name.is_empty(),
+            "remove_group's group_name was not empty"
+        );
         self.recipients.retain(|r| {
             let Recipient::Group(recipient) = r else {
                 return true;
             };
 
-            recipient.group_name != *group_name
+            group_name != &recipient.group_name
         })
     }
 
@@ -346,7 +384,7 @@ impl RecipientList {
     fn find_group_mut(&mut self, group_name: &str) -> Option<&mut GroupRecipient> {
         for r in self.recipients.iter_mut() {
             if let Recipient::Group(recipient) = r {
-                if recipient.group_name == group_name {
+                if &recipient.group_name == group_name {
                     return Some(recipient);
                 }
             }
@@ -372,7 +410,7 @@ impl RecipientList {
                         address: single.email.clone(),
                         is_proton,
                         name: single.display_name.clone().unwrap_or_default(),
-                        group: None,
+                        group: MaybeEmptyString(None),
                     })
                 }
                 Recipient::Group(group) => {
@@ -386,7 +424,7 @@ impl RecipientList {
                             address: recipient.email.clone(),
                             is_proton,
                             name: recipient.display_name.clone().unwrap_or_default(),
-                            group: Some(group.group_name.clone()),
+                            group: group.group_name.clone(),
                         })
                     }
                 }
@@ -467,12 +505,12 @@ impl RecipientList {
         false
     }
 
-    fn get_or_create_group(&mut self, group_name: &str) -> &mut GroupRecipient {
+    fn get_or_create_group(&mut self, group_name: MaybeEmptyString) -> &mut GroupRecipient {
         // Still can't do get or insert properly due to false positive
         // in borrow checker, so do the index trick.
         let position = self.recipients.iter().position(|r| {
             if let Recipient::Group(group) = r {
-                return group_name == group.group_name;
+                return group.group_name == group_name;
             }
 
             false
@@ -483,7 +521,7 @@ impl RecipientList {
         } else {
             let group = GroupRecipient {
                 recipients: vec![],
-                group_name: group_name.to_owned(),
+                group_name,
                 total_in_group: 0,
             };
             self.recipients.push(Recipient::Group(group));
@@ -615,7 +653,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     pub fn add_group(
         &self,
         ctx: Arc<MailUserContext>,
-        group_name: &str,
+        group_name: MaybeEmptyString,
         entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
     ) -> Vec<RecipientEntry> {

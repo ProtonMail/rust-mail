@@ -140,7 +140,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
 
     list.add_group(
         Arc::clone(&user_ctx),
-        "my_group",
+        "my_group".to_string().into(),
         [RecipientEntry {
             display_name: None,
             email: email.to_owned(),

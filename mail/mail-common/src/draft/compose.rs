@@ -120,7 +120,7 @@ fn recipient_from_message_sender(recipients: &[MessageRecipient]) -> Vec<DraftRe
         .map(|v| DraftRecipient {
             address: v.address.clone(),
             name: v.name.clone(),
-            group: v.group.clone(),
+            group: v.group.0.clone(),
         })
         .collect()
 }

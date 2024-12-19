@@ -91,6 +91,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::decrypted_message::{
     BlockQuote as RealBlockQuote, RemoteContent as RealRemoteContent,
 };
+use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
     Message as RealMessage,
@@ -1729,18 +1730,21 @@ impl From<RealMessageRecipient> for MessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group,
+            group: value.group.0,
         }
     }
 }
 
 impl From<MessageRecipient> for RealMessageRecipient {
     fn from(value: MessageRecipient) -> Self {
+        if let Some(name) = &value.group {
+            assert!(!name.is_empty(), "We got passed in an invalid group");
+        }
         Self {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group,
+            group: MaybeEmptyString::from_option(value.group),
         }
     }
 }

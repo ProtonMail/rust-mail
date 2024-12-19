@@ -49,6 +49,8 @@ pub enum AddGroupRecipientError {
     Duplicate(Vec<String>),
     /// Failed to queue save action for draft.
     SaveFailed,
+    /// Empty group name
+    EmtpyGroupName,
 }
 
 #[derive(Clone, uniffi::Enum)]
@@ -93,7 +95,7 @@ pub struct ComposerRecipientGroup {
 impl From<GroupRecipient> for ComposerRecipientGroup {
     fn from(value: GroupRecipient) -> Self {
         Self {
-            display_name: value.group_name,
+            display_name: value.group_name.0.unwrap_or(String::new()),
             recipients: value.recipients.into_iter().map_into().collect(),
             total_contacts_in_group: value.total_in_group,
         }
@@ -267,16 +269,19 @@ impl ComposerRecipientList {
     /// expected that this is retrieved from the contacts api.
     pub fn add_group_recipient(
         &self,
-        group_name: &str,
+        group_name: String,
         recipients: Vec<SingleRecipientEntry>,
         total_contacts_in_group: u64,
     ) -> AddGroupRecipientError {
+        if group_name.is_empty() {
+            return AddGroupRecipientError::EmtpyGroupName;
+        }
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let recipients_cloned = recipients.clone();
             let duplicates = self.list.add_group(
                 Arc::clone(&self.ctx),
-                group_name,
+                group_name.clone().into(),
                 recipients.into_iter().map_into(),
                 total_contacts_in_group,
             );
@@ -284,7 +289,7 @@ impl ComposerRecipientList {
             if let Err(e) = self.save_draft(&self.ctx).await {
                 error!("Failed to queue draft save after recipient add: {e}");
                 self.list.remove_group_recipients(
-                    group_name,
+                    &group_name,
                     recipients_cloned.into_iter().map(|e| e.email),
                 );
                 return AddGroupRecipientError::SaveFailed;
@@ -305,6 +310,10 @@ impl ComposerRecipientList {
 
     /// Remove a contact group by `group_name`
     pub fn remove_group(&self, group_name: &str) {
+        if group_name.is_empty() {
+            error!("remove_group with empty group name");
+            return;
+        }
         self.list.remove_group(group_name);
     }
 

@@ -53,12 +53,12 @@ fn invalid_email_is_added_to_list_with_error_status_group() {
         email: "borkenEmail!".to_owned(),
     };
 
-    list.add_group(GROUP_NAME, [entry.clone()], 1);
+    list.add_group(group_name(), [entry.clone()], 1);
     assert_eq!(list.len(), 1);
 
     match &list.recipients()[0] {
         Recipient::Group(entry) => {
-            assert_eq!(entry.group_name, GROUP_NAME);
+            assert_eq!(entry.group_name, group_name());
             assert_eq!(entry.total_in_group, 1);
             assert_eq!(entry.recipients.len(), 1);
             assert_eq!(entry.recipients[0].state, ValidationState::InvalidEmail);
@@ -80,13 +80,13 @@ fn duplicate_group_recipient_are_returned() {
     };
 
     list.add_single(entry.clone()).unwrap();
-    let (_, duplicates) = list.add_group(GROUP_NAME, [entry.clone(), entry2], 2);
+    let (_, duplicates) = list.add_group(group_name(), [entry.clone(), entry2], 2);
     assert_eq!(duplicates[0], entry);
     assert_eq!(list.len(), 2);
 
     match &list.recipients()[1] {
         Recipient::Group(entry) => {
-            assert_eq!(entry.group_name, GROUP_NAME);
+            assert_eq!(entry.group_name, group_name());
             assert_eq!(entry.total_in_group, 2);
             assert_eq!(entry.recipients.len(), 1);
         }
@@ -106,26 +106,26 @@ fn group_extend() {
         email: "bar@example.com".to_owned(),
     };
 
-    let (_, duplicates) = list.add_group(GROUP_NAME, [entry.clone()], 1);
+    let (_, duplicates) = list.add_group(group_name(), [entry.clone()], 1);
     assert!(duplicates.is_empty());
     assert_eq!(list.len(), 1);
 
     match &list.recipients()[0] {
         Recipient::Group(entry) => {
-            assert_eq!(entry.group_name, GROUP_NAME);
+            assert_eq!(entry.group_name, group_name());
             assert_eq!(entry.total_in_group, 1);
             assert_eq!(entry.recipients.len(), 1);
         }
         _ => panic!("unexpected entry"),
     }
 
-    let (_, duplicates) = list.add_group(GROUP_NAME, [entry2.clone()], 2);
+    let (_, duplicates) = list.add_group(group_name(), [entry2.clone()], 2);
     assert!(duplicates.is_empty());
     assert_eq!(list.len(), 1);
 
     match &list.recipients()[0] {
         Recipient::Group(entry) => {
-            assert_eq!(entry.group_name, GROUP_NAME);
+            assert_eq!(entry.group_name, group_name());
             assert_eq!(entry.total_in_group, 2);
             assert_eq!(entry.recipients.len(), 2);
         }
@@ -145,9 +145,9 @@ fn remove_group_recipient() {
         email: "bar@example.com".to_owned(),
     };
 
-    list.add_group(GROUP_NAME, [entry, entry2], 2);
+    list.add_group(group_name(), [entry, entry2], 2);
     assert_eq!(list.len(), 1);
-    list.remove_group(GROUP_NAME);
+    list.remove_group(group_name_str());
     assert!(list.is_empty());
 }
 
@@ -165,14 +165,14 @@ fn remove_single_recipient_from_group() {
         email: email2.clone(),
     };
 
-    list.add_group(GROUP_NAME, [entry, entry2], 2);
+    list.add_group(group_name(), [entry, entry2], 2);
     assert_eq!(list.len(), 1);
-    list.remove_group_recipient(GROUP_NAME, &email1);
+    list.remove_group_recipient(group_name_str(), &email1);
     assert_eq!(list.len(), 1);
 
     match &list.recipients()[0] {
         Recipient::Group(entry) => {
-            assert_eq!(entry.group_name, GROUP_NAME);
+            assert_eq!(entry.group_name, group_name());
             assert_eq!(entry.total_in_group, 2);
             assert_eq!(entry.recipients.len(), 1);
             assert_eq!(entry.recipients[0].email, email2);
@@ -234,25 +234,25 @@ fn to_message_recipient_only_copies_valid_values() {
             address: valid_entry.email,
             is_proton: false,
             name: valid_entry.display_name.unwrap_or_default(),
-            group: None,
+            group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
             name: valid_proton_entry.display_name.unwrap_or_default(),
-            group: None,
+            group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
             name: validating_entry.display_name.unwrap_or_default(),
-            group: None,
+            group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
             name: unchecked_entry.display_name.unwrap_or_default(),
-            group: None,
+            group: MaybeEmptyString(None),
         },
     ];
 
@@ -294,29 +294,29 @@ fn to_message_recipient_only_copies_valid_values_group() {
     };
 
     list.add_group_with_state(
-        GROUP_NAME,
+        group_name(),
         [valid_entry.clone()],
         0,
         ValidationState::Valid(false),
     );
     list.add_group_with_state(
-        GROUP_NAME,
+        group_name(),
         [valid_proton_entry.clone()],
         0,
         ValidationState::Valid(true),
     );
     list.add_group_with_state(
-        GROUP_NAME,
+        group_name().into(),
         [validating_entry.clone()],
         0,
         ValidationState::Validating,
     );
     // Unchecked is the default state.
-    list.add_group(GROUP_NAME, [unchecked_entry.clone()], 0);
+    list.add_group(group_name(), [unchecked_entry.clone()], 0);
     // email validation happen by default
-    list.add_group(GROUP_NAME, [invalid_email_entry.clone()], 0);
+    list.add_group(group_name(), [invalid_email_entry.clone()], 0);
     list.add_group_with_state(
-        GROUP_NAME,
+        group_name().into(),
         [unknown_error_entry.clone()],
         0,
         ValidationState::Unknown,
@@ -328,29 +328,35 @@ fn to_message_recipient_only_copies_valid_values_group() {
             address: valid_entry.email,
             is_proton: false,
             name: valid_entry.display_name.unwrap_or_default(),
-            group: Some(GROUP_NAME.to_owned()),
+            group: group_name(),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
             name: valid_proton_entry.display_name.unwrap_or_default(),
-            group: Some(GROUP_NAME.to_owned()),
+            group: group_name(),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
             name: validating_entry.display_name.unwrap_or_default(),
-            group: Some(GROUP_NAME.to_owned()),
+            group: group_name(),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
             name: unchecked_entry.display_name.unwrap_or_default(),
-            group: Some(GROUP_NAME.to_owned()),
+            group: group_name(),
         },
     ];
 
     assert_eq!(recipients, expected_message_recipients);
 }
 
-const GROUP_NAME: &str = "my_group";
+fn group_name() -> MaybeEmptyString {
+    "my_group".to_string().into()
+}
+
+fn group_name_str() -> &'static str {
+    "my_group"
+}
