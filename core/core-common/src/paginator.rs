@@ -522,7 +522,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 }
             }
         }
-        dbg!(format!("Index after {}", shared.cursor_index));
 
         match self.remote.total(&tether).await {
             Ok(v) => {

@@ -192,7 +192,10 @@ impl WatchHandle {
     pub fn new(handle: DropRemoveTableObserverHandle) -> Self {
         Self(Mutex::new(Some(handle)))
     }
+}
 
+#[uniffi::export]
+impl WatchHandle {
     pub fn disconnect(self: Arc<Self>) {
         self.0.lock().take();
     }
