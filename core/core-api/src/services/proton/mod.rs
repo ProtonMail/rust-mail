@@ -85,6 +85,9 @@ mod proton_impl;
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";
 
+/// The Proton Core API base path (v5).
+pub const CORE_V5: &str = "/core/v5";
+
 /// The Proton type is just an alias for the muon client.
 pub type Proton = muon::Client;
 

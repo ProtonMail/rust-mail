@@ -25,8 +25,8 @@ use crate::auth::Auth;
 use crate::crypto_clock::server_crypto_clock;
 use crate::service::{ApiServiceError, ApiServiceResult};
 use crate::services::proton::prelude::*;
-use crate::services::proton::CORE_V4;
 use crate::services::proton::{Proton, ProtonCore};
+use crate::services::proton::{CORE_V4, CORE_V5};
 use crate::store::Store;
 
 impl ProtonCore for Proton {
@@ -107,7 +107,7 @@ impl ProtonCore for Proton {
     where
         T: GetEventResponse + for<'de> Deserialize<'de>,
     {
-        Ok(GET!("{CORE_V4}/events/{event_id}")
+        Ok(GET!("{CORE_V5}/events/{event_id}")
             .query(serde_to_query(options)?)
             .send_with(self)
             .await?

@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fix
 
- - Restore early exit table watchers.
+  - Restore early exit table watchers.
+  - Fix missing message/conversation counters from event loop update.
 
 ## [0.30.0] - 2024-12-19
 
