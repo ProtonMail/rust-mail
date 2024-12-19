@@ -21,7 +21,6 @@ use core::future::Future;
 use core::iter::once;
 use core::iter::repeat;
 use core::str::FromStr;
-use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use rusqlite::hooks::Action;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
@@ -34,7 +33,6 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::vec::IntoIter;
 use thiserror::Error;
-use tokio::spawn as spawn_async;
 use tracing::{error, warn};
 
 /// Errors for conversion of database row data into record types.
@@ -438,12 +436,11 @@ where
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
-        queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
     ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send
     where
         Q: Into<String> + Send,
     {
-        async move { perform_find(query_logic, params, tether, queue).await }
+        async move { perform_find(query_logic, params, tether).await }
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -496,15 +493,12 @@ where
         Q: Into<String> + Send,
     {
         async move {
-            Ok(perform_find(
-                format!("{} LIMIT 1", query_logic.into()),
-                params,
-                tether,
-                None,
+            Ok(
+                perform_find(format!("{} LIMIT 1", query_logic.into()), params, tether)
+                    .await?
+                    .into_iter()
+                    .next(),
             )
-            .await?
-            .into_iter()
-            .next())
         }
     }
 
@@ -940,7 +934,6 @@ pub async fn perform_find<Q, T>(
     query_logic: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     tether: &Tether,
-    queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
 ) -> Result<Vec<T>, StashError>
 where
     Q: Into<String> + Send,
@@ -959,59 +952,6 @@ where
         query_logic.into(),
     );
     let records = tether.query(query, params).await?;
-
-    // Set up listener for changes to the result set, if requested.
-    #[allow(clippy::shadow_reuse)]
-    if let Some(queue) = queue {
-        let mut ids: HashMap<u64, T::IdType> = records
-            .iter()
-            .map(|record: &T| {
-                let row_id = record.row_id().ok_or(StashError::MissingRowId)?;
-                let id = record.id_value()?;
-                Ok((row_id, id))
-            })
-            .collect::<Result<HashMap<u64, T::IdType>, StashError>>()?;
-        let receiver = tether.stash().subscribe_to(T::table_name()).await?;
-        let stash = tether.stash().clone();
-
-        // Spawn a task to listen for notifications
-        drop(spawn_async(async move {
-            let changed_query = formatdoc!(
-                "
-                    SELECT
-                        {}.rowid AS rowid, *
-                    FROM
-                        {}
-                    WHERE
-                        rowid = ?
-                    LIMIT
-                        1
-                ",
-                T::table_name(),
-                T::table_name(),
-            );
-            loop {
-                match receiver.recv_async().await {
-                    Ok(notification) => {
-                        if let Some(change) =
-                            T::handle_notification(notification, &mut ids, &stash, &changed_query)
-                                .await
-                        {
-                            // TODO(ET-1400): Proper unsubscribe support
-                            if queue.send_async(change).await.is_err() {
-                                break;
-                            }
-                        }
-                    }
-                    Err(error) => {
-                        // In theory this should never happen, but we also can't do anything with it
-                        error!("Lost connection to change feed: {error}");
-                        break;
-                    }
-                }
-            }
-        }));
-    }
 
     Ok(records)
 }

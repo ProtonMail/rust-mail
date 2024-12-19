@@ -271,12 +271,11 @@ pub async fn watch_message(
     let stash = session.user_stash().clone();
     uniffi_async(async move {
         let tether = stash.connection();
-        let Some((message, receiver)) =
-            RealMessage::watch_message(RealLocalId::from(message_id), &tether).await?
-        else {
+        let Some(message) = RealMessage::load(message_id.into(), &tether).await? else {
             return Ok(None);
         };
-        let handle = watch_channel(receiver, callback).await;
+        let handle = RealMessage::watch(&stash)?;
+        let handle = watch_channel(handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
             handle,
@@ -307,7 +306,7 @@ pub async fn messages_for_conversation(
     uniffi_async(async move {
         let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(RealLocalId::from(conversation_id), &tether, None)
+            RealMessage::in_conversation(RealLocalId::from(conversation_id), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -339,7 +338,7 @@ pub async fn messages_for_label(
     uniffi_async(async move {
         let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_label(RealLocalId::from(label_id), &tether, None)
+            RealMessage::in_label(RealLocalId::from(label_id), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -377,7 +376,6 @@ pub async fn paginate_messages_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Arc<MessagePaginator>, ActionError> {
     let context = session.ctx();
-    let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
         let real_paginator = RealMessage::paginate_in_label(
             &context,
@@ -386,12 +384,12 @@ pub async fn paginate_messages_for_label(
             RealPaginatorFilter::from(filter),
             RealPaginatorSearchOptions::default(),
             true,
-            Some(msg_sender),
         )
         .await?;
+        let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback).await,
+            handle: watch_channel(handle, callback),
         }))
     })
     .await
@@ -423,7 +421,6 @@ pub async fn paginate_search(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Arc<MessagePaginator>, ActionError> {
     let context = session.ctx();
-    let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
         let tether = session.user_stash().connection();
         let real_paginator = RealMessage::paginate_in_label(
@@ -436,12 +433,12 @@ pub async fn paginate_search(
             RealPaginatorFilter::default(),
             RealPaginatorSearchOptions::from(options),
             false,
-            Some(msg_sender),
         )
         .await?;
+        let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(msg_receiver, callback).await,
+            handle: watch_channel(handle, callback),
         }))
     })
     .await
@@ -571,18 +568,14 @@ pub async fn watch_available_label_as_actions_for_messages(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedLabelAs, ActionError> {
     uniffi_async(async move {
-        let (tx, rx) = flume::unbounded();
-        let handle = watch_channel(rx, callback).await;
         let tether = mailbox.stash().connection();
-        let actions = RealMessage::watch_available_label_as_actions(
+        let (actions, handle) = RealMessage::watch_available_label_as_actions(
             ids.into_iter().map_into().collect(),
             &tether,
-            tx,
         )
-        .await?
-        .into_iter()
-        .map_into()
-        .collect_vec();
+        .await?;
+        let actions = actions.into_iter().map_into().collect_vec();
+        let handle = watch_channel(handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
@@ -721,9 +714,9 @@ pub async fn watch_messages_for_label(
     let stash = session.user_stash().clone();
     uniffi_async(async move {
         let tether = stash.connection();
-        let (messages, receiver) =
-            RealMessage::watch_in_label(RealLocalId::from(label_id), &tether).await?;
-        let watcher = watch_channel(receiver, callback).await;
+        let messages = RealMessage::in_label(label_id.into(), &tether).await?;
+        let handle = RealMessage::watch(&stash)?;
+        let watcher = watch_channel(handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
             handle: watcher,

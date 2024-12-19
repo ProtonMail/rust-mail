@@ -189,7 +189,7 @@ impl SenderImage {
     #[allow(clippy::missing_panics_doc)]
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let (query, params) = self.build_query();
-        let mut values = Self::find(query, params, bond, None).await?;
+        let mut values = Self::find(query, params, bond).await?;
 
         match values.len() {
             0 => <Self as Model>::save(self, bond).await?,
@@ -276,7 +276,7 @@ impl CacheConfig for SenderImage {
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
         let conn = stash.connection();
-        Self::all(&conn, None)
+        Self::all(&conn)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }

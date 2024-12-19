@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MessageButtons, MimeType, MobileSettings,
     NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction,
@@ -9,9 +11,10 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
+use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -253,6 +256,29 @@ impl MailSettings {
             mime_type: self.draft_mime_type.into(),
             sign: self.sign,
         }
+    }
+
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(MailSettingsWatcher { sender }))
+    }
+}
+
+pub struct MailSettingsWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for MailSettingsWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![MailSettings::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for MailSettingsWatcher: {}", e)
+            })
+            .ok();
     }
 }
 

@@ -306,12 +306,11 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 query_logic: Q,
                 params: Vec<Box<dyn stash::exports::ToSql + Send>>,
                 tether: &stash::stash::Tether,
-                queue: Option<flume::Sender<stash::orm::ResultsetChange<Self, Self::IdType>>>,
             ) -> Result<Vec<Self>, stash::stash::StashError>
             where
                 Q: Into<String> + Send,
             {
-                let mut instances = stash::orm::perform_find(query_logic, params, tether, queue).await?;
+                let mut instances = stash::orm::perform_find::<_, Self>(query_logic, params, tether).await?;
                 for instance in instances.iter_mut() {
                     instance.on_load(tether).await?;
                 }
@@ -325,7 +324,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             where
                 Q: Into<String> + Send,
             {
-                let mut instance: Option<Self> = stash::orm::perform_find(query_logic, params, &tether, None).await?.into_iter().next();
+                let mut instance: Option<Self> = stash::orm::perform_find::<_, Self>(query_logic, params, &tether).await?.into_iter().next();
                 match instance {
                     Some(mut i) => {
                         i.on_load(&tether).await?;

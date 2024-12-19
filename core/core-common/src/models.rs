@@ -47,7 +47,6 @@ use crate::datatypes::{
     UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::CoreContextResult;
-use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
@@ -56,7 +55,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
 use stash::exports::ToSql;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::Bond;
 use stash::stash::Tether;
@@ -88,11 +87,8 @@ pub trait ModelExtension: Model {
     /// * [`find()`](Model::find())
     ///
     #[must_use]
-    async fn all(
-        tether: &Tether,
-        queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
-    ) -> Result<Vec<Self>, StashError> {
-        Self::find(String::new(), vec![], tether, queue).await
+    async fn all(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find(String::new(), vec![], tether).await
     }
 
     /// Finds a record by its ID.
@@ -174,7 +170,7 @@ pub trait ModelExtension: Model {
         let placeholders = placeholders.join(", ");
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
-        Self::find(query, parameters, tether, None).await
+        Self::find(query, parameters, tether).await
     }
 
     /// Finds local record IDs matching given criteria.

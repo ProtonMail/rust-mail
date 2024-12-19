@@ -141,6 +141,9 @@
 //! crates that are the subject of the translations.*
 //!
 
+use parking_lot::Mutex;
+use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
+use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -148,19 +151,15 @@ use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
-use tracing::debug;
-use utils::damp;
 
 pub mod core;
 #[macro_use]
 pub mod errors;
 mod log;
 pub mod mail;
-mod utils;
 
 uniffi::setup_scaffolding!();
 
@@ -184,43 +183,21 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 /// This handle can be used to disconnect from the live query.
 ///
-#[derive(Clone, uniffi::Object)]
-pub struct WatchHandle {
-    /// A flag to indicate if the live query should be stopped.
-    stop_flag: Arc<AtomicBool>,
-}
-
-impl Default for WatchHandle {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Drop for WatchHandle {
-    fn drop(&mut self) {
-        self.disconnect();
-    }
-}
+#[allow(dead_code)]
+#[derive(uniffi::Object)]
+pub struct WatchHandle(Mutex<Option<DropRemoveTableObserverHandle>>);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new() -> Self {
-        Self {
-            stop_flag: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    #[must_use]
-    pub fn should_stop(&self) -> bool {
-        self.stop_flag.load(Ordering::SeqCst)
+    pub fn new(handle: DropRemoveTableObserverHandle) -> Self {
+        Self(Mutex::new(Some(handle)))
     }
 }
 
 #[uniffi::export]
 impl WatchHandle {
-    /// Disconnect from the live query.
-    pub fn disconnect(&self) {
-        self.stop_flag.store(true, Ordering::SeqCst);
+    pub fn disconnect(self: Arc<Self>) {
+        self.0.lock().take();
     }
 }
 
@@ -261,58 +238,25 @@ where
 /// Watch a notification channel for changes and trigger the callback
 /// once a message has been received.
 ///
-/// The callback is "dampened" to avoid excessive invocations to the callback.
-///
 #[must_use]
-pub async fn watch_channel<T: Send + 'static>(
-    channel: flume::Receiver<T>,
+pub fn watch_channel(
+    handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new();
+    watch_channel_inner(handle.receiver, move || {
+        callback.on_update();
+    });
 
-    watch_channel_inner(&watcher, channel, damp(callback).await);
-
-    Arc::new(watcher)
-}
-
-/// Watch a notification channel for changes and trigger the callback
-/// once a message has been received.
-///
-/// The callback is __not__ "dampened"; use with caution.
-///
-/// See [`watch_channel()`] for a dampened version.
-///
-#[must_use]
-pub fn watch_channel_nodamp<T: Send + 'static>(
-    channel: flume::Receiver<T>,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Arc<WatchHandle> {
-    let watcher = WatchHandle::new();
-
-    watch_channel_inner(&watcher, channel, move || callback.on_update());
-
-    Arc::new(watcher)
+    Arc::new(WatchHandle::new(handle.handle))
 }
 
 fn watch_channel_inner<T: Send + 'static>(
-    watcher: &WatchHandle,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
 ) {
-    let should_stop = Arc::downgrade(&watcher.stop_flag);
     drop(spawn_async(async move {
         let callback = Arc::new(callback);
         loop {
-            let Some(stop_flag) = should_stop.upgrade() else {
-                debug!("Watch handle dropped, stopping watch");
-                break;
-            };
-
-            if stop_flag.load(Ordering::SeqCst) {
-                debug!("Stop flag set, stopping watch");
-                break;
-            }
-
             if channel.recv_async().await.is_err() {
                 return;
             }

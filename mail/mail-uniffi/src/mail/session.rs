@@ -7,13 +7,12 @@ use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async, watch_channel_nodamp, LiveQueryCallback, WatchHandle};
-use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
-use proton_core_common::db::ChangeReceiver;
+use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use proton_core_common::db::account::SessionEncryptionKey;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContext;
-use stash::stash::Stash;
+use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
@@ -620,10 +619,10 @@ pub struct WatchedAccounts {
 impl WatchedAccounts {
     fn new(
         accounts: Vec<Arc<StoredAccount>>,
-        receiver: ChangeReceiver<CoreAccount>,
+        handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        let handle = watch_channel_nodamp(receiver, callback);
+        let handle = watch_channel(handle, callback);
 
         WatchedAccounts { accounts, handle }
     }
@@ -642,10 +641,10 @@ pub struct WatchedSessions {
 impl WatchedSessions {
     fn new(
         sessions: Vec<Arc<StoredSession>>,
-        receiver: ChangeReceiver<CoreSession>,
+        handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        let handle = watch_channel_nodamp(receiver, callback);
+        let handle = watch_channel(handle, callback);
 
         WatchedSessions { sessions, handle }
     }

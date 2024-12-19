@@ -183,7 +183,6 @@ async fn test_session_delete_user_id() {
             "WHERE account_id = ?",
             params![session.account_id.clone()],
             &tx,
-            None,
         )
         .await
         .unwrap();
@@ -222,7 +221,6 @@ async fn test_session_delete_session_id() {
             "WHERE account_id = ?",
             params![session.account_id.clone()],
             &tx,
-            None,
         )
         .await
         .unwrap();

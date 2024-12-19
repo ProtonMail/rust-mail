@@ -2,6 +2,8 @@
 #[path = "../tests/models/labels.rs"]
 mod labels;
 
+use std::collections::BTreeSet;
+
 use crate::datatypes::{
     ConversationCount, LabelColor, LabelType, MessageCount, SystemLabelId, ViewMode,
 };
@@ -17,10 +19,11 @@ use proton_api_mail::services::proton::requests::{
 use proton_api_mail::services::proton::response_data::{Label as ApiLabel, OperationResult};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -463,7 +466,6 @@ impl Label {
             "WHERE label_type = ? ORDER BY display_order ASC",
             params![kind],
             tether,
-            None,
         )
         .await
     }
@@ -477,24 +479,8 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn watch(
-        local_id: LocalId,
-        tether: &Tether,
-    ) -> Result<
-        Option<(
-            Self,
-            flume::Receiver<ResultsetChange<Self, <Self as Model>::IdType>>,
-        )>,
-        AppError,
-    > {
-        let (sender, receiver) = flume::unbounded();
-        let mut labels =
-            Label::find("WHERE local_id=?", params![local_id], tether, Some(sender)).await?;
-        if labels.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some((labels.swap_remove(0), receiver)))
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(LabelWatcher { sender }))
     }
 
     /// Resolve the remote id for a label with `local_id`.
@@ -526,6 +512,23 @@ impl Label {
             return Err(AppError::RemoteLabelDoesNotExist(label_id));
         };
         Ok(label_id)
+    }
+}
+
+pub struct LabelWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for LabelWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![Label::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| tracing::error!("Failed to send notification for LabelWatcher: {}", e))
+            .ok();
     }
 }
 

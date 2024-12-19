@@ -301,7 +301,7 @@ impl Draft {
     pub async fn empty(stash: &Stash) -> Result<Self, MailContextError> {
         let mut tether = stash.connection();
         // Default address should have display_order 0
-        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether, None)
+        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
             .await
             .inspect_err(|e| {
                 error!("Failed to load addresses: {e}");

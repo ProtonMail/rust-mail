@@ -1,19 +1,20 @@
+use std::collections::BTreeSet;
+
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
-    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageRecipients,
-    MessageSenders, MobileActions,
+    AttachmentMetadata, CustomLabel, ExclusiveLocation, MessageRecipients, MessageSenders,
+    MobileActions,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
-use stash::exports::ToSql;
-use stash::orm::{Model, ResultsetChange};
+use sqlite_watcher::watcher::TableObserver;
+use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::warn;
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
@@ -166,7 +167,7 @@ impl ContextualConversation {
         local_label_id: LocalId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        Ok(Conversation::in_label(local_label_id, tether, None)
+        Ok(Conversation::in_label(local_label_id, tether)
             .await?
             .into_iter()
             .filter_map(|c| Self::new(c, local_label_id))
@@ -202,7 +203,7 @@ impl ContextualConversation {
         else {
             return Ok(None);
         };
-        let messages = Message::in_conversation(local_conversation_id, &conn, None).await?;
+        let messages = Message::in_conversation(local_conversation_id, &conn).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
@@ -222,254 +223,8 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if the queries failed.
-    pub async fn watch_conversation_and_messages(
-        local_conversation_id: LocalId,
-        tether: &Tether,
-    ) -> Result<flume::Receiver<()>, StashError> {
-        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
-        let (conv_sender, conv_receiver) = flume::unbounded();
-        let (label_sender, label_receiver) = flume::unbounded();
-        let (cb_sender, cb_receiver) = flume::unbounded();
-        let (msg_sender, msg_receiver) = flume::unbounded();
-        let (msg_label_sender, msg_label_receiver) = flume::unbounded();
-
-        futures::try_join!(
-            Conversation::find(
-                "WHERE local_id = ?",
-                params![local_conversation_id],
-                tether,
-                Some(conv_sender),
-            ),
-            ConversationLabel::find(
-                "WHERE local_conversation_id =? ",
-                params![local_conversation_id],
-                tether,
-                Some(label_sender),
-            ),
-            Message::in_conversation(local_conversation_id, tether, Some(msg_sender)),
-            // Watching the message custom labels only here is enough as
-            // the conversation's custom labels are a combination of all
-            // the message labels. At this point we also have all
-            // the conversation messages, so we don't need to handle the case
-            // where they are not present.
-            Label::find(
-                formatdoc! {"
-                    WHERE label_type=? AND local_id IN (
-                        SELECT local_label_id FROM message_labels WHERE local_message_id IN (
-                            SELECT local_id FROM messages WHERE local_conversation_id = ?
-                        )
-                    )
-                "},
-                params![LabelType::Label, local_conversation_id],
-                tether,
-                Some(msg_label_sender),
-            )
-        )?;
-
-        tokio::spawn(async move {
-            loop {
-                tokio::select! {
-                 label_result = label_receiver.recv_async() =>  {
-                     if label_result.is_err() {
-                         return;
-                     }
-                     if cb_sender.send_async(()).await.is_err() {
-                         return;
-                     }
-                 }
-                 conv_result = conv_receiver.recv_async() => {
-                     if conv_result.is_err() {
-                         return;
-                     }
-                     if cb_sender.send_async(()).await.is_err() {
-                         return;
-                     }
-                 }
-                 msg_result = msg_receiver.recv_async() => {
-                     if msg_result.is_err() {
-                         return;
-                     }
-                     if cb_sender.send_async(()).await.is_err() {
-                         return;
-                     }
-                 }
-                    msg_label_result = msg_label_receiver.recv_async()=> {
-                     if msg_label_result.is_err() {
-                         return;
-                     }
-                     if cb_sender.send_async(()).await.is_err() {
-                         return;
-                     }
-
-                    }
-                }
-            }
-        });
-
-        Ok(cb_receiver)
-    }
-
-    /// Observe the conversations with `ids` for changes.
-    ///
-    /// Any time a change is detected a message is sent on the returned
-    /// channel.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed.
-    pub async fn watch(
-        ids: impl IntoIterator<Item = LocalId>,
-        tether: &Tether,
-    ) -> Result<flume::Receiver<()>, StashError> {
-        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
-        let conversation_ids = ids.into_iter().collect::<Vec<_>>();
-        let var_args = vec!["?"; conversation_ids.len()].join(",");
-        let (conv_sender, conv_receiver) = flume::unbounded();
-        let (conv_label_sender, con_label_receiver) = flume::unbounded();
-        let (cb_sender, cb_receiver) = flume::unbounded();
-        let (label_sender, label_receiver) = flume::unbounded();
-
-        futures::try_join!(
-            ConversationLabel::find(
-                format!("WHERE local_conversation_id IN ({})", var_args),
-                conversation_ids
-                    .iter()
-                    .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
-                    .collect(),
-                tether,
-                Some(conv_label_sender),
-            ),
-            Conversation::find(
-                format!("WHERE local_id IN ({})", var_args),
-                conversation_ids
-                    .iter()
-                    .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
-                    .collect(),
-                tether,
-                Some(conv_sender),
-            ),
-            Label::find(
-                formatdoc! {"
-                    WHERE label_type=? AND label_id IN (
-                        SELECT local_label_id FROM conversation_labels
-                        WHERE local_conversation_id IN ({args})
-                        AND deleted = 0
-                    )
-                ", args=var_args},
-                std::iter::once(Box::new(LabelType::Label) as Box<dyn ToSql + Send>)
-                    .chain(
-                        conversation_ids
-                            .iter()
-                            .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
-                    )
-                    .collect(),
-                tether,
-                Some(label_sender),
-            )
-        )?;
-
-        tokio::spawn(async move {
-            Self::watch_task(cb_sender, con_label_receiver, conv_receiver, label_receiver).await
-        });
-
-        Ok(cb_receiver)
-    }
-
-    /// Observe the conversations which have the given `label_id`.
-    ///
-    /// Any time a change is detected a message is sent on the returned
-    /// channel.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries failed.
-    pub async fn watch_in_label(
-        label_id: LocalId,
-        tether: &Tether,
-    ) -> Result<(Vec<ContextualConversation>, flume::Receiver<()>), StashError> {
-        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
-        let (conv_sender, conv_receiver) = flume::unbounded();
-        let (conv_label_sender, conv_label_receiver) = flume::unbounded();
-        let (label_sender, label_receiver) = flume::unbounded();
-        let (cb_sender, cb_receiver) = flume::unbounded();
-
-        let (_, conversations, _) = futures::try_join!(
-            ConversationLabel::find(
-                "WHERE local_label_id =? AND deleted = 0",
-                params![label_id],
-                tether,
-                Some(conv_label_sender),
-            ),
-            Conversation::in_label(label_id, tether, Some(conv_sender),),
-            Label::find(
-                formatdoc! {"
-                    WHERE label_type=? AND local_id IN (
-                        SELECT local_label_id FROM conversation_labels
-                        WHERE local_conversation_id IN (
-                            SELECT local_conversation_id FROM conversation_labels
-                                WHERE local_label_id=? AND deleted = 0
-                        )
-                    )
-                "},
-                params![LabelType::Label, label_id],
-                tether,
-                Some(label_sender),
-            )
-        )?;
-
-        tokio::spawn(async move {
-            Self::watch_task(
-                cb_sender,
-                conv_label_receiver,
-                conv_receiver,
-                label_receiver,
-            )
-            .await
-        });
-
-        let conversations = conversations
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, label_id))
-            .collect();
-
-        Ok((conversations, cb_receiver))
-    }
-
-    // Shared implementation to observe the labels.
-    async fn watch_task(
-        sender: flume::Sender<()>,
-        conv_label_receiver: flume::Receiver<ResultsetChange<ConversationLabel, LocalId>>,
-        conv_receiver: flume::Receiver<ResultsetChange<Conversation, LocalId>>,
-        custom_label_receiver: flume::Receiver<ResultsetChange<Label, LocalId>>,
-    ) {
-        loop {
-            tokio::select! {
-                conv_label_result = conv_label_receiver.recv_async() =>  {
-                    if conv_label_result.is_err() {
-                        return;
-                    }
-                    if sender.send_async(()).await.is_err() {
-                        return;
-                    }
-                }
-                custom_label_result = custom_label_receiver.recv_async() =>  {
-                    if custom_label_result.is_err() {
-                        return;
-                    }
-                    if sender.send_async(()).await.is_err() {
-                        return;
-                    }
-                }
-                conv_result = conv_receiver.recv_async() => {
-                    if conv_result.is_err() {
-                        return;
-                    }
-                    if sender.send_async(()).await.is_err() {
-                        return;
-                    }
-                }
-            }
-        }
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(ContextualConversationWatcher { sender }))
     }
 
     /// Get the available actions from bottom bar for given conversations
@@ -598,4 +353,31 @@ pub struct ContextualConversationAndMessages {
     pub messages: Vec<Message>,
     /// The id of message to display first.
     pub message_id_to_open: LocalId,
+}
+
+pub struct ContextualConversationWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for ContextualConversationWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![
+            Conversation::table_name().to_string(),
+            ConversationLabel::table_name().to_string(),
+            Message::table_name().to_string(),
+            Label::table_name().to_string(),
+        ]
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!(
+                    "Failed to send notification for ContextualConversationWatcher: {}",
+                    e
+                )
+            })
+            .ok();
+    }
 }

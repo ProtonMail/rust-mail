@@ -6,8 +6,8 @@ use futures::FutureExt;
 use proton_core_common::paginator::DataSource;
 use proton_mail_common::models::PaginatorCompat;
 use proton_mail_common::MailContextError;
-use stash::orm::{Model, ResultsetChange};
-use stash::stash::StashError;
+use stash::orm::Model;
+use stash::stash::WatcherHandle;
 use std::sync::Arc;
 
 /// Paginator adapter.
@@ -26,23 +26,24 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
     ///
     /// Creates a paginator and watcher.
     pub async fn new(
-        creat_paginator: impl FnOnce(
-            flume::Sender<ResultsetChange<T, <T as Model>::IdType>>,
-        ) -> BoxFuture<
+        creat_paginator: impl FnOnce() -> BoxFuture<
             'static,
             Result<PaginatorCompat<T, R>, MailContextError>,
         >,
-        to_message: impl Fn(Result<Vec<T>, StashError>) -> Messages + Send + Sync + 'static,
+        to_message: impl Fn(Result<Vec<T>, R::Error>) -> Messages + Send + Sync + 'static,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let to_message = Arc::new(to_message);
-        let (sender, receiver) = flume::unbounded();
-        let paginator = Arc::new(creat_paginator(sender).await?);
+        let paginator = Arc::new(creat_paginator().await?);
+        let WatcherHandle {
+            handle, receiver, ..
+        } = paginator.watch()?;
         let paginator_cloned = Arc::clone(&paginator);
-        let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
-            let paginator = Arc::clone(&paginator_cloned);
-            let to_message = Arc::clone(&to_message);
-            async move { Some(to_message(paginator.reload().await)) }.boxed()
-        });
+        let (watcher, background_command) =
+            WatchHandle::new_dampened(receiver, handle, move || {
+                let paginator = Arc::clone(&paginator_cloned);
+                let to_message = Arc::clone(&to_message);
+                async move { Some(to_message(paginator.reload().await)) }.boxed()
+            });
         Ok((
             Self {
                 paginator,

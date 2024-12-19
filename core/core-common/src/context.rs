@@ -5,7 +5,6 @@ use crate::cache::CacheError;
 use crate::datatypes::{LocalId, PasswordMode, RemoteId, TfaStatus};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
-use crate::db::ChangeReceiver;
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
@@ -20,7 +19,7 @@ use proton_api_core::session::Session as ApiSession;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::stash::{Stash, StashError};
+use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -268,7 +267,7 @@ impl Context {
     /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
         let tehter = self.stash().connection();
-        Ok(CoreAccount::all(&tehter, None).await?)
+        Ok(CoreAccount::all(&tehter).await?)
     }
 
     /// Watch the accounts for changes.
@@ -282,15 +281,11 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be registered with the database.
-    pub async fn watch_accounts(
-        &self,
-    ) -> CoreContextResult<(Vec<CoreAccount>, ChangeReceiver<CoreAccount>)> {
-        let (tx, rx) = flume::unbounded();
-        let tether = self.stash().connection();
+    pub async fn watch_accounts(&self) -> CoreContextResult<(Vec<CoreAccount>, WatcherHandle)> {
+        let accounts = self.get_accounts().await?;
+        let handle = CoreAccount::watch(self.stash())?;
 
-        let res = CoreAccount::all(&tether, Some(tx)).await?;
-
-        Ok((res, rx))
+        Ok((accounts, handle))
     }
 
     /// Get all available API sessions.
@@ -304,7 +299,7 @@ impl Context {
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
         let tether = self.stash().connection();
-        Ok(CoreSession::all(&tether, None).await?)
+        Ok(CoreSession::all(&tether).await?)
     }
 
     /// Watch the API sessions for changes.
@@ -318,15 +313,12 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be registered with the database.
-    pub async fn watch_sessions(
-        &self,
-    ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
-        let (tx, rx) = flume::unbounded();
+    pub async fn watch_sessions(&self) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let tether = self.stash().connection();
+        let sessions = CoreSession::all(&tether).await?;
+        let handle = CoreSession::watch(self.stash())?;
 
-        let res = CoreSession::all(&tether, Some(tx)).await?;
-
-        Ok((res, rx))
+        Ok((sessions, handle))
     }
 
     /// Get all API sessions associated with a given account.
@@ -341,7 +333,7 @@ impl Context {
         user_id: RemoteId,
     ) -> CoreContextResult<Vec<CoreSession>> {
         let tether = self.stash().connection();
-        Ok(CoreSession::find_by_user_id(user_id, &tether, None).await?)
+        Ok(CoreSession::find_by_user_id(user_id, &tether).await?)
     }
 
     /// Watch an account's API sessions for changes.
@@ -352,14 +344,14 @@ impl Context {
     ///
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_account_sessions(
+        // TODO: Two types of watchers on session, it needs to be unified.
         &self,
         user_id: RemoteId,
-    ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
-        let (tx, rx) = flume::unbounded();
-        let tether = self.stash().connection();
-        let res = CoreSession::find_by_user_id(user_id, &tether, Some(tx)).await?;
+    ) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
+        let sessions = self.get_account_sessions(user_id).await?;
+        let handle = CoreSession::watch(self.stash())?;
 
-        Ok((res, rx))
+        Ok((sessions, handle))
     }
 
     /// Get a single account by its remote (user) ID.
@@ -389,7 +381,7 @@ impl Context {
             return Ok(None);
         };
 
-        let state = CoreSession::find_by_user_id(user_id, &tether, None)
+        let state = CoreSession::find_by_user_id(user_id, &tether)
             .map_ok(|s| CoreAccountState::of(&account, &s))
             .await?;
 

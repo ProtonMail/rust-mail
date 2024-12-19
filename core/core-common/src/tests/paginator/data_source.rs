@@ -1,7 +1,7 @@
 use crate::paginator::{DataSource, Paginator};
 use serde::{Deserialize, Serialize};
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::future::Future;
@@ -151,7 +151,6 @@ async fn data_source_sync() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -198,7 +197,6 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        None,
     )
     .await
     .unwrap();
@@ -225,7 +223,6 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
         NonZeroU32::new(5).unwrap(),
         SkipFirstSyncSource(source),
         true,
-        None,
     )
     .await
     .unwrap();
@@ -241,12 +238,6 @@ async fn data_source_sync_with_callback() {
     let (stash, _dir) = init_db().await;
     let mut tether = stash.connection();
     let source = TestDataSource::new();
-    let (sender, receiver) = flume::unbounded();
-
-    let handle = tokio::spawn(async move {
-        // We should receive exactly one notification.
-        receiver.recv_async().await
-    });
 
     let paginator = Paginator::new(
         "ORDER BY id ASC",
@@ -255,10 +246,11 @@ async fn data_source_sync_with_callback() {
         NonZeroU32::new(5).unwrap(),
         source,
         true,
-        Some(sender),
     )
     .await
     .unwrap();
+    let handle = paginator.watch().unwrap();
+    let receiver = &handle.receiver;
 
     assert_eq!(paginator.page_count().await, 4);
     check_page(&paginator).await;
@@ -292,9 +284,7 @@ async fn data_source_sync_with_callback() {
     drop(paginator);
     drop(tether);
 
-    // We should only receive a notification for the manually inserted element.
-    let notification = handle.await.unwrap().unwrap();
-    assert_eq!(notification, ResultsetChange::Inserted(new_value));
+    receiver.recv_async().await.unwrap();
 }
 
 async fn init_db() -> (Stash, TempDir) {
@@ -327,7 +317,6 @@ async fn check_range_with_limit(tether: &Tether, range: Range<u32>, max_len: Opt
         "WHERE id >= ? AND id < ? ORDER BY id ASC ",
         params![start, end],
         tether,
-        None,
     )
     .await
     .unwrap();

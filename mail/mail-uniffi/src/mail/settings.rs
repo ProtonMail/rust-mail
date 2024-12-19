@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::errors::UserSessionError;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use proton_core_common::models::ModelExtension;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::MailSettings as RealSettings;
-use stash::orm::Model;
 use tokio::task::JoinError;
 
 use super::{datatypes::MailSettings, MailUserSession};
@@ -35,16 +35,15 @@ pub async fn watch_mail_settings(
 ) -> Result<SettingsWatcher, UserSessionError> {
     let stash = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
-        let (tx, rx) = flume::unbounded();
+        let handle = RealSettings::watch(&stash)?;
         let tether = stash.connection();
-        let settings = RealSettings::find("", vec![], &tether, Some(tx))
+        let settings = RealSettings::all(&tether)
             .await?
-            .first()
-            .cloned()
+            .pop()
             .unwrap_or_default()
             .into();
 
-        let watcher = watch_channel(rx, callback).await;
+        let watcher = watch_channel(handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,

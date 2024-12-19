@@ -10,18 +10,19 @@ use base64::Engine;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
+use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
+use std::collections::BTreeSet;
 use std::ops::Deref;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
 use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus, Timestamp};
-use crate::db::ChangeSender;
 use crate::models::ModelExtension;
 
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
@@ -93,7 +94,7 @@ impl CoreAccount {
     ///
     /// Returns error if the retrieval fails.
     pub async fn by_primary_at(tether: &Tether) -> Result<Vec<Self>, StashError> {
-        Self::find("ORDER BY primary_at DESC", vec![], tether, None).await
+        Self::find("ORDER BY primary_at DESC", vec![], tether).await
     }
 
     /// Update the username of the account.
@@ -195,6 +196,28 @@ impl CoreAccount {
 
         <Self as Model>::save(self, bond).await
     }
+
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
+    }
+}
+
+pub struct CoreAccountWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for CoreAccountWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![CoreAccount::table_name().to_string()]
+    }
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for CoreAccountWatcher: {}", e);
+            })
+            .ok();
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
@@ -255,9 +278,8 @@ impl CoreSession {
     pub async fn find_by_user_id(
         user_id: RemoteId,
         tether: &Tether,
-        queue: Option<ChangeSender<Self>>,
     ) -> Result<Vec<Self>, StashError> {
-        Self::find("WHERE account_id = ?", params![user_id], tether, queue).await
+        Self::find("WHERE account_id = ?", params![user_id], tether).await
     }
 
     /// Create a new session for the given account.
@@ -332,6 +354,28 @@ impl CoreSession {
             // --- preserve ---
             ..self
         })
+    }
+
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(CoreSessionWatcher { sender }))
+    }
+}
+
+pub struct CoreSessionWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for CoreSessionWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![CoreSession::table_name().to_string()]
+    }
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for CoreSessionWatcher: {}", e);
+            })
+            .ok();
     }
 }
 

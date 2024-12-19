@@ -4,7 +4,7 @@ use crate::{
     core::datatypes::{GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
-use crate::{utils::DAMPENING_PERIOD, watch_channel_inner, UniffiRecord};
+use crate::{watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContextError;
@@ -83,16 +83,16 @@ pub async fn watch_contact_list(
 ) -> Result<WatchedContactList, ActionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
-        let callback = damp_contacts_callback(session.clone(), callback);
-        let watcher = WatchHandle::new();
-        let (contact_list, channel) =
+        let callback = contacts_callback(session.clone(), callback);
+        let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
+        let watcher = Arc::new(WatchHandle::new(handle.handle));
 
-        watch_channel_inner(&watcher, channel, callback);
+        watch_channel_inner(handle.receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
-            handle: Arc::new(watcher),
+            handle: watcher,
         })
     })
     .await
@@ -104,7 +104,7 @@ pub async fn watch_contact_list(
 /// This returns a function that updates the boolean flag of whether we should
 /// send an update which gets checked every `duration`.
 ///
-pub fn damp_contacts_callback(
+pub fn contacts_callback(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
 ) -> impl Fn() + Clone {
@@ -112,7 +112,7 @@ pub fn damp_contacts_callback(
     let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
-        let mut interval = interval(Duration::from_millis(DAMPENING_PERIOD));
+        let mut interval = interval(Duration::from_millis(50));
         let callback = Arc::new(callback);
 
         loop {

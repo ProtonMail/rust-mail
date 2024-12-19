@@ -36,6 +36,7 @@ tui-input = "0.10.1"
 tui-logger = { version = "0.12.1", features = ["tracing-support"] }
 tui-textarea = { version = "0.6.1", features = ["ratatui"] }
 unicode-width = "0.1"
+sqlite-watcher = { workspace = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
 keyring = { version = "3.0.3", features = ["linux-native"] }

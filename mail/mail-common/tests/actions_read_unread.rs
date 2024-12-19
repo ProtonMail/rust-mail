@@ -152,7 +152,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .unwrap();
 
     // Validation
-    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether, None)
+    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
         .await
         .unwrap();
     assert_eq!(conversations.len(), expected_read);
@@ -217,7 +217,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .unwrap();
 
     // Validation
-    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether, None)
+    let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
         .await
         .unwrap();
     assert_eq!(conversations.len(), expected_read);

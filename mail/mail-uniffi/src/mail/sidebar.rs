@@ -11,18 +11,10 @@ use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
-use crate::utils::damp;
-use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
-use itertools::Itertools;
-use proton_core_common::datatypes::LocalId as RealLocalId;
-use proton_mail_common::datatypes::LabelType as RealLabelType;
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Label as RealLabel;
-use stash::orm::{Model, ResultsetChange};
-use stash::params;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tracing::debug;
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar
 #[derive(uniffi::Object)]
@@ -161,6 +153,7 @@ impl Sidebar {
     ///
     /// Returns an error if the database query fails.
     ///
+    #[allow(unused_variables)]
     pub async fn watch_labels(
         &self,
         label_type: LabelType,
@@ -168,59 +161,10 @@ impl Sidebar {
     ) -> Result<Arc<WatchHandle>, ActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
-            let tether = sidebar.user_ctx.user_stash().connection();
-            let results = RealLabel::find(
-                "WHERE label_type = ?",
-                params![RealLabelType::from(label_type)],
-                &tether,
-                Some(sender),
-            )
-            .await?;
-            // Unwrapping is safe here, as we will always have the local ID
-            let mut ids = results.iter().map(|m| m.local_id.unwrap()).collect_vec();
-            let stop_flag = Arc::new(AtomicBool::new(false));
-            let weak_stop_flag = Arc::downgrade(&stop_flag);
+            let handle = RealLabel::watch(sidebar.user_ctx.user_stash())?;
+            let handle = watch_channel(handle, callback);
 
-            spawn_async(async move {
-                let callback = damp(callback).await;
-
-                let callback = Arc::new(callback);
-                while let Ok(change) = receiver.recv_async().await {
-                    let callback = callback.clone();
-                    let callback = move || callback();
-                    let Some(stop_flag) = weak_stop_flag.upgrade() else {
-                        debug!("Watch handle dropped, stopping watch");
-                        break;
-                    };
-
-                    if stop_flag.load(Ordering::SeqCst) {
-                        debug!("Stop flag set, stopping watch");
-                        break;
-                    }
-                    match change {
-                        ResultsetChange::Inserted(label) => {
-                            if label.label_type == label_type.into() {
-                                // Unwrapping is safe here, as we will always have the local ID
-                                ids.push(label.local_id.unwrap());
-                                _ = async_runtime().spawn_blocking(callback).await;
-                            }
-                        }
-                        ResultsetChange::Updated(label) => {
-                            if label.label_type == label_type.into() {
-                                _ = async_runtime().spawn_blocking(callback).await;
-                            }
-                        }
-                        ResultsetChange::Deleted(local_label_id) => {
-                            if ids.contains(&local_label_id) {
-                                _ = async_runtime().spawn_blocking(callback).await;
-                            }
-                        }
-                        _ => {}
-                    };
-                }
-            });
-            Result::<_, RealProtonMailError>::Ok(Arc::new(WatchHandle { stop_flag }))
+            Result::<_, RealProtonMailError>::Ok(handle)
         })
         .await
         .map_err(ActionError::from)

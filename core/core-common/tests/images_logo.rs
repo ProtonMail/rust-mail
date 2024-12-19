@@ -134,9 +134,7 @@ async fn concurrent_request() {
 
     let (query, params) = key.build_query();
     let tether = user_ctx.stash().connection();
-    let items = SenderImage::find(query, params, &tether, None)
-        .await
-        .unwrap();
+    let items = SenderImage::find(query, params, &tether).await.unwrap();
     assert_eq!(items.len(), 1);
 }
 

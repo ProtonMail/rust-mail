@@ -262,7 +262,7 @@ impl Store for AuthStore {
             return Err(format!("failed to set user data: missing {user_id}"))?;
         };
 
-        for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
+        for session in CoreSession::find_by_user_id(user_id, &tx).await? {
             session.with_key_secret(&sec, &key)?.save(&tx).await?;
         }
 

@@ -39,6 +39,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 typed-builder = { workspace = true }
 url = { workspace = true }
+sqlite-watcher = { workspace = true }
 log = "0.4.22"
 
 [dev-dependencies]

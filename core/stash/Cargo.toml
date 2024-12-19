@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 fastrand = "2.1.1"
+sqlite-watcher = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

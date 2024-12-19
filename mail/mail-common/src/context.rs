@@ -10,7 +10,6 @@ use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::db::ChangeReceiver;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
@@ -20,7 +19,7 @@ use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
@@ -278,9 +277,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be registered with the database.
-    pub async fn watch_accounts(
-        &self,
-    ) -> MailContextResult<(Vec<CoreAccount>, ChangeReceiver<CoreAccount>)> {
+    pub async fn watch_accounts(&self) -> MailContextResult<(Vec<CoreAccount>, WatcherHandle)> {
         Ok(self.core_context.watch_accounts().await?)
     }
 
@@ -308,9 +305,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be registered with the database.
-    pub async fn watch_sessions(
-        &self,
-    ) -> MailContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
+    pub async fn watch_sessions(&self) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_sessions().await?)
     }
 
@@ -338,7 +333,7 @@ impl MailContext {
     pub async fn watch_account_sessions(
         &self,
         user_id: RemoteId,
-    ) -> MailContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
+    ) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_account_sessions(user_id).await?)
     }
 

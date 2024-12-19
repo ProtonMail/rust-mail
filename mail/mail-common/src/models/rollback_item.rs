@@ -296,7 +296,7 @@ impl RollbackItem {
         kind: RollbackItemType,
         tether: &Tether,
     ) -> Result<Vec<RollbackItem>, StashError> {
-        RollbackItem::find("WHERE item_type = ?", params![kind], tether, None).await
+        RollbackItem::find("WHERE item_type = ?", params![kind], tether).await
     }
 
     /// This helper method is used to delete rollback item of a specific kind & remote_id.

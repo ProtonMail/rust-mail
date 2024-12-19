@@ -53,7 +53,7 @@ impl ConversationsState {
         label_id: LocalId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let (paginator, command) = Paginator::new(
-            |sender| {
+            || {
                 async move {
                     Ok(Conversation::paginate_in_label(
                         &ctx,
@@ -61,7 +61,6 @@ impl ConversationsState {
                         ITEM_LIMIT.try_into().unwrap(),
                         PaginatorFilter::default(),
                         true,
-                        Some(sender),
                     )
                     .await?)
                 }

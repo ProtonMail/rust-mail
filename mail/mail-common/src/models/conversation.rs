@@ -36,14 +36,15 @@ use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::paginator::{DataSource, Paginator, Param};
+use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::ToSql;
 use stash::macros::Model;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use std::collections::hash_map::Entry as HmEntry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::ops::AddAssign;
@@ -567,7 +568,7 @@ impl Conversation {
     ) -> Result<Vec<Self>, StashError> {
         let (query, params) =
             find_in_query!("WHERE deleted = 0 AND local_id IN ({})", conversation_ids);
-        Conversation::find(query, params, tether, None).await
+        Conversation::find(query, params, tether).await
     }
 
     /// Create a new unknown conversation where we only know the `remote_id`.
@@ -690,13 +691,9 @@ impl Conversation {
                         deleted: false,
                         row_id: None,
                     };
-                    let conversation_labels = ConversationLabel::find(
-                        "WHERE local_conversation_id=?",
-                        params![id],
-                        bond,
-                        None,
-                    )
-                    .await?;
+                    let conversation_labels =
+                        ConversationLabel::find("WHERE local_conversation_id=?", params![id], bond)
+                            .await?;
                     for conversation_label in conversation_labels {
                         new_label.context_expiration_time = conversation_label
                             .context_expiration_time
@@ -858,7 +855,6 @@ impl Conversation {
                "},
                 params![id],
                 bond,
-                None,
             )
             .await?;
 
@@ -900,7 +896,6 @@ impl Conversation {
             "WHERE local_conversation_id=? AND deleted=0",
             params![self.local_id.unwrap()],
             bond,
-            None,
         )
         .await?;
 
@@ -963,7 +958,6 @@ impl Conversation {
                "},
                 params![id, label_id],
                 bond,
-                None,
             )
             .await?;
 
@@ -1097,7 +1091,6 @@ impl Conversation {
                "},
                 params![id],
                 bond,
-                None,
             )
             .await?;
 
@@ -1159,7 +1152,6 @@ impl Conversation {
             "WHERE local_conversation_id=? AND deleted=1",
             params![self.local_id.unwrap()],
             bond,
-            None,
         )
         .await?;
 
@@ -1219,7 +1211,6 @@ impl Conversation {
                "},
                 params![id, label_id],
                 bond,
-                None,
             )
             .await?;
 
@@ -1516,7 +1507,6 @@ impl Conversation {
             ),
             ids,
             tehter,
-            None,
         )
         .await?;
 
@@ -1534,7 +1524,6 @@ impl Conversation {
             "WHERE local_conversation_id = ?",
             params![self.local_id],
             tether,
-            None,
         )
         .await?;
         let labels = self.load_labels(tether).await?;
@@ -1725,7 +1714,6 @@ impl Conversation {
                 "WHERE local_conversation_id=? AND context_num_unread <> 0",
                 params![conversation_id],
                 bond,
-                None,
             )
             .await?;
 
@@ -1759,7 +1747,6 @@ impl Conversation {
                 "WHERE local_conversation_id=? AND unread<>0",
                 params![conversation_id],
                 bond,
-                None,
             )
             .await?;
 
@@ -1867,7 +1854,6 @@ impl Conversation {
                         "WHERE local_conversation_id=? AND local_label_id=?",
                         params![conversation_id, local_label_id],
                         bond,
-                        None,
                     )
                     .await?;
                     for mut conv_label in conv_labels {
@@ -2001,7 +1987,6 @@ impl Conversation {
                         .map(|&v| -> Box<dyn ToSql + Send> { Box::new(*v) })
                         .collect(),
                     bond,
-                    None,
                 )
                 .await?
                 .into_iter()
@@ -2468,53 +2453,18 @@ impl Conversation {
     pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalId>,
         tether: &Tether,
-        sender: flume::Sender<()>,
-    ) -> Result<Vec<LabelAsAction>, AppError> {
+    ) -> Result<(Vec<LabelAsAction>, WatcherHandle), AppError> {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
 
+        let handle = tether
+            .stash()
+            .subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
+
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
-        let ids = local_ids.iter().map(ToString::to_string).join(",");
-
-        let (cnv_tx, cnv_rx) = flume::unbounded();
-        let (cnv_label_tx, cnv_label_rx) = flume::unbounded();
-
-        let conversations = Conversation::find(
-            "WHERE local_id IN (?)",
-            params![ids.clone()],
-            tether,
-            Some(cnv_tx),
-        )
-        .await?;
-
-        let _ = ConversationLabel::find(
-            "WHERE local_conversation_id IN (?)",
-            params![ids.clone()],
-            tether,
-            Some(cnv_label_tx),
-        )
-        .await?;
-
-        tokio::spawn(async move {
-            loop {
-                if tokio::select! {
-                    x = cnv_label_rx.recv_async() => x.map(|_| ()),
-                    x = cnv_rx.recv_async() => x.map(|_| ()),
-                }
-                .is_err()
-                {
-                    error!("Bug in the watcher system: The watcher receiver was dropped");
-                    return;
-                };
-
-                if sender.send_async(()).await.is_err() {
-                    debug!("watch_available_label_as_actions stopped watching.");
-                    return;
-                }
-            }
-        });
-
+        let conversations =
+            <Conversation as ModelExtension>::find_by_ids(local_ids, tether).await?;
         let all_label_as_actions = conversations
             .iter()
             .flat_map(|conversation| {
@@ -2528,7 +2478,7 @@ impl Conversation {
             })
             .collect_vec();
 
-        Ok(LabelAsAction::finalize(all_label_as_actions))
+        Ok((LabelAsAction::finalize(all_label_as_actions), handle))
     }
 
     /// Get the available move actions for conversations
@@ -2564,7 +2514,6 @@ impl Conversation {
             ),
             vec![],
             tether,
-            None,
         )
         .await?;
 
@@ -2600,7 +2549,6 @@ impl Conversation {
             "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
             params![self.local_id.unwrap()],
             tether,
-            None,
         )
         .await
     }
@@ -2864,7 +2812,6 @@ impl Conversation {
     pub async fn in_label(
         local_label_id: LocalId,
         tether: &Tether,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<Vec<Self>, StashError> {
         Conversation::find(
             formatdoc!(
@@ -2882,7 +2829,6 @@ impl Conversation {
             ),
             params![local_label_id],
             tether,
-            queue,
         )
         .await
     }
@@ -2912,7 +2858,6 @@ impl Conversation {
         page_count: u32,
         filter: PaginatorFilter,
         local_first: bool,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
         let remote_source =
             ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
@@ -2955,7 +2900,6 @@ impl Conversation {
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
                 local_first,
-                queue,
             )
             .await?,
         ))
@@ -3076,6 +3020,28 @@ impl From<ApiConversation> for Conversation {
     }
 }
 
+pub struct ConversationActionWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for ConversationActionWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![
+            Conversation::table_name().to_string(),
+            ConversationLabel::table_name().to_string(),
+        ]
+    }
+
+    fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for ConversationWatcher: {}", e)
+            })
+            .ok();
+    }
+}
+
 /// Contextual label metadata associated with a Conversation.
 ///
 /// When a conversation is opened in the context of label, the
@@ -3183,7 +3149,6 @@ impl ConversationLabel {
             format!("WHERE local_id IN ({})", label_ids.into_iter().join(", ")),
             vec![],
             tether,
-            None,
         )
         .await
     }
@@ -3457,8 +3422,7 @@ impl ConversationMessageLabelStats {
         let messages = Message::find(format!(indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")),
-                                     params, tether, None).await?;
+            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3484,8 +3448,7 @@ impl ConversationMessageLabelStats {
         let messages = Message::find(format!(indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")),
-                                     params, tether, None).await?;
+            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3719,6 +3682,14 @@ impl DataSource for ConversationDataSource {
                 tether,
             )
             .await?)
+    }
+
+    fn watch_tables(&self) -> Vec<String> {
+        vec![
+            Conversation::table_name().to_string(),
+            ConversationLabel::table_name().to_string(),
+            Label::table_name().to_string(),
+        ]
     }
 }
 
