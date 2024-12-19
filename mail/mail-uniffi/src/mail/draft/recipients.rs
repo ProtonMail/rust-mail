@@ -206,15 +206,14 @@ impl ComposerRecipientList {
                 anyhow::anyhow!("Draft reference no longer valid"),
             )))?;
         let action = {
+            let list = self.list.list();
             let mut draft = upgrade.instance.write();
             match self.list_type {
-                ComposerListType::To => draft.to_list = self.list.list(),
-                ComposerListType::Cc => draft.cc_list = self.list.list(),
-                ComposerListType::Bcc => draft.bcc_list = self.list.list(),
+                ComposerListType::To => draft.to_list = list,
+                ComposerListType::Cc => draft.cc_list = list,
+                ComposerListType::Bcc => draft.bcc_list = list,
             }
-            let action = draft.to_save_action();
-            drop(draft);
-            action
+            draft.to_save_action()
         };
         ctx.queue().queue_action(action).await?;
         Ok(())
