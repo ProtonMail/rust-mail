@@ -1,7 +1,7 @@
 pub use super::*;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
-use crate::draft::recipients::NullContactGroupResolver;
+use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalId};
@@ -178,7 +178,7 @@ fn existing_message() -> Message {
                 address: "cc_contact_1@pm.me".to_string(),
                 is_proton: false,
                 name: "CC Contact".to_string(),
-                group: None,
+                group: MaybeEmptyString(None),
             }],
         },
         bcc_list: Default::default(),

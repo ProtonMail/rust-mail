@@ -14,6 +14,7 @@ use crate::models::{
     Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
+use futures::future::join3;
 use proton_action_queue::action::Metadata;
 use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
@@ -33,7 +34,7 @@ use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 pub mod compose;
 pub mod recipients;
@@ -188,46 +189,44 @@ impl Draft {
         context: Arc<MailUserContext>,
         message_id: LocalId,
     ) -> Result<Self, MailContextError> {
-        let tether = context.user_stash().connection();
-        let Some(mut message) = Message::find_by_id(message_id, &tether).await? else {
+        let tether = &mut context.user_stash().connection();
+
+        let Some(mut message) = Message::find_by_id(message_id, tether).await? else {
+            error!("Opened message as draft that does not exist.");
             return Err(AppError::MessageMissing(message_id).into());
         };
 
         if !message.flags.is_draft() {
+            error!("Opened a non-draft message as a draft");
             return Err(Error::MessageNotADraft(message_id).into());
         }
 
+        // First let's try to sync the body and metadata. If we can't we will fill it
+        // ourselves.
         let (body, body_metadata) = if let Some(remote_id) = message.remote_id.clone() {
-            match Message::force_sync_message_and_body(Arc::clone(&context), remote_id).await {
-                Ok((metadata, body_metadata, body)) => {
-                    message = metadata;
+            match Message::force_sync_message_and_body(context.clone(), remote_id).await {
+                Ok((message_new, body_metadata, body)) => {
+                    message = message_new;
                     (Some(body), Some(body_metadata))
                 }
-                Err(e) => {
-                    if let MailContextError::Api(api_err) = &e {
-                        // Handle offline mode case.
-                        if api_err.is_network_failure() {
-                            (None, None)
-                        } else {
-                            return Err(e);
-                        }
-                    } else {
-                        return Err(e);
-                    }
+                // Handle network failure
+                Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
+                    warn!("Api error syncing message");
+                    (None, None)
                 }
+                Err(e) => return Err(e),
             }
         } else {
             (None, None)
         };
 
-        let mut tether = context.user_stash().connection();
-
         // Load body metadata if not re-synced.
         let body_metadata = if let Some(body_metadata) = body_metadata {
             body_metadata
         } else {
+            debug!("Message body metadata not present. Querying the db...");
             let Some(body_metadata) =
-                MessageBodyMetadata::for_message(message.local_id.unwrap(), &tether).await?
+                MessageBodyMetadata::for_message(message.local_id.unwrap(), tether).await?
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
@@ -239,6 +238,7 @@ impl Draft {
         let body = if let Some(body) = body {
             body
         } else {
+            debug!("Message body not present. Looking in the cache...");
             let key = CacheMessageKey::from(&message);
             let Some(message_body_reader) = context.messages_cache().get_item(&key)? else {
                 return Err(AppError::MessageBodyMissing(message.local_id.unwrap()).into());
@@ -251,14 +251,13 @@ impl Draft {
         };
 
         let metadata_id = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e}"))?
         {
             debug!("Found existing metadata with id {}", metadata.id.unwrap());
             metadata.id.unwrap()
         } else {
-            let tx = tether.transaction().await?;
             debug!("No metadata found, creating new entry");
             let mut metadata = DraftMetadata {
                 id: None,
@@ -268,6 +267,7 @@ impl Draft {
                 reply_mode: None,
                 row_id: None,
             };
+            let tx = tether.transaction().await?;
             metadata
                 .save(&tx)
                 .await
@@ -277,12 +277,18 @@ impl Draft {
         };
 
         let context = &*context;
+        let (to_list, cc_list, bcc_list) = join3(
+            RecipientList::from_message_recipients(context, message.to_list.value),
+            RecipientList::from_message_recipients(context, message.cc_list.value),
+            RecipientList::from_message_recipients(context, message.bcc_list.value),
+        )
+        .await;
         Ok(Self {
             metadata_id,
             sender: message.sender.address,
-            to_list: RecipientList::from_message_recipients(context, message.to_list.value).await,
-            cc_list: RecipientList::from_message_recipients(context, message.cc_list.value).await,
-            bcc_list: RecipientList::from_message_recipients(context, message.bcc_list.value).await,
+            to_list,
+            cc_list,
+            bcc_list,
             address_id: message.remote_address_id,
             subject: message.subject,
             body,

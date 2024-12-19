@@ -1,11 +1,13 @@
 use crate::async_runtime;
 use crate::mail::draft::Draft;
 use itertools::Itertools;
+use non_empty_string::NonEmptyString;
 use proton_action_queue::queue::ActionError;
 use proton_mail_common::actions::draft;
 use proton_mail_common::draft::recipients::{
-    GroupRecipient, OnBackgroundValidationComplete, Recipient as RealRecipient, RecipientEntry,
-    RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList, ValidationState,
+    GroupRecipient, MaybeEmptyString, OnBackgroundValidationComplete, Recipient as RealRecipient,
+    RecipientEntry, RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList,
+    ValidationState,
 };
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::{Arc, Weak};
@@ -23,7 +25,7 @@ pub struct SingleRecipientEntry {
 impl From<SingleRecipientEntry> for RecipientEntry {
     fn from(value: SingleRecipientEntry) -> Self {
         Self {
-            display_name: value.name,
+            display_name: MaybeEmptyString::from_option(value.name),
             email: value.email,
         }
     }
@@ -49,6 +51,8 @@ pub enum AddGroupRecipientError {
     Duplicate(Vec<String>),
     /// Failed to queue save action for draft.
     SaveFailed,
+    /// Empty group name
+    EmtpyGroupName,
 }
 
 #[derive(Clone, uniffi::Enum)]
@@ -93,7 +97,7 @@ pub struct ComposerRecipientGroup {
 impl From<GroupRecipient> for ComposerRecipientGroup {
     fn from(value: GroupRecipient) -> Self {
         Self {
-            display_name: value.group_name,
+            display_name: value.group_name.into_inner(),
             recipients: value.recipients.into_iter().map_into().collect(),
             total_contacts_in_group: value.total_in_group,
         }
@@ -267,16 +271,20 @@ impl ComposerRecipientList {
     /// expected that this is retrieved from the contacts api.
     pub fn add_group_recipient(
         &self,
-        group_name: &str,
+        group_name: String,
         recipients: Vec<SingleRecipientEntry>,
         total_contacts_in_group: u64,
     ) -> AddGroupRecipientError {
+        let Ok(group_name) = NonEmptyString::new(group_name) else {
+            return AddGroupRecipientError::EmtpyGroupName;
+        };
+
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let recipients_cloned = recipients.clone();
             let duplicates = self.list.add_group(
                 Arc::clone(&self.ctx),
-                group_name,
+                group_name.clone(),
                 recipients.into_iter().map_into(),
                 total_contacts_in_group,
             );
@@ -284,7 +292,7 @@ impl ComposerRecipientList {
             if let Err(e) = self.save_draft(&self.ctx).await {
                 error!("Failed to queue draft save after recipient add: {e}");
                 self.list.remove_group_recipients(
-                    group_name,
+                    &group_name,
                     recipients_cloned.into_iter().map(|e| e.email),
                 );
                 return AddGroupRecipientError::SaveFailed;
@@ -304,12 +312,20 @@ impl ComposerRecipientList {
     }
 
     /// Remove a contact group by `group_name`
-    pub fn remove_group(&self, group_name: &str) {
-        self.list.remove_group(group_name);
+    pub fn remove_group(&self, group_name: String) {
+        let Ok(group_name) = NonEmptyString::new(group_name) else {
+            error!("remove_group with empty group name");
+            return;
+        };
+        self.list.remove_group(&group_name);
     }
 
     /// Remove a recipient with `email` from a contact group with `group_name`.
-    pub fn remove_recipient_from_group(&self, group_name: &str, email: &str) {
-        self.list.remove_group_recipient(group_name, email);
+    pub fn remove_recipient_from_group(&self, group_name: String, email: &str) {
+        let Ok(group_name) = NonEmptyString::new(group_name) else {
+            error!("remove_recipient_from_group with empty group name");
+            return;
+        };
+        self.list.remove_group_recipient(&group_name, email);
     }
 }

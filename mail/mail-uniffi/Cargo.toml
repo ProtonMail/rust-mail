@@ -33,6 +33,7 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }
 sqlite-watcher = { workspace = true }
+non-empty-string = { workspace = true }
 
 [dev-dependencies]
 proton-api-mail = { workspace = true }

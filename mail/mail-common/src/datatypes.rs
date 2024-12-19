@@ -53,6 +53,7 @@ pub use system_folder::MovableSystemFolder;
 pub use system_label::SystemLabel;
 
 use crate::decrypted_message::DecryptedMessageBody;
+use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
@@ -1247,7 +1248,7 @@ impl From<&str> for MessageSender {
 sql_using_serde!(MessageSender);
 
 /// Recipient address information.
-#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct MessageRecipient {
     /// Email of the recipient
     pub address: String,
@@ -1255,11 +1256,11 @@ pub struct MessageRecipient {
     /// Whether the recipient is a proton address.
     pub is_proton: bool,
 
-    /// Display name of the recipient,empty if none.
+    /// Display name of the recipient, empty if none.
     pub name: String,
 
     /// Name of the address group this recipient belongs too.
-    pub group: Option<String>,
+    pub group: MaybeEmptyString,
 }
 
 impl MessageRecipient {
@@ -1280,7 +1281,7 @@ impl From<ApiMessageRecipient> for MessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group,
+            group: MaybeEmptyString::from_option(value.group),
         }
     }
 }
@@ -1291,7 +1292,7 @@ impl From<MessageRecipient> for ApiMessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: value.group,
+            group: value.group.into_option(),
         }
     }
 }
@@ -1308,7 +1309,7 @@ impl From<MessageSender> for MessageRecipient {
             address: value.address,
             is_proton: value.is_proton,
             name: value.name,
-            group: None,
+            group: MaybeEmptyString(None),
         }
     }
 }
