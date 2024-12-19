@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fix
+
+ - Restore early exit table watchers.
+
 ## [0.30.0] - 2024-12-19
 
 ### Changed
