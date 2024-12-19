@@ -52,6 +52,7 @@ use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
 };
 use proton_api_core::services::proton::Proton;
+use proton_api_core::services::proton::ProtonCore;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;

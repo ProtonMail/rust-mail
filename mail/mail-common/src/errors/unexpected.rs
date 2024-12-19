@@ -1,11 +1,8 @@
-use std::io::{Error as IOError, ErrorKind};
-
 use anyhow::Error as AnyhowError;
-
 use proton_action_queue::action::FactoryError;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
-use proton_api_core::auth::StoreError;
 use proton_api_core::login::SaltError;
+use proton_api_core::store::StoreError;
 use proton_core_common::cache::CacheError;
 use proton_core_common::os::KeyChainError;
 use proton_core_common::KeyHandlingError;
@@ -13,6 +10,7 @@ use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use proton_crypto_inbox::message::MessageError;
 use proton_sqlite3::MigratorError;
 use stash::stash::StashError;
+use std::io::{Error as IOError, ErrorKind};
 use tokio::task::JoinError;
 
 /// Categories for Unexpected error
@@ -22,6 +20,8 @@ pub enum Unexpected {
     Api,
     /// Error related to cryptography
     Crypto,
+    /// Error related to internal app configuration
+    Config,
     /// Error related to the database
     Database,
     /// Error related to draft

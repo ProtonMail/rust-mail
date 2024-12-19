@@ -108,14 +108,14 @@ impl AppStateHandler for Model {
                         "Performing Login ...".to_owned(),
                     )),
                     Command::task(async move {
-                        let mut flow = match ctx.new_login_flow().await {
+                        let mut flow = match ctx.new_login_flow() {
                             Ok(f) => f,
                             Err(e) => {
                                 return Command::message(e.into());
                             }
                         };
                         let message = if let Err(e) = flow
-                            .login(email.clone(), password.expose_secret().to_owned(), None)
+                            .login(email.clone(), password.expose_secret().to_owned())
                             .await
                         {
                             Message::LoginFailed(e).into()
@@ -129,13 +129,13 @@ impl AppStateHandler for Model {
                     }),
                 ])
             }
-            Message::LoginSuccess(flow) => {
+            Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
-                        match ctx.user_context_from_login_flow(&flow).await {
+                        match ctx.user_context_from_login_flow(&mut flow).await {
                             Ok(context) => Command::message(Messages::SwitchAppState(
                                 context_init::Model::new(context).into(),
                             )),

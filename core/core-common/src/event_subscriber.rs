@@ -36,12 +36,13 @@ pub trait CoreEvent: Event {
 
 /// Since the core database can be embedded into another database, the integrator needs to provide
 /// the subscriber with a way to access this database in order to make the required changes.
+#[async_trait]
 pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
     /// Get the current user id and database connection.
     ///
     /// # Errors
     /// Return error if the connection or the user id can not be obtained.
-    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)>;
+    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)>;
 }
 pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(Weak<T>);
 
@@ -67,6 +68,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
             .upgrade()
             .unwrap()
             .get_user_id_and_db_connection()
+            .await
             .map_err(|e| {
                 error!("Failed to get DB connection :{e}");
                 SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))

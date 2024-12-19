@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
 use futures::TryFutureExt;
-use proton_api_core::services::proton::Config;
+use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::{MailContext, MailUserContext};
@@ -16,17 +16,24 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let dir = TempDir::new("login")?;
+    let dir = TempDir::new("login")?.into_path();
     let key = SessionEncryptionKey::random();
     let kch = InMemoryKeyChain::default();
     let cfg = Config::default();
 
     kch.store(key.to_base64())?;
 
-    let mail_ctx = new_mail_ctx(dir.path(), kch.into(), cfg).await?;
-    let user_ctx = new_user_ctx(mail_ctx).await?;
+    let mail_ctx = new_mail_ctx(&dir, kch.into(), cfg).await?;
+    let user_ctx = new_user_ctx(Arc::clone(&mail_ctx)).await?;
 
     println!("{:#?}", user_ctx.user().await?);
+
+    let account = mail_ctx
+        .get_account(user_ctx.user_id().to_owned())
+        .await?
+        .unwrap();
+
+    println!("{account:#?}");
 
     Ok(())
 }
@@ -55,9 +62,9 @@ async fn new_mail_ctx(
 }
 
 async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
-    let mut flow = ctx.new_login_flow().await?;
+    let mut flow = ctx.new_login_flow()?;
 
-    flow.login(read("username")?, read("password")?, None)
+    flow.login(read("username")?, read("password")?)
         .inspect_err(|err| error!("failed to login: {err}"))
         .await?;
 
@@ -68,13 +75,13 @@ async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     }
 
     if flow.is_awaiting_mailbox_password() {
-        flow.submit_mailbox_password(&read("2nd password")?)
+        flow.submit_mailbox_password(read("2nd password")?)
             .inspect_err(|err| error!("failed to submit mailbox password: {err}"))
             .await?;
     }
 
     let user_ctx = ctx
-        .user_context_from_login_flow(&flow)
+        .user_context_from_login_flow(&mut flow)
         .inspect_err(|err| error!("failed to create user context: {err}"))
         .await?;
 

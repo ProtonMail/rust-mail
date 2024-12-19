@@ -7,6 +7,8 @@ pub enum UnexpectedError {
     Api,
     /// Error related to cryptography
     Crypto,
+    /// Error related to internal app configuration
+    Config,
     /// Error related to the database
     Database,
     /// Error related to an operation on file system
@@ -36,6 +38,7 @@ impl From<RealUnexpected> for UnexpectedError {
         match value {
             RealUnexpected::Api => Self::Api,
             RealUnexpected::Crypto => Self::Crypto,
+            RealUnexpected::Config => Self::Config,
             RealUnexpected::Database => Self::Database,
             RealUnexpected::FileSystem => Self::FileSystem,
             RealUnexpected::Internal => Self::Internal,

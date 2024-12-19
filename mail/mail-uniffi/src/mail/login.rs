@@ -1,7 +1,6 @@
 use crate::errors::{LoginError, VoidLoginResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use proton_api_core::auth::{ExposeSecret, SecretString};
 use proton_api_core::login::Flow as CoreLoginFlow;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
@@ -43,11 +42,10 @@ impl LoginFlow {
     /// Login with user and password.
     pub async fn login(&self, email: String, password: String) -> VoidLoginResult {
         let flow = self.flow.clone();
-        let password = SecretString::from(password);
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .login(email, password.expose_secret().clone(), None)
+                .login(email, password)
                 .await
                 .map_err(RealProtonMailError::from)
         })
@@ -77,7 +75,7 @@ impl LoginFlow {
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .submit_mailbox_password(&mailbox_password)
+                .submit_mailbox_password(mailbox_password)
                 .await
                 .map_err(RealProtonMailError::from)
         })
@@ -146,10 +144,10 @@ impl LoginFlow {
     pub fn to_user_context(&self) -> Result<Arc<MailUserSession>, LoginError> {
         async_runtime()
             .block_on(async {
-                let guard = self.flow.lock().await;
+                let mut guard = self.flow.lock().await;
                 let user_ctx = self
                     .ctx
-                    .user_context_from_login_flow(&guard)
+                    .user_context_from_login_flow(&mut guard)
                     .await
                     .map_err(RealProtonMailError::from)?;
                 Ok::<_, RealProtonMailError>(MailUserSession::new(user_ctx))

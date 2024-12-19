@@ -13,7 +13,7 @@ pub use initialization::*;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::crypto_clock;
-use proton_api_core::services::proton::Proton;
+use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{LocalId, RemoteId};
@@ -231,6 +231,7 @@ impl MailUserContext {
         Provider: PGPProviderSync,
     {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
+
         // If the email is from an owned address by the user, use the corresponding keys.
         if let Some(address) = Address::by_email(email, bond).await.inspect_err(|err| {
             error!("send preferences: failed to search address by email: {err}")

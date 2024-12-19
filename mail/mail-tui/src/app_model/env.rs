@@ -1,4 +1,4 @@
-use proton_mail_common::proton_api_mail::proton_api_core::services::proton::Config;
+use proton_mail_common::proton_api_mail::proton_api_core::session::Config;
 
 #[derive(Copy, Clone, Debug, Default, Eq, Hash, PartialEq)]
 pub enum Env {
@@ -14,10 +14,7 @@ impl Env {
     pub fn api_config(self) -> Config {
         match self {
             Env::Prod => Config::default(),
-            Env::Dev => Config {
-                base_url: "https://mail.proton.black/api/".to_owned(),
-                ..Default::default()
-            },
+            Env::Dev => Config::atlas(),
         }
     }
 }

@@ -41,7 +41,7 @@ use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
-use proton_api_core::services::proton::Proton;
+use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{

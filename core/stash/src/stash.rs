@@ -2939,6 +2939,7 @@ impl TetheredWorker {
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
+        #[allow(clippy::cognitive_complexity)]
         let thread_handle = spawn(move || {
             #[allow(unused_assignments)]
             let mut connection: Option<PooledConnection<SqliteConnectionManager>> = None;
@@ -3194,6 +3195,7 @@ impl Worker {
     /// with.
     ///
     #[allow(clippy::too_many_lines)]
+    #[allow(clippy::cognitive_complexity)]
     fn handle_operation(&mut self, operation: Operation) {
         let pool = self.pool.clone();
         let queue = self.queue.clone();
@@ -3481,6 +3483,7 @@ impl Worker {
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, and will return the results via
         // oneshot channels.
+        #[allow(clippy::cognitive_complexity)]
         drop(spawn(move || {
             let runtime = match Runtime::new() {
                 Ok(runtime) => runtime,

@@ -7,7 +7,7 @@ async fn test_mock_context() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     Mock::given(method("GET"))
-        .and(path("/api/tests/ping"))
+        .and(path("/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
         .mount(ctx.mock_server())

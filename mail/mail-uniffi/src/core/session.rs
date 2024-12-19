@@ -60,14 +60,14 @@ impl StoredAccount {
 
     /// Returns whether the account has 2FA enabled.
     #[must_use]
-    pub fn second_factor_status(&self) -> SecondFactorStatus {
-        self.account.second_factor_mode.into()
+    pub fn second_factor_status(&self) -> Option<SecondFactorStatus> {
+        self.account.second_factor_mode.map(Into::into)
     }
 
     /// Returns whether the account has a second (mailbox) password.
     #[must_use]
-    pub fn second_password_status(&self) -> SecondPasswordStatus {
-        self.account.password_mode.into()
+    pub fn second_password_status(&self) -> Option<SecondPasswordStatus> {
+        self.account.password_mode.map(Into::into)
     }
 
     /// The account's username (once known).

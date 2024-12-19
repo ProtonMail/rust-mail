@@ -5,7 +5,8 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::{Config, Proton};
+use proton_api_core::services::proton::BuildError;
+use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -30,6 +31,8 @@ use tokio::task::JoinError;
 pub enum MailContextError {
     #[error("A Cryptography error occurred")]
     Crypto,
+    #[error("Build Error: {0}")]
+    Build(#[from] BuildError),
     #[error("Keychain Error: {0}")]
     KeyChain(#[from] KeyChainError),
     #[error("IO Error: {0}")]
@@ -83,6 +86,7 @@ impl proton_action_queue::action::Error for MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
+            CoreContextError::Build(err) => MailContextError::Build(err),
             CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,
@@ -144,6 +148,7 @@ impl MailContext {
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
+
         let core_context = Context::new(
             session_db_path,
             user_db_path,
@@ -187,8 +192,8 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
-        Ok(self.core_context.new_login_flow().await?)
+    pub fn new_login_flow(&self) -> MailContextResult<Flow> {
+        Ok(self.core_context.new_login_flow()?)
     }
 
     /// Resume a partially completed login flow.
@@ -227,7 +232,7 @@ impl MailContext {
     /// the user database.
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
-        login_flow: &Flow,
+        login_flow: &mut Flow,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
@@ -437,11 +442,6 @@ impl MailContext {
     /// Get the core context.
     pub fn core_context(&self) -> &Arc<Context> {
         &self.core_context
-    }
-
-    /// Get the API service.
-    pub fn api(&self) -> &Proton {
-        self.core_context.api()
     }
 
     /// Get the connection to the session database.

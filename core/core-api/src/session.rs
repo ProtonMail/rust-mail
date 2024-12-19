@@ -1,23 +1,72 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::auth::{CachedStore, Store, StoreError, UserKeySecret};
-use crate::service::ApiServiceError;
-use crate::services::proton::{Config as ApiConfig, Proton};
-use tokio::sync::RwLock as AsyncRwLock;
+use muon::client::flow::ForkFlowResult;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+use crate::auth::UserKeySecret;
+use crate::crypto_clock::init_server_crypto_clock;
+use crate::service::ApiServiceResult;
+use crate::services::proton::{self, BuildError, Proton};
+use crate::store::{DynStore, Store, TempStore};
+
+pub use muon::app::AppVersion;
+pub use muon::common::{Endpoint, Server};
+pub use muon::env::{Env, EnvId};
+pub use muon::tls::TlsPinSet;
 
 /// Core session trait which provides access to the API.
-///
-/// TODO: Rename this to simply `Api`?
 pub trait CoreSession {
     #[must_use]
     fn api(&self) -> &Proton;
 }
 
-/// Authenticated API session from which one can access data/functionality restricted to authenticated
-/// users.
+impl CoreSession for Session {
+    fn api(&self) -> &Proton {
+        &self.client
+    }
+}
+
+/// A session configuration.
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// The app version to report (`x-pm-appversion`).
+    pub app_version: String,
+
+    /// The user agent to report, if any.
+    pub user_agent: Option<String>,
+
+    /// The environment to connect to.
+    pub env_id: EnvId,
+}
+
+impl Config {
+    #[must_use]
+    pub fn atlas() -> Self {
+        Self {
+            app_version: String::from("Other"),
+            user_agent: None,
+            env_id: EnvId::new_atlas(),
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            app_version: String::from("Other"),
+            user_agent: None,
+            env_id: EnvId::new_prod(),
+        }
+    }
+}
+
+/// An API session, capable of making requests to the API on behalf of a user.
 #[derive(Clone)]
 pub struct Session {
-    api: Proton,
+    client: Proton,
+    config: Arc<Config>,
+    store: DynStore,
 }
 
 impl Session {
@@ -26,12 +75,21 @@ impl Session {
     /// # Errors
     ///
     /// Returns error if the API service failed to initialize.
-    pub async fn new(
-        api_config: ApiConfig,
-        store: Option<Box<dyn Store>>,
-    ) -> Result<Self, StoreError> {
+    ///
+    /// # Panics
+    ///
+    /// Panics if the Proton client fails to build.
+    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, BuildError> {
+        init_server_crypto_clock();
+
+        let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
+        let client = proton::build(Config::clone(&config), Arc::clone(&store))?;
+        let config = Arc::new(config);
+
         Ok(Self {
-            api: Proton::new(api_config, None, store).await?,
+            client,
+            config,
+            store,
         })
     }
 
@@ -49,11 +107,8 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, ApiServiceError> {
-        self.api
-            .post_auth_sessions_forks(Some(self.api.config().app_version.clone()))
-            .await
-            .map(|r| r.selector)
+    pub async fn fork(&self) -> ApiServiceResult<String> {
+        self.fork_with_version(&self.config.app_version).await
     }
 
     /// Fork the current session with a user and a version.
@@ -64,11 +119,11 @@ impl Session {
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
-    pub async fn fork_with_version(&self, version: String) -> Result<String, ApiServiceError> {
-        self.api
-            .post_auth_sessions_forks(Some(version))
-            .await
-            .map(|r| r.selector)
+    pub async fn fork_with_version(&self, version: impl AsRef<str>) -> ApiServiceResult<String> {
+        match self.client.clone().fork(version.as_ref()).send().await {
+            ForkFlowResult::Success(_, selector) => Ok(selector),
+            ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
+        }
     }
 
     /// Exposes the user key secret from the auth store to unlock user keys.
@@ -77,11 +132,7 @@ impl Session {
     /// stored.
     ///
     pub async fn expose_key_secret(&self) -> Option<UserKeySecret> {
-        self.auth_store()
-            .read()
-            .await
-            .get_user_secrets()
-            .map(|secrets| secrets.key_secret.clone())
+        self.store.read().await.expose_key_secret().await
     }
 
     /// Logout the user and invalidate the current session.
@@ -90,19 +141,35 @@ impl Session {
     ///
     /// This method will return an error if the request fails.
     ///
-    pub async fn logout(&self) -> Result<(), ApiServiceError> {
-        self.api.delete_auth().await?;
-        self.auth_store().write().await.clear().await?;
-        Ok(())
-    }
+    pub async fn logout(&self) -> ApiServiceResult<()> {
+        self.client.logout().await;
+        self.store.write().await.clear().await?;
 
-    pub(crate) fn auth_store(&self) -> &AsyncRwLock<CachedStore> {
-        self.api.auth_store()
+        Ok(())
     }
 }
 
-impl CoreSession for Session {
-    fn api(&self) -> &Proton {
-        &self.api
+/// The parts of a session.
+pub(crate) struct SessionParts {
+    pub(crate) client: Proton,
+    pub(crate) config: Arc<Config>,
+    pub(crate) store: DynStore,
+}
+
+impl Session {
+    pub(crate) fn into_parts(self) -> SessionParts {
+        SessionParts {
+            client: self.client,
+            config: self.config,
+            store: self.store,
+        }
+    }
+
+    pub(crate) fn from_parts(parts: SessionParts) -> Self {
+        Self {
+            client: parts.client,
+            config: parts.config,
+            store: parts.store,
+        }
     }
 }

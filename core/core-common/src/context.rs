@@ -2,7 +2,7 @@
 
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::{LocalId, RemoteId};
+use crate::datatypes::{LocalId, PasswordMode, RemoteId, TfaStatus};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
@@ -13,9 +13,9 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::Config as ApiConfig;
-use proton_api_core::services::proton::Proton;
-use proton_api_core::session::{Session as ApiCoreSession, Session};
+use proton_api_core::services::proton::BuildError;
+use proton_api_core::session::Config as ApiConfig;
+use proton_api_core::session::Session as ApiSession;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
@@ -31,6 +31,8 @@ use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
+    #[error("Build error: {0}")]
+    Build(#[from] BuildError),
     #[error("Login error: {0}")]
     Login(#[from] LoginError),
     #[error("API error: {0}")]
@@ -130,14 +132,14 @@ impl CoreAccountState {
 
         // Does the account have any sessions that are awaiting a mailbox password?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
-            if account.password_mode.want_mbp() {
+            if account.password_mode.is_some_and(PasswordMode::want_mbp) {
                 return CoreAccountState::NeedMbp(sessions);
             }
         }
 
         // Does the account have any sessions that are awaiting a second factor?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
-            if account.second_factor_mode.want_tfa() {
+            if account.second_factor_mode.is_some_and(TfaStatus::want_tfa) {
                 return CoreAccountState::NeedTfa(sessions);
             }
         }
@@ -166,7 +168,7 @@ pub enum CoreSessionState {
 
 impl CoreSessionState {
     fn of(session: &CoreSession) -> Self {
-        if session.auth_state.need_tfa() {
+        if session.auth_scopes.contains("twofactor") {
             CoreSessionState::NeedTfa
         } else if session.key_secret.is_none() {
             CoreSessionState::NeedKey
@@ -193,11 +195,11 @@ pub struct Context {
     stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-    api: Proton,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
     active_user_contexts: Mutex<HashMap<RemoteId, Weak<UserContext>>>,
     cache_path: PathBuf,
     sender_image_cache_size: u64,
+    api_config: ApiConfig,
 }
 
 impl Context {
@@ -239,10 +241,6 @@ impl Context {
         let stash = Stash::get_instance(&account_db_path)?;
         migrate_account_db(&stash).await?;
 
-        let api = Proton::new(api_config, None, None)
-            .await
-            .map_err(ApiServiceError::from)?;
-
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             network_connected: AtomicBool::new(true),
@@ -251,10 +249,10 @@ impl Context {
             stash,
             user_db_initializers: initializers,
             network_callback,
-            api,
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             sender_image_cache_size,
+            api_config,
         }))
     }
 
@@ -467,12 +465,12 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if there is no encryption key in the keychain.
-    pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
+    pub fn new_login_flow(&self) -> CoreContextResult<Flow> {
         // Ensure we have an encryption key
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None).await?;
+        let session = self.new_api_session(None)?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -495,9 +493,6 @@ impl Context {
         session_id: RemoteId,
     ) -> CoreContextResult<Flow> {
         let tether = self.stash().connection();
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("account not found")));
-        };
 
         let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
             return Err(CoreContextError::Other(anyhow!("session not found")));
@@ -505,17 +500,15 @@ impl Context {
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
-                self.new_api_session(Some(&session)).await?,
+                self.new_api_session(Some(&session))?,
                 user_id.into(),
                 session_id.into(),
-                account.second_factor_mode.into(),
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
-                self.new_api_session(Some(&session)).await?,
+                self.new_api_session(Some(&session))?,
                 user_id.into(),
                 session_id.into(),
-                account.password_mode.into(),
             )),
 
             CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(
@@ -533,7 +526,7 @@ impl Context {
     #[tracing::instrument(level=Level::DEBUG, skip(self, flow))]
     pub async fn user_context_from_login_flow(
         &self,
-        flow: &Flow,
+        flow: &mut Flow,
     ) -> CoreContextResult<Arc<UserContext>> {
         if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
@@ -541,7 +534,7 @@ impl Context {
 
         let user_id: RemoteId = flow.user_id()?.to_owned().into();
         let session_id: RemoteId = flow.session_id()?.to_owned().into();
-        let session = flow.session().to_owned();
+        let session = flow.take_session()?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -573,7 +566,7 @@ impl Context {
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session)).await?;
+        let session = self.new_api_session(Some(session))?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -588,7 +581,6 @@ impl Context {
             let Ok(api) = self
                 .new_api_session(Some(session))
                 .inspect_err(|err| error!("failed to create API session: {err}"))
-                .await
             else {
                 continue;
             };
@@ -661,25 +653,15 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    async fn new_api_session(
-        &self,
-        session: Option<&CoreSession>,
-    ) -> CoreContextResult<ApiCoreSession> {
+    fn new_api_session(&self, session: Option<&CoreSession>) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let stash = self.stash();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(stash, keychain, user_id, session_id);
-        let config = self.api.config().to_owned();
+        let config = self.api_config.clone();
 
-        Ok(ApiCoreSession::new(config, Some(Box::new(store)))
-            .map_err(ApiServiceError::from)
-            .await?)
-    }
-
-    /// Get the API service
-    pub fn api(&self) -> &Proton {
-        &self.api
+        Ok(ApiSession::new(config, Some(Box::new(store)))?)
     }
 
     /// Get the stash in use
@@ -714,7 +696,7 @@ impl Context {
     async fn new_user_context(
         &self,
         user_id: RemoteId,
-        session: Session,
+        session: ApiSession,
         session_id: RemoteId,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;

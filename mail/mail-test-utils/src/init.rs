@@ -28,8 +28,7 @@ use proton_api_mail::services::proton::response_data::{
 
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
-    GetLabelsResponse, GetMessagesCountResponse, GetMessagesResponse,
-    GetSettingsResponse as GetMailSettingsResponse,
+    GetLabelsResponse, GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_test_utils::account::{

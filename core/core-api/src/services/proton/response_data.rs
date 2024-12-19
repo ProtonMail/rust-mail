@@ -23,7 +23,7 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{Fido2Auth, HumanVerificationType, RemoteId};
+use crate::services::proton::common::{HumanVerificationType, RemoteId};
 use crate::services::proton::responses::GetEventResponse;
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
@@ -779,32 +779,6 @@ pub struct SettingsFlags {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
     pub welcomed: bool,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct TfaAuth {
-    /// TODO: Document this field.
-    #[serde(rename = "FIDO2")]
-    pub fido2: Fido2Auth,
-
-    /// TODO: Document this field.
-    pub two_factor_code: String,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct TfaInfo {
-    /// TODO: Document this field.
-    pub enabled: TfaStatus,
-
-    /// TODO: Document this field.
-    #[serde(rename = "FIDO2")]
-    pub fido2_info: Fido2Info,
 }
 
 /// TODO: Document this struct.

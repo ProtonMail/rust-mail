@@ -26,20 +26,16 @@
 //! are used by both requests and responses.
 //!
 
-use crate::auth::SecretString;
-use crate::services::proton::common::RemoteId;
-use crate::services::proton::response_data::{
-    Address, ContactBasic, ContactEmail, ContactFull, PasswordMode, Salt, TfaInfo, User,
-    UserSettings,
-};
+use crate::services::proton::prelude::*;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup as PublicAddressKeyGroup,
     APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup,
 };
 use serde::Deserialize;
+use serde_with::{serde_as, BoolFromInt};
+
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt};
 
 use super::response_data::ApiErrorInfo;
 
@@ -153,7 +149,6 @@ pub struct GetKeysSaltsResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
-    #[serde(rename = "UserSettings")]
     pub user_settings: UserSettings,
 }
 
@@ -184,119 +179,6 @@ pub struct PutDeleteContactResponse {
     pub id: RemoteId,
     /// Response data.
     pub response: ApiErrorInfo,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthResponse {
-    /// TODO: Document this field.
-    pub access_token: SecretString,
-
-    /// TODO: Document this field.
-    pub password_mode: PasswordMode,
-
-    /// TODO: Document this field.
-    pub refresh_token: SecretString,
-
-    /// TODO: Document this field.
-    pub scopes: Vec<String>,
-
-    /// TODO: Document this field.
-    pub server_proof: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "2FA")]
-    pub tfa: TfaInfo,
-
-    /// TODO: Document this field.
-    pub token_type: Option<String>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "UID")]
-    pub uid: RemoteId,
-
-    /// TODO: Document this field.
-    #[serde(rename = "UserID")]
-    pub user_id: RemoteId,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthRefreshResponse {
-    /// TODO: Document this field.
-    pub access_token: SecretString,
-
-    /// TODO: Document this field.
-    pub refresh_token: SecretString,
-
-    /// TODO: Document this field.
-    pub scopes: Vec<String>,
-
-    /// TODO: Document this field.
-    pub token_type: Option<String>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "UID")]
-    pub uid: RemoteId,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthInfoResponse {
-    /// TODO: Document this field.
-    pub modulus: String,
-
-    /// TODO: Document this field.
-    pub salt: String,
-
-    /// TODO: Document this field.
-    pub server_ephemeral: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "SRPSession")]
-    pub srp_session: String,
-
-    /// TODO: Document this field.
-    pub version: u8,
-}
-
-/// Fork session response.
-///
-/// This is the "selector" that is returned when a session is forked.
-///
-/// The relevant API documentation is here:
-///
-///   - [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/auth/#tag/Authentication-Sessions/operation/post_auth-%7B_version%7D-sessions-forks)
-///
-/// The fields in the JSON response are not currently documented.
-///
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthSessionsForksResponse {
-    /// The selector that is returned when a session is forked. It's not clear
-    /// exactly what this is at present.
-    pub selector: String,
-}
-
-/// Post 2FA response.
-///
-/// This returns the updated list of scopes available to the user after 2FA.
-///
-/// TODO: Use a `HashSet`?
-///
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostAuthTfaResponse {
-    /// The updated list of scopes available to the user after 2FA.
-    pub scopes: Vec<String>,
 }
 
 //  TRAITS

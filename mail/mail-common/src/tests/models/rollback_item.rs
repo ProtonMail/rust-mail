@@ -1,5 +1,5 @@
 use crate as proton_mail_common;
-use proton_api_core::services::proton::{Config, Proton};
+use proton_api_core::session::{Config, CoreSession, EnvId, Session};
 #[allow(unused_imports)]
 use proton_api_mail::{
     services::proton::{
@@ -9,6 +9,7 @@ use proton_api_mail::{
     MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
 };
 use proton_core_common::{datatypes::LocalId, models::ModelExtension};
+use proton_core_test_utils::test_context::MockApiEnv;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{
     api_conversation, api_label, api_message, api_message_meta, conversation, label, message,
@@ -127,7 +128,7 @@ async fn test_store_and_delete_remote_items(
 
     let (_mock, api) = start_server(&tether).await;
 
-    RollbackItem::sync_all(&api, &stash, 2).await.unwrap();
+    RollbackItem::sync_all(api.api(), &stash, 2).await.unwrap();
 
     // * RollbackItems are correctly deleted during sync *
     let actual = RollbackItem::all(&tether).await.unwrap();
@@ -135,7 +136,9 @@ async fn test_store_and_delete_remote_items(
     assert_eq!(actual.len(), 0);
 
     // * RollbackItems with no limit for empty stash *
-    RollbackItem::sync_all(&api, &stash, None).await.unwrap();
+    RollbackItem::sync_all(api.api(), &stash, None)
+        .await
+        .unwrap();
 }
 
 async fn setup_database(tether: &mut Tether) {
@@ -218,15 +221,13 @@ async fn labels(tether: &Tether) -> Vec<Label> {
         .collect()
 }
 
-async fn start_server(tether: &Tether) -> (MockServer, Proton) {
+async fn start_server(tether: &Tether) -> (MockServer, Session) {
     let mock_server = MockServer::start().await;
     let api_config = Config {
-        base_url: format!("{}/api/", mock_server.uri()),
-        allow_http: true,
-        skip_srp_proof_validation: true,
+        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api = Proton::new(api_config, None, None).await.unwrap();
+    let api = Session::new(api_config, None).unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,
