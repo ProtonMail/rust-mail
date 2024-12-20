@@ -14,6 +14,7 @@ pub mod os;
 pub mod paginator;
 mod user_context;
 pub mod utils;
+pub mod watch_handle;
 
 #[cfg(test)]
 mod tests;

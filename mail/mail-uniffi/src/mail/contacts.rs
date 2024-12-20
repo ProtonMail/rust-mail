@@ -88,8 +88,8 @@ pub async fn watch_contact_list(
         let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        let sender = watch_channel_inner(handle.receiver, callback);
-        let watcher = Arc::new(WatchHandle::new(handle.handle, sender));
+        let task_handle = watch_channel_inner(handle.receiver, callback);
+        let watcher = Arc::new(WatchHandle::new(handle.handle, &task_handle));
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
             contact_list: contact_list.into_iter().map(Into::into).collect(),
