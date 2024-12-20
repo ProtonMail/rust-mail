@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.31.0] - 2024-12-19
+
+### Changed
+
+  - Event loop and queue can now safely be called concurrently.
+
+### Fix
+
+  - Unrelated callbacks in table observers
+
 ## [0.30.1] - 2024-12-19
 
 ### Fix
