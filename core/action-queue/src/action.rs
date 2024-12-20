@@ -543,6 +543,12 @@ impl Factory {
         }
     }
 
+    /// Check whether the given action is registered with the queue.
+    #[must_use]
+    pub fn has_action<T: Action>(&self) -> bool {
+        self.factories.contains_key(T::TYPE.as_ref())
+    }
+
     /// Register an [`Action`] with the factory.
     ///
     /// # Errors

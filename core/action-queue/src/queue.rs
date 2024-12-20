@@ -50,6 +50,8 @@ pub enum Error {
     Context(#[from] ContextError),
     #[error("Failed to communicate with worker")]
     WorkerChannel,
+    #[error("Unknown action: {0}")]
+    UnknownAction(String),
 }
 
 impl<T> From<SendError<T>> for Error {
@@ -312,6 +314,10 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    fn has_action<T: Action>(&self) -> bool {
+        self.factory.read().has_action::<T>()
+    }
+
     fn resolve_execution_context<T: Action>(
         &self,
     ) -> std::result::Result<Arc<T::Context>, ContextError> {
@@ -465,7 +471,11 @@ impl Queue {
         mut action: T,
         metadata: Metadata,
     ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
-        debug!("Queueing action: {} {:?}", T::TYPE, metadata,);
+        debug!("Queueing action: {} {:?}", T::TYPE, metadata);
+        if !self.shared.has_action::<T>() {
+            error!("Unknown action queued: {}", T::TYPE);
+            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+        }
         let handler = T::Handler::default();
         let context = self
             .shared
@@ -529,8 +539,13 @@ impl Queue {
         mut action: T,
         metadata: Metadata,
     ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
-        let (sender, receiver) = oneshot::channel();
         debug!("Applying action: {} {:?}", T::TYPE, metadata,);
+        if !self.shared.has_action::<T>() {
+            error!("Unknown action applied: {}", T::TYPE);
+            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+        }
+
+        let (sender, receiver) = oneshot::channel();
 
         let handler = T::Handler::default();
 

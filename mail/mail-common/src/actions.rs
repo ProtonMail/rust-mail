@@ -72,6 +72,16 @@ pub(crate) fn new_action_factory() -> Factory {
         .expect(ERR_MSG);
     factory.register::<draft::Save>().expect(ERR_MSG);
     factory.register::<draft::Send>().expect(ERR_MSG);
+    factory.register::<labels::Expand>().expect(ERR_MSG);
+    factory
+        .register::<messages::label_as::LabelAs>()
+        .expect(ERR_MSG);
+    factory
+        .register::<conversations::label_as::LabelAs>()
+        .expect(ERR_MSG);
+    factory
+        .register::<proton_core_common::actions::contacts::Delete>()
+        .expect(ERR_MSG);
     factory
 }
 
