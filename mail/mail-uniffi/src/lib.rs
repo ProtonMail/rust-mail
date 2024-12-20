@@ -141,20 +141,20 @@
 //! crates that are the subject of the translations.*
 //!
 
-use parking_lot::Mutex;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
+use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
 use std::future::Future;
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
-use tokio::sync::oneshot;
 use tokio::task::JoinError;
+use tokio::task::JoinHandle;
 
 pub mod core;
 #[macro_use]
@@ -186,19 +186,19 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 #[allow(dead_code)]
 #[derive(uniffi::Object)]
-pub struct WatchHandle(Mutex<Option<(DropRemoveTableObserverHandle, oneshot::Sender<()>)>>);
+pub struct WatchHandle(RealWatchHandle);
 
 impl WatchHandle {
     #[must_use]
-    pub fn new(handle: DropRemoveTableObserverHandle, sender: oneshot::Sender<()>) -> Self {
-        Self(Mutex::new(Some((handle, sender))))
+    pub fn new(watch_handle: DropRemoveTableObserverHandle, task_handle: &JoinHandle<()>) -> Self {
+        Self(RealWatchHandle::new(watch_handle, task_handle))
     }
 }
 
 #[uniffi::export]
 impl WatchHandle {
     pub fn disconnect(self: Arc<Self>) {
-        self.0.lock().take();
+        self.0.disconnect();
     }
 }
 
@@ -217,7 +217,7 @@ pub fn async_runtime() -> &'static Runtime {
 }
 
 /// Spawn an async function on the runtime.
-fn spawn_async<T, F>(future: F) -> tokio::task::JoinHandle<T>
+fn spawn_async<T, F>(future: F) -> JoinHandle<T>
 where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
@@ -244,39 +244,30 @@ pub fn watch_channel(
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
-    let sender = watch_channel_inner(handle.receiver, move || {
+    let task_handle = watch_channel_inner(handle.receiver, move || {
         callback.on_update();
     });
 
-    Arc::new(WatchHandle::new(handle.handle, sender))
+    Arc::new(WatchHandle::new(handle.handle, &task_handle))
 }
 
 fn watch_channel_inner<T: Send + 'static>(
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
-) -> oneshot::Sender<()> {
+) -> JoinHandle<()> {
     // use a one-shot channel to act as an early exit strategy.
-    let (sender, mut receiver) = oneshot::channel();
-    drop(spawn_async(async move {
+    spawn_async(async move {
         let callback = Arc::new(callback);
         loop {
-            tokio::select! {
-                _= &mut receiver => {
-                    return
-                }
-                rx = channel.recv_async() => {
-                    if rx.is_err() {
-                        return;
-                    }
-
-                    let callback = callback.clone();
-                    let callback = move || callback();
-                    _ = async_runtime().spawn_blocking(callback).await;
-                }
+            if channel.recv_async().await.is_err() {
+                return;
             }
+
+            let callback = callback.clone();
+            let callback = move || callback();
+            _ = async_runtime().spawn_blocking(callback).await;
         }
-    }));
-    sender
+    })
 }
 
 /// Filter options for pagination
