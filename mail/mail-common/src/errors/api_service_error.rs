@@ -63,6 +63,7 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
             ApiServiceError::JsonError(_, _)
             | ApiServiceError::QueryStringError(_)
             | ApiServiceError::RequestError(_)
+            | ApiServiceError::ResponseError(_)
             | ApiServiceError::Utf8DecodingError(_)
             | ApiServiceError::ServiceError(_)
             | ApiServiceError::UnsupportedHttpMethod(_)
