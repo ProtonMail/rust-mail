@@ -66,7 +66,8 @@ pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
     let ctx = ctx.ctx().clone();
     uniffi_async(async move {
         let mbox = proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::inbox()).await?;
-        Mailbox::sync(mbox).await
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
     })
     .await
     .map_err(UserSessionError::from)
@@ -93,7 +94,8 @@ pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
     uniffi_async(async move {
         let mbox =
             proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::all_mail()).await?;
-        Mailbox::sync(mbox).await
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
     })
     .await
     .map_err(UserSessionError::from)
@@ -175,12 +177,5 @@ impl Mailbox {
     #[must_use]
     pub fn stash(&self) -> &Stash {
         self.mbox.stash()
-    }
-
-    async fn sync(mbox: proton_mail_common::Mailbox) -> Result<Arc<Self>, RealProtonMailError> {
-        if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
-            error!("Could not sync mailbox: {e}");
-        }
-        Ok(Arc::new(Self { mbox }))
     }
 }
