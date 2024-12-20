@@ -16,7 +16,7 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::requests::{
     PatchLabelRequest, PostLabelsRequest, PutLabelRequest,
 };
-use proton_api_mail::services::proton::response_data::{Label as ApiLabel, OperationResult};
+use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId};
 use sqlite_watcher::watcher::TableObserver;
@@ -415,7 +415,7 @@ impl Label {
         id: LabelId,
         expanded: bool,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Label, ApiServiceError> {
         api.patch_label(
             id.into(),
             PatchLabelRequest {
@@ -424,7 +424,7 @@ impl Label {
             },
         )
         .await
-        .map(|r| r.responses)
+        .map(|r| r.label.into())
     }
 
     /// Return the preferred view mode for this label.

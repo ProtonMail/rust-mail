@@ -1,7 +1,6 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::PatchLabelRequest;
-use proton_api_mail::services::proton::response_data::{Label as ApiLabel, OperationResult};
+use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::responses::{GetLabelsResponse, PatchLabelResponse};
 use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::LabelType;
@@ -37,10 +36,11 @@ impl MailTestContext {
             notify: None,
         };
         let response = PatchLabelResponse {
-            responses: vec![OperationResult {
+            label: ApiLabel {
+                expanded: expand,
                 id: label_id.clone().into(),
-                response: ApiErrorInfo::default(),
-            }],
+                ..Default::default()
+            },
         };
         Mock::given(method("PATCH"))
             .and(path(format!("/api/core/v4/labels/{label_id}")))
