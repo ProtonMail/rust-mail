@@ -191,36 +191,36 @@ impl From<muon::Error> for ApiServiceError {
             | MuonErrorKind::Dial
             | MuonErrorKind::Connect => Self::ConnectionError(e.to_string()),
 
-            MuonErrorKind::Auth
-            | MuonErrorKind::Send
-            | MuonErrorKind::Closed
-            | MuonErrorKind::Req
-            | MuonErrorKind::Res => Self::NetworkError(e.to_string()),
-
+            MuonErrorKind::Send | MuonErrorKind::Closed => Self::NetworkError(e.to_string()),
+            MuonErrorKind::Auth => Self::Unauthorized(String::default(), e.to_string()),
+            MuonErrorKind::Req => Self::RequestError(e.to_string()),
+            MuonErrorKind::Res => Self::ResponseError(e.to_string()),
             MuonErrorKind::Other => Self::UnknownError(e.to_string()),
         }
     }
 }
 
 impl From<muon::StatusErr> for ApiServiceError {
-    fn from(e: muon::StatusErr) -> Self {
-        let text = match String::from_utf8(e.1.body().to_owned()) {
+    fn from(muon::StatusErr(code, res): muon::StatusErr) -> Self {
+        let body = match String::from_utf8(res.body().to_owned()) {
             Ok(b) => b,
             Err(e) => return Self::Utf8DecodingError(e),
         };
 
-        match (e.0, e.to_string()) {
-            (s, e) if s.is_redirection() => Self::Redirect(e, text),
-            (Status::BAD_REQUEST, e) => Self::BadRequest(e, text),
-            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, text),
-            (Status::NOT_FOUND, e) => Self::NotFound(e, text),
-            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, text),
-            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequest(e, text),
-            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, text),
-            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, text),
-            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, text),
-            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, text),
-            (other, e) => Self::OtherHttpError(other, e, text),
+        match (code, code.to_string()) {
+            (code, e) if code.is_redirection() => Self::Redirect(e, body),
+
+            (Status::BAD_REQUEST, e) => Self::BadRequest(e, body),
+            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, body),
+            (Status::NOT_FOUND, e) => Self::NotFound(e, body),
+            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, body),
+            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequest(e, body),
+            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, body),
+            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, body),
+            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, body),
+            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, body),
+
+            (code, e) => Self::OtherHttpError(code, e, body),
         }
     }
 }

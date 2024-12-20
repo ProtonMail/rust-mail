@@ -135,9 +135,9 @@ pub enum ApiServiceError {
 
     //  DATA ERRORS
     //==========================================================================
-    /// There has been a failure in decoding the JSON data returned from the
-    /// external API into the appropriate structs.
-    #[error("JSON deserialization error: {0}, context: {1}")]
+    /// There has been a failure in en/decoding the JSON data sent/received to/from the
+    /// external API into/from the appropriate structs.
+    #[error("JSON (de)serialization error: {0}, context: {1}")]
     JsonError(JsonError, String),
 
     /// There has been a failure in encoding the query parameters to be sent with
@@ -149,6 +149,11 @@ pub enum ApiServiceError {
     /// that this is not a network error, but an error in the request itself.
     #[error("Request composition error: {0}")]
     RequestError(String),
+
+    /// There has been a failure in parsing the HTTP response received. Note
+    /// that this is not a network error, but an error in the response itself.
+    #[error("Response parsing error: {0}")]
+    ResponseError(String),
 
     /// There has been a failure in decoding the data returned from the external
     /// API into valid UTF8 text.
