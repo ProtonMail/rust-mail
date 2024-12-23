@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Log errors send to UI
+
 ## [0.31.4] - 2024-12-20
 
 ### Fix

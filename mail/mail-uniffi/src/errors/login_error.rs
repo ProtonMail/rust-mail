@@ -14,11 +14,9 @@ pub enum LoginError {
 
 impl From<RealProtonMailError> for LoginError {
     fn from(error: RealProtonMailError) -> Self {
-        {
-            match error {
-                RealProtonMailError::Reason(reason) => reason.into(),
-                mail_error => LoginError::Other(ProtonError::from(mail_error)),
-            }
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => LoginError::Other(ProtonError::from(mail_error)),
         }
     }
 }

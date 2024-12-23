@@ -1,4 +1,5 @@
 use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
+use tracing::error;
 
 #[derive(Debug, uniffi::Enum)]
 pub enum UserApiServiceError {
@@ -38,6 +39,7 @@ pub enum UserApiServiceError {
 
 impl From<RealUserApiServiceError> for UserApiServiceError {
     fn from(value: RealUserApiServiceError) -> Self {
+        error!("UserApiServiceError from {value:?}");
         match value {
             RealUserApiServiceError::BadRequest(text) => Self::BadRequest(text),
             RealUserApiServiceError::Unauthorized(text) => Self::Unauthorized(text),

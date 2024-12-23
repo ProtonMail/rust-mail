@@ -4,6 +4,7 @@ use crate::errors::OtherErrorReason;
 use crate::UniffiEnum;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use tracing::error;
 
 #[derive(Debug, UniffiEnum)]
 pub enum ProtonError {
@@ -16,14 +17,13 @@ pub enum ProtonError {
 
 impl From<RealProtonMailError> for ProtonError {
     fn from(error: RealProtonMailError) -> Self {
-        {
-            match error {
-                RealProtonMailError::SessionExpired => ProtonError::SessionExpired,
-                RealProtonMailError::ServerError(err) => ProtonError::ServerError(err.into()),
-                RealProtonMailError::Network => ProtonError::Network,
-                RealProtonMailError::Unexpected(err) => ProtonError::Unexpected(err.into()),
-                RealProtonMailError::Reason(reason) => ProtonError::from(reason),
-            }
+        error!("ProtonError from {error:?}");
+        match error {
+            RealProtonMailError::SessionExpired => ProtonError::SessionExpired,
+            RealProtonMailError::ServerError(err) => ProtonError::ServerError(err.into()),
+            RealProtonMailError::Network => ProtonError::Network,
+            RealProtonMailError::Unexpected(err) => ProtonError::Unexpected(err.into()),
+            RealProtonMailError::Reason(reason) => ProtonError::from(reason),
         }
     }
 }
