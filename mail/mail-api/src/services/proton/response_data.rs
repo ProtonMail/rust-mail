@@ -26,7 +26,7 @@
 use crate::services::proton::common::LabelType;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::response_data::{
-    Action, Address, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
+    Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
     UserSettings,
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
@@ -642,7 +642,7 @@ pub struct MailEvent {
     pub event_id: RemoteId,
 
     /// TODO: Document this field.
-    pub addresses: Option<Vec<Address>>,
+    pub addresses: Option<Vec<AddressEvent>>,
 
     /// TODO: Document this field.
     pub conversation_counts: Option<Vec<ConversationCount>>,

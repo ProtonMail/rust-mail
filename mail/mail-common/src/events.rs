@@ -41,8 +41,9 @@ use proton_api_mail::services::proton::response_data::{
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
 };
 use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
-use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{Address, User, UserSettings};
+use proton_core_common::events::ContactEvent;
+use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
+use proton_core_common::models::{User, UserSettings};
 use proton_core_common::CoreEvent;
 use proton_event_loop::Event;
 
@@ -99,7 +100,7 @@ pub struct MailEvent {
     pub event_id: RemoteId,
 
     /// TODO: Document this field.
-    pub addresses: Option<Vec<Address>>,
+    pub addresses: Option<Vec<AddressEvent>>,
 
     /// TODO: Document this field.
     pub conversation_counts: Option<Vec<ConversationCount>>,
@@ -166,11 +167,11 @@ impl CoreEvent for MailEvent {
         self.product_used_space.as_ref()
     }
 
-    fn get_core_event_addresses(&self) -> Option<&[Address]> {
+    fn get_core_event_addresses(&self) -> Option<&[AddressEvent]> {
         self.addresses.as_deref()
     }
 
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
         self.addresses.as_deref_mut()
     }
 
@@ -210,7 +211,7 @@ impl From<ApiMailEvent> for MailEvent {
             event_id: value.event_id.into(),
             addresses: value
                 .addresses
-                .map(|addresses| addresses.into_iter().map(Address::from).collect()),
+                .map(|addresses| addresses.into_iter().map(AddressEvent::from).collect()),
             conversation_counts: value.conversation_counts.map(|conversation_counts| {
                 conversation_counts
                     .into_iter()

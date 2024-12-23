@@ -1,17 +1,18 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::datatypes::{ProductUsedSpace, RemoteId};
-use crate::events::{Action, ContactEmailEvent, ContactEvent};
-use crate::models::{Address, User, UserSettings};
+use crate::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
+use crate::models::{User, UserSettings};
 use anyhow::anyhow;
 use async_trait::async_trait;
+use futures::TryFutureExt;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError};
 use std::sync::Weak;
-use tracing::{debug, error, Level};
+use tracing::{debug, error, warn, Level};
 
 pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;
@@ -20,8 +21,8 @@ pub trait CoreEvent: Event {
     fn get_core_event_user_settings(&self) -> Option<&UserSettings>;
     fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings>;
 
-    fn get_core_event_addresses(&self) -> Option<&[Address]>;
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]>;
+    fn get_core_event_addresses(&self) -> Option<&[AddressEvent]>;
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]>;
 
     fn get_core_event_used_space(&self) -> Option<i64>;
 
@@ -116,12 +117,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(addresses) = event.get_core_event_addresses_mut() {
                     debug!("Handling address event");
-                    for address in addresses {
-                        address.save(&tx).await.map_err(|e| {
-                            error!("Failed to update user addresses: {e}");
-                            e
-                        })?;
-                    }
+                    handle_address_event(&tx, addresses).await?;
                 }
                 if let Some(contacts) = event.get_core_event_contacts_mut() {
                     debug!("Handling contact events");
@@ -139,6 +135,34 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
         }
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }
+}
+
+async fn handle_address_event(
+    tx: &Bond<'_>,
+    address_events: &mut [AddressEvent],
+) -> Result<(), StashError> {
+    for event in address_events {
+        match event.action {
+            Action::Delete => {
+                warn!("[ET-1461] Delete action not implemented for address event");
+            }
+
+            Action::Create | Action::Update => {
+                if let Some(ref mut address) = event.address {
+                    address
+                        .save(tx)
+                        .inspect_err(|e| error!("Failed to create or update address: {e}"))
+                        .await?;
+                }
+            }
+
+            Action::UpdateFlags => {
+                warn!("[ET-1461] UpdateFlags action not implemented for address event");
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn handle_contact_event(

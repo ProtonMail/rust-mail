@@ -3,16 +3,17 @@ use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
-    Action as ApiAction, Address as ApiAddress, ContactEmailEvent as ApiContactEmailEvent,
-    ContactEvent as ApiContactEvent, User as ApiUser, UserSettings as ApiUserSettings,
+    Action as ApiAction, AddressEvent as ApiAddressEvent,
+    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
+    UserSettings as ApiUserSettings,
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{Address, ModelExtension, User, UserSettings};
+use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
+use proton_core_common::models::{ModelExtension, User, UserSettings};
 use proton_core_common::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain},
@@ -305,7 +306,7 @@ impl CoreEventSubscriberConnectionProvider for TestContext {
 pub struct TestApiCoreEvent {
     pub event_id: ApiRemoteId,
     pub action: ApiAction,
-    pub address: Option<Vec<ApiAddress>>,
+    pub address: Option<Vec<ApiAddressEvent>>,
     pub contact_emails: Option<Vec<ApiContactEmailEvent>>,
     pub contacts: Option<Vec<ApiContactEvent>>,
     pub has_more: bool,
@@ -319,7 +320,7 @@ impl GetEventResponse for TestApiCoreEvent {}
 pub struct TestCoreEvent {
     pub event_id: RemoteId,
     pub action: Action,
-    pub address: Option<Vec<Address>>,
+    pub address: Option<Vec<AddressEvent>>,
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
     pub contacts: Option<Vec<ContactEvent>>,
     pub has_more: bool,
@@ -347,7 +348,7 @@ impl From<TestApiCoreEvent> for TestCoreEvent {
             action: value.action.into(),
             address: value
                 .address
-                .map(|vec| vec.into_iter().map(Address::from).collect()),
+                .map(|vec| vec.into_iter().map(AddressEvent::from).collect()),
             contact_emails: value
                 .contact_emails
                 .map(|vec| vec.into_iter().map(ContactEmailEvent::from).collect()),
@@ -376,10 +377,10 @@ impl CoreEvent for TestCoreEvent {
         self.user_settings.as_mut()
     }
 
-    fn get_core_event_addresses(&self) -> Option<&[Address]> {
+    fn get_core_event_addresses(&self) -> Option<&[AddressEvent]> {
         self.address.as_deref()
     }
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
         self.address.as_deref_mut()
     }
 

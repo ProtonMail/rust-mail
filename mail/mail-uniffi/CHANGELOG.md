@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Log errors send to UI
 
+### Fix
+
+  - Properly handle address events
+
 ## [0.31.4] - 2024-12-20
 
 ### Fix

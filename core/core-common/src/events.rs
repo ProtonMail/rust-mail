@@ -31,9 +31,10 @@
 //!
 
 use crate::datatypes::RemoteId;
-use crate::models::{Contact, ContactEmail};
+use crate::models::{Address, Contact, ContactEmail};
 use proton_api_core::services::proton::response_data::{
-    Action as ApiAction, ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
+    Action as ApiAction, AddressEvent as ApiAddressEvent,
+    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
 };
 
 /// TODO: Document this enum.
@@ -106,6 +107,29 @@ impl From<ApiContactEvent> for ContactEvent {
             remote_id: value.id.into(),
             action: value.action.into(),
             contact: value.contact.map(Contact::from),
+        }
+    }
+}
+
+/// An address event.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AddressEvent {
+    /// The remote ID of the address.
+    pub remote_id: RemoteId,
+
+    /// The action that was taken on the address.
+    pub action: Action,
+
+    /// The address metadata.
+    pub address: Option<Address>,
+}
+
+impl From<ApiAddressEvent> for AddressEvent {
+    fn from(value: ApiAddressEvent) -> Self {
+        Self {
+            remote_id: value.id.into(),
+            action: value.action.into(),
+            address: value.address.map(Address::from),
         }
     }
 }

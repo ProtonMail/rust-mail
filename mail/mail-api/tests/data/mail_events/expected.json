@@ -3,42 +3,46 @@
   "Addresses": [
     {
       "ID": "qmhrlFY24BhSHiFplF0B7G_cMVLi1sokaWIhfNaee6dRtdIZPYnqgI4-MpAb8h3JhOOykKv8ZsuTH8X_SrUZSg==",
-      "Type": 1,
-      "CatchAll": false,
-      "DisplayName": "D L'u, P.D. 定超",
-      "DomainID": "l8vWAXHBQmv0u7OVtPbcqMa4iwQaBqowINSQjPrxAr-Da8fVPKUkUcqAq30_BCxj1X0nW70HQRmAa-rIvzmKUA==",
-      "Email": "jason@protonmail.dev",
-      "Keys": [
-        {
-          "ID": "G1MbEt3...Ol_6h==",
-          "Version": 3,
-          "PrivateKey": "-----BEGIN PGP PRIVATE KEY BLOCK-----",
-          "Token": "null or -----BEGIN PGP MESSAGE-----.*",
-          "Signature": "null or -----BEGIN PGP SIGNATURE-----",
-          "Activation": "-----BEGIN PGP MESSAGE-----.*",
-          "Primary": 1,
-          "Active": 1,
-          "Flags": 3,
-          "RecoverySecret": null,
-          "RecoverySecretSignature": null,
-          "AddressForwardingID": "fWIio823...j45sL=="
-        }
-      ],
-      "Order": 1,
-      "ProtonMX": true,
-      "Receive": 1,
-      "Send": 1,
-      "Signature": "hi there",
-      "SignedKeyList": {
-        "Data": "[{\"\"Fingerprint\"\": \"\"c93f767df53b0ca8395cfde90483475164ec6353\"\",\"\"Primary\"\": 0,\"\"Flags\"\": 1},{\"\"Fingerprint\"\": \"\"fde90483475164ec6353c93f767df53b0ca8395c\"\",\"\"Primary\"\": 1,\"\"Flags\"\": 3}]",
-        "ExpectedMinEpochID": 265,
-        "MaxEpochID": 241,
-        "MinEpochID": 125,
-        "ObsolescenceToken": "000000006243460497f838b649439b5f29c4e73014b9da096d0fe3ed",
-        "Revision": 42,
-        "Signature": "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----"
-      },
-      "Status": 1
+      "Action": 1,
+      "Address": {
+        "ID": "qmhrlFY24BhSHiFplF0B7G_cMVLi1sokaWIhfNaee6dRtdIZPYnqgI4-MpAb8h3JhOOykKv8ZsuTH8X_SrUZSg==",
+        "Type": 1,
+        "CatchAll": false,
+        "DisplayName": "D L'u, P.D. 定超",
+        "DomainID": "l8vWAXHBQmv0u7OVtPbcqMa4iwQaBqowINSQjPrxAr-Da8fVPKUkUcqAq30_BCxj1X0nW70HQRmAa-rIvzmKUA==",
+        "Email": "jason@protonmail.dev",
+        "Keys": [
+          {
+            "ID": "G1MbEt3...Ol_6h==",
+            "Version": 3,
+            "PrivateKey": "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+            "Token": "null or -----BEGIN PGP MESSAGE-----.*",
+            "Signature": "null or -----BEGIN PGP SIGNATURE-----",
+            "Activation": "-----BEGIN PGP MESSAGE-----.*",
+            "Primary": 1,
+            "Active": 1,
+            "Flags": 3,
+            "RecoverySecret": null,
+            "RecoverySecretSignature": null,
+            "AddressForwardingID": "fWIio823...j45sL=="
+          }
+        ],
+        "Order": 1,
+        "ProtonMX": true,
+        "Receive": 1,
+        "Send": 1,
+        "Signature": "hi there",
+        "SignedKeyList": {
+          "Data": "[{\"\"Fingerprint\"\": \"\"c93f767df53b0ca8395cfde90483475164ec6353\"\",\"\"Primary\"\": 0,\"\"Flags\"\": 1},{\"\"Fingerprint\"\": \"\"fde90483475164ec6353c93f767df53b0ca8395c\"\",\"\"Primary\"\": 1,\"\"Flags\"\": 3}]",
+          "ExpectedMinEpochID": 265,
+          "MaxEpochID": 241,
+          "MinEpochID": 125,
+          "ObsolescenceToken": "000000006243460497f838b649439b5f29c4e73014b9da096d0fe3ed",
+          "Revision": 42,
+          "Signature": "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----"
+        },
+        "Status": 1
+      }
     }
   ],
   "ConversationCounts": [
