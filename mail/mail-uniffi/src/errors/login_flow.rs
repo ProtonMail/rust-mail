@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use proton_api_core::services::proton::common::HumanVerificationType as RealHumanVerificationType;
 use proton_api_core::services::proton::response_data::HumanVerificationChallenge as RealHumanVerificationChallenge;
+use tracing::error;
 
 /// Information for the human verification challenge.
 #[derive(Debug, uniffi::Record)]
@@ -13,6 +14,7 @@ pub struct HumanChallenge {
 
 impl From<RealHumanVerificationChallenge> for HumanChallenge {
     fn from(value: RealHumanVerificationChallenge) -> Self {
+        error!("HumanChallenge from {value:?}");
         Self {
             method: value.methods.into_iter().map_into().collect(),
             token: value.token,

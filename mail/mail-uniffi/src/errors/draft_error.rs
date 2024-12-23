@@ -4,6 +4,7 @@ use crate::UniffiEnum;
 use crate::{export_typed_result, export_void_result};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use tracing::error;
 
 export_void_result!(VoidDraftResult, DraftError);
 export_typed_result!(OptIdDraftResult, Option<Id>, DraftError);
@@ -16,11 +17,10 @@ pub enum DraftError {
 
 impl From<RealProtonMailError> for DraftError {
     fn from(error: RealProtonMailError) -> Self {
-        {
-            match error {
-                RealProtonMailError::Reason(reason) => reason.into(),
-                mail_error => DraftError::Other(ProtonError::from(mail_error)),
-            }
+        error!("DraftError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => DraftError::Other(ProtonError::from(mail_error)),
         }
     }
 }

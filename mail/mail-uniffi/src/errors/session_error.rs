@@ -3,6 +3,7 @@ use crate::export_void_result;
 use crate::UniffiEnum;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use tracing::error;
 
 export_void_result!(VoidSessionResult, UserSessionError);
 
@@ -14,11 +15,10 @@ pub enum UserSessionError {
 
 impl From<RealProtonMailError> for UserSessionError {
     fn from(error: RealProtonMailError) -> Self {
-        {
-            match error {
-                RealProtonMailError::Reason(reason) => reason.into(),
-                mail_error => UserSessionError::Other(ProtonError::from(mail_error)),
-            }
+        error!("UserSessionError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => UserSessionError::Other(ProtonError::from(mail_error)),
         }
     }
 }
