@@ -707,48 +707,52 @@
     "Addresses": [
         {
             "ID": "qmhrlFY24BhSHiFplF0B7G_cMVLi1sokaWIhfNaee6dRtdIZPYnqgI4-MpAb8h3JhOOykKv8ZsuTH8X_SrUZSg==",
-            "DomainID": "l8vWAXHBQmv0u7OVtPbcqMa4iwQaBqowINSQjPrxAr-Da8fVPKUkUcqAq30_BCxj1X0nW70HQRmAa-rIvzmKUA==",
-            "Email": "jason@protonmail.dev",
-            "Send": 1,
-            "Receive": 1,
-            "Status": 1,
-            "Type": 1,
-            "Order": 1,
-            "DisplayName": "D L'u, P.D. 定超",
-            "Signature": "hi there",
-            "HasKeys": 1,
-            "CatchAll": false,
-            "ProtonMX": true,
-            "SignedKeyList": {
-                "MinEpochID": 125,
-                "MaxEpochID": 241,
-                "ExpectedMinEpochID": 265,
-                "Data": "[{\"\"Fingerprint\"\": \"\"c93f767df53b0ca8395cfde90483475164ec6353\"\",\"\"Primary\"\": 0,\"\"Flags\"\": 1},{\"\"Fingerprint\"\": \"\"fde90483475164ec6353c93f767df53b0ca8395c\"\",\"\"Primary\"\": 1,\"\"Flags\"\": 3}]",
-                "ObsolescenceToken": "000000006243460497f838b649439b5f29c4e73014b9da096d0fe3ed",
-                "Signature": "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----",
-                "Revision": 42
-            },
-            "Keys": [
-                {
-                    "ID": "G1MbEt3...Ol_6h==",
-                    "Version": 3,
-                    "PublicKey": "-----BEGIN PGP PUBLIC KEY BLOCK-----.*",
-                    "PrivateKey": "-----BEGIN PGP PRIVATE KEY BLOCK-----",
-                    "Token": "null or -----BEGIN PGP MESSAGE-----.*",
-                    "Signature": "null or -----BEGIN PGP SIGNATURE-----",
-                    "Fingerprint": "c93f767df53b0ca8395cfde90483475164ec6353",
-                    "Fingerprints": [
-                        "c93f767df53b0ca8395cfde90483475164ec6353"
-                    ],
-                    "Activation": "-----BEGIN PGP MESSAGE-----.*",
-                    "Primary": 1,
-                    "Active": 1,
-                    "Flags": 3,
-                    "AddressForwardingID": "fWIio823...j45sL==",
-                    "GroupMemberID": "fWIio823...j45sL=="
-                }
-            ],
-            "Flags": 48
+            "Action": 1,
+            "Address": {
+                "ID": "qmhrlFY24BhSHiFplF0B7G_cMVLi1sokaWIhfNaee6dRtdIZPYnqgI4-MpAb8h3JhOOykKv8ZsuTH8X_SrUZSg==",
+                "DomainID": "l8vWAXHBQmv0u7OVtPbcqMa4iwQaBqowINSQjPrxAr-Da8fVPKUkUcqAq30_BCxj1X0nW70HQRmAa-rIvzmKUA==",
+                "Email": "jason@protonmail.dev",
+                "Send": 1,
+                "Receive": 1,
+                "Status": 1,
+                "Type": 1,
+                "Order": 1,
+                "DisplayName": "D L'u, P.D. 定超",
+                "Signature": "hi there",
+                "HasKeys": 1,
+                "CatchAll": false,
+                "ProtonMX": true,
+                "SignedKeyList": {
+                    "MinEpochID": 125,
+                    "MaxEpochID": 241,
+                    "ExpectedMinEpochID": 265,
+                    "Data": "[{\"\"Fingerprint\"\": \"\"c93f767df53b0ca8395cfde90483475164ec6353\"\",\"\"Primary\"\": 0,\"\"Flags\"\": 1},{\"\"Fingerprint\"\": \"\"fde90483475164ec6353c93f767df53b0ca8395c\"\",\"\"Primary\"\": 1,\"\"Flags\"\": 3}]",
+                    "ObsolescenceToken": "000000006243460497f838b649439b5f29c4e73014b9da096d0fe3ed",
+                    "Signature": "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----",
+                    "Revision": 42
+                },
+                "Keys": [
+                    {
+                        "ID": "G1MbEt3...Ol_6h==",
+                        "Version": 3,
+                        "PublicKey": "-----BEGIN PGP PUBLIC KEY BLOCK-----.*",
+                        "PrivateKey": "-----BEGIN PGP PRIVATE KEY BLOCK-----",
+                        "Token": "null or -----BEGIN PGP MESSAGE-----.*",
+                        "Signature": "null or -----BEGIN PGP SIGNATURE-----",
+                        "Fingerprint": "c93f767df53b0ca8395cfde90483475164ec6353",
+                        "Fingerprints": [
+                            "c93f767df53b0ca8395cfde90483475164ec6353"
+                        ],
+                        "Activation": "-----BEGIN PGP MESSAGE-----.*",
+                        "Primary": 1,
+                        "Active": 1,
+                        "Flags": 3,
+                        "AddressForwardingID": "fWIio823...j45sL==",
+                        "GroupMemberID": "fWIio823...j45sL=="
+                    }
+                ],
+                "Flags": 48
+            }
         }
     ],
     "SignedAddressList": {
