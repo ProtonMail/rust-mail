@@ -30,6 +30,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 velcro = { workspace = true }
+rusqlite = { workspace = true }
 
 [features]
 default = []

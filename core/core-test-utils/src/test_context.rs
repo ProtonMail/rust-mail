@@ -329,10 +329,9 @@ pub struct TestCoreEvent {
 }
 
 impl Event for TestCoreEvent {
-    type Id = RemoteId;
     type Response = TestApiCoreEvent;
 
-    fn event_id(&self) -> &Self::Id {
+    fn event_id(&self) -> &RemoteId {
         &self.event_id
     }
 

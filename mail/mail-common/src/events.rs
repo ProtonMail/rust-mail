@@ -193,10 +193,9 @@ impl CoreEvent for MailEvent {
 }
 
 impl Event for MailEvent {
-    type Id = RemoteId;
     type Response = ApiMailEvent;
 
-    fn event_id(&self) -> &Self::Id {
+    fn event_id(&self) -> &proton_api_core::services::proton::common::RemoteId {
         &self.event_id
     }
 

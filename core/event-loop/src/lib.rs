@@ -3,24 +3,25 @@
 //! delegated to a [`Subscriber`]. These need to be registered with either loop version.
 //!
 //! # Foreground Example
+//!
 //! This version of the loop requires the user to poll the loop manually so that it can progress.
 //! ```ignore
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
-//! async fn create_loop_and_poll<T:Event>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>) {
+//! async fn create_loop_and_poll<T: Event>(store: Box<dyn Store>, provider: Box<dyn Provider<T>>) {
 //!     let mut event_loop = EventLoop::new();
 //!
 //!     loop {
-//!         if let Err(_) = event_loop.poll(store.as_ref(), provider.as_ref(),&[]).await {
-//!             //Handle error
+//!         if let Err(_) = event_loop.poll(store.as_ref(), provider.as_ref(), &[]).await {
+//!             // Handle error
 //!         }
 //!     }
 //! }
-//!
 //! ```
 //!
 //! # Background Example
+//!
 //! This version of the loop runs automatically in a background task with a user defined interval.
 //! Additionally, this version also has modifiers to pause and resume the loop.
 //! ```ignore
@@ -28,10 +29,17 @@
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{BackgroundEventLoop, EventLoop, EventLoopErrorHandler, Provider, Store};
 //!
-//! async fn create_background_loop<T:Event+'static>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>, error_handler:Box<dyn EventLoopErrorHandler>) {
+//! async fn create_background_loop<Ev: Event + 'static>(
+//!     store: Box<dyn Store>,
+//!     provider: Box<dyn Provider<Ev>>,
+//!     error_handler: Box<dyn EventLoopErrorHandler>,
+//! ) {
 //!     let bg_event_loop = BackgroundEventLoop::new();
 //!
-//!     bg_event_loop.start(Duration::from_secs(15), store, provider, error_handler).await.unwrap();
+//!     bg_event_loop
+//!         .start(Duration::from_secs(15), store, provider, error_handler)
+//!         .await
+//!         .unwrap();
 //!     // Background event loop is always created in a paused state
 //!     bg_event_loop.resume();
 //!
@@ -56,8 +64,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
+use std::fmt::Debug;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -86,17 +93,11 @@ pub trait Event:
     + Sync
     + 'static
 {
-    /// The type of remote ID used by the code that creates and handles the
-    /// events. Note that this will most likely be the `RemoteId` type of the
-    /// crate in question, which cannot be specified in this crate, hence is
-    /// left to be defined.
-    type Id: Clone + Debug + Display + Eq + From<RemoteId> + Hash + Into<RemoteId> + PartialEq + Send + Sync;
-
     /// The API response type of the event.
     type Response: GetEventResponse + Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
 
     /// Get the event id of the event.
-    fn event_id(&self) -> &Self::Id;
+    fn event_id(&self) -> &RemoteId;
 
     /// Check if the event has more data.
     fn has_more(&self) -> bool;
