@@ -128,7 +128,7 @@ async fn test_sync_and_load_contacts_mixed() {
     let conn = user_ctx.stash().connection();
 
     let remote_id = test_contacts.first().unwrap().id.clone();
-    let mut contact = Contact::find_by_id(RemoteId::from(remote_id), &conn)
+    let mut contact = Contact::find_by_id(remote_id, &conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -187,12 +187,12 @@ async fn test_sync_and_delete_event_contact() {
     let contact_to_remove = test_contacts.last().unwrap();
 
     let delete_event = ContactEmailEvent {
-        remote_id: email_to_remove.id.clone().into(),
+        remote_id: email_to_remove.id.clone(),
         action: Action::Delete,
         contact_email: None,
     };
     let delete_contact_event = ContactEvent {
-        remote_id: contact_to_remove.id.clone().into(),
+        remote_id: contact_to_remove.id.clone(),
         action: Action::Delete,
         contact: None,
     };
@@ -410,7 +410,7 @@ async fn prepare_sync_test_data_contacts(
     Contact::sync(user_ctx.session().api(), user_ctx.stash())
         .await
         .expect("failed to sync contacts");
-    let local_id = RemoteId::from(remote_contact_id)
+    let local_id = remote_contact_id
         .counterpart::<Contact>(&tether)
         .await
         .unwrap()

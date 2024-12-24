@@ -83,7 +83,7 @@ async fn test_attachment_create_with_metadata() {
 }
 fn test_attachment() -> ApiAttachment {
     ApiAttachment {
-        id: RemoteId::from("attachment").into(),
+        id: RemoteId::from("attachment"),
         name: "attachment_foo".to_owned(),
         size: 1024,
         mime_type: attachment::MimeType::text_plain().to_string(),
@@ -99,9 +99,9 @@ fn test_attachment() -> ApiAttachment {
             is_simple_login: false,
             bimi_selector: None,
         }),
-        address_id: address_id().into(),
-        message_id: message_id().into(),
-        conversation_id: conversation_id().into(),
+        address_id: address_id(),
+        message_id: message_id(),
+        conversation_id: conversation_id(),
         is_auto_forwardee: true,
     }
 }
@@ -160,10 +160,10 @@ async fn create_attachment_dependencies(
 
     let local_msg_ids = Message::create_or_update_messages_from_metadata(
         vec![ApiMessageMetadata {
-            id: message_id().into(),
-            conversation_id: conversation_id().into(),
+            id: message_id(),
+            conversation_id: conversation_id(),
             order: 0,
-            address_id: address_id().into(),
+            address_id: address_id(),
             label_ids: vec![],
             external_id: None,
             subject: String::new(),

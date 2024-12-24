@@ -58,14 +58,14 @@ async fn action_label_as_without_archive() {
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &label1_id.clone().into_inner().into(),
+        &label1_id.clone().into_inner(),
         vec![conversation1.id.clone(), conversation2.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &label3_id.into_inner().into(),
+        &label3_id.into_inner(),
         vec![
             conversation2.id,
             conversation3.id.clone(),
@@ -252,18 +252,14 @@ async fn action_label_as_with_archive() {
     )
     .await;
     ctx.mock_label_conversation(
-        &label1_id.clone().into_inner().into(),
+        &label1_id.clone().into_inner(),
         vec![conversation1.id.clone()],
         None,
         vec![],
     )
     .await;
-    ctx.mock_unlabel_conversation(
-        &label3_id.into_inner().into(),
-        vec![conversation2.id],
-        vec![],
-    )
-    .await;
+    ctx.mock_unlabel_conversation(&label3_id.into_inner(), vec![conversation2.id], vec![])
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 

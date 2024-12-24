@@ -58,7 +58,7 @@ impl<T: CoreEventSubscriberConnectionProvider> CoreEventSubscriber<T> {
 impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
     for CoreEventSubscriber<T>
 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "proton-core-subscriber"
     }
 

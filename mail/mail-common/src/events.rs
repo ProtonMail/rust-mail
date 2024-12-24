@@ -63,7 +63,7 @@ pub struct ConversationEvent {
 impl From<ApiConversationEvent> for ConversationEvent {
     fn from(value: ApiConversationEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             conversation: value.conversation.map(Conversation::from),
         }
@@ -86,7 +86,7 @@ pub struct LabelEvent {
 impl From<ApiLabelEvent> for LabelEvent {
     fn from(value: ApiLabelEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             label: value.label.map(Label::from),
         }
@@ -193,10 +193,9 @@ impl CoreEvent for MailEvent {
 }
 
 impl Event for MailEvent {
-    type Id = RemoteId;
     type Response = ApiMailEvent;
 
-    fn event_id(&self) -> &Self::Id {
+    fn event_id(&self) -> &proton_api_core::services::proton::common::RemoteId {
         &self.event_id
     }
 
@@ -208,7 +207,7 @@ impl Event for MailEvent {
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
-            event_id: value.event_id.into(),
+            event_id: value.event_id,
             addresses: value
                 .addresses
                 .map(|addresses| addresses.into_iter().map(AddressEvent::from).collect()),
@@ -268,7 +267,7 @@ pub struct MessageEvent {
 impl From<ApiMessageEvent> for MessageEvent {
     fn from(value: ApiMessageEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             message: value.message.map(MessageMetadata::from),
         }

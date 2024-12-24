@@ -25,7 +25,6 @@ pub struct LoopEvent {
 }
 
 impl Event for LoopEvent {
-    type Id = RemoteId;
     type Response = LoopEvent;
 
     fn event_id(&self) -> &RemoteId {

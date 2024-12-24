@@ -51,14 +51,14 @@ async fn test_labeling_conversation_with_custom_label() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &remote_label_id.clone().into_inner().into(),
+        &remote_label_id.clone().into_inner(),
         vec![remote_conversation.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &remote_label_id.clone().into_inner().into(),
+        &remote_label_id.clone().into_inner(),
         vec![remote_conversation.id.clone()],
         vec![],
     )
@@ -176,14 +176,14 @@ async fn test_labeling_conversation_with_starred_label() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &LabelId::starred().into_inner().into(),
+        &LabelId::starred().into_inner(),
         vec![remote_conversation.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &LabelId::starred().into_inner().into(),
+        &LabelId::starred().into_inner(),
         vec![remote_conversation.id.clone()],
         vec![],
     )

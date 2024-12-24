@@ -245,7 +245,7 @@ impl ActionHandler for Handler {
                 .map_into()
                 .collect();
             let response = api
-                .put_messages_label(message_ids, LabelId::archive().into_inner().into(), None)
+                .put_messages_label(message_ids, LabelId::archive().into_inner(), None)
                 .await?
                 .responses;
 

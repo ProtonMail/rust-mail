@@ -8,7 +8,6 @@ use proton_api_core::services::proton::prelude::GetEventOptions;
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::MailEvent as ApiMailEvent;
-use proton_core_common::datatypes::RemoteId;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::EventLoopError;
@@ -54,7 +53,7 @@ impl Store for MailUserContext {
             let tx = tether.transaction().await?;
             tx.execute(
                 "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                params![MAIL_EVENT_TYPE_ID, RemoteId::from(id)],
+                params![MAIL_EVENT_TYPE_ID, id],
             )
             .await?;
             tx.commit().await?;

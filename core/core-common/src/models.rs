@@ -536,7 +536,7 @@ impl From<ApiAddress> for Address {
     fn from(value: ApiAddress) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             address_type: value.address_type.into(),
             catch_all: value.catch_all,
             display_name: value.display_name,
@@ -656,7 +656,7 @@ pub struct User {
 impl From<ApiUser> for User {
     fn from(value: ApiUser) -> Self {
         Self {
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             create_time: value.create_time,
             credit: value.credit,
             currency: value.currency,

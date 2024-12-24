@@ -1161,7 +1161,7 @@ impl ConversationSearchOptions {
                         .counterpart::<RealConversation>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {
@@ -2052,7 +2052,7 @@ impl MessageSearchOptions {
                         .counterpart::<RealMessage>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {
@@ -2071,7 +2071,7 @@ impl MessageSearchOptions {
                         .counterpart::<RealLabel>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {

@@ -251,7 +251,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
 
 async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
-    let api_conversation = api_conversation!(id: remote_id.clone().into());
+    let api_conversation = api_conversation!(id: remote_id.clone());
 
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations".to_string()))
@@ -275,9 +275,9 @@ async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether:
         .unwrap()
         .unwrap();
     let api_meta = api_message_meta!(
-        id: remote_id.clone().into(),
-        address_id: db_message.remote_address_id.clone().into(),
-        conversation_id: db_message.remote_conversation_id.clone().unwrap().into()
+        id: remote_id.clone(),
+        address_id: db_message.remote_address_id.clone(),
+        conversation_id: db_message.remote_conversation_id.clone().unwrap()
     );
     let api_message = api_message!(
         metadata: api_meta
@@ -297,12 +297,12 @@ async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether:
 
 async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
-    let api_label = api_label!(id: remote_id.clone().into());
+    let api_label = api_label!(id: remote_id.clone());
 
     Mock::given(method("POST"))
         .and(path("/api/core/v4/labels/by-ids".to_string()))
         .and(body_json(GetLabelsByIdsOptions {
-            label_ids: vec![remote_id.clone().into()],
+            label_ids: vec![remote_id.clone()],
         }))
         .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
             labels: vec![api_label],

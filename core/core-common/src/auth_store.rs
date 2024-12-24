@@ -190,8 +190,8 @@ impl Store for AuthStore {
         info!("setting auth info in store");
 
         // Get the user and session IDs from the incoming auth info.
-        let user_id = RemoteId::from(info.user_id);
-        let session_id = RemoteId::from(info.session_id);
+        let user_id = info.user_id;
+        let session_id = info.session_id;
         let tfa_mode = info.tfa_mode.into();
         let mbp_mode = info.mbp_mode.into();
 

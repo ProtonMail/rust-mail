@@ -97,7 +97,7 @@ fn sidebar_test_params(
 
     if scheduled {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::all_scheduled().into_inner().into(),
+            label_id: LabelId::all_scheduled().into_inner(),
             total: 1,
             unread: 0,
         });
@@ -105,7 +105,7 @@ fn sidebar_test_params(
 
     if outbox {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::outbox().into_inner().into(),
+            label_id: LabelId::outbox().into_inner(),
             total: 1,
             unread: 0,
         });
@@ -113,7 +113,7 @@ fn sidebar_test_params(
 
     if snoozed {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::snoozed().into_inner().into(),
+            label_id: LabelId::snoozed().into_inner(),
             total: 1,
             unread: 0,
         });
@@ -155,7 +155,7 @@ fn sidebar_test_mail_settings(
 
 fn create_label(label_id: LabelId) -> ApiLabel {
     ApiLabel {
-        id: label_id.into_inner().into(),
+        id: label_id.into_inner(),
         label_type: LabelType::System,
         parent_id: None,
         color: "".to_string(),

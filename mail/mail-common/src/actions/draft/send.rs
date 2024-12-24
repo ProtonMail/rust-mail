@@ -230,7 +230,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let response = context
             .api()
-            .send_mail(remote_message_id.into(), packages, auto_save_contacts)
+            .send_mail(remote_message_id, packages, auto_save_contacts)
             .await
             .inspect_err(|err| {
                 error!("Failed to send send email request: {err}");

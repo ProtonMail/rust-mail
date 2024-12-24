@@ -81,7 +81,7 @@ impl EventLoop {
                 return Err(EventLoopError::Other("Collected no events".into()));
             };
 
-            if *last_event.event_id() == last_event_id.into() {
+            if *last_event.event_id() == last_event_id {
                 debug!("No new events");
                 //no new api events
                 return Ok(());
@@ -105,7 +105,7 @@ impl EventLoop {
             .event_id()
             .clone();
 
-        if let Err(e) = store.store(new_event_id.clone().into()).await {
+        if let Err(e) = store.store(new_event_id.clone()).await {
             error!("Failed to store new event id: {e}");
             return Err(EventLoopError::StoreWrite(e));
         }
@@ -136,7 +136,7 @@ impl EventLoop {
                 return Ok(events);
             }
 
-            let event = provider.get_event(&next_event_id.into()).await?;
+            let event = provider.get_event(&next_event_id).await?;
             has_more = event.has_more();
             next_event_id = event.event_id().clone();
             events.push(event);

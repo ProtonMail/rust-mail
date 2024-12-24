@@ -8,6 +8,8 @@
 //!
 
 use core::fmt;
+use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::ToSql;
 use secrecy::{CloneableSecret, DebugSecret, Zeroize};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -84,6 +86,12 @@ impl RemoteId {
     pub fn into_inner(self) -> String {
         self.0
     }
+
+    /// Get a reference to the inner [`String`]
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 impl CloneableSecret for RemoteId {}
@@ -119,5 +127,17 @@ impl From<&str> for RemoteId {
 impl Zeroize for RemoteId {
     fn zeroize(&mut self) {
         self.0.zeroize();
+    }
+}
+
+impl ToSql for RemoteId {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, rusqlite::Error> {
+        self.as_str().to_sql()
+    }
+}
+
+impl FromSql for RemoteId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        String::column_result(value).map(RemoteId)
     }
 }

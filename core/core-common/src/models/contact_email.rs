@@ -84,9 +84,9 @@ impl From<ApiContactEmail> for ContactEmail {
     fn from(value: ApiContactEmail) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             local_contact_id: None,
-            remote_contact_id: Some(value.contact_id.into()),
+            remote_contact_id: Some(value.contact_id),
             canonical_email: value.canonical_email,
             contact_type: ContactTypes::new(value.contact_type),
             defaults: value.defaults.into(),
