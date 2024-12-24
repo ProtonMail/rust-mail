@@ -10,7 +10,7 @@ mod user_settings;
 pub struct V0 {}
 
 impl Migration for V0 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "proton_core_v0"
     }
 

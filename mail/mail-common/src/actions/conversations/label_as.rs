@@ -243,11 +243,7 @@ impl ActionHandler for Handler {
                 .collect();
             let response = session
                 .api()
-                .put_conversations_label(
-                    conversation_ids,
-                    LabelId::archive().into_inner().into(),
-                    None,
-                )
+                .put_conversations_label(conversation_ids, LabelId::archive().into_inner(), None)
                 .await?
                 .responses;
 

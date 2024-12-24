@@ -343,7 +343,7 @@ impl Event for TestCoreEvent {
 impl From<TestApiCoreEvent> for TestCoreEvent {
     fn from(value: TestApiCoreEvent) -> Self {
         Self {
-            event_id: value.event_id.into(),
+            event_id: value.event_id,
             action: value.action.into(),
             address: value
                 .address

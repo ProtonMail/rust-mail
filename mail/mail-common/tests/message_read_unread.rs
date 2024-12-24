@@ -148,7 +148,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 
     if !messages.is_empty() {
         let mut conversation =
-            Conversation::find_by_id(RemoteId::from(params.conversations[0].id.clone()), &tether)
+            Conversation::find_by_id(params.conversations[0].id.clone(), &tether)
                 .await
                 .unwrap()
                 .unwrap();

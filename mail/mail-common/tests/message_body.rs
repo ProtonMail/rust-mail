@@ -44,7 +44,7 @@ async fn mailbox_message_body_simple() {
         .await
         .unwrap()
         .expect("failed to load message");
-    assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
+    assert_eq!(saved_message.remote_id, Some(message.metadata.id));
 
     // No message cached
     let cache = user_ctx.messages_cache();
@@ -121,7 +121,7 @@ async fn mailbox_message_body_mime() {
         .await
         .unwrap()
         .expect("failed to load message");
-    assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
+    assert_eq!(saved_message.remote_id, Some(message.metadata.id));
 
     let cache = user_ctx.messages_cache();
     assert!(cache.is_empty());

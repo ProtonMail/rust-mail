@@ -3,7 +3,7 @@ use stash::stash::{Bond, StashError};
 pub struct V0 {}
 
 impl proton_sqlite3::Migration for V0 {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "proton_core_db_v0"
     }
 

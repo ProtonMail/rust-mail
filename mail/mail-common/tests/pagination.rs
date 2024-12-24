@@ -58,7 +58,7 @@ async fn paginate_conversations() {
             std::iter::once(last_page_0_item.clone())
                 .chain(page_chunks[1].iter().cloned())
                 .collect(),
-            Some(last_page_0_item.id.clone().into()),
+            Some(last_page_0_item.id.clone()),
             Some(last_page_0_item.labels[0].context_time),
             page_size as u64 + 1_u64,
             (conversation_count - page_size) as u64,
@@ -74,7 +74,7 @@ async fn paginate_conversations() {
             std::iter::once(last_page_1_item.clone())
                 .chain(page_chunks[2].iter().cloned())
                 .collect(),
-            Some(last_page_1_item.id.clone().into()),
+            Some(last_page_1_item.id.clone()),
             Some(last_page_1_item.labels[0].context_time),
             page_size as u64 + 1_u64,
             (conversation_count - page_size * 2) as u64,
@@ -88,7 +88,7 @@ async fn paginate_conversations() {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_conversations_page(
             vec![last_page_2_item.clone()],
-            Some(last_page_2_item.id.clone().into()),
+            Some(last_page_2_item.id.clone()),
             Some(last_page_2_item.labels[0].context_time),
             page_size as u64 + 1_u64,
             1,
@@ -163,7 +163,7 @@ async fn paginate_messages() {
             std::iter::once(last_page_0_item.clone())
                 .chain(page_chunks[1].iter().cloned())
                 .collect(),
-            Some(last_page_0_item.id.clone().into()),
+            Some(last_page_0_item.id.clone()),
             None,
             page_size as u64 + 1_u64,
             (conversation_count - page_size) as u64,
@@ -179,7 +179,7 @@ async fn paginate_messages() {
             std::iter::once(last_page_1_item.clone())
                 .chain(page_chunks[2].iter().cloned())
                 .collect(),
-            Some(last_page_1_item.id.clone().into()),
+            Some(last_page_1_item.id.clone()),
             Some(last_page_1_item.time),
             page_size as u64 + 1_u64,
             (conversation_count - page_size * 2) as u64,
@@ -193,7 +193,7 @@ async fn paginate_messages() {
         let last_page_2_item = page_chunks[2].last().unwrap();
         ctx.mock_get_message_metadata_page(
             vec![last_page_2_item.clone()],
-            Some(last_page_2_item.id.clone().into()),
+            Some(last_page_2_item.id.clone()),
             Some(last_page_2_item.time),
             page_size as u64 + 1_u64,
             1,
@@ -246,11 +246,10 @@ async fn compare_conversations(
 ) {
     let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv =
-            Conversation::find_by_id::<RemoteId>(api_conv.id.clone().into(), &tether)
-                .await
-                .unwrap()
-                .unwrap();
+        let api_local_conv = Conversation::find_by_id::<RemoteId>(api_conv.id.clone(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(*local_conv, api_local_conv);
     }
 }
@@ -261,7 +260,7 @@ async fn compare_messages(
 ) {
     let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv = Message::find_by_id::<RemoteId>(api_conv.id.clone().into(), &tether)
+        let api_local_conv = Message::find_by_id::<RemoteId>(api_conv.id.clone(), &tether)
             .await
             .unwrap()
             .unwrap();

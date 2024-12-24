@@ -1250,11 +1250,12 @@ async fn test_conversation_create_with_attachment() {
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id =
-        RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
 
     assert_eq!(
         db_conversation.attachments_metadata[0],
@@ -1304,11 +1305,12 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("should have value");
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id =
-        RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
 
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
@@ -1413,11 +1415,12 @@ async fn test_conversation_update() {
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
-    local_conversation2.attachments_metadata[0].local_id =
-        RemoteId::from(conv_update.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation2.attachments_metadata[0].local_id = conv_update.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &tether)

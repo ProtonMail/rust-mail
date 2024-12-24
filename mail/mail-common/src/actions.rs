@@ -174,7 +174,7 @@ pub fn filter_responses_by_codes(
     responses
         .into_iter()
         .filter(|r| !accepted.contains(&r.response.code))
-        .map(|r| RemoteId::from(r.id))
+        .map(|r| r.id)
         .collect::<Vec<_>>()
 }
 

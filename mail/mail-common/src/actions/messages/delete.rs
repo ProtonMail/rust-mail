@@ -81,11 +81,7 @@ impl ActionHandler for Handler {
             .into_iter()
             .map(Into::into)
             .collect();
-        let label_id = action
-            .0
-            .remote_label_id
-            .clone()
-            .map(|x| x.into_inner().into());
+        let label_id = action.0.remote_label_id.clone().map(|x| x.into_inner());
         let response = api
             .put_messages_delete(message_ids, label_id)
             .await?

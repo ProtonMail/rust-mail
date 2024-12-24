@@ -633,7 +633,7 @@ impl Message {
             let response = api
                 .put_messages_label(
                     message_ids.iter().cloned().map_into().collect(),
-                    label_id.clone().into(),
+                    label_id.clone(),
                     None,
                 )
                 .await;
@@ -653,7 +653,7 @@ impl Message {
             let response = api
                 .put_messages_unlabel(
                     message_ids.iter().cloned().map_into().collect(),
-                    label_id.clone().into(),
+                    label_id.clone(),
                 )
                 .await;
 
@@ -1413,9 +1413,7 @@ impl Message {
         // First we load the addresses because the addresses need to exist before the messages get
         // loaded.
         for msg in messages {
-            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), tether).await?)
-                .is_none()
-            {
+            if (Address::find_by_id(msg.address_id.to_owned(), tether).await?).is_none() {
                 debug!("Address {} not found, syncing...", msg.address_id);
                 let addr = api
                     .get_address_by_id(msg.address_id.to_owned())
@@ -1648,7 +1646,7 @@ impl Message {
                 self.local_id.unwrap_or(LocalId::from(0)),
             ))?;
         // sync the message body
-        Ok(api.get_message(remote_id.into()).await.map(|v| v.message)?)
+        Ok(api.get_message(remote_id).await.map(|v| v.message)?)
     }
 
     /// Get the available actions for messages excluding move to the current view.
@@ -2122,9 +2120,9 @@ impl Message {
         let metadata = Message::from_api_metadata(value.metadata, tether).await?;
         let (body_metadata, body) = MessageBodyMetadata::from_api_message_body(
             value.body,
-            remote_message_id.into(),
-            remote_conversation_id.into(),
-            remote_address_id.into(),
+            remote_message_id,
+            remote_conversation_id,
+            remote_address_id,
         );
 
         Ok((metadata, body_metadata, body))
@@ -2147,16 +2145,18 @@ impl Message {
 
         Ok(Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             local_conversation_id: None,
-            remote_conversation_id: Some(value.conversation_id.into()),
-            local_address_id: RemoteId::from(value.address_id.clone())
+            remote_conversation_id: Some(value.conversation_id),
+            local_address_id: value
+                .address_id
+                .clone()
                 .counterpart::<Address>(tether)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone().into())
+                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone())
                 })?,
-            remote_address_id: value.address_id.into(),
+            remote_address_id: value.address_id,
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
@@ -2171,7 +2171,7 @@ impl Message {
             deleted: false,
             display_order: value.order,
             expiration_time: value.expiration_time,
-            external_id: value.external_id.map(|v| v.into()),
+            external_id: value.external_id,
             flags: value.flags.into(),
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
@@ -2614,7 +2614,7 @@ impl Message {
         //TODO(ET-1763): Cleanup sync code for messages to use this method.
         let response = ctx
             .api()
-            .get_message(message_id.into())
+            .get_message(message_id)
             .await
             .inspect_err(|e| error!("Failed to fetch messages: {e}"))?;
 
@@ -2793,7 +2793,7 @@ impl DataSource for MessageDataSource {
             .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
-                label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
+                label_id: Some(vec![self.remote_label_id.clone().into_inner()]),
                 page_size: page_size.get() as u64,
                 unread: self.filter.unread,
                 keyword: self.options.keywords.clone(),
@@ -2836,7 +2836,7 @@ impl DataSource for MessageDataSource {
         };
         // Safe to unwrap as we have validated this before.
         let last_element_id: proton_api_core::services::proton::common::RemoteId =
-            last_element.remote_id.clone().unwrap().into();
+            last_element.remote_id.clone().unwrap();
 
         debug!("Last Element= {last_element_id}");
         let mut response = self
@@ -2846,7 +2846,7 @@ impl DataSource for MessageDataSource {
                 desc: Some(true),
                 end: Some(last_element.time),
                 end_id: Some(last_element_id.clone()),
-                label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
+                label_id: Some(vec![self.remote_label_id.clone().into_inner()]),
                 page_size: page_size.get() as u64 + 1_u64,
                 unread: self.filter.unread,
                 keyword: self.options.keywords.clone(),

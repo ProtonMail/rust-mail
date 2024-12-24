@@ -68,7 +68,6 @@ impl From<ApiAction> for Action {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEmailEvent {
-    /// TODO: Document this field.
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
@@ -81,7 +80,7 @@ pub struct ContactEmailEvent {
 impl From<ApiContactEmailEvent> for ContactEmailEvent {
     fn from(value: ApiContactEmailEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             contact_email: value.contact_email.map(ContactEmail::from),
         }
@@ -91,7 +90,6 @@ impl From<ApiContactEmailEvent> for ContactEmailEvent {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEvent {
-    /// TODO: Document this field.
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
@@ -104,7 +102,7 @@ pub struct ContactEvent {
 impl From<ApiContactEvent> for ContactEvent {
     fn from(value: ApiContactEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             contact: value.contact.map(Contact::from),
         }
@@ -127,7 +125,7 @@ pub struct AddressEvent {
 impl From<ApiAddressEvent> for AddressEvent {
     fn from(value: ApiAddressEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
+            remote_id: value.id,
             action: value.action.into(),
             address: value.address.map(Address::from),
         }

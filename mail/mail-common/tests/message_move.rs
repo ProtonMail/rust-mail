@@ -212,8 +212,8 @@ async fn move_into_trash_remove_label_and_mark_read() {
     let message = test_message(
         vec![
             custom_label_id.clone().into(),
-            LabelId::inbox().into_inner().into(),
-            LabelId::all_mail().into_inner().into(),
+            LabelId::inbox().into_inner(),
+            LabelId::all_mail().into_inner(),
         ],
         true,
     );
@@ -290,8 +290,8 @@ async fn move_into_spam_remove_labels() {
     let message = test_message(
         vec![
             custom_label_id.clone().into(),
-            LabelId::inbox().into_inner().into(),
-            LabelId::all_mail().into_inner().into(),
+            LabelId::inbox().into_inner(),
+            LabelId::all_mail().into_inner(),
         ],
         false,
     );
@@ -374,7 +374,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap()
         .unwrap();
 
-    let message = test_message(vec![LabelId::spam().into_inner().into()], false);
+    let message = test_message(vec![LabelId::spam().into_inner()], false);
     let params = test_init_params(HashMap::new());
     ctx.setup_user(params.clone()).await;
 

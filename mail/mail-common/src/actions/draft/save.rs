@@ -391,9 +391,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let row_id = message.row_id;
 
         // Update remote ids
-        message.remote_id = Some(new_message.metadata.id.clone().into());
-        message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone().into());
-        conversation.remote_id = Some(new_message.metadata.conversation_id.clone().into());
+        message.remote_id = Some(new_message.metadata.id.clone());
+        message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone());
+        conversation.remote_id = Some(new_message.metadata.conversation_id.clone());
 
         // Because we can't have custom update function in stash we need to
         // first set the remote id on the message body metadata and then
