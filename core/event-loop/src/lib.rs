@@ -2,9 +2,14 @@
 //! ([`EventLoop`]) and a Background event loop ([`BackgroundEventLoop`]).
 //! Handling of events is delegated to a [`Subscriber`]. These need to be registered with either loop version.
 //!
-//! # Foreground Example
+//! # Foreground Event Loop
 //!
 //! This version of the loop requires the user to poll the loop manually so that it can progress.
+//! The user is fully responsible for handling errors at the poll call site.
+//! This is also the only one we currently use.
+//!
+//! ## Example
+//!
 //! ```ignore
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
@@ -20,10 +25,15 @@
 //! }
 //! ```
 //!
-//! # Background Example
+//! # Background Event Loop
 //!
 //! This version of the loop runs automatically in a background task with a user defined interval.
-//! Additionally, this version also has modifiers to pause and resume the loop.
+//! Additionally, this version also has modifiers to pause, resume and cancel the loop.
+//! You need to provide a custom error handler to it.
+//! This is currently not used.
+//!
+//! ## Example
+//!
 //! ```ignore
 //! use std::time::Duration;
 //! use proton_api_core::domain::Event;
