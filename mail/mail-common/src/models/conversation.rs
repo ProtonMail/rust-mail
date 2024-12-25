@@ -1901,18 +1901,13 @@ impl Conversation {
 
                     label.save(bond).await?;
                 }
-
-                if let Some(mut conv_label) =
-                    ConversationLabel::find_first("WHERE local_label_id=?", params![label_id], bond)
-                        .await?
-                {
-                    conv_label.context_num_unread += 1;
-                    conv_label.save(bond).await?;
-                }
             }
 
             // update conversations
             conversation.num_unread += 1;
+            for conversation_label in &mut conversation.labels {
+                conversation_label.context_num_unread += 1;
+            }
             conversation.save(bond).await?;
         }
         Ok(())
