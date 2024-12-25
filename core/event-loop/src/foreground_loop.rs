@@ -22,7 +22,7 @@ impl EventLoop {
         Self
     }
 
-    /// Stores one event id if the store does not contain an event.
+    /// Stores one event id if the [`Store`] does not contain an event.
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
     pub async fn initialize<T: Event + From<<T as Event>::Response>>(
         &self,

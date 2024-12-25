@@ -87,8 +87,6 @@ pub enum EventLoopError {
     Provider(#[from] ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
-    #[error("Other: {0}")]
-    Other(String),
 }
 
 /// This represents an event returned by the API.

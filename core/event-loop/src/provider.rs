@@ -9,12 +9,13 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::session::{CoreSession, Session};
 
+/// This trait allows abstraction over how to request the next event from the API.
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Provider<T: Event + From<<T as Event>::Response>>: Send + Sync {
+pub trait Provider<Ev: Event + From<<Ev as Event>::Response>>: Send + Sync {
     async fn get_latest_event_id(&self) -> Result<RemoteId, ApiServiceError>;
 
-    async fn get_event(&self, event_id: &RemoteId) -> Result<T, ApiServiceError>;
+    async fn get_event(&self, event_id: &RemoteId) -> Result<Ev, ApiServiceError>;
 }
 
 pub struct ProtonProvider {

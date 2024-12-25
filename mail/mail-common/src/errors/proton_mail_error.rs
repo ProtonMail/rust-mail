@@ -220,7 +220,6 @@ impl From<EventLoopError> for ProtonMailError {
             }
             EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
             EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
-            EventLoopError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
         }
     }
 }
