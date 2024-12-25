@@ -3,14 +3,13 @@ use crate::provider::Provider;
 use crate::store::Store;
 use crate::subscriber::Subscriber;
 use crate::{Event, EventLoopError};
-use futures::FutureExt;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::spawn;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
-use tokio::{select, spawn};
+use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
@@ -158,20 +157,13 @@ struct BackgroundLoopState<T: Event> {
 
 #[doc(hidden)]
 impl<T: Event + From<<T as Event>::Response>> BackgroundLoopState<T> {
-    #[allow(clippy::ignored_unit_patterns)] // we can not control this macro impl
+    /// This executes all [`SubscriberOperation`] batched every `poll_interval`.
     async fn run(&mut self, poll_interval: Duration) {
-        debug!("Starting loop");
-        loop {
-            select! {
-                _= self.shared.token.cancelled().fuse()=> {
-                    debug!("Cancellation requested, exiting");
-                    return;
-                }
-
-                _= sleep(poll_interval).fuse() => {
-                    self.tick().await;
-                }
-            }
+        let mut interval = interval(poll_interval);
+        debug!("Starting background loop");
+        while !self.shared.token.is_cancelled() {
+            interval.tick().await;
+            self.tick().await;
         }
     }
 

@@ -1,6 +1,6 @@
 //! Utilities to listen to the proton event loop. This crate provides both a Foreground event loop
-//! ([`EventLoop`]) and a Background event loop ([`BackgroundEventLoop`]). Handling of events is
-//! delegated to a [`Subscriber`]. These need to be registered with either loop version.
+//! ([`EventLoop`]) and a Background event loop ([`BackgroundEventLoop`]).
+//! Handling of events is delegated to a [`Subscriber`]. These need to be registered with either loop version.
 //!
 //! # Foreground Example
 //!
@@ -9,11 +9,11 @@
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
-//! async fn create_loop_and_poll<T: Event>(store: Box<dyn Store>, provider: Box<dyn Provider<T>>) {
+//! async fn create_loop_and_poll<T: Event>(store: &dyn Store, provider: &dyn Provider<T>) {
 //!     let mut event_loop = EventLoop::new();
 //!
 //!     loop {
-//!         if let Err(_) = event_loop.poll(store.as_ref(), provider.as_ref(), &[]).await {
+//!         if let Err(_) = event_loop.poll(store, provider, &[]).await {
 //!             // Handle error
 //!         }
 //!     }
@@ -81,20 +81,17 @@ pub enum EventLoopError {
     Other(String),
 }
 
-/// TODO: Document this trait.
-pub trait Event:
-    Clone
-    + Debug
-    // + for<'de> Deserialize<'de>
-    + Eq
-    + PartialEq
-    // + Serialize
-    + Send
-    + Sync
-    + 'static
-{
+/// This represents an event returned by the API.
+pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
     /// The API response type of the event.
-    type Response: GetEventResponse + Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
+    type Response: GetEventResponse
+        + Clone
+        + Debug
+        + for<'de> Deserialize<'de>
+        + Eq
+        + PartialEq
+        + Send
+        + Sync;
 
     /// Get the event id of the event.
     fn event_id(&self) -> &RemoteId;
