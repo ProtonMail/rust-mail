@@ -169,26 +169,27 @@ impl<T: Event + From<<T as Event>::Response>> BackgroundLoopState<T> {
 
     async fn tick(&mut self) {
         // Process pending subscriber operations
-        {
-            let mut accessor = self.shared.pending_subscribers.lock();
-            for operation in accessor.drain(..) {
-                match operation {
-                    SubscriberOperation::Register(s) => {
-                        let new_subscriber_name = s.name();
-                        if !self
-                            .subscribers
-                            .iter()
-                            .any(move |v| v.name() == new_subscriber_name)
-                        {
-                            debug!("Registering subscriber {new_subscriber_name}");
-                            self.subscribers.push(s);
-                        }
+        let mut accessor: Vec<_> = {
+            let mut guard = self.shared.pending_subscribers.lock();
+            std::mem::take(&mut guard)
+        };
+        for operation in accessor.drain(..) {
+            match operation {
+                SubscriberOperation::Register(s) => {
+                    let new_subscriber_name = s.name();
+                    if !self
+                        .subscribers
+                        .iter()
+                        .any(move |v| v.name() == new_subscriber_name)
+                    {
+                        debug!("Registering subscriber {new_subscriber_name}");
+                        self.subscribers.push(s);
                     }
+                }
 
-                    SubscriberOperation::Unregister(s) => {
-                        debug!("Unregistering subscriber {s}");
-                        self.subscribers.retain(|v| v.name() != s);
-                    }
+                SubscriberOperation::Unregister(s) => {
+                    debug!("Unregistering subscriber {s}");
+                    self.subscribers.retain(|v| v.name() != s);
                 }
             }
         }
