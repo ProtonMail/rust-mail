@@ -12,23 +12,17 @@ use tracing::{self, debug, error, Level};
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
 /// iterate the loop. For a continuous loop which operates in the background see
 /// [`BackgroundEventLoop`].
-
-#[derive(Debug)]
-pub struct EventLoop {}
-
-impl Default for EventLoop {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+#[derive(Debug, Default)]
+pub struct EventLoop;
 
 const MAX_EVENTS_PER_POLL: usize = 50;
 impl EventLoop {
     #[must_use]
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
+    /// Stores one event id if the [`Store`] does not contain an event.
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
     pub async fn initialize<T: Event + From<<T as Event>::Response>>(
         &self,
@@ -76,24 +70,18 @@ impl EventLoop {
                 e
             })?;
 
-        {
-            let Some(last_event) = events.last() else {
-                return Err(EventLoopError::Other("Collected no events".into()));
-            };
+        let Some(last_event) = events.last() else {
+            unreachable!("collect_events must collect at least one event");
+        };
 
-            if *last_event.event_id() == last_event_id {
-                debug!("No new events");
-                //no new api events
-                return Ok(());
-            }
+        if *last_event.event_id() == last_event_id {
+            debug!("No new api events");
+            return Ok(());
         }
 
         debug!(
             "Received new events: {:?}",
-            events
-                .iter()
-                .map(|e| e.event_id().clone())
-                .collect::<Vec<_>>()
+            events.iter().map(Event::event_id).collect::<Vec<_>>()
         );
 
         self.publish_events_to_subscribers(&mut events, subscribers)
@@ -102,8 +90,7 @@ impl EventLoop {
         let new_event_id = events
             .last()
             .expect("should be at least one event object present")
-            .event_id()
-            .clone();
+            .event_id();
 
         if let Err(e) = store.store(new_event_id.clone()).await {
             error!("Failed to store new event id: {e}");
@@ -115,31 +102,23 @@ impl EventLoop {
         Ok(())
     }
 
+    /// Requests all events. The resulting vec is non empty.
     async fn collect_events<T: Event + From<<T as Event>::Response>>(
         &self,
         provider: &dyn Provider<T>,
-        last_event_id: &RemoteId,
+        mut last_event_id: &RemoteId,
     ) -> Result<Vec<T>, ApiServiceError> {
         let mut events = Vec::with_capacity(4);
 
-        let event = provider.get_event(last_event_id).await?;
-
-        let mut has_more = event.has_more();
-        let mut next_event_id = event.event_id().clone();
-        events.push(event);
-
-        let mut num_collected = 0_usize;
-
-        while has_more {
-            num_collected += 1;
-            if num_collected >= MAX_EVENTS_PER_POLL {
-                return Ok(events);
+        for _ in 0..MAX_EVENTS_PER_POLL {
+            let event = provider.get_event(last_event_id).await?;
+            let has_more = event.has_more();
+            events.push(event);
+            if !has_more {
+                break;
             }
 
-            let event = provider.get_event(&next_event_id).await?;
-            has_more = event.has_more();
-            next_event_id = event.event_id().clone();
-            events.push(event);
+            last_event_id = events.last().unwrap().event_id();
         }
 
         Ok(events)
