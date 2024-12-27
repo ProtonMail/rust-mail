@@ -178,7 +178,7 @@ pub enum ApiServiceError {
 
     /// An unknown error has occurred. These should be monitored and specific
     /// handling added in.
-    #[error("Unknown error: {0}")]
+    #[error("Unknown error")]
     UnknownError(String),
 }
 

@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use muon::client::PasswordMode;
+use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
-use std::{error::Error, ops::Deref};
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
@@ -12,7 +12,7 @@ use crate::services::proton::common::RemoteId;
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
 
 /// The error type returned by the store.
-pub type StoreError = Box<dyn Error + Send + Sync>;
+pub type StoreError = anyhow::Error;
 
 /// The info known about the user's authentication.
 #[derive(Debug, Clone)]

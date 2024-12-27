@@ -70,11 +70,12 @@ impl EventLoop {
                 e
             })?;
 
-        let Some(last_event) = events.last() else {
-            unreachable!("collect_events must collect at least one event");
-        };
-
-        if *last_event.event_id() == last_event_id {
+        if *events
+            .last()
+            .expect("collect_events must collect at least one event")
+            .event_id()
+            == last_event_id
+        {
             debug!("No new api events");
             return Ok(());
         }

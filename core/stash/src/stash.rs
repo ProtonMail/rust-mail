@@ -2386,7 +2386,7 @@ impl<'tether> Bond<'tether> {
 
     #[allow(clippy::mem_forget)]
     /// Internal commit implementation.
-
+    ///
     /// This method is used to commit a transaction without publishing changes.
     /// It is needed for internal implementation of the watch mechanism.
     ///

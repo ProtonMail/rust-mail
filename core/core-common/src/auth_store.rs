@@ -4,6 +4,7 @@ use crate::datatypes::RemoteId;
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::KeyChain;
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
@@ -42,12 +43,12 @@ impl AuthStore {
 
     fn encryption_key(&self) -> Result<SessionEncryptionKey, StoreError> {
         let key = (self.key_chain.get())
-            .map_err(|e| format!("failed to load secret from key chain: {e}"))
-            .inspect_err(|e| error!(e))?
-            .ok_or("keychain has no decryption key")
-            .inspect_err(|e| error!(e))?;
+            .context("failed to load secret from key chain")
+            .inspect_err(|e| error!("{e}"))?
+            .context("keychain has no decryption key")
+            .inspect_err(|e| error!("{e}"))?;
 
-        Ok(SessionEncryptionKey::from_base64(&key).ok_or("invalid encryption key")?)
+        SessionEncryptionKey::from_base64(&key).context("invalid encryption key")
     }
 
     async fn try_get_auth(&self) -> Result<Auth, StoreError> {
@@ -129,9 +130,9 @@ impl Store for AuthStore {
         info!("setting auth in store");
 
         // Get the user and session IDs from the incoming auth session.
-        let user_id = RemoteId::from(auth.user_id().ok_or("missing user ID")?);
-        let session_id = RemoteId::from(auth.uid().ok_or("missing session ID")?);
-        let tokens = auth.tokens().ok_or("missing tokens")?;
+        let user_id = RemoteId::from(auth.user_id().context("missing user ID")?);
+        let session_id = RemoteId::from(auth.uid().context("missing session ID")?);
+        let tokens = auth.tokens().context("missing tokens")?;
 
         // Get the encryption key.
         let key = self.encryption_key()?;
@@ -145,7 +146,7 @@ impl Store for AuthStore {
             info!("creating account for {user_id}");
 
             let name_or_addr = self.name_or_addr.take();
-            let name_or_addr = name_or_addr.ok_or("missing name or address")?;
+            let name_or_addr = name_or_addr.context("missing name or address")?;
 
             CoreAccount::new(user_id.clone(), name_or_addr)
                 .save(&tx)
@@ -212,7 +213,7 @@ impl Store for AuthStore {
             info!("creating account for {user_id}");
 
             let name_or_addr = self.name_or_addr.take();
-            let name_or_addr = name_or_addr.ok_or("missing name or address")?;
+            let name_or_addr = name_or_addr.context("missing name or address")?;
 
             CoreAccount::new(user_id.clone(), name_or_addr)
                 .with_tfa_mode(tfa_mode)
@@ -255,11 +256,11 @@ impl Store for AuthStore {
         let tx = tether.transaction().await?;
 
         let Some(user_id) = self.user_id.clone() else {
-            return Err("failed to set user data: no user ID")?;
+            bail!("failed to set user data: no user ID");
         };
 
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
-            return Err(format!("failed to set user data: missing {user_id}"))?;
+            bail!("failed to set user data: missing {user_id}");
         };
 
         for session in CoreSession::find_by_user_id(user_id, &tx).await? {
