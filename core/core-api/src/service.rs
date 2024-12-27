@@ -2,8 +2,7 @@
 
 use crate::services::proton::prelude::*;
 use crate::store::StoreError;
-use muon::{Method, Status};
-use serde_json::Error as JsonError;
+use muon::Status;
 use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;
@@ -135,11 +134,6 @@ pub enum ApiServiceError {
 
     //  DATA ERRORS
     //==========================================================================
-    /// There has been a failure in en/decoding the JSON data sent/received to/from the
-    /// external API into/from the appropriate structs.
-    #[error("JSON (de)serialization error: {0}, context: {1}")]
-    JsonError(JsonError, String),
-
     /// There has been a failure in encoding the query parameters to be sent with
     /// an outgoing HTTP request.
     #[error("Query encoding error: {0}")]
@@ -162,16 +156,6 @@ pub enum ApiServiceError {
 
     //  LOGIC ERRORS
     //==========================================================================
-    /// An error has been reported by the implementing service. We don't worry
-    /// too much about use of `Box` or dynamic traits here, as performance is
-    /// not critical in this context.
-    #[error("API Service error: {0}")]
-    ServiceError(Box<dyn ServiceError>),
-
-    /// An unsupported HTTP method was specified.
-    #[error("Unsupported HTTP method: {0}")]
-    UnsupportedHttpMethod(Method),
-
     /// Authentication store operation failed.
     #[error("Authentication Store error: {0}")]
     AuthStore(#[from] StoreError),

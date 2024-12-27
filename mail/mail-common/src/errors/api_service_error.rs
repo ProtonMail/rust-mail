@@ -60,13 +60,10 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
             | ApiServiceError::Redirect(_, _)
             | ApiServiceError::Timeout(_) => Err(Unexpected::Network),
 
-            ApiServiceError::JsonError(_, _)
-            | ApiServiceError::QueryStringError(_)
+            ApiServiceError::QueryStringError(_)
             | ApiServiceError::RequestError(_)
             | ApiServiceError::ResponseError(_)
             | ApiServiceError::Utf8DecodingError(_)
-            | ApiServiceError::ServiceError(_)
-            | ApiServiceError::UnsupportedHttpMethod(_)
             | ApiServiceError::AuthStore(_)
             | ApiServiceError::UnknownError(_) => Err(Unexpected::Internal),
         }
