@@ -31,6 +31,7 @@ mod attachment;
 mod conversation;
 mod draft;
 mod labels;
+mod mail_scroller;
 mod mail_settings;
 mod message;
 mod network;
@@ -48,6 +49,5 @@ pub use network::*;
 pub use paginator::*;
 pub use rollback_item::*;
 
-mod mail_scroller;
 #[path = "tests/models.rs"]
 mod tests;

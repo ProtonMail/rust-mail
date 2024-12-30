@@ -159,6 +159,11 @@ pub struct Conversation {
 }
 
 impl Conversation {
+    pub fn label(&self, local_id: LocalId) -> Option<&ConversationLabel> {
+        self.labels
+            .iter()
+            .find(|&label| label.local_label_id == Some(local_id))
+    }
     /// Label multiple conversations.
     ///
     /// # Parameters

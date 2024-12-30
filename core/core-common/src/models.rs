@@ -371,9 +371,41 @@ pub trait ModelExtension: Model {
     /// # Errors
     ///
     /// See [`Model::save()`].
+    ///
     async fn with_save(mut self, bond: &Bond<'_>) -> Result<Self, StashError> {
         self.save(bond).await?;
         Ok(self)
+    }
+
+    /// Reloads the model from database.
+    ///
+    /// Especially useful for models which have `on_load` implementations
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    async fn reload(&mut self, tether: &Tether) -> Result<(), StashError> {
+        if let Some(this) = Self::load(self.id_value()?, tether).await? {
+            *self = this;
+        }
+
+        Ok(())
+    }
+
+    /// Deletes the model instance from database.
+    ///
+    /// # Errors
+    ///
+    /// When querying the database fails.
+    ///
+    async fn delete(self, bond: &Bond<'_>) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let id_field = Self::id_field_name();
+        let query = format!("DELETE FROM {table} WHERE {id_field} = ?");
+        let id = self.id_value()?;
+
+        bond.execute(query, params![id]).await
     }
 }
 

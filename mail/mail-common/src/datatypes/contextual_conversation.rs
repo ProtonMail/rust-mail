@@ -99,11 +99,7 @@ impl ContextualConversation {
     /// If the `local_label_id` is not present in the `conversation`, `None` is
     /// returned. This means that the conversation is not present in this label.
     pub fn new(conversation: Conversation, local_label_id: LocalId) -> Option<Self> {
-        let label = conversation
-            .labels
-            .iter()
-            .find(|&label| label.local_label_id == Some(local_label_id))?;
-
+        let label = conversation.label(local_label_id)?.clone();
         let is_starred = conversation.is_starred();
         let attachments_metadata = conversation.get_attachment_metadata();
 

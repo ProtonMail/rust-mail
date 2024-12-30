@@ -43,7 +43,7 @@ macro_rules! lid {
 macro_rules! rid {
     ($id:expr) => {{
         use proton_core_common::datatypes::RemoteId;
-        Some(RemoteId::from($id).into())
+        Some(RemoteId::from($id.to_string()).into())
     }};
 }
 
@@ -113,6 +113,18 @@ macro_rules! conversation {
         use proton_mail_common::models::Conversation;
 
         Conversation {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! conv_label {
+    ($($field:tt)*) => {{
+        use proton_mail_common::models::ConversationLabel;
+
+        ConversationLabel {
             $($field)*,
             ..Default::default()
         }

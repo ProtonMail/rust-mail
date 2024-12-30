@@ -1,26 +1,20 @@
 use clap::Parser;
-use log::{debug, info};
+use log::info;
 use pretty_assertions::assert_eq;
 use proton_api_core::session::Config;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_core_common::paginator::DataSource;
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{
     MailConversationScrollerSource, MailScroller, MailScrollerSource,
 };
-use proton_mail_common::models::{
-    Conversation, ConversationScrollData, Label, Message, PaginatorCompat, PaginatorFilter,
-    PaginatorSearchOptions, ReadFilter,
-};
+use proton_mail_common::models::Label;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
-use proton_sqlite3::rusqlite::ffi::sqlite3changeset_upgrade;
-use stash::orm::Model;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
@@ -65,7 +59,7 @@ async fn main() {
     let Args {
         username,
         password,
-        messages,
+        messages: _,
     } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
     info!("TEMP_DIR = {tmp_dir:?}");
@@ -110,8 +104,7 @@ async fn main() {
     let filter = ReadFilter::Unread;
     let mut paginator = MailScroller::new(
         Arc::clone(&user_ctx),
-        MailConversationScrollerSource::new(label.local_id.unwrap(), filter),
-        page_count as usize,
+        MailConversationScrollerSource::new(label.local_id.unwrap(), filter, page_count as usize),
     )
     .await
     .unwrap();
@@ -156,21 +149,6 @@ async fn main() {
     }*/
 }
 
-async fn paginate<T: Model, R: DataSource<Item = T>>(
-    paginator: &PaginatorCompat<T, R>,
-    total_elements: u64,
-) {
-    let mut element_count = 0_u64;
-
-    while paginator.has_next_page().await {
-        let page = paginator.next_page().await.unwrap();
-        tracing::info!("Elements {} / {}", element_count, total_elements);
-        element_count += page.len() as u64;
-    }
-
-    tracing::info!("END {} / {}", element_count, total_elements);
-}
-
 async fn paginate_mail<T: MailScrollerSource>(
     paginator: &mut MailScroller<T>,
     is_eq: impl Fn(&T::Item, &T::Item) -> bool,
@@ -179,6 +157,7 @@ async fn paginate_mail<T: MailScrollerSource>(
 {
     let mut element_count = 0_u64;
     let total_elements = paginator.total();
+    #[allow(clippy::cast_possible_truncation)]
     let mut all_elements = Vec::with_capacity(total_elements as usize);
 
     while paginator.has_more().await.unwrap() {

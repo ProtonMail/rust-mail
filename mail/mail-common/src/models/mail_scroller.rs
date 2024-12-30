@@ -1,68 +1,14 @@
-use crate::datatypes::ContextualConversation;
+use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use indoc::formatdoc;
 use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
-use proton_sqlite3::rusqlite::types::{FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
-use stash::exports::{FromSql, ToSql, Value};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
-
-/// Conversation and message read filter.
-#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy)]
-#[repr(u8)]
-pub enum ReadFilter {
-    /// Return all messages/conversations.
-    #[default]
-    All = 0,
-    /// Return only unread messages/conversations.
-    Unread = 1,
-    /// Return only read messages/conversations.
-    Read = 2,
-}
-
-impl From<Option<bool>> for ReadFilter {
-    fn from(value: Option<bool>) -> Self {
-        match value {
-            Some(unread) => {
-                if unread {
-                    Self::Unread
-                } else {
-                    Self::Read
-                }
-            }
-            None => Self::All,
-        }
-    }
-}
-impl From<ReadFilter> for Option<bool> {
-    fn from(value: ReadFilter) -> Self {
-        match value {
-            ReadFilter::All => None,
-            ReadFilter::Unread => Some(true),
-            ReadFilter::Read => Some(false),
-        }
-    }
-}
-
-impl ToSql for ReadFilter {
-    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
-    }
-}
-
-impl FromSql for ReadFilter {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value.as_i64()? {
-            0 => Ok(ReadFilter::All),
-            1 => Ok(ReadFilter::Unread),
-            2 => Ok(ReadFilter::Read),
-            v => Err(FromSqlError::OutOfRange(v)),
-        }
-    }
-}
+use std::ops::Deref;
+use typed_builder::TypedBuilder;
 
 #[derive(Debug, Model, Eq, PartialEq, Clone)]
 #[TableName("mail_message_scroll_data")]
@@ -91,7 +37,112 @@ pub struct MessageScrollData {
     pub row_id: Option<u64>,
 }
 
-#[derive(Debug, Model, Eq, PartialEq, Clone)]
+#[derive(Debug)]
+pub struct CachedConverstationScrollData {
+    local_label_id: LocalId,
+    unread: ReadFilter,
+    page_size: usize,
+    data: ConversationScrollData,
+    cursor: ConversationScrollData,
+}
+
+impl CachedConverstationScrollData {
+    pub async fn new(
+        local_label_id: LocalId,
+        unread: ReadFilter,
+        page_size: usize,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let data = ConversationScrollData::find_with_key(local_label_id, unread, tether).await?;
+
+        Ok(match data {
+            Some(data) => {
+                let data_count = data.visible_element_count(tether).await?;
+                let cursor = if data_count > page_size as u64 {
+                    // Load first page, could be improved to load only last element but
+                    // there is tiny risk that background task could be invoked between
+                    // count & page_load which would invalidate the cursor.
+                    // so safer option is to load more items to make sure we have reference point
+                    let mut items = data
+                        .visible_elements_limit(Some(page_size), None, tether)
+                        .await?;
+
+                    match items.pop() {
+                        Some(last) => ConversationScrollData::builder()
+                            .local_label_id(local_label_id)
+                            .unread(unread)
+                            .remote_conversation_id(last.remote_id.clone().unwrap())
+                            .conversation_time(last.time)
+                            .display_order(last.display_order)
+                            .build(),
+                        None => data.clone(),
+                    }
+                } else {
+                    data.clone()
+                };
+
+                Some(Self {
+                    local_label_id,
+                    unread,
+                    page_size,
+                    data,
+                    cursor,
+                })
+            }
+            None => None,
+        })
+    }
+
+    pub async fn fetch_more(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<Vec<ContextualConversation>, StashError> {
+        let all = self.data.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if cursor_count < all {
+            let offset = Some(cursor_count);
+            let limit = Some(self.page_size);
+            let items = self
+                .data
+                .visible_elements_limit(limit, offset, tether)
+                .await?;
+            let cursor = match items.last() {
+                Some(last) => ConversationScrollData::builder()
+                    .local_label_id(self.local_label_id)
+                    .unread(self.unread)
+                    .remote_conversation_id(last.remote_id.clone().unwrap())
+                    .conversation_time(last.time)
+                    .display_order(last.display_order)
+                    .build(),
+                None => self.data.clone(),
+            };
+
+            self.cursor = cursor;
+
+            Ok(items)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
+        let all = self.data.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        Ok(cursor_count < all)
+    }
+}
+
+impl Deref for CachedConverstationScrollData {
+    type Target = ConversationScrollData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cursor
+    }
+}
+
+#[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_conversation_scroll_data")]
 pub struct ConversationScrollData {
     /// Label id used in the sync.
@@ -119,6 +170,7 @@ pub struct ConversationScrollData {
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
+    #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,
 }
 
@@ -151,7 +203,7 @@ impl ConversationScrollData {
     ) -> Result<Option<ContextualConversation>, StashError> {
         // NOTE: this is currently unused but can later be used to query
         // the server for new elements before the latest elements.
-        let query = self.query(Some(1), true);
+        let query = self.query(Some(1), true, None);
         let Some(conv) = Conversation::find_first(
             query,
             params![
@@ -176,7 +228,7 @@ impl ConversationScrollData {
     ///
     /// Return error if the query failed.
     pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = self.query(None, false);
+        let query = self.query(None, false, None);
         Conversation::count(
             query,
             //TODO: this could potentially be abstracted into a function.
@@ -207,7 +259,16 @@ impl ConversationScrollData {
         &self,
         tether: &Tether,
     ) -> Result<Vec<ContextualConversation>, StashError> {
-        let query = self.query(None, false);
+        self.visible_elements_limit(None, None, tether).await
+    }
+
+    async fn visible_elements_limit(
+        &self,
+        limit: Option<usize>,
+        offset: Option<u64>,
+        tether: &Tether,
+    ) -> Result<Vec<ContextualConversation>, StashError> {
+        let query = self.query(limit, false, offset);
         Ok(Conversation::find(
             query,
             params![
@@ -223,7 +284,7 @@ impl ConversationScrollData {
         .collect())
     }
 
-    fn query(&self, limit: Option<usize>, require_remote_id: bool) -> String {
+    fn query(&self, limit: Option<usize>, require_remote_id: bool, offset: Option<u64>) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
         let mut query = formatdoc!(
@@ -261,7 +322,11 @@ impl ConversationScrollData {
         ";
 
         if let Some(limit) = limit {
-            query += &format!("LIMIT {limit}");
+            query += &format!(" LIMIT {limit} ");
+        }
+
+        if let Some(offset) = offset {
+            query += &format!(" OFFSET {offset} ");
         }
 
         query
