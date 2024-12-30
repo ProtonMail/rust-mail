@@ -99,6 +99,9 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
+    // Event APIs
+    // https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Events
+
     async fn get_event<T>(
         &self,
         event_id: RemoteId,

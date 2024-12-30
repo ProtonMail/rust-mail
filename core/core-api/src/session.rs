@@ -139,7 +139,7 @@ impl Session {
     ///
     /// # Errors
     ///
-    /// This method will return an error if the request fails.
+    /// This method will return an error if the database query fails.
     ///
     pub async fn logout(&self) -> ApiServiceResult<()> {
         self.client.logout().await;

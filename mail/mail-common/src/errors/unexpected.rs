@@ -1,4 +1,3 @@
-use anyhow::Error as AnyhowError;
 use proton_action_queue::action::FactoryError;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
 use proton_api_core::login::SaltError;
@@ -163,12 +162,6 @@ impl From<KeyChainError> for Unexpected {
 impl From<KeyHandlingError> for Unexpected {
     fn from(_error: KeyHandlingError) -> Self {
         Self::Crypto
-    }
-}
-
-impl From<AnyhowError> for Unexpected {
-    fn from(_error: AnyhowError) -> Self {
-        Self::Unknown
     }
 }
 
