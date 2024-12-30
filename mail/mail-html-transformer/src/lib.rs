@@ -12,13 +12,27 @@
 //! # Example
 //!
 //! ```
-//! use proton_mail_html_transformer::Transformer;
+//! let input = r#"
+//! <html>
+//!     <body>
+//!         <a href="https://ads.com?utm_source=tracker">bar</a>
+//!     </body>
+//! </html>
+//! "#;
 //!
-//! let html = "<html>..</html>";
 //!
-//! let transformed_html = Transformer::new(html)
-//!   .strip_utm() // Strip utm codes.
-//!   .to_string();// Convert back to textual representation
+//! let mut transformer = Transformer::new(html);
+//! transformer.strip_utm();
+//! let output = transformer.to_string();
+//!
+//! let expected = r#"
+//! <html>
+//!     <body>
+//!         <a href="https://ads.com/">bar</a>
+//!     </body>
+//! </html>
+//! "#;
+//! assert_eq!(expected, output);
 //! ```
 //!
 
