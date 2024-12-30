@@ -341,8 +341,8 @@ pub fn transform_html(
     // preserving whitespaces and adding links.
     let mut transformer = if mime_type == MimeType::TextPlain {
         let mut transformer = Transformer::new_text_plain(html);
-        transformer.add_noreferrer();
-        transformer.insert_links();
+        let tok = transformer.add_noreferrer();
+        transformer.insert_links(tok);
         transformer
     } else {
         let mut transformer = Transformer::new(html);
