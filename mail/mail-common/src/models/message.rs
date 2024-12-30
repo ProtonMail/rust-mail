@@ -1538,7 +1538,6 @@ impl Message {
         );
 
         let tx = tether.transaction().await?;
-        ConversationLabel::create_or_update_from_message_metadata(&response.messages, &tx).await?;
         Self::create_or_update_messages_from_metadata(response.messages, &tx).await?;
         tx.commit().await?;
         Ok(())
@@ -2310,23 +2309,23 @@ impl Message {
         }
 
         for (conversation_id, message_ids) in conversation_messages {
-            let (remaining_unread, remaining_messages): (u64, u64) =
-                match ConversationMessageLabelStats::without(
-                    conversation_id,
-                    local_label_id,
-                    &message_ids,
-                    bond,
-                )
-                .await
-                {
-                    Ok(stats) => {
-                        let mut conversation_label = ConversationLabel::find_first(
-                            "WHERE local_conversation_id=? AND local_label_id=?",
-                            params![conversation_id, local_label_id],
+            let label_stats = ConversationMessageLabelStats::without(
+                conversation_id,
+                local_label_id,
+                &message_ids,
+                bond,
+            )
+            .await;
+            let (remaining_unread, remaining_messages): (u64, u64) = match label_stats {
+                Ok(stats) => {
+                    if let Some(mut conversation_label) =
+                        ConversationLabel::find_by_conversation_and_label(
+                            &conversation_id,
+                            &local_label_id,
                             bond,
                         )
                         .await?
-                        .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+                    {
                         conversation_label.context_time = stats.time;
                         conversation_label.context_snooze_time = stats.snooze_time;
                         conversation_label.context_expiration_time = stats.expiration_time;
@@ -2338,20 +2337,23 @@ impl Message {
                             conversation_label.context_num_unread,
                             conversation_label.context_num_messages,
                         )
-                    }
-                    Err(e) => {
-                        if !matches!(
-                            e,
-                            StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                        ) {
-                            return Err(e);
-                        }
-                        // If no information is returned it means there are no messages associated
-                        // with this label.
-                        bond.execute("DELETE FROM conversation_labels WHERE local_conversation_id=? AND local_label_id=?", params![conversation_id,local_label_id]).await?;
+                    } else {
                         (0, 0)
                     }
-                };
+                }
+                Err(e) => {
+                    if !matches!(
+                        e,
+                        StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                    ) {
+                        return Err(e);
+                    }
+                    // If no information is returned it means there are no messages associated
+                    // with this label.
+                    bond.execute("DELETE FROM conversation_labels WHERE local_conversation_id=? AND local_label_id=?", params![conversation_id,local_label_id]).await?;
+                    (0, 0)
+                }
+            };
 
             let mut label = Label::find_by_id(local_label_id, bond)
                 .await?
