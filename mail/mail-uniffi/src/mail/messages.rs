@@ -47,6 +47,10 @@ pub struct DecryptedMessage {
 
 #[proton_uniffi_macros::export_result]
 impl DecryptedMessage {
+    pub async fn body_with_defaults(self: Arc<Self>) -> BodyOutput {
+        self.body(TransformOpts::default()).await
+    }
+
     /// Gets the message body as an HTML. This does all of the transformations that are
     /// required based on the options and the user settings.
     ///

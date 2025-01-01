@@ -17,7 +17,7 @@ use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::{LocalId, LocalLabelId};
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody, TransformOpts};
+use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{
     Label, MailSettings, Message as MailMessage, MessageDataSource, PaginatorFilter,

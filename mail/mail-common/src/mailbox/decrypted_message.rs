@@ -21,35 +21,6 @@ use tracing::warn;
 
 use super::MailboxResult;
 
-/// Enable or disable remote content (images).
-/// The default behaviour is Default.
-#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
-pub enum RemoteContent {
-    #[default]
-    Default, // Use whatever is in the user's [`MailSettings`]
-    Enabled,  // Override the settings and show images
-    Disabled, // Override the settings and don't show images
-}
-
-/// Enable or disable embedded images.
-/// The default behaviour is Default.
-#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
-pub enum EmbeddedImages {
-    #[default]
-    Default, // Use whatever is in the user's [`MailSettings`]
-    Enabled,  // Override the settings and show images
-    Disabled, // Override the settings and don't show images
-}
-
-/// What to do with the blockquote (previous conversation threads)
-/// The default behaviour is Strip.
-#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
-pub enum BlockQuote {
-    #[default]
-    Strip,
-    Untouched,
-}
-
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
 #[derive(Debug, Clone, Copy, uniffi::Record, SmartDefault)]

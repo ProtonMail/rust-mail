@@ -88,9 +88,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
 };
-use proton_mail_common::decrypted_message::{
-    BlockQuote as RealBlockQuote, RemoteContent as RealRemoteContent,
-};
+use proton_mail_common::decrypted_message::BlockQuote as RealBlockQuote;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
@@ -131,36 +129,6 @@ impl From<RealAlmostAllMail> for AlmostAllMail {
         match value {
             RealAlmostAllMail::AllMail => AlmostAllMail::AllMail,
             RealAlmostAllMail::AlmostAllMail => AlmostAllMail::AlmostAllMail,
-        }
-    }
-}
-
-/// What to do with the blockquote (previous conversation threads)
-/// The default behaviour is Strip.
-#[derive(Debug, Clone, Copy, Default, UniffiEnum)]
-pub enum BlockQuote {
-    /// Remove the previous conversation.
-    #[default]
-    Strip,
-
-    /// Don't remove the previous conversation.
-    Untouched,
-}
-
-impl From<RealBlockQuote> for BlockQuote {
-    fn from(value: RealBlockQuote) -> Self {
-        match value {
-            RealBlockQuote::Strip => Self::Strip,
-            RealBlockQuote::Untouched => Self::Untouched,
-        }
-    }
-}
-
-impl From<BlockQuote> for RealBlockQuote {
-    fn from(value: BlockQuote) -> Self {
-        match value {
-            BlockQuote::Strip => Self::Strip,
-            BlockQuote::Untouched => Self::Untouched,
         }
     }
 }
@@ -623,41 +591,6 @@ impl From<RealPmSignature> for PmSignature {
             RealPmSignature::Disabled => PmSignature::Disabled,
             RealPmSignature::Enabled => PmSignature::Enabled,
             RealPmSignature::EnabledLocked => PmSignature::EnabledLocked,
-        }
-    }
-}
-
-/// Enable or disable remote content (images).
-/// The default behaviour is Default.
-#[derive(Debug, Clone, Copy, Default, UniffiEnum)]
-pub enum EnableContent {
-    /// Use whatever is in the user's [`MailSettings`].
-    #[default]
-    Default,
-
-    /// Override the settings and don't show images.
-    Disabled,
-
-    /// Override the settings and show images.
-    Enabled,
-}
-
-impl From<RealRemoteContent> for EnableContent {
-    fn from(value: RealRemoteContent) -> Self {
-        match value {
-            RealRemoteContent::Default => Self::Default,
-            RealRemoteContent::Disabled => Self::Disabled,
-            RealRemoteContent::Enabled => Self::Enabled,
-        }
-    }
-}
-
-impl From<EnableContent> for RealRemoteContent {
-    fn from(value: EnableContent) -> Self {
-        match value {
-            EnableContent::Default => Self::Default,
-            EnableContent::Disabled => Self::Disabled,
-            EnableContent::Enabled => Self::Enabled,
         }
     }
 }
