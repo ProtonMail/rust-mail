@@ -33,6 +33,7 @@ pub struct TransformOpts {
 }
 
 /// This is created after calling [`TransformOpts::fill_defaults`]
+// It exists for type safety purposes.
 #[derive(Debug, Clone, Copy)]
 pub struct TransformOptsResolved<'a> {
     pub show_block_quote: bool,

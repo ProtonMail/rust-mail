@@ -88,7 +88,6 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
 };
-use proton_mail_common::decrypted_message::BlockQuote as RealBlockQuote;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,

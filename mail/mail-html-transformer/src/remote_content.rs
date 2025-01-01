@@ -1,3 +1,4 @@
+#![allow(clippy::must_use_candidate)]
 //! This pass focuses on blocking remote content from loading and/or patching remote content Urls to
 //! go through the Proton Proxy.
 //!
