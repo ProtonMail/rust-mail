@@ -113,6 +113,24 @@ impl TransformOpts {
     }
 }
 
+/// Which banners related to the body the client should show.
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct BodyBanners {
+    /// Whether to show the "enable remote images" banner
+    pub enable_show_remote_images: bool,
+    /// Whether to show the "enable embedded images" banner
+    pub enable_show_embedded_images: bool,
+}
+
+impl BodyBanners {
+    fn new(opts: TransformOptsResolved<'_>) -> Self {
+        Self {
+            enable_show_remote_images: !opts.hide_remote_images,
+            enable_show_embedded_images: !opts.hide_embedded_images,
+        }
+    }
+}
+
 impl From<TransformOptsResolved<'_>> for TransformOpts {
     fn from(val: TransformOptsResolved<'_>) -> Self {
         TransformOpts {
@@ -405,6 +423,9 @@ pub struct BodyOutput {
 
     /// The transform opts that were used. All fields are actually Some.
     pub transform_opts: TransformOpts,
+
+    /// This instructs the client on what banners they should show.
+    pub body_banners: BodyBanners,
 }
 
 pub fn transform_html(
@@ -472,5 +493,6 @@ pub fn transform_html(
         embedded_images_disabled,
         images_proxied,
         transform_opts: opts.into(),
+        body_banners: BodyBanners::new(opts),
     }
 }
