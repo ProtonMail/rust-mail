@@ -4,13 +4,15 @@
 
 use crate::datatypes::{LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
-use crate::{AppError, MailUserContext, MailboxError};
+use crate::{AppError, MailUserContext};
 use parking_lot::Mutex;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use smart_default::SmartDefault;
 use stash::orm::Model;
+use stash::stash::Tether;
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
@@ -21,8 +23,18 @@ use super::MailboxResult;
 
 /// Enable or disable remote content (images).
 /// The default behaviour is Default.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
 pub enum RemoteContent {
+    #[default]
+    Default, // Use whatever is in the user's [`MailSettings`]
+    Enabled,  // Override the settings and show images
+    Disabled, // Override the settings and don't show images
+}
+
+/// Enable or disable embedded images.
+/// The default behaviour is Default.
+#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
+pub enum EmbeddedImages {
     #[default]
     Default, // Use whatever is in the user's [`MailSettings`]
     Enabled,  // Override the settings and show images
@@ -31,11 +43,85 @@ pub enum RemoteContent {
 
 /// What to do with the blockquote (previous conversation threads)
 /// The default behaviour is Strip.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, uniffi::Enum)]
 pub enum BlockQuote {
     #[default]
     Strip,
     Untouched,
+}
+
+/// What to do with the body. If in any of the fields `None` is specified it will read the relevant
+/// value from the user setttings. If all are set, the db query will be elided.
+#[derive(Debug, Clone, Copy, uniffi::Record, SmartDefault)]
+pub struct TransformOpts {
+    #[default = true]
+    pub show_block_quote: bool,
+    pub hide_remote_images: Option<bool>,
+    pub hide_embedded_images: Option<bool>,
+    pub image_proxy: Option<bool>,
+}
+
+/// This is created after calling [`TransformOpts::fill_defaults`]
+#[derive(Debug, Clone, Copy)]
+pub struct TransformOptsResolved<'a> {
+    pub show_block_quote: bool,
+    pub hide_remote_images: bool,
+    pub hide_embedded_images: bool,
+    pub image_proxy: Option<&'a str>,
+}
+
+impl TransformOpts {
+    /// Loads the relevant opts from the setttings.
+    /// If all are set, the db query will be elided.
+    #[must_use]
+    pub async fn resolve<'a>(
+        self,
+        tether: &'_ Tether,
+        user_session_id: &'a str,
+    ) -> TransformOptsResolved<'a> {
+        let show_block_quote = self.show_block_quote;
+        if let (Some(hide_embedded_images), Some(hide_remote_images), Some(image_proxy)) = (
+            self.hide_embedded_images,
+            self.hide_remote_images,
+            self.image_proxy,
+        ) {
+            return TransformOptsResolved {
+                show_block_quote,
+                hide_remote_images,
+                hide_embedded_images,
+                image_proxy: image_proxy.then_some(user_session_id),
+            };
+        }
+
+        let mail_settings = MailSettings::get_or_default(tether).await;
+        let MailSettings {
+            hide_remote_images,
+            hide_embedded_images,
+            image_proxy,
+            ..
+        } = mail_settings;
+
+        TransformOptsResolved {
+            show_block_quote,
+            hide_remote_images: self.hide_remote_images.unwrap_or(hide_remote_images),
+            hide_embedded_images: self.hide_embedded_images.unwrap_or(hide_embedded_images),
+            image_proxy: self
+                .image_proxy
+                .unwrap_or(image_proxy | 2 == 2)
+                .then_some(user_session_id),
+        }
+    }
+}
+
+impl From<TransformOptsResolved<'_>> for TransformOpts {
+    fn from(val: TransformOptsResolved<'_>) -> Self {
+        TransformOpts {
+            show_block_quote: val.show_block_quote,
+            hide_remote_images: Some(val.hide_remote_images),
+            hide_embedded_images: Some(val.hide_embedded_images),
+            image_proxy: Some(val.image_proxy.is_some()),
+        }
+    }
 }
 
 /// A message parsed header value can either be a string or an array of strings.
@@ -227,34 +313,11 @@ impl DecryptedMessageBody {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn transformed(
-        &self,
-        ctx: &MailUserContext,
-        remote_content: RemoteContent,
-        block_quote: BlockQuote,
-    ) -> Result<BodyOutput, MailboxError> {
+    pub async fn transformed(&self, ctx: &MailUserContext, opts: TransformOpts) -> BodyOutput {
         let tether = ctx.user_stash().connection();
-        let mail_settings = MailSettings::get_or_default(&tether).await;
         let user_session_id = ctx.user_id();
-        let BodyOutput {
-            body,
-            had_blockquote,
-            tags_stripped,
-            utm_stripped,
-        } = transform_html(
-            &self.body,
-            remote_content,
-            block_quote,
-            &mail_settings,
-            user_session_id.as_ref(),
-            self.metadata.mime_type,
-        );
-        Ok(BodyOutput {
-            body,
-            had_blockquote,
-            tags_stripped,
-            utm_stripped,
-        })
+        let resolved = opts.resolve(&tether, user_session_id).await;
+        transform_html(&self.body, resolved, self.metadata.mime_type)
     }
 
     /// Create `DecryptedMessageBody` from a `StorableMessageBody` and a `MessageBodyMetadata`.
@@ -315,6 +378,9 @@ impl From<DecryptedMessageBody> for StorableMessageBody {
 }
 
 /// The result of transforming the message body.
+/// It will have more things in the future
+#[non_exhaustive]
+#[derive(Debug, Clone, uniffi::Record)]
 pub struct BodyOutput {
     /// The transformed html of the message.
     pub body: String,
@@ -327,16 +393,34 @@ pub struct BodyOutput {
 
     /// How many UTM tracking params it has removed.
     pub utm_stripped: u64,
+
+    /// How many html tags it has removed.
+    pub remote_images_disabled: u64,
+
+    /// How many embedded images it has disabled.
+    pub embedded_images_disabled: u64,
+
+    /// How many images it has proxied.
+    pub images_proxied: u64,
+
+    /// The transform opts that were used. All fields are actually Some.
+    pub transform_opts: TransformOpts,
 }
 
 pub fn transform_html(
     html: &str,
-    remote_content: RemoteContent,
-    blockquote: BlockQuote,
-    mail_settings: &MailSettings,
-    user_session_id: &str,
+    opts: TransformOptsResolved<'_>,
     mime_type: MimeType,
 ) -> BodyOutput {
+    // The order at which we run the transforms is not random, it's been chosen for maximum
+    // efficiency.
+
+    let TransformOptsResolved {
+        show_block_quote,
+        hide_remote_images,
+        hide_embedded_images,
+        image_proxy,
+    } = opts;
     // If the message is text/plain we need to apply some extra transforms to it like
     // preserving whitespaces and adding links.
     let mut transformer = if mime_type == MimeType::TextPlain {
@@ -352,34 +436,41 @@ pub fn transform_html(
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
-    transformer.inject_style();
+    let embedded_images_disabled = if hide_embedded_images {
+        transformer.disable_embedded_images()
+    } else {
+        0
+    };
 
-    if mail_settings.image_proxy | 2 == 2 {
-        transformer.proxy_images(user_session_id);
+    let mut remote_images_disabled = 0;
+    let mut images_proxied = 0;
+    if hide_remote_images {
+        remote_images_disabled = transformer.disable_remote_content();
+    } else if let Some(user_session_id) = image_proxy {
+        // Doesn't make sense to proxy images if they have been disabled ;)
+        images_proxied = transformer.proxy_images(user_session_id);
     }
+
+    let had_blockquote = if !show_block_quote {
+        transformer.strip_blockquote()
+    } else {
+        false
+    };
 
     if cfg!(target_os = "ios") {
         transformer.inject_ios_content_size();
     }
 
-    match remote_content {
-        RemoteContent::Disabled | // Explicit disable
-        RemoteContent::Default if mail_settings.hide_remote_images  => {
-            transformer.disable_remote_content();
-        }
-        _ => (),
-    }
-
-    let had_blockquote = if let BlockQuote::Strip = blockquote {
-        transformer.strip_blockquote()
-    } else {
-        false
-    };
+    transformer.inject_style();
 
     BodyOutput {
         body: transformer.to_string(),
         had_blockquote,
         tags_stripped,
         utm_stripped,
+        remote_images_disabled,
+        embedded_images_disabled,
+        images_proxied,
+        transform_opts: opts.into(),
     }
 }

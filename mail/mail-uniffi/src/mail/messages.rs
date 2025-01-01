@@ -8,14 +8,16 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, BlockQuote, Message, RemoteContent};
+use super::datatypes::{AllBottomBarMessageActions, Message};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle};
+use crate::{
+    spawn_async, uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle,
+};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
@@ -24,7 +26,7 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
-    self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
+    self, BodyOutput, DecryptedMessageBody, TransformOpts,
 };
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
@@ -37,49 +39,10 @@ use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
 
-/// Which transform options to apply to the html.
-///
-/// Most transforms are either implicit, mandatory or read from the settings.
-#[derive(Debug, Clone, Copy, Default, uniffi::Record)]
-pub struct TransformOpts {
-    pub block_quote: BlockQuote,
-    pub remote_content: RemoteContent,
-}
-
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
     pub(crate) ctx: Arc<MailUserContext>,
     pub(crate) body: DecryptedMessageBody,
-}
-
-/// The result of transforming the message body.
-/// It will have more things in the future
-#[non_exhaustive]
-#[derive(Debug, Clone, uniffi::Record)]
-/// The result of transforming the message body.
-pub struct BodyOutput {
-    /// The transformed html of the message.
-    pub body: String,
-
-    /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
-    pub had_blockquote: bool,
-
-    /// How many html tags it has removed.
-    pub tags_stripped: u64,
-
-    /// How many UTM tracking params it has removed.
-    pub utm_stripped: u64,
-}
-
-impl From<RealBodyOutput> for BodyOutput {
-    fn from(value: RealBodyOutput) -> Self {
-        Self {
-            body: value.body,
-            had_blockquote: value.had_blockquote,
-            tags_stripped: value.tags_stripped,
-            utm_stripped: value.utm_stripped,
-        }
-    }
 }
 
 #[proton_uniffi_macros::export_result]
@@ -96,23 +59,12 @@ impl DecryptedMessage {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ActionError> {
-        let cloned = Arc::clone(&self);
-        uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(
-                cloned
-                    .body
-                    .transformed(
-                        &cloned.ctx,
-                        opts.remote_content.into(),
-                        opts.block_quote.into(),
-                    )
-                    .await?
-                    .into(),
-            )
-        })
-        .await
-        .map_err(ActionError::from)
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> BodyOutput {
+        let this = self.clone();
+        spawn_async(async move { this.body.transformed(&this.ctx, opts).await })
+            .await
+            .expect("Transformed is infailable.")
     }
 
     #[must_use]

@@ -630,7 +630,7 @@ impl From<RealPmSignature> for PmSignature {
 /// Enable or disable remote content (images).
 /// The default behaviour is Default.
 #[derive(Debug, Clone, Copy, Default, UniffiEnum)]
-pub enum RemoteContent {
+pub enum EnableContent {
     /// Use whatever is in the user's [`MailSettings`].
     #[default]
     Default,
@@ -642,7 +642,7 @@ pub enum RemoteContent {
     Enabled,
 }
 
-impl From<RealRemoteContent> for RemoteContent {
+impl From<RealRemoteContent> for EnableContent {
     fn from(value: RealRemoteContent) -> Self {
         match value {
             RealRemoteContent::Default => Self::Default,
@@ -652,12 +652,12 @@ impl From<RealRemoteContent> for RemoteContent {
     }
 }
 
-impl From<RemoteContent> for RealRemoteContent {
-    fn from(value: RemoteContent) -> Self {
+impl From<EnableContent> for RealRemoteContent {
+    fn from(value: EnableContent) -> Self {
         match value {
-            RemoteContent::Default => Self::Default,
-            RemoteContent::Disabled => Self::Disabled,
-            RemoteContent::Enabled => Self::Enabled,
+            EnableContent::Default => Self::Default,
+            EnableContent::Disabled => Self::Disabled,
+            EnableContent::Enabled => Self::Enabled,
         }
     }
 }

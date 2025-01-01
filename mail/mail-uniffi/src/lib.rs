@@ -162,7 +162,11 @@ pub mod errors;
 mod log;
 pub mod mail;
 
-uniffi::setup_scaffolding!();
+#[allow(
+    clippy::wildcard_imports,
+    reason = "We use this trick to use uniffi in the two crates to "
+)]
+use proton_mail_common::uniffi::*;
 
 /// A callback interface for live queries.
 ///
@@ -184,7 +188,6 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 /// This handle can be used to disconnect from the live query.
 ///
-#[allow(dead_code)]
 #[derive(uniffi::Object)]
 pub struct WatchHandle(RealWatchHandle);
 

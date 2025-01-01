@@ -42,12 +42,13 @@ const PROTON_PREFIX: &str = "proton-";
 /// # Errors
 ///
 /// Returns an error if the selector failed to build.
-pub fn disable_remote_content(document: &NodeRef) {
+pub fn disable_remote_content(document: &NodeRef) -> u64 {
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
     let attribute_list = AttributeInfo::default_list();
 
+    let mut count = 0;
     for node in document.traverse_inclusive() {
         let NodeEdge::Start(node_ref) = node else {
             continue;
@@ -69,8 +70,10 @@ pub fn disable_remote_content(document: &NodeRef) {
             };
 
             attributes.map.insert(item.disabled.clone(), attribute);
+            count += 1;
         }
     }
+    count
 }
 
 /// Re-enables all disabled content by stripping the `proton-` prefix.

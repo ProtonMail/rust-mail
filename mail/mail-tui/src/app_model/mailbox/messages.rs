@@ -17,7 +17,7 @@ use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::{LocalId, LocalLabelId};
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody};
+use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{
     Label, MailSettings, Message as MailMessage, MessageDataSource, PaginatorFilter,
@@ -199,13 +199,8 @@ impl MessagesState {
                         .await
                         .context("Failed to get message body")?;
                 let html = decrypted
-                    .transformed(
-                        &mbox.user_context(),
-                        proton_mail_common::decrypted_message::RemoteContent::Default,
-                        BlockQuote::default(),
-                    )
-                    .await
-                    .context("Failed to transform html")?;
+                    .transformed(&mbox.user_context(), TransformOpts::default())
+                    .await;
                 let html = html_to_text(&html.body)?;
                 Ok(Box::new(DecryptedMessage::new(
                     metadata,

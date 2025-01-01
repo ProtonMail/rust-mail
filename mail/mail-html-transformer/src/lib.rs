@@ -110,8 +110,8 @@ impl Transformer {
     /// Disables remote content.
     ///
     /// See [`remote_content::disable_remote_content()`] for more details.
-    pub fn disable_remote_content(&mut self) {
-        remote_content::disable_remote_content(&self.document);
+    pub fn disable_remote_content(&mut self) -> u64 {
+        remote_content::disable_remote_content(&self.document)
     }
 
     /// If true, inject metadata for iOS web view.
@@ -143,8 +143,13 @@ impl Transformer {
     }
 
     /// Proxies all images through proton's proxy.
-    pub fn proxy_images(&mut self, user_session_id: &str) {
-        transforms::proxy_images(self.document(), user_session_id);
+    pub fn proxy_images(&mut self, user_session_id: &str) -> u64 {
+        transforms::proxy_images(self.document(), user_session_id)
+    }
+
+    /// Disables embedded images
+    pub fn disable_embedded_images(&mut self) -> u64 {
+        transforms::disable_embedded_images(self.document())
     }
 
     /// Inserts `<a>` elements in plain text links
