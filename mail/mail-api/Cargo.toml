@@ -16,6 +16,7 @@ serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 smart-default = { workspace = true }
+stash = { workspace = true, optional = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
@@ -31,3 +32,7 @@ wiremock = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+default = []
+sql = ["dep:stash", "proton-api-core/sql"]

@@ -8,10 +8,9 @@
 //!
 
 use core::fmt;
-use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
-use rusqlite::ToSql;
-use secrecy::{CloneableSecret, DebugSecret, Zeroize};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "sql")]
+use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 
@@ -61,6 +60,109 @@ pub enum LightOrDarkMode {
 //  STRUCTS
 //==============================================================================
 
+/// Declare a new unique type for a Proton String Identifier.
+///
+/// # Example
+///
+/// ```
+/// use proton_api_core::declare_proton_id;
+/// declare_proton_id!(pub MyProtonId);
+///
+/// let id = MyProtonId::from("my-actual-proton-id");
+/// ```
+#[macro_export]
+macro_rules! declare_proton_id {
+    (
+        $(#[$($attrss:tt)*])*
+        $visibility:vis $name:ident
+    ) => {
+        $(#[$($attrss)*])*
+        #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+        $visibility struct $ name(String);
+
+        impl $name {
+            #[doc ="Create a new [`"]
+            #[doc =stringify!($name)]
+            #[doc ="`] from a [`String`]."]
+            ///
+            /// # Parameters
+            ///
+            /// * `id` - The ID to wrap.
+            ///
+            #[must_use]
+            pub fn new(id: String) -> Self {
+                Self(id)
+            }
+
+            #[doc = "Convert the [`"]
+            #[doc = stringify!($name)]
+            #[doc = "`] into the inner [`String`]."]
+            #[must_use]
+            pub fn into_inner(self) -> String {
+                self.0
+            }
+
+            /// Get a reference to the inner [`String`]
+            #[must_use]
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl Display for $name {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl From<String> for $name{
+            fn from(id: String) -> Self {
+                Self(id)
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(id: &str) -> Self {
+                Self(id.to_owned())
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        #[cfg(feature = "sql")]
+        impl ToSql for $name {
+            fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+                self.as_str().to_sql()
+            }
+        }
+
+        #[cfg(feature = "sql")]
+        impl FromSql for $name {
+            fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+                String::column_result(value).map(Self)
+            }
+        }
+
+        // Compatibility method, to be removed when conversion is complete.
+        impl From<RemoteId> for $name {
+            fn from(id: RemoteId) -> Self {
+                Self(id.0)
+            }
+        }
+
+        // Compatibility method, to be removed when conversion is complete.
+        impl From<$name> for RemoteId {
+            fn from(id: $name) -> Self {
+                Self(id.0)
+            }
+        }
+    }
+}
+
 /// Remote ID.
 ///
 /// This minimal struct is simply a wrapper around a [`String`], and is used to
@@ -94,10 +196,6 @@ impl RemoteId {
     }
 }
 
-impl CloneableSecret for RemoteId {}
-
-impl DebugSecret for RemoteId {}
-
 impl Deref for RemoteId {
     type Target = String;
 
@@ -124,18 +222,14 @@ impl From<&str> for RemoteId {
     }
 }
 
-impl Zeroize for RemoteId {
-    fn zeroize(&mut self) {
-        self.0.zeroize();
-    }
-}
-
+#[cfg(feature = "sql")]
 impl ToSql for RemoteId {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, rusqlite::Error> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.as_str().to_sql()
     }
 }
 
+#[cfg(feature = "sql")]
 impl FromSql for RemoteId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         String::column_result(value).map(RemoteId)
