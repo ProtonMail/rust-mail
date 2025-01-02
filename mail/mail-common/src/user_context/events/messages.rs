@@ -1,5 +1,5 @@
 use crate::events::MessageEvent;
-use crate::models::{ConversationLabel, DraftMetadata, Message};
+use crate::models::{DraftMetadata, Message};
 use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
@@ -21,11 +21,6 @@ pub async fn handle_message_events(
             }
             Action::Create => {
                 if let Some(message) = &message_event.message {
-                    ConversationLabel::create_or_update_from_message_metadata(
-                        &[message.clone()],
-                        tx,
-                    )
-                    .await?;
                     Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
                         .await?;
                 } else {
@@ -43,11 +38,6 @@ pub async fn handle_message_events(
                     continue;
                 }
                 if let Some(message) = &message_event.message {
-                    ConversationLabel::create_or_update_from_message_metadata(
-                        &[message.clone()],
-                        tx,
-                    )
-                    .await?;
                     Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
                         .await?;
                 } else {
