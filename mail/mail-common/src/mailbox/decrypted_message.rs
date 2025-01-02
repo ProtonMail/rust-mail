@@ -23,7 +23,8 @@ use super::MailboxResult;
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
-#[derive(Debug, Clone, Copy, uniffi::Record, SmartDefault)]
+#[derive(Debug, Clone, Copy, SmartDefault)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TransformOpts {
     #[default = true]
     pub show_block_quote: bool,
@@ -86,7 +87,8 @@ impl TransformOpts {
 }
 
 /// Which banners related to the body the client should show.
-#[derive(Debug, Clone, Copy, uniffi::Record)]
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BodyBanners {
     /// Whether to show the "enable remote images" banner
     pub enable_show_remote_images: bool,
@@ -370,7 +372,8 @@ impl From<DecryptedMessageBody> for StorableMessageBody {
 /// The result of transforming the message body.
 /// It will have more things in the future
 #[non_exhaustive]
-#[derive(Debug, Clone, uniffi::Record)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BodyOutput {
     /// The transformed html of the message.
     pub body: String,

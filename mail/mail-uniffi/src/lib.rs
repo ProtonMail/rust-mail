@@ -162,11 +162,7 @@ pub mod errors;
 mod log;
 pub mod mail;
 
-#[allow(
-    clippy::wildcard_imports,
-    reason = "We use this trick to use uniffi in the two crates to "
-)]
-use proton_mail_common::uniffi::*;
+uniffi::setup_scaffolding!("proton_mail_uniffi");
 
 /// A callback interface for live queries.
 ///
