@@ -77,7 +77,7 @@ macro_rules! declare_proton_id {
         $visibility:vis $name:ident
     ) => {
         $(#[$($attrss)*])*
-        #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+        #[derive(Clone, Debug, serde::Deserialize, Eq, Hash, PartialEq, serde::Serialize)]
         $visibility struct $ name(String);
 
         impl $name {
@@ -109,8 +109,8 @@ macro_rules! declare_proton_id {
             }
         }
 
-        impl Display for $name {
-            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                 write!(f, "{}", self.0)
             }
         }
@@ -134,30 +134,30 @@ macro_rules! declare_proton_id {
         }
 
         #[cfg(feature = "sql")]
-        impl ToSql for $name {
-            fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        impl stash::exports::ToSql for $name {
+            fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
                 self.as_str().to_sql()
             }
         }
 
         #[cfg(feature = "sql")]
-        impl FromSql for $name {
-            fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        impl stash::exports::FromSql for $name {
+            fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
                 String::column_result(value).map(Self)
             }
         }
 
         // Compatibility method, to be removed when conversion is complete.
-        impl From<RemoteId> for $name {
-            fn from(id: RemoteId) -> Self {
-                Self(id.0)
+        impl From<$crate::RemoteId> for $name {
+            fn from(id: $crate::RemoteId) -> Self {
+                Self(id.into_inner())
             }
         }
 
         // Compatibility method, to be removed when conversion is complete.
-        impl From<$name> for RemoteId {
+        impl From<$name> for $crate::RemoteId {
             fn from(id: $name) -> Self {
-                Self(id.0)
+                $crate::RemoteId::new(id.into_inner())
             }
         }
     }
