@@ -11,7 +11,7 @@ mail-builder = "0.3.2"
 thiserror = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
-serde = { version = "1", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 proton-crypto = { workspace = true }
