@@ -16,6 +16,7 @@ pub enum PGPScheme {
 
 impl PGPScheme {
     /// Returns the string representation of a PGP scheme.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PGPInline => "pgp-inline",
@@ -24,6 +25,7 @@ impl PGPScheme {
     }
 
     /// Returns true if the input string represents a valid PGP scheme
+    #[must_use]
     pub fn valid(other: &str) -> bool {
         matches!(other, "pgp-inline" | "pgp-mime")
     }
@@ -51,6 +53,7 @@ pub enum EmailMimeType {
 
 impl EmailMimeType {
     /// Returns the string representation of the mime type.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Html => "text/html",
@@ -95,6 +98,7 @@ pub struct PinnedPublicKeys<Pub: PublicKey> {
 
 impl<Pub: PublicKey> PinnedPublicKeys<Pub> {
     /// Creates pinned keys with the imported keys using default config values.
+    #[must_use]
     pub fn new(pinned_keys: Vec<Pub>) -> PinnedPublicKeys<Pub> {
         Self {
             pinned_keys,

@@ -92,10 +92,12 @@ impl Display for PackageCryptoType {
 }
 
 impl PackageCryptoType {
+    #[must_use]
     pub fn type_value(self) -> u8 {
         self as u8
     }
 
+    #[must_use]
     pub fn enum_of(value: u8) -> Option<PackageCryptoType> {
         match value {
             1 => Some(PackageCryptoType::ProtonMail),
@@ -108,6 +110,7 @@ impl PackageCryptoType {
         }
     }
 
+    #[must_use]
     pub fn from_scheme(scheme: PGPScheme, encrypt: bool, sign: bool) -> PackageCryptoType {
         match scheme {
             PGPScheme::PGPMime => {

@@ -117,6 +117,7 @@ pub struct InboxMimeBuilder<'x> {
 
 impl<'x> InboxMimeBuilder<'x> {
     /// Starts building a multipart MIME message.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             text_body: None,
@@ -130,6 +131,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// # Parameters
     ///
     /// * `text_body` - The plain text body of the email.
+    #[must_use]
     pub fn text_body(mut self, text_body: &'x str) -> Self {
         self.text_body = Some(
             MimePart::new(MIME_TYPE_PLAIN, BodyPart::Text(text_body.into()))
@@ -145,6 +147,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// # Parameters
     ///
     /// * `html_body` - The HTML content of the email message.
+    #[must_use]
     pub fn html_body(self, html_body: &'x [u8]) -> InboxMimeBuilder<'x> {
         self.begin_html_body(html_body).end_html_body()
     }
@@ -157,6 +160,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// # Parameters
     ///
     /// * `html_body` - The HTML content of the email message.
+    #[must_use]
     pub fn begin_html_body(self, html_body: &'x [u8]) -> HtmlBodyPartBuilder<'x> {
         HtmlBodyPartBuilder::new(
             self,
@@ -171,6 +175,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// * `filename`  - The filename of the attachment.
     /// * `mime_type` - The MIME type of the attachment, if any.
     /// * `content`   - The content of the attachment.
+    #[must_use]
     pub fn attachment(
         mut self,
         filename: &'x str,
@@ -201,6 +206,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// * `filename`    - The filename of the attachment.
     /// * `mime_type`   - The MIME type of the attachment, if any.
     /// * `content`     - The content of the attachment.
+    #[must_use]
     pub fn inline_attachment(
         mut self,
         content_id: &'x str,
@@ -288,6 +294,7 @@ impl<'x> HtmlBodyPartBuilder<'x> {
     /// * `filename`    - The filename of the attachment.
     /// * `mime_type`   - The MIME type of the attachment, if any.
     /// * `content`     - The content of the attachment.
+    #[must_use]
     pub fn inline_attachment(
         mut self,
         content_id: &'x str,
@@ -307,6 +314,7 @@ impl<'x> HtmlBodyPartBuilder<'x> {
     }
 
     /// Finalizes the HTML body part.
+    #[must_use]
     pub fn end_html_body(mut self) -> InboxMimeBuilder<'x> {
         let mut parts = Vec::with_capacity(self.inline_attachments.len() + 1);
         parts.push(self.html_body);

@@ -49,6 +49,7 @@ impl<Pub: PublicKey> PublicAddressKeys<Pub> {
     ///
     /// The `include_internal_keys_with_e2ee_disabled` indicates if internal keys
     /// with end-to-end encryption disabled should be considered in the output.
+    #[must_use]
     pub fn into_inbox_keys(
         self,
         include_internal_keys_with_e2ee_disabled: bool,

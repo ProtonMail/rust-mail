@@ -77,6 +77,7 @@ impl<Provider: PGPProviderSync> Clone for UnlockedUserKeys<Provider> {
 impl<Provider: PGPProviderSync> UnlockedUserKeys<Provider> {
     /// Retrieves the primary user key for encryption and signing operations
     /// for the user who owns these keys.
+    #[must_use]
     pub fn primary(&self) -> Option<&UnlockedUserKey<Provider>> {
         // For now we treat the first key in the list as primary.
         // - This might change with key transparency in place.

@@ -102,6 +102,7 @@ impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
     ///
     /// # Note
     /// For e-mail encryption and signing, use [`Self::primary_for_mail`] instead.
+    #[must_use]
     pub fn primary_default(&self) -> Option<&UnlockedAddressKey<Provider>> {
         self.0.iter().find(|key| !key.is_v6)
     }
@@ -350,6 +351,7 @@ impl AddressKeys {
     ///
     /// Legacy means that the address key is encrypted with the same key secret
     /// as the user key. Thus, it does not contain an encrypted token or a token signature.
+    #[must_use]
     pub fn contains_legacy_keys(&self) -> bool {
         self.0
             .iter()
@@ -405,6 +407,7 @@ impl LocalAddressKey {
     ///
     /// Legacy means that the address key is encrypted with the same key secret
     /// as the user key. Thus, it does not contain an encrypted token and a token signature.
+    #[must_use]
     pub fn is_legacy(&self) -> bool {
         self.token.is_none() || self.signature.is_none()
     }

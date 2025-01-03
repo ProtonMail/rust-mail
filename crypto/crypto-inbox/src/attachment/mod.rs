@@ -18,6 +18,7 @@ string_id! {
 }
 
 impl KeyPackets {
+    #[must_use]
     pub fn from_vec(value: Vec<KeyPacket>) -> Self {
         Self(value.into_iter().map(|a| a.0).collect::<String>())
     }

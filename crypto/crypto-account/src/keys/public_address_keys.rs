@@ -48,6 +48,7 @@ pub struct UnverifiedPublicAddressKeyGroup<T: PublicKey> {
 }
 
 impl<T: PublicKey> PublicAddressKeyGroup<T> {
+    #[must_use]
     pub fn as_slice(&self) -> &[PublicAddressKey<T>] {
         self.keys.as_slice()
     }

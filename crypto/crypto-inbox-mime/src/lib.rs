@@ -24,6 +24,7 @@ pub enum Disposition {
 
 impl Disposition {
     /// Returns a reference to its string representation.
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Disposition::Attachment => "attachment",

@@ -183,11 +183,13 @@ impl InboxSessionKey {
     }
 
     /// Exposes the internal session key as a base64 encoded string, which is wiped from memory on drop.
+    #[must_use]
     pub fn expose_secret(&self) -> SessionKeyExposed {
         self.session_key_bytes.to_exposed()
     }
 
     /// Returns the symmetric encryption algorithm the session key is associated with.
+    #[must_use]
     pub fn algorithm(&self) -> SessionKeyAlgorithm {
         self.session_key_algorithm
     }

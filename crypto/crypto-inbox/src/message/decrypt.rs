@@ -27,11 +27,13 @@ impl AsRef<str> for DecryptedBody {
 
 impl DecryptedBody {
     /// Returns a reference to the decrypted message body.
+    #[must_use]
     pub fn body(&self) -> &str {
         self.as_ref()
     }
 
     /// Consumes the type and returns the body of the message.
+    #[must_use]
     pub fn into_string(self) -> String {
         match self {
             DecryptedBody::Plain(body) => body,
@@ -40,6 +42,7 @@ impl DecryptedBody {
     }
 
     /// Returns whether this decryption result is from an encrypted mime message.
+    #[must_use]
     pub fn is_mime(&self) -> bool {
         matches!(self, DecryptedBody::Mime(_))
     }

@@ -14,6 +14,7 @@ use super::GettablePGPMessage;
 pub struct EncryptedMessageBody(Vec<u8>);
 
 impl EncryptedMessageBody {
+    #[must_use]
     pub fn to_base64_string(&self) -> String {
         BASE64_STANDARD.encode(&self.0)
     }

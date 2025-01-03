@@ -96,6 +96,7 @@ pub enum ProcessedBodyType {
 
 impl ProcessedBodyType {
     /// Returns the mime type string.
+    #[must_use]
     pub fn mime_type(&self) -> &str {
         match self {
             ProcessedBodyType::Text => "text/plain",
@@ -120,6 +121,7 @@ pub struct MimeSignatureVerifier {
 
 impl MimeSignatureVerifier {
     /// Returns the a slice of the content that should be verified in `raw_data`.
+    #[must_use]
     pub fn data_to_verify<'a>(&self, raw_data: &'a [u8]) -> &'a [u8] {
         &raw_data[self.verify_data_range.clone()]
     }

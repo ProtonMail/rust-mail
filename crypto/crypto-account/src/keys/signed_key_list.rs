@@ -139,14 +139,17 @@ pub struct SignedKeyList {
 
 impl SignedKeyList {
     /// Returns if the SKL is released in an epoch.
+    #[must_use]
     pub fn is_released_in_epoch(&self) -> bool {
         self.max_epoch_id.is_some() && self.max_epoch_id.is_some()
     }
     /// Returns if the SKL represents an obsolete address.
+    #[must_use]
     pub fn is_obsolete(&self) -> bool {
         self.obsolescence_token.is_some()
     }
     /// Returns if the SKL represents an address with active address keys.
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.signature.is_some() && self.data.is_some() && !self.is_obsolete()
     }

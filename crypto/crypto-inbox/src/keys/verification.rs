@@ -62,6 +62,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     ///
     /// Selects the public keys for signature verification based on the public keys fetched from the API
     /// and the public keys found in the associated contact.
+    #[must_use]
     pub fn from_public_keys(
         api_keys: PublicAddressKeys<Pub>,
         vcard_keys: Option<PinnedPublicKeys<Pub>>,
@@ -105,6 +106,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     ///
     /// The keys be the input input to the respective signature verification function.
     /// Pinned keys extracted from contacts are preferred over keys from the API.
+    #[must_use]
     pub fn signature_verification_keys(&self) -> &[Pub] {
         if self.uses_pinned_keys() {
             return &self.pinned_keys;
@@ -113,6 +115,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     }
 
     /// Indicates whether contact pinned keys are used by these preferences.
+    #[must_use]
     pub fn uses_pinned_keys(&self) -> bool {
         !self.pinned_keys.is_empty()
     }
@@ -120,6 +123,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     /// Checks whether this `OpenPGP` key fingerprint belongs to a key marked as compromised.
     ///
     /// This can be helpful to check whether as signature was created by a key marked as compromised.
+    #[must_use]
     pub fn is_compromised(&self, fingerprint: &OpenPGPFingerprint) -> bool {
         self.compromised_fingerprints.contains(fingerprint)
     }

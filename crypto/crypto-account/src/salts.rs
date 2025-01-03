@@ -43,11 +43,13 @@ pub struct KeySecret(Vec<u8>);
 
 impl KeySecret {
     /// Creates a key secret from a byte vector.
+    #[must_use]
     pub fn new(data: Vec<u8>) -> Self {
         KeySecret(data)
     }
 
     /// Returns a slice of the key in bytes.
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
     }
@@ -68,17 +70,20 @@ impl Debug for KeySecret {
 impl KeySalt {
     const SALT_LEN: usize = 16;
     /// Encode raw salt bytes as [`KeySalt`].
+    #[must_use]
     pub fn from_bytes(salt_bytes: &[u8; Self::SALT_LEN]) -> Self {
         Self(BASE_64.encode(salt_bytes))
     }
 
     /// Generates a fresh random [`KeySalt`] using client randomness.
+    #[must_use]
     pub fn generate() -> Self {
         let salt_bytes: [u8; Self::SALT_LEN] = generate_secure_random_bytes();
         Self::from_bytes(&salt_bytes)
     }
 
     /// Encode raw salt bytes as [`KeySalt`].
+    #[must_use]
     pub fn encode(salt_bytes: &[u8]) -> Self {
         Self(BASE_64.encode(salt_bytes))
     }

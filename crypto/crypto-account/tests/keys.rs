@@ -62,6 +62,7 @@ fn get_test_decrypted_user_key<T: PGPProviderSync>(
     }]
 }
 
+#[must_use]
 pub fn get_test_locked_address_key() -> AddressKeys {
     AddressKeys::new(
         vec![LockedKey {
@@ -81,6 +82,7 @@ pub fn get_test_locked_address_key() -> AddressKeys {
     )
 }
 
+#[must_use]
 pub fn get_test_locked_legacy_address_key() -> AddressKeys {
     AddressKeys::new(
         vec![LockedKey {

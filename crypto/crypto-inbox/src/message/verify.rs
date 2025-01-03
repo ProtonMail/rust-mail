@@ -45,6 +45,7 @@ impl VerifiableBody {
         }
     }
 
+    #[must_use]
     pub fn new(
         is_decrypted_mime: bool,
         decrypted_raw: Vec<u8>,

@@ -48,10 +48,12 @@ impl Default for KeyFlag {
 
 impl KeyFlag {
     /// Returns the key flag bitmap as u32.
+    #[must_use]
     pub fn to_u32(&self) -> u32 {
         self.0
     }
     /// Returns true if the flag indicates no email signing.
+    #[must_use]
     pub fn is_email_no_sign(&self) -> bool {
         (self.0 & FLAG_EMAIL_NO_SIGN) > 0
     }
@@ -62,18 +64,22 @@ impl KeyFlag {
     /// - the key is associated to a product without Mail, like Drive or VPN
     /// - the key is associated to an external address
     /// - the key is associated to an internal address e2e encryption disabled (e.g. because of forwarding)
+    #[must_use]
     pub fn is_email_no_encryption(&self) -> bool {
         (self.0 & FLAG_EMAIL_NO_ENCRYPT) > 0
     }
     /// Returns true if the flag indicates that the associated key is obsolete.
+    #[must_use]
     pub fn is_obsolete(&self) -> bool {
         (self.0 & FLAG_NOT_OBSOLETE) == 0
     }
     /// Returns true if the flag indicates that the associated key is compromised.
+    #[must_use]
     pub fn is_compromised(&self) -> bool {
         (self.0 & FLAG_NOT_COMPROMISED) == 0
     }
     /// Indicates whether the key supports mail.
+    #[must_use]
     pub fn supports_mail(&self) -> bool {
         !self.is_email_no_encryption()
     }
