@@ -5,7 +5,7 @@ use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use crate::models::{CachedConverstationScrollData, ConversationScrollData, Label};
 use maplit::hashmap;
-use proton_core_common::datatypes::{Id, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::{conv_label, conversation, label, rid};
@@ -315,5 +315,109 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
 
     assert_eq!(actual.len(), all_count);
+    assert_eq!(actual, expected);
+
+    // Create a new cached scroller and assert it starts from the beggining
+    let mut cached_scroller =
+        CachedConverstationScrollData::new(local_label_id, unread, page_size, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    let expected_count = 5_usize;
+    let count = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(count, expected_count as u64);
+    assert!(cached_scroller.has_more(&tether).await.unwrap());
+
+    let actual = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(actual.first().unwrap().local_id, LocalId::from(100));
+
+    // Delete whole first page
+    let convs = data.get(REMOTE_LABEL_ID).unwrap();
+    let bond = tether.transaction().await.unwrap();
+
+    for conv_to_delete in convs.iter().rev().take(page_size).cloned() {
+        conv_to_delete.delete(&bond).await.unwrap();
+    }
+
+    bond.commit().await.unwrap();
+
+    let actual_count = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+    assert_eq!(actual_count, 0);
+
+    let actual = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(actual, vec![]);
+
+    // Prove we can progress to the next page
+    let actual = cached_scroller.fetch_more(&tether).await.unwrap();
+    assert_eq!(actual.len(), page_size);
+
+    let expected = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(actual, expected);
+
+    // Delete next 3 pages and prove we can progress to the next page
+    let bond = tether.transaction().await.unwrap();
+
+    for conv_to_delete in convs
+        .iter()
+        .rev()
+        .skip(page_size)
+        .take(page_size * 3)
+        .cloned()
+    {
+        conv_to_delete.delete(&bond).await.unwrap();
+    }
+
+    bond.commit().await.unwrap();
+
+    let actual_count = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+    assert_eq!(actual_count, 0);
+
+    let actual = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(actual, vec![]);
+
+    let actual = cached_scroller.fetch_more(&tether).await.unwrap();
+    assert_eq!(actual.len(), page_size);
+
+    let expected = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(actual, expected);
+
+    // Undelete previous 4 pages
+    let convs = data.get_mut(REMOTE_LABEL_ID).unwrap();
+    let bond = tether.transaction().await.unwrap();
+
+    for conv in convs.iter_mut().rev().take(page_size * 4) {
+        conv.local_id = None;
+        conv.row_id = None;
+        let mut labels = vec![];
+        std::mem::swap(&mut conv.labels, &mut labels);
+
+        conv.save(&bond).await.unwrap();
+
+        for label in labels.iter_mut() {
+            label.local_id = None;
+            label.row_id = None;
+            label.local_conversation_id = conv.local_id;
+            label.save(&bond).await.unwrap();
+        }
+
+        conv.reload(&bond).await.unwrap();
+    }
+
+    bond.commit().await.unwrap();
+
+    let actual = cached_scroller.visible_elements(&tether).await.unwrap();
+    let expected = expected_conversations(page_size * 5, REMOTE_LABEL_ID, &data).unwrap();
+
+    assert_eq!(actual.len(), page_size * 5);
     assert_eq!(actual, expected);
 }

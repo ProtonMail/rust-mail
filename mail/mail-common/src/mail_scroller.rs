@@ -488,7 +488,7 @@ impl MailConversationScrollerSource {
                 desc: Some(true),
                 // time == 0 breaks the api query.
                 end: Some(last_element_time),
-                end_id: Some(last_element_id.clone().into()),
+                end_id: Some(last_element_id.clone()),
                 label_id: Some(remote_label_id.into()),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
@@ -499,7 +499,7 @@ impl MailConversationScrollerSource {
         if !response.conversations.is_empty() {
             // Unless we are filtering, end id is always the first element in the returned
             // data, even if there is are no more elements.
-            if response.conversations[0].id == last_element_id.into() {
+            if response.conversations[0].id == last_element_id {
                 response.conversations.remove(0);
             } else if response.conversations.len() > page_size {
                 // sometimes we get more elements back than we need.
