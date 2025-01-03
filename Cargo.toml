@@ -21,6 +21,7 @@ derive_more = "1.0"
 email_address = { version = "0.2.9", features = ["serde"] }
 flume = "0.11"
 futures = "0.3.30"
+hex = "0.4.3"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"
 insta = { version = "1.39.0", features = ["toml"] }
@@ -137,12 +138,23 @@ registry = "proton"
 
 [workspace.dependencies.proton-crypto-inbox]
 version = "0.9.0"
+path = "crypto/crypto-inbox"
+registry = "proton"
+
+[workspace.dependencies.proton-crypto-inbox-mime]
+version = "0.4.1"
+path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
 version = "0.8.0"
+path = "crypto/crypto-account"
 registry = "proton"
 features = ["sql"]
+
+[workspace.dependencies.proton-crypto]
+version = "0.4.11"
+registry = "proton"
 
 [workspace.dependencies.muon]
 version = "1.1"
