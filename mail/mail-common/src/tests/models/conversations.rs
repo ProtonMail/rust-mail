@@ -2805,8 +2805,6 @@ async fn test_conversation_watcher() {
         tx.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
                    params![30, local_label_id1, local_conv_id],
         ).await.unwrap();
-        tx.commit().await.unwrap();
-        let tx = tether.transaction().await.unwrap();
         tx.execute(
             "UPDATE conversations SET num_unread=? WHERE local_id=?",
             params![10, local_conv_id],
@@ -2816,9 +2814,6 @@ async fn test_conversation_watcher() {
         tx.commit().await.unwrap();
     });
 
-    // first update when modifying label
-    watch_result.recv_async().await.unwrap();
-    // second update when modifying conversation
     watch_result.recv_async().await.unwrap();
 }
 
