@@ -1,4 +1,4 @@
-use crate::datatypes::{Id, LocalId, RemoteId};
+use crate::datatypes::{IdCounterpart, LocalId, RemoteId};
 use crate::models::{Contact, ModelExtension};
 use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};

@@ -14,7 +14,7 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,

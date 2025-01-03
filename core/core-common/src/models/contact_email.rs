@@ -1,5 +1,5 @@
 use crate::datatypes::{
-    ContactSendingPreferences, ContactTypes, Id, LabelId, Labels, LocalId, RemoteId,
+    ContactSendingPreferences, ContactTypes, IdCounterpart, LabelId, Labels, LocalId, RemoteId,
 };
 use crate::models::{Contact, ModelExtension};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;

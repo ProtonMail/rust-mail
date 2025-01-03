@@ -8,7 +8,7 @@ use crate::{
     models::Label,
     AppError,
 };
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::stash::Tether;
 

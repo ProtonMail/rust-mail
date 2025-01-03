@@ -11,7 +11,7 @@ use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;

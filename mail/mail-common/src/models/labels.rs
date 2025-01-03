@@ -18,7 +18,7 @@ use proton_api_mail::services::proton::requests::{
 };
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;

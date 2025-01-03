@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};

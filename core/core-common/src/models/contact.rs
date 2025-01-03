@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
+use crate::datatypes::{GroupedContacts, IdCounterpart, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;

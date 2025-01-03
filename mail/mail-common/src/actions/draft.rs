@@ -6,7 +6,7 @@ use crate::datatypes::SystemLabelId;
 use crate::decrypted_message::StorableMessageBody;
 use crate::models::{Label, Message};
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
 pub use save::*;
 pub use send::*;
 use stash::stash::Tether;
