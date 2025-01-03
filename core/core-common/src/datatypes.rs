@@ -172,141 +172,6 @@ impl ToSql for AddressType {
     }
 }
 
-/// A dual-nature ID representation.
-///
-/// This enum allows transparent handling of a local or remote ID, i.e.
-/// [`LocalId`] or [`RemoteId`], in a single type. This is useful for cases such
-/// as combining functionality, e.g. finding a record by either ID type. This
-/// approach means that both can be accepted and used, plus their core/shared
-/// functionality can be used in the same way, but also the enum can be
-/// destructured to use one or other specifically if needed. This gives full
-/// functionality but also ease of use.
-///
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(clippy::exhaustive_enums)]
-pub enum AgnosticId {
-    /// A [`LocalId`] instance.
-    Local(LocalId),
-
-    /// A [`RemoteId`] instance.
-    Remote(RemoteId),
-}
-
-impl AgnosticId {
-    pub(crate) fn id_field_name(&self) -> &'static str {
-        match self {
-            AgnosticId::Local(_) => "local_id",
-            AgnosticId::Remote(_) => "remote_id",
-        }
-    }
-}
-
-impl From<LocalId> for AgnosticId {
-    fn from(id: LocalId) -> Self {
-        Self::Local(id)
-    }
-}
-
-impl From<&LocalId> for AgnosticId {
-    fn from(id: &LocalId) -> Self {
-        Self::Local(*id)
-    }
-}
-
-impl From<RemoteId> for AgnosticId {
-    fn from(id: RemoteId) -> Self {
-        Self::Remote(id)
-    }
-}
-
-impl From<&RemoteId> for AgnosticId {
-    fn from(id: &RemoteId) -> Self {
-        Self::Remote(id.clone())
-    }
-}
-
-impl Id for AgnosticId {
-    type Counterpart = AgnosticId;
-
-    async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
-    where
-        T: Model,
-    {
-        match self {
-            Self::Local(id) => id
-                .counterpart::<T>(tether)
-                .await
-                .map(|id| id.map(Self::Remote)),
-            Self::Remote(id) => id
-                .counterpart::<T>(tether)
-                .await
-                .map(|id| id.map(Self::Local)),
-        }
-    }
-
-    async fn counterparts<T>(
-        ids: Vec<Self>,
-        tether: &Tether,
-    ) -> Result<Vec<Self::Counterpart>, StashError>
-    where
-        T: Model,
-    {
-        match ids.first() {
-            Some(Self::Local(_)) => LocalId::counterparts::<T>(
-                ids.into_iter()
-                    .map(|id| match id {
-                        Self::Local(id) => id,
-                        Self::Remote(_) => unreachable!(),
-                    })
-                    .collect(),
-                tether,
-            )
-            .await
-            .map(|ids| ids.into_iter().map(Self::Remote).collect()),
-            Some(Self::Remote(_)) => RemoteId::counterparts::<T>(
-                ids.into_iter()
-                    .map(|id| match id {
-                        Self::Local(_) => unreachable!(),
-                        Self::Remote(id) => id,
-                    })
-                    .collect(),
-                tether,
-            )
-            .await
-            .map(|ids| ids.into_iter().map(Self::Local).collect()),
-            None => Ok(vec![]),
-        }
-    }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        match self {
-            Self::Local(id) => id.load(tether).await,
-            Self::Remote(id) => id.load(tether).await,
-        }
-    }
-}
-
-impl IdOpt<LocalId> for AgnosticId {
-    fn opt<I: Into<Self>>(id: I) -> Option<LocalId> {
-        match id.into() {
-            Self::Local(id) => Some(id),
-            Self::Remote(_) => None,
-        }
-    }
-}
-
-impl IdOpt<RemoteId> for AgnosticId {
-    fn opt<I: Into<Self>>(id: I) -> Option<RemoteId> {
-        match id.into() {
-            Self::Local(_) => None,
-            Self::Remote(id) => Some(id),
-        }
-    }
-}
-
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
@@ -916,6 +781,9 @@ pub trait Id: Clone + Send + Sync {
     async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
         T: Model;
+
+    /// Name of the id field in the database table.
+    fn id_field_name() -> &'static str;
 }
 
 /// Extension of functionality shared by both [`LocalId`] and [`RemoteId`].
@@ -1395,6 +1263,10 @@ impl Id for LocalId {
     {
         T::find_first("WHERE local_id = ?", params![*self], tether).await
     }
+
+    fn id_field_name() -> &'static str {
+        "local_id"
+    }
 }
 
 impl IdOpt<Self> for LocalId {
@@ -1623,6 +1495,10 @@ impl Id for RemoteId {
         T: Model,
     {
         T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
+    }
+
+    fn id_field_name() -> &'static str {
+        "remote_id"
     }
 }
 
