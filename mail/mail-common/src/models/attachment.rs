@@ -12,7 +12,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,

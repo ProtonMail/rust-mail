@@ -1,6 +1,6 @@
 use crate::draft::ReplyMode;
 use crate::models::Message;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
 use serde::{Deserialize, Serialize};

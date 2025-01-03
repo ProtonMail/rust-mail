@@ -688,15 +688,41 @@ impl ToSql for WeekStart {
 //  TRAITS
 //==============================================================================
 
-/// Presentation of functionality shared by both [`LocalId`] and [`RemoteId`].
-///
-/// This trait specifies functionality that is provided by both the [`LocalId`]
-/// and [`RemoteId`] types. Both of these types, plus the [`AgnosticId`] type,
-/// implement this trait, and so the key aspects common to both [`LocalId`]
-/// instances and [`RemoteId`] instances can be used in unified fashion.
-///
+/// Shared functionality associated with a database identifier.
 #[allow(async_fn_in_trait)]
 pub trait Id: Clone + Send + Sync {
+    /// Loads a record from the database by ID.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`Model`] trait.
+    ///
+    /// For full usage details, see [`Model::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::load()`]
+    ///
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model;
+
+    /// Name of the id field in the database table.
+    fn id_field_name() -> &'static str;
+}
+
+/// Mapping trait which allows one to convert a local into a remote id and vice-versa.
+#[allow(async_fn_in_trait)]
+pub trait IdCounterpart: Clone + Send + Sync {
     /// The counterpart type to this ID.
     type Counterpart: Id;
 
@@ -756,34 +782,6 @@ pub trait Id: Clone + Send + Sync {
     ) -> Result<Vec<Self::Counterpart>, StashError>
     where
         T: Model;
-
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`Model`] trait.
-    ///
-    /// For full usage details, see [`Model::load()`].
-    ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::load()`]
-    ///
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model;
-
-    /// Name of the id field in the database table.
-    fn id_field_name() -> &'static str;
 }
 
 /// Extension of functionality shared by both [`LocalId`] and [`RemoteId`].
@@ -1138,6 +1136,36 @@ impl Deref for Labels {
 
 sql_using_serde!(Labels);
 
+/// Implement the `Id` trait for a proton id declared with [`proton_api_core::declare_proton_id`]
+/// macro.
+///
+/// This macro should be used if the proton id does not have a local id counterpart.
+#[macro_export]
+macro_rules! impl_id_for_proton_id {
+    ($proton_id:ident) => {
+        impl $crate::datatypes::Id for $proton_id {
+            async fn load<T>(
+                &self,
+                tether: &::stash::stash::Tether,
+            ) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first(
+                    "WHERE remote_id = ?",
+                    ::stash::params![self.clone()],
+                    tether,
+                )
+                .await
+            }
+
+            fn id_field_name() -> &'static str {
+                "remote_id"
+            }
+        }
+    };
+}
+
 /// Declare a new Local id type that maps to a remote Proton Id.
 ///
 /// A local identifier should exist for every remote/proton Id for every resource we store
@@ -1202,6 +1230,19 @@ macro_rules! declare_local_id {
         }
 
         impl $crate::datatypes::Id for $name {
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first("WHERE local_id = ?", ::stash::params![*self], tether).await
+            }
+
+            fn id_field_name() -> &'static str {
+                "local_id"
+            }
+        }
+
+        impl $crate::datatypes::IdCounterpart for $name {
             type Counterpart = $remote_id;
 
             async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
@@ -1266,20 +1307,11 @@ macro_rules! declare_local_id {
                     .map($remote_id::new)
                     .collect())
             }
-
-            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
-            where
-                T: ::stash::orm::Model,
-            {
-                T::find_first("WHERE local_id = ?", ::stash::params![*self], tether).await
-            }
-
-            fn id_field_name() -> &'static str {
-                "local_id"
-            }
         }
 
-        impl $crate::datatypes::Id for $remote_id {
+        $crate::impl_id_for_proton_id!($remote_id);
+
+        impl $crate::datatypes::IdCounterpart for $remote_id {
             type Counterpart = $name;
 
             async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
@@ -1353,17 +1385,6 @@ macro_rules! declare_local_id {
                     .map(Into::into)
                     .collect())
             }
-
-            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
-            where
-                T: ::stash::orm::Model,
-            {
-                T::find_first("WHERE remote_id = ?", ::stash::params![self.clone()], tether).await
-            }
-
-            fn id_field_name() -> &'static str {
-                "remote_id"
-            }
         }
     };
 }
@@ -1424,6 +1445,19 @@ impl FromSql for LocalId {
 }
 
 impl Id for LocalId {
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+    {
+        T::find_first("WHERE local_id = ?", params![*self], tether).await
+    }
+
+    fn id_field_name() -> &'static str {
+        "local_id"
+    }
+}
+
+impl IdCounterpart for LocalId {
     type Counterpart = RemoteId;
 
     async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
@@ -1485,17 +1519,6 @@ impl Id for LocalId {
             .into_iter()
             .map(|r| r.id)
             .collect())
-    }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        T::find_first("WHERE local_id = ?", params![*self], tether).await
-    }
-
-    fn id_field_name() -> &'static str {
-        "local_id"
     }
 }
 
@@ -1646,7 +1669,21 @@ impl From<ApiReferral> for Referral {
 sql_using_serde!(Referral);
 
 pub use proton_api_core::RemoteId;
+
 impl Id for RemoteId {
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+    {
+        T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
+    }
+
+    fn id_field_name() -> &'static str {
+        "remote_id"
+    }
+}
+
+impl IdCounterpart for RemoteId {
     type Counterpart = LocalId;
 
     async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
@@ -1718,17 +1755,6 @@ impl Id for RemoteId {
             .into_iter()
             .map(Into::into)
             .collect())
-    }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
-    }
-
-    fn id_field_name() -> &'static str {
-        "remote_id"
     }
 }
 

@@ -8,7 +8,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{
-    ContactSendingPreferences, ContactTypes, Id, LabelId, Labels, RemoteId,
+    ContactSendingPreferences, ContactTypes, IdCounterpart, LabelId, Labels, RemoteId,
 };
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelExtension};

@@ -13,7 +13,7 @@ use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};

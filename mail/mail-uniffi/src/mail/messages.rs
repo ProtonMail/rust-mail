@@ -19,7 +19,9 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, Watch
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_core_common::datatypes::{
+    IdCounterpart as RealIdCounterpart, LabelId as RealLabelId, LocalId as RealLocalId,
+};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,

@@ -4,7 +4,7 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount, Label as ApiLabel,
     MessageCount as ApiMessageCount,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Conversation, Label};

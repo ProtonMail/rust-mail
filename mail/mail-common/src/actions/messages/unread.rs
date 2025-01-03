@@ -9,7 +9,7 @@ use proton_action_queue::action::{
 use proton_api_core::consts::General;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;

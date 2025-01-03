@@ -3,7 +3,7 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
     MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
