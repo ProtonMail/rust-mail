@@ -1,0 +1,33 @@
+[package]
+name = "proton-crypto-account"
+version = "0.8.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+base64 = { workspace = true }
+futures = { version="0.3.30", features = ["async-await"]}
+hex = { workspace = true }
+proton-crypto = { workspace = true }
+serde = { workspace = true }
+serde_with = "3.11.0"
+serde_repr = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+rusqlite = { version = "0.32.1", features = [
+    "bundled",
+    "chrono",
+    "functions",
+    "trace",
+    "uuid",
+], optional = true}
+
+
+[lints]
+workspace = true
+
+[features]
+default = []
+sql = ["dep:rusqlite"]
