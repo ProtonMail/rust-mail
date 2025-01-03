@@ -329,10 +329,9 @@ pub struct TestCoreEvent {
 }
 
 impl Event for TestCoreEvent {
-    type Id = RemoteId;
     type Response = TestApiCoreEvent;
 
-    fn event_id(&self) -> &Self::Id {
+    fn event_id(&self) -> &RemoteId {
         &self.event_id
     }
 
@@ -344,7 +343,7 @@ impl Event for TestCoreEvent {
 impl From<TestApiCoreEvent> for TestCoreEvent {
     fn from(value: TestApiCoreEvent) -> Self {
         Self {
-            event_id: value.event_id.into(),
+            event_id: value.event_id,
             action: value.action.into(),
             address: value
                 .address

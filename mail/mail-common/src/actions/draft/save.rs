@@ -11,7 +11,7 @@ use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -391,9 +391,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let row_id = message.row_id;
 
         // Update remote ids
-        message.remote_id = Some(new_message.metadata.id.clone().into());
-        message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone().into());
-        conversation.remote_id = Some(new_message.metadata.conversation_id.clone().into());
+        message.remote_id = Some(new_message.metadata.id.clone());
+        message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone());
+        conversation.remote_id = Some(new_message.metadata.conversation_id.clone());
 
         // Because we can't have custom update function in stash we need to
         // first set the remote id on the message body metadata and then

@@ -6,7 +6,7 @@ use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -81,11 +81,7 @@ impl ActionHandler for Handler {
             .into_iter()
             .map(Into::into)
             .collect();
-        let label_id = action
-            .0
-            .remote_label_id
-            .clone()
-            .map(|x| x.into_inner().into());
+        let label_id = action.0.remote_label_id.clone().map(|x| x.into_inner());
         let response = api
             .put_messages_delete(message_ids, label_id)
             .await?

@@ -14,7 +14,7 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
@@ -1250,11 +1250,12 @@ async fn test_conversation_create_with_attachment() {
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id =
-        RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
 
     assert_eq!(
         db_conversation.attachments_metadata[0],
@@ -1304,11 +1305,12 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("should have value");
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id =
-        RemoteId::from(conv.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
 
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
@@ -1413,11 +1415,12 @@ async fn test_conversation_update() {
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
-    local_conversation2.attachments_metadata[0].local_id =
-        RemoteId::from(conv_update.attachments_metadata[0].id.clone())
-            .counterpart::<Attachment>(&tether)
-            .await
-            .unwrap();
+    local_conversation2.attachments_metadata[0].local_id = conv_update.attachments_metadata[0]
+        .id
+        .clone()
+        .counterpart::<Attachment>(&tether)
+        .await
+        .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &tether)
@@ -2802,8 +2805,6 @@ async fn test_conversation_watcher() {
         tx.execute("UPDATE conversation_labels SET context_num_unread=? WHERE local_label_id=? AND local_conversation_id=?",
                    params![30, local_label_id1, local_conv_id],
         ).await.unwrap();
-        tx.commit().await.unwrap();
-        let tx = tether.transaction().await.unwrap();
         tx.execute(
             "UPDATE conversations SET num_unread=? WHERE local_id=?",
             params![10, local_conv_id],
@@ -2813,9 +2814,6 @@ async fn test_conversation_watcher() {
         tx.commit().await.unwrap();
     });
 
-    // first update when modifying label
-    watch_result.recv_async().await.unwrap();
-    // second update when modifying conversation
     watch_result.recv_async().await.unwrap();
 }
 

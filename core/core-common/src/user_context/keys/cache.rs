@@ -62,6 +62,7 @@ pub struct CachedAddressKey {
     id: KeyId,
     flags: KeyFlag,
     primary: bool,
+    is_v6: bool,
     private_key: SecretVec<u8>,
 }
 
@@ -77,6 +78,7 @@ impl CachedAddressKey {
             id: key.id.clone(),
             flags: key.flags,
             primary: key.primary,
+            is_v6: key.is_v6,
             private_key: SecretVec::new(exported_key.as_ref().to_vec()),
         })
     }
@@ -93,6 +95,7 @@ impl CachedAddressKey {
             id: self.id.clone(),
             flags: self.flags,
             primary: self.primary,
+            is_v6: self.is_v6,
             public_key,
             private_key: imported_key,
         })

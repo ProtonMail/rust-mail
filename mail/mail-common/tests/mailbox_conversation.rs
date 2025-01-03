@@ -129,8 +129,8 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     assert_eq!(result.messages.len(), 2);
-    assert_eq!(result.messages[0].remote_id, Some(message_id1.into()));
-    assert_eq!(result.messages[1].remote_id, Some(message_id2.into()));
+    assert_eq!(result.messages[0].remote_id, Some(message_id1));
+    assert_eq!(result.messages[1].remote_id, Some(message_id2));
 
     // Get messages again, but should not fire request.
     let _ = ContextualConversation::conversation_and_messages(

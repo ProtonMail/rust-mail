@@ -2,7 +2,7 @@ use itertools::Itertools;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
-use proton_core_common::datatypes::{Id, LabelId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, RemoteId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;

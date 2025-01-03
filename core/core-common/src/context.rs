@@ -501,14 +501,14 @@ impl Context {
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
                 self.new_api_session(Some(&session))?,
-                user_id.into(),
-                session_id.into(),
+                user_id,
+                session_id,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
                 self.new_api_session(Some(&session))?,
-                user_id.into(),
-                session_id.into(),
+                user_id,
+                session_id,
             )),
 
             CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(
@@ -532,8 +532,8 @@ impl Context {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         }
 
-        let user_id: RemoteId = flow.user_id()?.to_owned().into();
-        let session_id: RemoteId = flow.session_id()?.to_owned().into();
+        let user_id: RemoteId = flow.user_id()?.to_owned();
+        let session_id: RemoteId = flow.session_id()?.to_owned();
         let session = flow.take_session()?;
 
         self.new_user_context(user_id, session, session_id).await

@@ -3,7 +3,7 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
-use proton_core_common::datatypes::{Id, LabelId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label, Message};
@@ -148,7 +148,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 
     if !messages.is_empty() {
         let mut conversation =
-            Conversation::find_by_id(RemoteId::from(params.conversations[0].id.clone()), &tether)
+            Conversation::find_by_id(params.conversations[0].id.clone(), &tether)
                 .await
                 .unwrap()
                 .unwrap();

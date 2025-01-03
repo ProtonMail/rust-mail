@@ -11,7 +11,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::RemoteId;
-use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};

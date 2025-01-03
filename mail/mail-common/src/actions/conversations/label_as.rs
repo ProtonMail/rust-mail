@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -243,11 +243,7 @@ impl ActionHandler for Handler {
                 .collect();
             let response = session
                 .api()
-                .put_conversations_label(
-                    conversation_ids,
-                    LabelId::archive().into_inner().into(),
-                    None,
-                )
+                .put_conversations_label(conversation_ids, LabelId::archive().into_inner(), None)
                 .await?
                 .responses;
 

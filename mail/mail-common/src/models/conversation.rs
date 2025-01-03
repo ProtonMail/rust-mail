@@ -33,7 +33,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use sqlite_watcher::watcher::TableObserver;
@@ -483,7 +483,7 @@ impl Conversation {
             let response = api
                 .put_conversations_label(
                     conversation_ids.iter().cloned().map_into().collect(),
-                    label_id.clone().into(),
+                    label_id.clone(),
                     None,
                 )
                 .await;
@@ -504,7 +504,7 @@ impl Conversation {
             let response = api
                 .put_conversations_unlabel(
                     conversation_ids.iter().cloned().map_into().collect(),
-                    label_id.clone().into(),
+                    label_id.clone(),
                 )
                 .await;
             match response {
@@ -1906,18 +1906,13 @@ impl Conversation {
 
                     label.save(bond).await?;
                 }
-
-                if let Some(mut conv_label) =
-                    ConversationLabel::find_first("WHERE local_label_id=?", params![label_id], bond)
-                        .await?
-                {
-                    conv_label.context_num_unread += 1;
-                    conv_label.save(bond).await?;
-                }
             }
 
             // update conversations
             conversation.num_unread += 1;
+            for conversation_label in &mut conversation.labels {
+                conversation_label.context_num_unread += 1;
+            }
             conversation.save(bond).await?;
         }
         Ok(())
@@ -2090,7 +2085,7 @@ impl Conversation {
         let mut missing_labels = vec![];
         for conv in conversations {
             for label in &conv.labels {
-                let rid: RemoteId = label.id.clone().into();
+                let rid: RemoteId = label.id.clone();
                 if (Label::find_by_id(rid, tether)).await?.is_none() {
                     missing_labels.push(label.id.clone());
                 }
@@ -2763,7 +2758,7 @@ impl Conversation {
                 return Err(AppError::LabelDoesNotHaveRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
-            let conversation_response = api.get_conversation(rid.into()).await.map_err(|e| {
+            let conversation_response = api.get_conversation(rid).await.map_err(|e| {
                 error!("failed to download conversation messages: {e}");
                 AppError::from(e)
             })?;
@@ -2777,8 +2772,6 @@ impl Conversation {
                 .collect();
             let mut new_conversation: Conversation = conversation_response.conversation.into();
 
-            ConversationLabel::create_or_update_from_message_metadata(&message_metadata, &tx)
-                .await?;
             Message::create_or_update_messages_from_metadata(message_metadata, &tx)
                 .await
                 .map_err(|e| {
@@ -2987,7 +2980,7 @@ impl From<ApiConversation> for Conversation {
     fn from(value: ApiConversation) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             attachment_info: MessageAttachmentInfos {
                 value: value
                     .attachment_info
@@ -3268,75 +3261,7 @@ impl ConversationLabel {
         Ok(())
     }
 
-    /// Given a list of message metadata, tries to update `ConversationLabel`
-    ///
-    /// # Parameters
-    /// * `metadata`  - The message metadata returned from the API.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for accessing the database.
-    ///
-    /// # Errors
-    ///
-    /// On database error.
-    ///
-    pub(crate) async fn create_or_update_from_message_metadata(
-        metadata: &[ApiMessageMetadata],
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let mut conversation_label_counters = HashMap::new();
-        for metadata in metadata {
-            let local_conversation_id = if let Some(local_conversation_id) =
-                RemoteId::counterpart::<Conversation>(
-                    &metadata.conversation_id.clone().into(),
-                    bond,
-                )
-                .await?
-            {
-                local_conversation_id
-            } else {
-                let mut conversation = Conversation {
-                    remote_id: Some(metadata.conversation_id.clone().into()),
-                    ..Default::default()
-                };
-                conversation.save(bond).await?;
-                conversation.local_id.expect("Should be set")
-            };
-            for label_id in metadata.label_ids.clone() {
-                conversation_label_counters
-                    .entry(local_conversation_id)
-                    .or_insert_with(HashMap::new)
-                    .entry(label_id)
-                    .and_modify(|s: &mut ConversationMessageLabelStats| *s += metadata)
-                    .or_insert(metadata.into());
-            }
-        }
-
-        for (conversation_id, label_counters) in conversation_label_counters {
-            for (label_id, counters) in label_counters {
-                let local_label_id = RemoteId::counterpart::<Label>(&label_id.clone().into(), bond)
-                    .await?
-                    .expect("Should be set");
-                let label_id = LabelId::from(label_id);
-                let conversation_label =
-                    Self::find_by_conversation_and_label(&conversation_id, &local_label_id, bond)
-                        .await?;
-
-                if let Some(mut conversation_label) = conversation_label {
-                    conversation_label += counters;
-                    conversation_label.save(bond).await?
-                } else {
-                    let mut conversation_label = ConversationLabel::from(counters);
-                    conversation_label.local_conversation_id = Some(conversation_id);
-                    conversation_label.remote_label_id = Some(label_id);
-                    conversation_label.local_label_id = Some(local_label_id);
-                    conversation_label.save(bond).await?
-                }
-            }
-        }
-        Ok(())
-    }
-
-    async fn find_by_conversation_and_label(
+    pub(crate) async fn find_by_conversation_and_label(
         conversation_id: &LocalId,
         label_id: &LocalId,
         tether: &Tether,
@@ -3631,7 +3556,7 @@ impl DataSource for ConversationDataSource {
         };
         // Safe to unwrap as we have validated this before.
         let last_element_id: proton_api_core::services::proton::common::RemoteId =
-            last_element.remote_id.clone().unwrap().into();
+            last_element.remote_id.clone().unwrap();
 
         debug!("Last Element= {last_element_id}");
 

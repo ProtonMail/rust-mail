@@ -23,6 +23,7 @@ pub fn testdata_address_keys_other_user() -> GetKeysAllResponse {
             keys: vec![APIPublicKey {
                 source: APIPublicKeySource::Proton,
                 flags: KeyFlag::from(3_u8),
+                primary: true,
                 public_key: TEST_OTHER_USER_ADDRESS_KEY.to_owned(),
             }],
             signed_key_list: Some(SignedKeyList {

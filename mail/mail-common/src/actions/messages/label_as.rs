@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -245,7 +245,7 @@ impl ActionHandler for Handler {
                 .map_into()
                 .collect();
             let response = api
-                .put_messages_label(message_ids, LabelId::archive().into_inner().into(), None)
+                .put_messages_label(message_ids, LabelId::archive().into_inner(), None)
                 .await?
                 .responses;
 

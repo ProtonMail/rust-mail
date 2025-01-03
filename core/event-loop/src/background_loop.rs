@@ -3,14 +3,13 @@ use crate::provider::Provider;
 use crate::store::Store;
 use crate::subscriber::Subscriber;
 use crate::{Event, EventLoopError};
-use futures::FutureExt;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::spawn;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
-use tokio::{select, spawn};
+use tokio::time::interval;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
@@ -158,45 +157,41 @@ struct BackgroundLoopState<T: Event> {
 
 #[doc(hidden)]
 impl<T: Event + From<<T as Event>::Response>> BackgroundLoopState<T> {
-    #[allow(clippy::ignored_unit_patterns)] // we can not control this macro impl
+    /// This executes all [`SubscriberOperation`] batched every `poll_interval`.
     async fn run(&mut self, poll_interval: Duration) {
-        debug!("Starting loop");
-        loop {
-            select! {
-                _= self.shared.token.cancelled().fuse()=> {
-                    debug!("Cancellation requested, exiting");
-                    return;
-                }
-
-                _= sleep(poll_interval).fuse() => {
-                    self.tick().await;
-                }
-            }
+        let mut interval = interval(poll_interval);
+        debug!("Starting background loop");
+        while !self.shared.token.is_cancelled() {
+            interval.tick().await;
+            self.tick().await;
         }
     }
 
+    /// Process pending subscriber operations
     async fn tick(&mut self) {
-        // Process pending subscriber operations
-        {
-            let mut accessor = self.shared.pending_subscribers.lock();
-            for operation in accessor.drain(..) {
-                match operation {
-                    SubscriberOperation::Register(s) => {
-                        let new_subscriber_name = s.name();
-                        if !self
-                            .subscribers
-                            .iter()
-                            .any(move |v| v.name() == new_subscriber_name)
-                        {
-                            debug!("Registering subscriber {new_subscriber_name}");
-                            self.subscribers.push(s);
-                        }
+        // First process all register/unregister requests for subscribers.
+        let accessor: Vec<_> = {
+            // This should probably be a channel
+            let mut guard = self.shared.pending_subscribers.lock();
+            std::mem::take(&mut guard)
+        };
+        for operation in accessor {
+            match operation {
+                SubscriberOperation::Register(subscriber) => {
+                    let new_subscriber_name = subscriber.name();
+                    if !self
+                        .subscribers
+                        .iter()
+                        .any(|v| v.name() == new_subscriber_name)
+                    {
+                        debug!("Registering subscriber {new_subscriber_name}");
+                        self.subscribers.push(subscriber);
                     }
+                }
 
-                    SubscriberOperation::Unregister(s) => {
-                        debug!("Unregistering subscriber {s}");
-                        self.subscribers.retain(|v| v.name() != s);
-                    }
+                SubscriberOperation::Unregister(subscriber_name) => {
+                    debug!("Unregistering subscriber {subscriber_name}");
+                    self.subscribers.retain(|v| v.name() != subscriber_name);
                 }
             }
         }

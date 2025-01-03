@@ -931,7 +931,7 @@ impl From<ApiAttachmentMetadata> for AttachmentMetadata {
     fn from(value: ApiAttachmentMetadata) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.parse().unwrap_or_default(),
             filename: value.name,
@@ -1413,7 +1413,7 @@ pub struct MessageAttachment {
 impl From<ApiMessageAttachment> for MessageAttachment {
     fn from(value: ApiMessageAttachment) -> Self {
         Self {
-            id: value.id.into(),
+            id: value.id,
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.map(|v| v.into()),
             headers: value.headers.into(),

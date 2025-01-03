@@ -157,7 +157,7 @@ async fn basic_send_check() {
         .unwrap()
         .expect("failed to load message");
 
-    assert_eq!(draft_message.remote_id, Some(message.metadata.id.into()));
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id));
     assert!(draft_message.flags.contains(MessageFlags::SENT.into()));
     assert!(draft_message.label_ids.contains(&LabelId::sent()));
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));

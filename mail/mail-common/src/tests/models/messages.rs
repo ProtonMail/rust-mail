@@ -837,7 +837,7 @@ async fn test_create_message() {
         .expect("failed to get message")
         .expect("must have a value");
     let (mut expected, _, _) = Message::from_api_data(message, &tether).await.unwrap();
-    let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &tether)
+    let label = Label::find_by_id(MY_LABEL_ID1.clone(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -875,7 +875,7 @@ async fn test_create_message_without_synced_conversation() {
         .await
         .expect("failed to create message");
     tx.commit().await.unwrap();
-    let db_metadata = Message::find_by_id(RemoteId::from(remote_id), &tether)
+    let db_metadata = Message::find_by_id(remote_id, &tether)
         .await
         .expect("failed to get message")
         .expect("must have a value");
@@ -1081,7 +1081,7 @@ async fn test_update_message() {
         .expect("failed to update message");
     tx.commit().await.unwrap();
 
-    let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &tether)
+    let label = Label::find_by_id(MY_LABEL_ID1.clone(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -1658,7 +1658,7 @@ async fn test_create_message_and_body_with_attachments() {
         metadata: test_message_metadata(
             vec![MY_LABEL_ID1.clone()],
             vec![ApiAttachmentMetadata {
-                id: attachment_id.clone().into(),
+                id: attachment_id.clone(),
                 size: 1024,
                 name: "fooo".to_owned(),
                 mime_type: attachment::MimeType::text_html().to_string(),
@@ -1674,7 +1674,7 @@ async fn test_create_message_and_body_with_attachments() {
             body: "my_message".to_owned(),
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![ApiMessageAttachment {
-                id: attachment_id.clone().into(),
+                id: attachment_id.clone(),
                 name: "fooo".to_owned(),
                 size: 1024,
                 mime_type: attachment::MimeType::text_html().to_string(),
@@ -2491,7 +2491,7 @@ fn test_message_metadata(
     attachments: impl IntoIterator<Item = ApiAttachmentMetadata>,
 ) -> ApiMessageMetadata {
     ApiMessageMetadata {
-        id: MY_MESSAGE_ID.clone().into(),
+        id: MY_MESSAGE_ID.clone(),
         conversation_id: MY_CONVERSATION_ID.clone(),
         order: 1,
         address_id: MY_ADDRESS_ID.clone(),
@@ -2537,7 +2537,7 @@ fn test_message_with_metadata(
             parsed_headers: Default::default(),
         },
         metadata: ApiMessageMetadata {
-            id: MY_MESSAGE_ID.clone().into(),
+            id: MY_MESSAGE_ID.clone(),
             conversation_id: MY_CONVERSATION_ID.clone(),
             order: 1,
             address_id: MY_ADDRESS_ID.clone(),

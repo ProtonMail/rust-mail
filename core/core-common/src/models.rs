@@ -41,8 +41,8 @@ pub use self::contact_card::*;
 pub use self::contact_email::*;
 
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId, DateFormat, Density,
-    Email, Flags, HighSecurity, Id, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, DateFormat, Density, Email,
+    Flags, HighSecurity, Id, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
     QueryResultRemoteId, Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys,
     UserMnemonicStatus, UserType, WeekStart,
 };
@@ -125,7 +125,7 @@ pub trait ModelExtension: Model {
     ///
     async fn find_by_id<I>(id: I, tether: &Tether) -> Result<Option<Self>, StashError>
     where
-        I: Into<AgnosticId> + Id,
+        I: Id,
     {
         id.load(tether).await
     }
@@ -154,12 +154,12 @@ pub trait ModelExtension: Model {
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError>
     where
-        I: Into<AgnosticId> + Id + ToSql + 'static,
+        I: Id + ToSql + 'static,
     {
         let mut ids = ids.into_iter().peekable();
-        let field_name = if let Some(first) = ids.peek() {
+        let field_name = if ids.peek().is_some() {
             // We make the assumption that all ids are the same AgnosticId variant
-            Into::<AgnosticId>::into(first.clone()).id_field_name()
+            I::id_field_name()
         } else {
             return Ok(vec![]);
         };
@@ -568,7 +568,7 @@ impl From<ApiAddress> for Address {
     fn from(value: ApiAddress) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             address_type: value.address_type.into(),
             catch_all: value.catch_all,
             display_name: value.display_name,
@@ -688,7 +688,7 @@ pub struct User {
 impl From<ApiUser> for User {
     fn from(value: ApiUser) -> Self {
         Self {
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             create_time: value.create_time,
             credit: value.credit,
             currency: value.currency,

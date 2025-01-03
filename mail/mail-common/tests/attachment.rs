@@ -207,7 +207,7 @@ async fn get_attachment(
 ) -> Attachment {
     Attachment {
         local_id: Some(id),
-        remote_id: Some(attachment.id.clone().into()),
+        remote_id: Some(attachment.id.clone()),
         // TODO: Should probably be something like this:
         // local_address_id: Some(
         //     RemoteId::from(attachment.address_id.clone())
@@ -218,11 +218,11 @@ async fn get_attachment(
         //         .into(),
         // ),
         local_address_id: None,
-        remote_address_id: Some(attachment.address_id.clone().into()),
+        remote_address_id: Some(attachment.address_id.clone()),
         local_conversation_id: None,
-        remote_conversation_id: Some(attachment.conversation_id.clone().into()),
+        remote_conversation_id: Some(attachment.conversation_id.clone()),
         local_message_id: None,
-        remote_message_id: Some(attachment.message_id.clone().into()),
+        remote_message_id: Some(attachment.message_id.clone()),
         disposition: Disposition::Attachment,
         enc_signature: None,
         is_auto_forwardee: false,

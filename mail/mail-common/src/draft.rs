@@ -566,7 +566,7 @@ impl Draft {
                     Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
                 );
             };
-            attachment_key_packets.insert(remote_id.into(), key_packets.value.clone());
+            attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
 
         let response = session
@@ -621,13 +621,13 @@ impl Draft {
                     Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
                 );
             };
-            attachment_key_packets.insert(remote_id.into(), key_packets.value.clone());
+            attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
 
         let response = session
             .api()
             .update_draft(
-                message.remote_id.clone().unwrap().into(),
+                message.remote_id.clone().unwrap(),
                 params,
                 attachment_key_packets,
             )

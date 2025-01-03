@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{GroupedContacts, Id, LabelId, Labels, LocalId, RemoteId};
+use crate::datatypes::{GroupedContacts, IdCounterpart, LabelId, Labels, LocalId, RemoteId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;
@@ -328,7 +328,7 @@ impl Contact {
             })?;
 
         let mut contact_with_card = Contact::from(
-            api.get_contact(remote_id.clone().into())
+            api.get_contact(remote_id.clone())
                 .await
                 .map_err(|err| {
                     error!("Failed to fetch full contact with id {local_id}: {err}");
@@ -410,7 +410,7 @@ impl Contact {
             .responses
             .iter()
             .filter(|r| r.response.code != General::NoError as u32)
-            .map(|r| r.id.clone().into())
+            .map(|r| r.id.clone())
             .collect())
     }
 
@@ -439,7 +439,7 @@ impl From<ApiContactBasic> for Contact {
     fn from(value: ApiContactBasic) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             cards: vec![],
             contact_emails: vec![],
             create_time: value.create_time,
@@ -447,7 +447,7 @@ impl From<ApiContactBasic> for Contact {
             modify_time: value.modify_time,
             name: value.name,
             size: value.size,
-            uid: value.uid.into(),
+            uid: value.uid,
             deleted: false,
             row_id: None,
         }
@@ -479,7 +479,7 @@ impl From<ApiContactFull> for Contact {
     fn from(value: ApiContactFull) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             cards: value.cards.into_iter().map(ContactCard::from).collect(),
             contact_emails: value
                 .contact_emails
@@ -491,7 +491,7 @@ impl From<ApiContactFull> for Contact {
             modify_time: value.modify_time,
             name: value.name,
             size: value.size,
-            uid: value.uid.into(),
+            uid: value.uid,
             deleted: false,
             row_id: None,
         }

@@ -230,7 +230,7 @@ impl RollbackItem {
         use proton_api_mail::services::proton::responses::GetLabelsResponse;
 
         sync_any!(Label, Label, tether, batch => |remote_id| async {
-            api.get_labels_by_ids(vec![remote_id.into()]).await
+            api.get_labels_by_ids(vec![remote_id]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
         })
@@ -248,9 +248,9 @@ impl RollbackItem {
         PM: ProtonMail,
     {
         sync_any!(Message, MessageAndBodyMetadata, tether, batch => |remote_id| async {
-            api.get_message(remote_id.into()).await
+            api.get_message(remote_id).await
         } => |api_message: GetMessageResponse| async {
-            let remote_id = api_message.message.metadata.id.clone().into();
+            let remote_id = api_message.message.metadata.id.clone();
             let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, tether).await?;
             Result::<_, AppError>::Ok(Some(MessageAndBodyMetadata{message_metadata: metadata,body_metadata,remote_id:Some(remote_id)}))
         })
@@ -273,7 +273,7 @@ impl RollbackItem {
     {
         sync_any!(Conversation, Conversation, tether, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
-                ids: Some(vec![remote_id.into()]),
+                ids: Some(vec![remote_id]),
                 ..Default::default()
             }).await
         } => |api_conversations: GetConversationsResponse| async {

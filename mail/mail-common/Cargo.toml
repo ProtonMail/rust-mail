@@ -22,7 +22,7 @@ mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
-proton-api-mail = { workspace = true }
+proton-api-mail = { workspace = true, features = ["sql"] }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
@@ -87,3 +87,8 @@ module_name_repetitions = "allow"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
+
+
+[features]
+default = ["sql"]
+sql = ["proton-api-core/sql", "proton-api-mail/sql"]

@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{Id, LabelId};
+use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
@@ -87,12 +87,12 @@ async fn label_as_without_archive() {
     ])
     .await;
     ctx.mock_label_messages(
-        &label1_id.clone().into_inner().into(),
+        &label1_id.clone().into_inner(),
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
     )
     .await;
     ctx.mock_unlabel_messages(
-        &label3_id.into_inner().into(),
+        &label3_id.into_inner(),
         vec![
             message2.metadata.id.clone(),
             message3.metadata.id.clone(),
@@ -251,12 +251,12 @@ async fn label_as_with_archive() {
     ctx.mock_get_messages(vec![message1.metadata.clone(), message2.metadata.clone()])
         .await;
     ctx.mock_label_messages(
-        &label1_id.clone().into_inner().into(),
+        &label1_id.clone().into_inner(),
         vec![message1.metadata.id.clone()],
     )
     .await;
     ctx.mock_unlabel_messages(
-        &label3_id.into_inner().into(),
+        &label3_id.into_inner(),
         vec![message2.metadata.id.clone()],
         vec![],
     )

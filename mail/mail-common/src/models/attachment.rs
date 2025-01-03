@@ -12,7 +12,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -282,7 +282,7 @@ impl Attachment {
         id: RemoteId,
         api: &PM,
     ) -> Result<Bytes, ApiServiceError> {
-        api.get_attachment(id.into()).await
+        api.get_attachment(id).await
     }
 
     /// Fetch attachment metadata from the API.
@@ -305,7 +305,7 @@ impl Attachment {
         id: RemoteId,
         api: &PM,
     ) -> Result<GetAttachmentMetadataResponse, ApiServiceError> {
-        api.get_attachment_metadata(id.into()).await
+        api.get_attachment_metadata(id).await
     }
 
     /// Check whether attachment is complete.
@@ -433,13 +433,13 @@ impl From<ApiAttachment> for Attachment {
     fn from(value: ApiAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             local_address_id: None,
-            remote_address_id: Some(value.address_id.into()),
+            remote_address_id: Some(value.address_id),
             local_conversation_id: None,
-            remote_conversation_id: Some(value.conversation_id.into()),
+            remote_conversation_id: Some(value.conversation_id),
             local_message_id: None,
-            remote_message_id: Some(value.message_id.into()),
+            remote_message_id: Some(value.message_id),
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
@@ -462,7 +462,7 @@ impl From<ApiMessageAttachment> for Attachment {
     fn from(value: ApiMessageAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,

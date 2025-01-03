@@ -23,7 +23,6 @@ pub struct TestEvent {
 }
 
 impl Event for TestEvent {
-    type Id = RemoteId;
     type Response = TestEvent;
 
     fn event_id(&self) -> &RemoteId {

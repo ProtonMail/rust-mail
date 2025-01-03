@@ -57,11 +57,11 @@ use proton_core_common::datatypes::{
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
-    HighSecurity as RealHighSecurity, Id as RealId, LocalId as RealLocalId, LogAuth as RealLogAuth,
-    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
-    Referral as RealReferral, RemoteId as RealRemoteId, SettingsFlags as RealSettingsFlags,
-    TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat, TwoFa as RealTwoFa,
-    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    HighSecurity as RealHighSecurity, IdCounterpart as RealIdCounterpart, LocalId as RealLocalId,
+    LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
+    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
+    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{

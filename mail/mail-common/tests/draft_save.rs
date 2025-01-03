@@ -82,7 +82,7 @@ async fn create_empty_draft() {
         .await
         .unwrap()
         .expect("failed to load message");
-    assert_eq!(draft_message.remote_id, Some(message.metadata.id.into()));
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
     // Local conversation id should have been assigned.
     assert!(draft_message.local_conversation_id.is_some());
@@ -111,7 +111,7 @@ async fn create_empty_draft() {
     // Conversation remote id has been set.
     assert_eq!(
         conversation.remote_id.unwrap(),
-        message.metadata.conversation_id.into()
+        message.metadata.conversation_id
     );
     // Conversation should also have the draft label.
     assert!(conversation
@@ -454,7 +454,7 @@ async fn create_draft_forward_inherits_all_attachments() {
     compare_inline_attachment(attachment_1, inline_attachment);
     assert_eq!(
         attachment_2.remote_id.clone().unwrap(),
-        normal_attachment.id.into()
+        normal_attachment.id
     );
     assert_eq!(
         attachment_2.disposition,
@@ -465,10 +465,7 @@ async fn create_draft_forward_inherits_all_attachments() {
 }
 
 fn compare_inline_attachment(attachment: &Attachment, inline_attachment: MessageAttachment) {
-    assert_eq!(
-        attachment.remote_id.clone().unwrap(),
-        inline_attachment.id.into()
-    );
+    assert_eq!(attachment.remote_id.clone().unwrap(), inline_attachment.id);
     assert_eq!(attachment.disposition, inline_attachment.disposition.into());
     assert_eq!(attachment.filename, inline_attachment.name);
     assert_eq!(attachment.size, inline_attachment.size);
@@ -542,7 +539,7 @@ async fn create_draft_reply_impl(
         expected_draft_params,
         DraftAction::from(reply_mode),
         message.clone(),
-        Some(existing_message.remote_id.clone().unwrap().into()),
+        Some(existing_message.remote_id.clone().unwrap()),
         key_packets,
     )
     .await;
@@ -587,7 +584,7 @@ async fn create_draft_reply_impl(
         .await
         .unwrap()
         .expect("failed to load message");
-    assert_eq!(draft_message.remote_id, Some(message.metadata.id.into()));
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
     // Local conversation id match the source message,
     assert_eq!(
@@ -616,7 +613,7 @@ async fn create_draft_reply_impl(
     // Conversation remote id has been set.
     assert_eq!(
         conversation.remote_id.unwrap(),
-        message.metadata.conversation_id.into()
+        message.metadata.conversation_id
     );
 
     // Opening this draft should work;

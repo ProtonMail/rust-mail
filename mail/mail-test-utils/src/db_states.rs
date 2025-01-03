@@ -27,7 +27,7 @@ static TEXT_ATTACHMENT: LazyLock<AttachmentMetadata> = LazyLock::new(|| Attachme
 
 static BASE_CONV1_MESSAGE: LazyLock<Message> = LazyLock::new(|| Message {
     remote_conversation_id: Some(DELETE_DB_CONV1.clone()),
-    remote_address_id: MY_ADDRESS_ID.clone().into(),
+    remote_address_id: MY_ADDRESS_ID.clone(),
     local_address_id: 1.into(),
     ..Default::default()
 });

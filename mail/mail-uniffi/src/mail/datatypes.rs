@@ -64,7 +64,7 @@ use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMe
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
 use proton_core_common::datatypes::{
-    Id as RealId, LocalId as RealLocalId, RemoteId as RealRemoteId,
+    IdCounterpart as RealIdCounterpart, LocalId as RealLocalId, RemoteId as RealRemoteId,
 };
 use proton_core_common::models::Address as RealAddress;
 use proton_mail_common::datatypes::{
@@ -1161,7 +1161,7 @@ impl ConversationSearchOptions {
                         .counterpart::<RealConversation>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {
@@ -2052,7 +2052,7 @@ impl MessageSearchOptions {
                         .counterpart::<RealMessage>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {
@@ -2071,7 +2071,7 @@ impl MessageSearchOptions {
                         .counterpart::<RealLabel>(tether)
                         .await?
                     {
-                        ids.push(resolved_id.into());
+                        ids.push(resolved_id);
                     }
                 }
                 if ids.is_empty() {

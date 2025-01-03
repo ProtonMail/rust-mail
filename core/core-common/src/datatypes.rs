@@ -47,9 +47,7 @@ use core::fmt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use proton_api_core::services::proton::common::{
-    LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
-};
+use proton_api_core::services::proton::common::LightOrDarkMode as ApiLightOrDarkMode;
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
@@ -64,7 +62,6 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
-use secrecy::{CloneableSecret, DebugSecret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -79,7 +76,6 @@ use std::iter::repeat;
 use std::ops::Deref;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
-use zeroize::Zeroize;
 
 //  ENUMS
 //==============================================================================
@@ -173,141 +169,6 @@ impl FromSql for AddressType {
 impl ToSql for AddressType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
-    }
-}
-
-/// A dual-nature ID representation.
-///
-/// This enum allows transparent handling of a local or remote ID, i.e.
-/// [`LocalId`] or [`RemoteId`], in a single type. This is useful for cases such
-/// as combining functionality, e.g. finding a record by either ID type. This
-/// approach means that both can be accepted and used, plus their core/shared
-/// functionality can be used in the same way, but also the enum can be
-/// destructured to use one or other specifically if needed. This gives full
-/// functionality but also ease of use.
-///
-#[derive(Clone, Debug, Eq, PartialEq)]
-#[allow(clippy::exhaustive_enums)]
-pub enum AgnosticId {
-    /// A [`LocalId`] instance.
-    Local(LocalId),
-
-    /// A [`RemoteId`] instance.
-    Remote(RemoteId),
-}
-
-impl AgnosticId {
-    pub(crate) fn id_field_name(&self) -> &'static str {
-        match self {
-            AgnosticId::Local(_) => "local_id",
-            AgnosticId::Remote(_) => "remote_id",
-        }
-    }
-}
-
-impl From<LocalId> for AgnosticId {
-    fn from(id: LocalId) -> Self {
-        Self::Local(id)
-    }
-}
-
-impl From<&LocalId> for AgnosticId {
-    fn from(id: &LocalId) -> Self {
-        Self::Local(*id)
-    }
-}
-
-impl From<RemoteId> for AgnosticId {
-    fn from(id: RemoteId) -> Self {
-        Self::Remote(id)
-    }
-}
-
-impl From<&RemoteId> for AgnosticId {
-    fn from(id: &RemoteId) -> Self {
-        Self::Remote(id.clone())
-    }
-}
-
-impl Id for AgnosticId {
-    type Counterpart = AgnosticId;
-
-    async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
-    where
-        T: Model,
-    {
-        match self {
-            Self::Local(id) => id
-                .counterpart::<T>(tether)
-                .await
-                .map(|id| id.map(Self::Remote)),
-            Self::Remote(id) => id
-                .counterpart::<T>(tether)
-                .await
-                .map(|id| id.map(Self::Local)),
-        }
-    }
-
-    async fn counterparts<T>(
-        ids: Vec<Self>,
-        tether: &Tether,
-    ) -> Result<Vec<Self::Counterpart>, StashError>
-    where
-        T: Model,
-    {
-        match ids.first() {
-            Some(Self::Local(_)) => LocalId::counterparts::<T>(
-                ids.into_iter()
-                    .map(|id| match id {
-                        Self::Local(id) => id,
-                        Self::Remote(_) => unreachable!(),
-                    })
-                    .collect(),
-                tether,
-            )
-            .await
-            .map(|ids| ids.into_iter().map(Self::Remote).collect()),
-            Some(Self::Remote(_)) => RemoteId::counterparts::<T>(
-                ids.into_iter()
-                    .map(|id| match id {
-                        Self::Local(_) => unreachable!(),
-                        Self::Remote(id) => id,
-                    })
-                    .collect(),
-                tether,
-            )
-            .await
-            .map(|ids| ids.into_iter().map(Self::Local).collect()),
-            None => Ok(vec![]),
-        }
-    }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        match self {
-            Self::Local(id) => id.load(tether).await,
-            Self::Remote(id) => id.load(tether).await,
-        }
-    }
-}
-
-impl IdOpt<LocalId> for AgnosticId {
-    fn opt<I: Into<Self>>(id: I) -> Option<LocalId> {
-        match id.into() {
-            Self::Local(id) => Some(id),
-            Self::Remote(_) => None,
-        }
-    }
-}
-
-impl IdOpt<RemoteId> for AgnosticId {
-    fn opt<I: Into<Self>>(id: I) -> Option<RemoteId> {
-        match id.into() {
-            Self::Local(_) => None,
-            Self::Remote(id) => Some(id),
-        }
     }
 }
 
@@ -827,15 +688,41 @@ impl ToSql for WeekStart {
 //  TRAITS
 //==============================================================================
 
-/// Presentation of functionality shared by both [`LocalId`] and [`RemoteId`].
-///
-/// This trait specifies functionality that is provided by both the [`LocalId`]
-/// and [`RemoteId`] types. Both of these types, plus the [`AgnosticId`] type,
-/// implement this trait, and so the key aspects common to both [`LocalId`]
-/// instances and [`RemoteId`] instances can be used in unified fashion.
-///
+/// Shared functionality associated with a database identifier.
 #[allow(async_fn_in_trait)]
 pub trait Id: Clone + Send + Sync {
+    /// Loads a record from the database by ID.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`Model`] trait.
+    ///
+    /// For full usage details, see [`Model::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::load()`]
+    ///
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model;
+
+    /// Name of the id field in the database table.
+    fn id_field_name() -> &'static str;
+}
+
+/// Mapping trait which allows one to convert a local into a remote id and vice-versa.
+#[allow(async_fn_in_trait)]
+pub trait IdCounterpart: Clone + Send + Sync {
     /// The counterpart type to this ID.
     type Counterpart: Id;
 
@@ -893,31 +780,6 @@ pub trait Id: Clone + Send + Sync {
         ids: Vec<Self>,
         tether: &Tether,
     ) -> Result<Vec<Self::Counterpart>, StashError>
-    where
-        T: Model;
-
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`Model`] trait.
-    ///
-    /// For full usage details, see [`Model::load()`].
-    ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::load()`]
-    ///
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
     where
         T: Model;
 }
@@ -1205,18 +1067,6 @@ impl Display for LabelId {
     }
 }
 
-impl From<ApiRemoteId> for LabelId {
-    fn from(value: ApiRemoteId) -> Self {
-        Self(RemoteId::from(value.into_inner()))
-    }
-}
-
-impl From<LabelId> for ApiRemoteId {
-    fn from(value: LabelId) -> Self {
-        Self::new(value.into_inner().into_inner())
-    }
-}
-
 impl From<LabelId> for RemoteId {
     fn from(value: LabelId) -> Self {
         value.into_inner()
@@ -1286,6 +1136,259 @@ impl Deref for Labels {
 
 sql_using_serde!(Labels);
 
+/// Implement the `Id` trait for a proton id declared with [`proton_api_core::declare_proton_id`]
+/// macro.
+///
+/// This macro should be used if the proton id does not have a local id counterpart.
+#[macro_export]
+macro_rules! impl_id_for_proton_id {
+    ($proton_id:ident) => {
+        impl $crate::datatypes::Id for $proton_id {
+            async fn load<T>(
+                &self,
+                tether: &::stash::stash::Tether,
+            ) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first(
+                    "WHERE remote_id = ?",
+                    ::stash::params![self.clone()],
+                    tether,
+                )
+                .await
+            }
+
+            fn id_field_name() -> &'static str {
+                "remote_id"
+            }
+        }
+    };
+}
+
+/// Declare a new Local id type that maps to a remote Proton Id.
+///
+/// A local identifier should exist for every remote/proton Id for every resource we store
+/// in the database that we will create/mutate.
+///
+/// # Example
+///
+/// ```
+/// use proton_api_core::declare_proton_id;
+/// use proton_core_common::declare_local_id;
+///
+/// declare_proton_id!(pub MyProtonId);
+/// declare_local_id!(pub MyLocalProtonId => MyProtonId);
+/// ```
+#[macro_export]
+macro_rules! declare_local_id {
+    (
+        $(#[$($attrss:tt)*])*
+        $visibility:vis $name:ident => $remote_id:ident
+    ) => {
+
+        $(#[$($attrss)*])*
+        #[derive(Clone, Copy, Debug, serde::Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize)]
+        pub struct $name(u64);
+
+        impl $name {
+            /// Represents the internal value as an unsigned 64-bit integer.
+            #[must_use]
+            pub const fn as_u64(&self) -> u64 {
+                self.0
+            }
+        }
+
+        impl AsRef<u64> for $name{
+            fn as_ref(&self) -> &u64 {
+                &self.0
+            }
+        }
+
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl From<u64> for $name{
+            fn from(id: u64) -> Self {
+                Self(id)
+            }
+        }
+
+        impl ::stash::exports::FromSql for $name {
+            fn column_result(value: ::stash::exports::ValueRef<'_>) -> ::stash::exports::FromSqlResult<Self> {
+                u64::column_result(value).map($name)
+            }
+        }
+
+        impl ::stash::exports::ToSql for $name {
+            fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
+                self.0.to_sql()
+            }
+        }
+
+        impl $crate::datatypes::Id for $name {
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first("WHERE local_id = ?", ::stash::params![*self], tether).await
+            }
+
+            fn id_field_name() -> &'static str {
+                "local_id"
+            }
+        }
+
+        impl $crate::datatypes::IdCounterpart for $name {
+            type Counterpart = $remote_id;
+
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                Ok(tether
+                    .query_values::<_, String>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                remote_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                local_id = ?
+                            LIMIT 1
+                            ",
+                            T::table_name(),
+                        ),
+                        ::stash::params![*self],
+                    )
+                    .await?
+                    .into_iter()
+                    .next()
+                    .map($remote_id::new))
+            }
+
+            async fn counterparts<T>(
+                ids: Vec<Self>,
+                tether: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                use ::stash::exports::ToSql;
+
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                #[allow(trivial_casts)]
+                let values = ids
+                    .into_iter()
+                    .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+                    .collect();
+                Ok(tether
+                    .query_values::<_, String>(
+                        indoc::formatdoc!(
+                            "
+                            SELECT
+                                remote_id AS id
+                            FROM
+                                {}
+                            WHERE
+                                local_id IN ({})
+                            ",
+                            T::table_name(),
+                            placeholders,
+                        ),
+                        values,
+                    )
+                    .await?
+                    .into_iter()
+                    .map($remote_id::new)
+                    .collect())
+            }
+        }
+
+        $crate::impl_id_for_proton_id!($remote_id);
+
+        impl $crate::datatypes::IdCounterpart for $remote_id {
+            type Counterpart = $name;
+
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                match tether
+                    .query_value::<_, u64>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                local_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                remote_id = ?
+                            LIMIT 1
+                            ",
+                            T::table_name(),
+                        ),
+                        ::stash::params![self.clone()],
+                    )
+                    .await
+                {
+                    Ok(v) => Ok(Some(v.into())),
+                    Err(e) => {
+                        if matches!(
+                            e,
+                            ::stash::stash::StashError::ExecutionError(::stash::exports::SqliteError::QueryReturnedNoRows)
+                        ) {
+                            Ok(None)
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
+            }
+
+            async fn counterparts<T>(
+                ids: Vec<Self>,
+                tehter: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                use ::stash::exports::ToSql;
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                #[allow(trivial_casts)]
+                let values = ids
+                    .into_iter()
+                    .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+                    .collect();
+                Ok(tehter
+                    .query_values::<_, u64>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                local_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                remote_id IN ({})
+                            ",
+                            T::table_name(),
+                            placeholders,
+                        ),
+                        values,
+                    )
+                    .await?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect())
+            }
+        }
+    };
+}
+
 /// Local ID.
 ///
 /// This minimal struct is simply a wrapper around a [`u64`], and is used to
@@ -1342,6 +1445,19 @@ impl FromSql for LocalId {
 }
 
 impl Id for LocalId {
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+    {
+        T::find_first("WHERE local_id = ?", params![*self], tether).await
+    }
+
+    fn id_field_name() -> &'static str {
+        "local_id"
+    }
+}
+
+impl IdCounterpart for LocalId {
     type Counterpart = RemoteId;
 
     async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
@@ -1403,13 +1519,6 @@ impl Id for LocalId {
             .into_iter()
             .map(|r| r.id)
             .collect())
-    }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        T::find_first("WHERE local_id = ?", params![*self], tether).await
     }
 }
 
@@ -1559,88 +1668,22 @@ impl From<ApiReferral> for Referral {
 
 sql_using_serde!(Referral);
 
-/// Remote ID.
-///
-/// This minimal struct is simply a wrapper around a [`String`], and is used to
-/// formalise all IDs used by the Proton API.
-///
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct RemoteId(String);
-
-impl RemoteId {
-    /// Create a new [`RemoteId`] from a [`String`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID to wrap.
-    ///
-    #[must_use]
-    pub fn new(id: String) -> Self {
-        Self(id)
-    }
-
-    /// Convert the [`RemoteId`] into the inner [`String`].
-    #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-}
-
-impl CloneableSecret for RemoteId {}
-
-impl DebugSecret for RemoteId {}
-
-impl AsRef<str> for RemoteId {
-    fn as_ref(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl Deref for RemoteId {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Display for RemoteId {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<ApiRemoteId> for RemoteId {
-    fn from(value: ApiRemoteId) -> Self {
-        Self(value.into_inner())
-    }
-}
-
-impl From<RemoteId> for ApiRemoteId {
-    fn from(value: RemoteId) -> Self {
-        Self::new(value.into_inner())
-    }
-}
-
-impl From<String> for RemoteId {
-    fn from(id: String) -> Self {
-        Self(id)
-    }
-}
-
-impl From<&str> for RemoteId {
-    fn from(id: &str) -> Self {
-        Self(id.to_owned())
-    }
-}
-
-impl FromSql for RemoteId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        String::column_result(value).map(RemoteId)
-    }
-}
+pub use proton_api_core::RemoteId;
 
 impl Id for RemoteId {
+    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+    {
+        T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
+    }
+
+    fn id_field_name() -> &'static str {
+        "remote_id"
+    }
+}
+
+impl IdCounterpart for RemoteId {
     type Counterpart = LocalId;
 
     async fn counterpart<T>(&self, tether: &Tether) -> Result<Option<Self::Counterpart>, StashError>
@@ -1713,30 +1756,11 @@ impl Id for RemoteId {
             .map(Into::into)
             .collect())
     }
-
-    async fn load<T>(&self, tether: &Tether) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-    {
-        T::find_first("WHERE remote_id = ?", params![self.clone()], tether).await
-    }
 }
 
 impl IdOpt<Self> for RemoteId {
     fn opt<I: Into<Self>>(id: I) -> Option<Self> {
         Some(id.into())
-    }
-}
-
-impl ToSql for RemoteId {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        self.0.to_sql()
-    }
-}
-
-impl Zeroize for RemoteId {
-    fn zeroize(&mut self) {
-        self.0.zeroize();
     }
 }
 

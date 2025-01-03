@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
 

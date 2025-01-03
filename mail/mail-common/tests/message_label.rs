@@ -317,12 +317,12 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
         mail_settings: Some(test_mail_settings()),
         labels,
         conversation_count: vec![ConversationCount {
-            label_id: SystemLabel::Inbox.remote_id().into(),
+            label_id: SystemLabel::Inbox.remote_id(),
             total: 1,
             unread: 0,
         }],
         message_count: vec![MessageCount {
-            label_id: SystemLabel::Inbox.remote_id().into(),
+            label_id: SystemLabel::Inbox.remote_id(),
             total: 1,
             unread: 0,
         }],
