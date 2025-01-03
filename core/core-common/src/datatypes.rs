@@ -1138,6 +1138,236 @@ impl Deref for Labels {
 
 sql_using_serde!(Labels);
 
+/// Declare a new Local id type that maps to a remote Proton Id.
+///
+/// A local identifier should exist for every remote/proton Id for every resource we store
+/// in the database that we will create/mutate.
+///
+/// # Example
+///
+/// ```
+/// use proton_api_core::declare_proton_id;
+/// use proton_core_common::declare_local_id;
+///
+/// declare_proton_id!(pub MyProtonId);
+/// declare_local_id!(pub MyLocalProtonId => MyProtonId);
+/// ```
+#[macro_export]
+macro_rules! declare_local_id {
+    (
+        $(#[$($attrss:tt)*])*
+        $visibility:vis $name:ident => $remote_id:ident
+    ) => {
+
+        $(#[$($attrss)*])*
+        #[derive(Clone, Copy, Debug, serde::Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, serde::Serialize)]
+        pub struct $name(u64);
+
+        impl $name {
+            /// Represents the internal value as an unsigned 64-bit integer.
+            #[must_use]
+            pub const fn as_u64(&self) -> u64 {
+                self.0
+            }
+        }
+
+        impl AsRef<u64> for $name{
+            fn as_ref(&self) -> &u64 {
+                &self.0
+            }
+        }
+
+        impl ::std::fmt::Display for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+
+        impl From<u64> for $name{
+            fn from(id: u64) -> Self {
+                Self(id)
+            }
+        }
+
+        impl ::stash::exports::FromSql for $name {
+            fn column_result(value: ::stash::exports::ValueRef<'_>) -> ::stash::exports::FromSqlResult<Self> {
+                u64::column_result(value).map($name)
+            }
+        }
+
+        impl ::stash::exports::ToSql for $name {
+            fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
+                self.0.to_sql()
+            }
+        }
+
+        impl $crate::datatypes::Id for $name {
+            type Counterpart = $remote_id;
+
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                Ok(tether
+                    .query_values::<_, String>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                remote_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                local_id = ?
+                            LIMIT 1
+                            ",
+                            T::table_name(),
+                        ),
+                        ::stash::params![*self],
+                    )
+                    .await?
+                    .into_iter()
+                    .next()
+                    .map($remote_id::new))
+            }
+
+            async fn counterparts<T>(
+                ids: Vec<Self>,
+                tether: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                use ::stash::exports::ToSql;
+
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                #[allow(trivial_casts)]
+                let values = ids
+                    .into_iter()
+                    .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+                    .collect();
+                Ok(tether
+                    .query_values::<_, String>(
+                        indoc::formatdoc!(
+                            "
+                            SELECT
+                                remote_id AS id
+                            FROM
+                                {}
+                            WHERE
+                                local_id IN ({})
+                            ",
+                            T::table_name(),
+                            placeholders,
+                        ),
+                        values,
+                    )
+                    .await?
+                    .into_iter()
+                    .map($remote_id::new)
+                    .collect())
+            }
+
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first("WHERE local_id = ?", ::stash::params![*self], tether).await
+            }
+
+            fn id_field_name() -> &'static str {
+                "local_id"
+            }
+        }
+
+        impl $crate::datatypes::Id for $remote_id {
+            type Counterpart = $name;
+
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                match tether
+                    .query_value::<_, u64>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                local_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                remote_id = ?
+                            LIMIT 1
+                            ",
+                            T::table_name(),
+                        ),
+                        ::stash::params![self.clone()],
+                    )
+                    .await
+                {
+                    Ok(v) => Ok(Some(v.into())),
+                    Err(e) => {
+                        if matches!(
+                            e,
+                            ::stash::stash::StashError::ExecutionError(::stash::exports::SqliteError::QueryReturnedNoRows)
+                        ) {
+                            Ok(None)
+                        } else {
+                            Err(e)
+                        }
+                    }
+                }
+            }
+
+            async fn counterparts<T>(
+                ids: Vec<Self>,
+                tehter: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                use ::stash::exports::ToSql;
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                #[allow(trivial_casts)]
+                let values = ids
+                    .into_iter()
+                    .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+                    .collect();
+                Ok(tehter
+                    .query_values::<_, u64>(
+                        ::indoc::formatdoc!(
+                            "
+                            SELECT
+                                local_id AS value
+                            FROM
+                                {}
+                            WHERE
+                                remote_id IN ({})
+                            ",
+                            T::table_name(),
+                            placeholders,
+                        ),
+                        values,
+                    )
+                    .await?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect())
+            }
+
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
+            where
+                T: ::stash::orm::Model,
+            {
+                T::find_first("WHERE remote_id = ?", ::stash::params![self.clone()], tether).await
+            }
+
+            fn id_field_name() -> &'static str {
+                "remote_id"
+            }
+        }
+    };
+}
+
 /// Local ID.
 ///
 /// This minimal struct is simply a wrapper around a [`u64`], and is used to

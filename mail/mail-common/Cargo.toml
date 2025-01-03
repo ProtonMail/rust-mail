@@ -86,3 +86,8 @@ module_name_repetitions = "allow"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
+
+
+[features]
+default = ["sql"]
+sql = ["proton-api-core/sql", "proton-api-mail/sql"]
