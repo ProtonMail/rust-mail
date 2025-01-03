@@ -1189,14 +1189,14 @@ macro_rules! declare_local_id {
             }
         }
 
-        impl stash::exports::FromSql for $name {
-            fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
+        impl ::stash::exports::FromSql for $name {
+            fn column_result(value: ::stash::exports::ValueRef<'_>) -> ::stash::exports::FromSqlResult<Self> {
                 u64::column_result(value).map($name)
             }
         }
 
-        impl stash::exports::ToSql for $name {
-            fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
+        impl ::stash::exports::ToSql for $name {
+            fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
                 self.0.to_sql()
             }
         }
@@ -1204,13 +1204,13 @@ macro_rules! declare_local_id {
         impl $crate::datatypes::Id for $name {
             type Counterpart = $remote_id;
 
-            async fn counterpart<T>(&self, tether: &stash::stash::Tether) -> Result<Option<Self::Counterpart>, stash::stash::StashError>
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
                 Ok(tether
                     .query_values::<_, String>(
-                        indoc::formatdoc!(
+                        ::indoc::formatdoc!(
                             "
                             SELECT
                                 remote_id AS value
@@ -1222,7 +1222,7 @@ macro_rules! declare_local_id {
                             ",
                             T::table_name(),
                         ),
-                        stash::params![*self],
+                        ::stash::params![*self],
                     )
                     .await?
                     .into_iter()
@@ -1232,14 +1232,14 @@ macro_rules! declare_local_id {
 
             async fn counterparts<T>(
                 ids: Vec<Self>,
-                tether: &stash::stash::Tether,
-            ) -> Result<Vec<Self::Counterpart>, stash::stash::StashError>
+                tether: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
-                use stash::exports::ToSql;
+                use ::stash::exports::ToSql;
 
-                let placeholders = std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
                 #[allow(trivial_casts)]
                 let values = ids
                     .into_iter()
@@ -1267,11 +1267,11 @@ macro_rules! declare_local_id {
                     .collect())
             }
 
-            async fn load<T>(&self, tether: &stash::stash::Tether) -> Result<Option<T>, stash::stash::StashError>
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
-                T::find_first("WHERE local_id = ?", stash::params![*self], tether).await
+                T::find_first("WHERE local_id = ?", ::stash::params![*self], tether).await
             }
 
             fn id_field_name() -> &'static str {
@@ -1282,13 +1282,13 @@ macro_rules! declare_local_id {
         impl $crate::datatypes::Id for $remote_id {
             type Counterpart = $name;
 
-            async fn counterpart<T>(&self, tether: &stash::stash::Tether) -> Result<Option<Self::Counterpart>, stash::stash::StashError>
+            async fn counterpart<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<Self::Counterpart>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
                 match tether
                     .query_value::<_, u64>(
-                        indoc::formatdoc!(
+                        ::indoc::formatdoc!(
                             "
                             SELECT
                                 local_id AS value
@@ -1300,7 +1300,7 @@ macro_rules! declare_local_id {
                             ",
                             T::table_name(),
                         ),
-                        stash::params![self.clone()],
+                        ::stash::params![self.clone()],
                     )
                     .await
                 {
@@ -1308,7 +1308,7 @@ macro_rules! declare_local_id {
                     Err(e) => {
                         if matches!(
                             e,
-                            stash::stash::StashError::ExecutionError(stash::exports::SqliteError::QueryReturnedNoRows)
+                            ::stash::stash::StashError::ExecutionError(::stash::exports::SqliteError::QueryReturnedNoRows)
                         ) {
                             Ok(None)
                         } else {
@@ -1320,13 +1320,13 @@ macro_rules! declare_local_id {
 
             async fn counterparts<T>(
                 ids: Vec<Self>,
-                tehter: &stash::stash::Tether,
-            ) -> Result<Vec<Self::Counterpart>, stash::stash::StashError>
+                tehter: &::stash::stash::Tether,
+            ) -> Result<Vec<Self::Counterpart>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
-                use stash::exports::ToSql;
-                let placeholders = std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+                use ::stash::exports::ToSql;
+                let placeholders = ::std::iter::repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
                 #[allow(trivial_casts)]
                 let values = ids
                     .into_iter()
@@ -1334,7 +1334,7 @@ macro_rules! declare_local_id {
                     .collect();
                 Ok(tehter
                     .query_values::<_, u64>(
-                        indoc::formatdoc!(
+                        ::indoc::formatdoc!(
                             "
                             SELECT
                                 local_id AS value
@@ -1354,11 +1354,11 @@ macro_rules! declare_local_id {
                     .collect())
             }
 
-            async fn load<T>(&self, tether: &stash::stash::Tether) -> Result<Option<T>, stash::stash::StashError>
+            async fn load<T>(&self, tether: &::stash::stash::Tether) -> Result<Option<T>, ::stash::stash::StashError>
             where
-                T: stash::orm::Model,
+                T: ::stash::orm::Model,
             {
-                T::find_first("WHERE remote_id = ?", stash::params![self.clone()], tether).await
+                T::find_first("WHERE remote_id = ?", ::stash::params![self.clone()], tether).await
             }
 
             fn id_field_name() -> &'static str {

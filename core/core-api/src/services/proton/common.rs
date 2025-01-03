@@ -134,15 +134,15 @@ macro_rules! declare_proton_id {
         }
 
         #[cfg(feature = "sql")]
-        impl stash::exports::ToSql for $name {
-            fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
+        impl ::stash::exports::ToSql for $name {
+            fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
                 self.as_str().to_sql()
             }
         }
 
         #[cfg(feature = "sql")]
-        impl stash::exports::FromSql for $name {
-            fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
+        impl ::stash::exports::FromSql for $name {
+            fn column_result(value: stash::exports::ValueRef<'_>) -> ::stash::exports::FromSqlResult<Self> {
                 String::column_result(value).map(Self)
             }
         }
