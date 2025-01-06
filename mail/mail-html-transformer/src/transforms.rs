@@ -131,13 +131,13 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
 }
 
 /// Proxies all images through proton's proxy.
+///
+/// `auth_id` must be a valid `AuthId`.
 #[allow(clippy::missing_panics_doc)] // the select is well formed.
-pub fn proxy_images(document: NodeRef, user_session_id: &str) -> u64 {
+pub fn proxy_images(document: NodeRef, auth_id: &str) -> u64 {
     let elements = document.select("img").unwrap();
     let mut base = Url::parse("https://mail.proton.me/api/core/v4/images").unwrap();
-    base.query_pairs_mut()
-        .append_pair("DryRun", "0")
-        .append_pair("UID", user_session_id);
+    base.query_pairs_mut().append_pair("UID", auth_id);
 
     let mut count = 0;
     for element in elements {

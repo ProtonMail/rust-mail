@@ -6,6 +6,7 @@ use crate::datatypes::{LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use parking_lot::Mutex;
+use proton_api_core::services::proton::common::AuthId;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
@@ -40,7 +41,7 @@ pub struct TransformOptsResolved<'a> {
     pub show_block_quote: bool,
     pub hide_remote_images: bool,
     pub hide_embedded_images: bool,
-    pub image_proxy: Option<&'a str>,
+    pub image_proxy: Option<&'a AuthId>,
 }
 
 impl TransformOpts {
@@ -50,7 +51,7 @@ impl TransformOpts {
     pub async fn resolve<'a>(
         self,
         tether: &'_ Tether,
-        user_session_id: &'a str,
+        auth_id: &'a AuthId,
     ) -> TransformOptsResolved<'a> {
         let show_block_quote = self.show_block_quote;
         if let (Some(hide_embedded_images), Some(hide_remote_images), Some(image_proxy)) = (
@@ -62,7 +63,7 @@ impl TransformOpts {
                 show_block_quote,
                 hide_remote_images,
                 hide_embedded_images,
-                image_proxy: image_proxy.then_some(user_session_id),
+                image_proxy: image_proxy.then_some(auth_id),
             };
         }
 
@@ -81,7 +82,7 @@ impl TransformOpts {
             image_proxy: self
                 .image_proxy
                 .unwrap_or(image_proxy | 2 == 2)
-                .then_some(user_session_id),
+                .then_some(auth_id),
         }
     }
 }
@@ -307,10 +308,7 @@ impl DecryptedMessageBody {
     /// or if the message doesn't exist.
     pub async fn transformed(&self, ctx: &MailUserContext, opts: TransformOpts) -> BodyOutput {
         let tether = ctx.user_stash().connection();
-        // FIXME: This is straight up wrong.
-        let user_session_id = ctx.user_id();
-        // FIXME: use actual type safety instead of a &str
-        let resolved = opts.resolve(&tether, user_session_id.as_str()).await;
+        let resolved = opts.resolve(&tether, ctx.session_id()).await;
         transform_html(&self.body, resolved, self.metadata.mime_type)
     }
 
@@ -444,9 +442,9 @@ pub fn transform_html(
     let mut images_proxied = 0;
     if hide_remote_images {
         remote_images_disabled = transformer.disable_remote_content();
-    } else if let Some(user_session_id) = image_proxy {
+    } else if let Some(auth_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
-        images_proxied = transformer.proxy_images(user_session_id);
+        images_proxied = transformer.proxy_images(auth_id.as_ref());
     }
 
     let had_blockquote = if !show_block_quote {
