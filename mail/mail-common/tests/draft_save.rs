@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -11,7 +11,6 @@ use proton_api_mail::services::proton::response_data::{AttachmentMetadata, Messa
 use proton_api_mail::services::proton::response_data::{
     Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::attachment::KeyPackets;
@@ -36,14 +35,14 @@ async fn create_empty_draft() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts().into());
+    message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
@@ -131,14 +130,14 @@ async fn create_empty_draft_and_save_twice() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts().into());
+    message.metadata.label_ids.push(LabelId::drafts());
 
     let new_subject = "My New Subject";
     let new_body = "Hello world";
@@ -274,7 +273,7 @@ async fn create_draft_reply_without_body_is_error() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
@@ -318,7 +317,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
@@ -367,14 +366,14 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts().into());
+    message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_with_expected(&message.metadata.id, message.clone(), 2)
@@ -479,7 +478,7 @@ async fn create_draft_reply_impl(
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
@@ -514,7 +513,7 @@ async fn create_draft_reply_impl(
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
     }
-    message.metadata.label_ids.push(LabelId::drafts().into());
+    message.metadata.label_ids.push(LabelId::drafts());
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
         remote_existing_message
@@ -644,7 +643,7 @@ fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     // correct primary address. Using this key will result in a crypto
     // error.
     params.addresses.push(ApiAddress {
-        id: ApiRemoteId::from("GIBBERISH TEST ID"),
+        id: AddressId::from("GIBBERISH TEST ID"),
         email: "gibberish@proton.ch".to_owned(),
         send: true,
         receive: true,

@@ -41,6 +41,7 @@ use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
@@ -52,7 +53,9 @@ use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{
+    IdCounterpart, LocalAddressId, LocalId, LocalLabelId, RemoteId,
+};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
@@ -100,11 +103,11 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_address_id: LocalId,
+    pub local_address_id: LocalAddressId,
 
     /// TODO: Document this field.
     #[DbField]
-    pub remote_address_id: RemoteId,
+    pub remote_address_id: AddressId,
 
     /// TODO: Document this field.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -224,7 +227,7 @@ impl Message {
     ///
     pub async fn action_apply_label(
         queue: &Queue,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
@@ -295,7 +298,7 @@ impl Message {
     ///
     pub async fn action_remove_label(
         queue: &Queue,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
@@ -316,7 +319,7 @@ impl Message {
     ///
     pub async fn action_mark_read(
         queue: &Queue,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Read>, QueueActionError<Read>> {
         let action = Read::new(label_id, message_ids);
@@ -342,7 +345,7 @@ impl Message {
     ///
     pub async fn action_mark_unread(
         queue: &Queue,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unread>, QueueActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
@@ -367,7 +370,7 @@ impl Message {
     ///
     pub async fn action_delete(
         queue: &Queue,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
@@ -389,8 +392,8 @@ impl Message {
     ///
     pub async fn action_move(
         queue: &Queue,
-        source_id: LocalId,
-        destination_id: LocalId,
+        source_id: LocalLabelId,
+        destination_id: LocalLabelId,
         target_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
@@ -429,7 +432,6 @@ impl Message {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let all_mail_id = LabelId::all_mail()
-            .into_inner()
             .counterpart::<Label>(bond)
             .await?
             .expect("AllMail should be set");
@@ -460,8 +462,8 @@ impl Message {
     ///
     /// Returns errors if the operation failed.
     pub async fn move_messages(
-        source_id: LocalId,
-        destination_id: LocalId,
+        source_id: LocalLabelId,
+        destination_id: LocalLabelId,
         message_ids: Vec<LocalId>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
@@ -525,11 +527,11 @@ impl Message {
     /// Returns errors if the operation failed.
     ///
     pub async fn label_as(
-        source_label_id: LocalId,
+        source_label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
-        selected_label_ids: &[LocalId],
-        partially_selected_label_ids: &[LocalId],
-        all_label_ids: &[LocalId],
+        selected_label_ids: &[LocalLabelId],
+        partially_selected_label_ids: &[LocalLabelId],
+        all_label_ids: &[LocalLabelId],
         must_archive: bool,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
@@ -543,7 +545,7 @@ impl Message {
         }
 
         if must_archive {
-            let archive_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), bond)
+            let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), bond)
                 .await?
                 .expect("Archive label must have a RemoteId");
             Self::move_messages(source_label_id, archive_id, message_ids, bond).await?;
@@ -568,10 +570,10 @@ impl Message {
     ///
     pub async fn action_label_as(
         queue: &Queue,
-        source_label_id: LocalId,
+        source_label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
-        selected_label_ids: Vec<LocalId>,
-        partially_selected_label_ids: Vec<LocalId>,
+        selected_label_ids: Vec<LocalLabelId>,
+        partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
     ) -> Result<bool, AppError> {
         let action = LabelAs::new(
@@ -595,18 +597,18 @@ impl Message {
     /// Remotely apply LabelAs action for conversations
     pub(crate) async fn remote_relabel(
         session: &Session,
-        added_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
-        removed_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+        added_label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
+        removed_label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
         tether: &Tether,
     ) -> Result<Vec<RemoteId>, AppError> {
         /// Gets a hashmap of the remote label id and the local ids.
         async fn group_ids_by_label(
-            label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+            label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
             tether: &Tether,
-        ) -> Result<HashMap<RemoteId, HashSet<LocalId>>, AppError> {
+        ) -> Result<HashMap<LabelId, HashSet<LocalId>>, AppError> {
             let mut map = HashMap::new();
             for (conv_id, local_label_ids) in label_ids {
-                let remote_label_ids = LocalId::counterparts::<Label>(
+                let remote_label_ids = LocalLabelId::counterparts::<Label>(
                     Vec::from_iter(local_label_ids.iter().cloned()),
                     tether,
                 )
@@ -696,7 +698,7 @@ impl Message {
     /// * `interface`   - The database interface.
     ///
     pub async fn all_available_bottom_bar_actions_for_messages(
-        current_label_id: LocalId,
+        current_label_id: LocalLabelId,
         message_ids: Vec<LocalId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
@@ -801,14 +803,14 @@ impl Message {
     /// Revert locally the LabelAs action for conversation.
     pub(crate) async fn undo_label_as(
         local_ids: Vec<LocalId>,
-        source_label_id: LocalId,
-        mut added_labels: HashMap<LocalId, HashSet<LocalId>>,
-        mut removed_labels: HashMap<LocalId, HashSet<LocalId>>,
+        source_label_id: LocalLabelId,
+        mut added_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
+        mut removed_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
         original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
         must_archive: bool,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let archive_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), bond)
+        let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), bond)
             .await?
             .expect("Archive label must have a RemoteId");
 
@@ -820,19 +822,12 @@ impl Message {
 
             let added_labels = added_labels.remove(message_id).unwrap_or_default();
             let removed_labels = removed_labels.remove(message_id).unwrap_or_default();
-            let current_labels = RemoteId::counterparts::<Label>(
-                message
-                    .label_ids
-                    .iter()
-                    .map(|l| l.clone().into_inner())
-                    .collect(),
-                bond,
-            )
-            .await?;
+            let current_labels =
+                LabelId::counterparts::<Label>(message.label_ids.clone(), bond).await?;
             let current_labels = HashSet::from_iter(current_labels.into_iter());
             let new_labels = &(&current_labels - &removed_labels) | &added_labels;
             let new_labels =
-                LocalId::counterparts::<Label>(Vec::from_iter(new_labels), bond).await?;
+                LocalLabelId::counterparts::<Label>(Vec::from_iter(new_labels), bond).await?;
             message.label_ids = new_labels.into_iter().map_into().collect();
 
             if let Some(location) = original_location.get(message_id) {
@@ -963,7 +958,7 @@ impl Message {
         let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
-                api.put_messages_delete(ids, Some(label_id.into()))
+                api.put_messages_delete(ids, Some(label_id))
                     .await
                     .map(|r| r.responses)
             }
@@ -1524,7 +1519,7 @@ impl Message {
         let response = api
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
-                label_id: Some(vec![label_id.into()]),
+                label_id: Some(vec![label_id]),
                 page: 0,
                 page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
                 ..Default::default()
@@ -2155,7 +2150,7 @@ impl Message {
                 .counterpart::<Address>(tether)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone())
+                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone().into())
                 })?,
             remote_address_id: value.address_id,
             attachments_metadata: value
@@ -2205,7 +2200,7 @@ impl Message {
     ///
     /// Returns error if the queries fail.
     pub async fn apply_label(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
@@ -2263,7 +2258,7 @@ impl Message {
     ///
     /// Returns error if the queries fail.
     pub async fn remove_label(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
@@ -2323,7 +2318,7 @@ impl Message {
                     if let Some(mut conversation_label) =
                         ConversationLabel::find_by_conversation_and_label(
                             &conversation_id,
-                            &local_label_id,
+                            local_label_id,
                             bond,
                         )
                         .await?
@@ -2460,7 +2455,7 @@ impl Message {
     ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         page_count: u32,
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
@@ -2540,7 +2535,7 @@ impl Message {
     pub async fn update_message_counters_after_soft_delete(
         messages: impl IntoIterator<Item = Message>,
         bond: &Bond<'_>,
-    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError> {
+    ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
             if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
@@ -2557,7 +2552,7 @@ impl Message {
     pub async fn update_message_counters_after_soft_undelete(
         messages: impl IntoIterator<Item = Message>,
         bond: &Bond<'_>,
-    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError> {
+    ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
             if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
@@ -2731,7 +2726,7 @@ pub struct MessageDataSource {
     remote_label_id: LabelId,
 
     /// Local id of the label.
-    local_label_id: LocalId,
+    local_label_id: LocalLabelId,
 
     /// Filter options for pagination.
     filter: PaginatorFilter,
@@ -2755,7 +2750,7 @@ impl MessageDataSource {
     /// Returns error if the remote id for the label can't be resolved.
     pub async fn new(
         context: &MailUserContext,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
     ) -> Result<Self, AppError> {
@@ -2765,7 +2760,7 @@ impl MessageDataSource {
         };
 
         Ok(Self {
-            remote_label_id: remote_id.into(),
+            remote_label_id: remote_id,
             session: context.session().clone(),
             local_label_id: label_id,
             filter,
@@ -2797,7 +2792,7 @@ impl DataSource for MessageDataSource {
             .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
-                label_id: Some(vec![self.remote_label_id.clone().into_inner()]),
+                label_id: Some(vec![self.remote_label_id.clone()]),
                 page_size: page_size.get() as u64,
                 unread: self.filter.unread,
                 keyword: self.options.keywords.clone(),
@@ -2850,7 +2845,7 @@ impl DataSource for MessageDataSource {
                 desc: Some(true),
                 end: Some(last_element.time),
                 end_id: Some(last_element_id.clone()),
-                label_id: Some(vec![self.remote_label_id.clone().into_inner()]),
+                label_id: Some(vec![self.remote_label_id.clone()]),
                 page_size: page_size.get() as u64 + 1_u64,
                 unread: self.filter.unread,
                 keyword: self.options.keywords.clone(),
@@ -2915,7 +2910,7 @@ impl Default for Message {
     fn default() -> Self {
         Self {
             local_address_id: 0.into(),
-            remote_address_id: RemoteId::new(Default::default()),
+            remote_address_id: AddressId::new(Default::default()),
             // The rest are by default default.
             flags: Default::default(),
             local_id: Default::default(),
@@ -3134,7 +3129,7 @@ impl MessageBodyMetadata {
         api_message_body: ApiMessageBody,
         remote_message_id: RemoteId,
         remote_conversation_id: RemoteId,
-        remote_address_id: RemoteId,
+        remote_address_id: AddressId,
     ) -> (Self, String) {
         let attachments = api_message_body
             .attachments
@@ -3177,12 +3172,12 @@ impl MessageLabelStats {
     async fn build(
         messages: impl IntoIterator<Item = Message>,
         tether: &Tether,
-    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError> {
+    ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let messages = messages.into_iter();
         let mut label_stats = HashMap::with_capacity(messages.size_hint().1.unwrap_or(4));
         for message in messages {
             let label_ids = tether
-                .query_values::<_, LocalId>(
+                .query_values::<_, LocalLabelId>(
                     "SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?",
                     params![message.local_id.unwrap()],
                 )

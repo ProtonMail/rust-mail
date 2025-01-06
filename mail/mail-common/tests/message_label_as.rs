@@ -1,4 +1,6 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{
+    AddressId, LabelId, RemoteId as ApiRemoteId, UserId,
+};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace,
     User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
@@ -9,7 +11,7 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{IdCounterpart, LabelId};
+use proton_core_common::datatypes::IdCounterpart;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
@@ -57,21 +59,11 @@ async fn label_as_without_archive() {
     let label3 = test_label(&label3_id, "unselected");
 
     let message1 = test_message("first", vec![]);
-    let message2 = test_message(
-        "second",
-        vec![label2_id.clone().into(), label3_id.clone().into()],
-    );
-    let message3 = test_message(
-        "third",
-        vec![label1_id.clone().into(), label3_id.clone().into()],
-    );
+    let message2 = test_message("second", vec![label2_id.clone(), label3_id.clone()]);
+    let message3 = test_message("third", vec![label1_id.clone(), label3_id.clone()]);
     let message4 = test_message(
         "fourth",
-        vec![
-            label1_id.clone().into(),
-            label2_id.clone().into(),
-            label3_id.clone().into(),
-        ],
+        vec![label1_id.clone(), label2_id.clone(), label3_id.clone()],
     );
     let labels = hash_map! {
         ApiLabelType::Label: vec![label1, label2, label3],
@@ -87,12 +79,12 @@ async fn label_as_without_archive() {
     ])
     .await;
     ctx.mock_label_messages(
-        &label1_id.clone().into_inner(),
+        &label1_id,
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
     )
     .await;
     ctx.mock_unlabel_messages(
-        &label3_id.into_inner(),
+        &label3_id,
         vec![
             message2.metadata.id.clone(),
             message3.metadata.id.clone(),
@@ -236,11 +228,7 @@ async fn label_as_with_archive() {
     let message1 = test_message("first", vec![]);
     let message2 = test_message(
         "second",
-        vec![
-            label1_id.clone().into(),
-            label2_id.clone().into(),
-            label3_id.clone().into(),
-        ],
+        vec![label1_id.clone(), label2_id.clone(), label3_id.clone()],
     );
     let labels = hash_map! {
         ApiLabelType::Label: vec![label1, label2, label3],
@@ -250,19 +238,12 @@ async fn label_as_with_archive() {
 
     ctx.mock_get_messages(vec![message1.metadata.clone(), message2.metadata.clone()])
         .await;
+    ctx.mock_label_messages(&label1_id, vec![message1.metadata.id.clone()])
+        .await;
+    ctx.mock_unlabel_messages(&label3_id, vec![message2.metadata.id.clone()], vec![])
+        .await;
     ctx.mock_label_messages(
-        &label1_id.clone().into_inner(),
-        vec![message1.metadata.id.clone()],
-    )
-    .await;
-    ctx.mock_unlabel_messages(
-        &label3_id.into_inner(),
-        vec![message2.metadata.id.clone()],
-        vec![],
-    )
-    .await;
-    ctx.mock_label_messages(
-        &LabelId::archive().into(),
+        &LabelId::archive(),
         vec![message1.metadata.id.clone(), message2.metadata.id.clone()],
     )
     .await;
@@ -358,18 +339,18 @@ async fn label_as_with_archive() {
 
 fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
     ApiLabel {
-        id: label_id.clone().into(),
+        id: label_id.clone(),
         label_type: ApiLabelType::Label,
         name: name.to_owned(),
         ..Default::default()
     }
 }
 
-fn test_message(id: &str, label_ids: Vec<ApiRemoteId>) -> ApiMessage {
+fn test_message(id: &str, label_ids: Vec<LabelId>) -> ApiMessage {
     let metadata = ApiMessageMetadata {
         id: ApiRemoteId::from(id.to_owned()),
         conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
-        address_id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+        address_id: AddressId::from(TEST_USER_ADDRESS_ID),
         label_ids,
         size: 333,
         subject: "A simple message".to_owned(),
@@ -398,7 +379,7 @@ fn test_init_params(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams 
 
 fn test_user_info() -> ApiUser {
     ApiUser {
-        id: ApiRemoteId::from(TEST_USER_ID),
+        id: UserId::from(TEST_USER_ID),
         name: Some("rust_test".to_owned()),
         display_name: None,
         email: "rust_test@proton.ch".to_owned(),

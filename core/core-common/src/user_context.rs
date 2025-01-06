@@ -1,9 +1,9 @@
 pub use self::keys::*;
 use crate::cache::ProtonCache;
-use crate::datatypes::RemoteId;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::CoreContextResult;
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
@@ -37,8 +37,8 @@ pub trait UserDatabaseInitializer: Send + Sync {
 pub struct UserContext {
     session: Session,
     user_stash: Stash,
-    user_id: RemoteId,
-    session_id: RemoteId,
+    user_id: UserId,
+    session_id: AuthId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
     pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
 }
@@ -54,8 +54,8 @@ impl UserContext {
         session: Session,
         user_stash_path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
-        user_id: RemoteId,
-        session_id: RemoteId,
+        user_id: UserId,
+        session_id: AuthId,
         cache_path: PathBuf,
         sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
@@ -113,13 +113,13 @@ impl UserContext {
 
     /// Get the user id of this context.
     #[must_use]
-    pub fn user_id(&self) -> &RemoteId {
+    pub fn user_id(&self) -> &UserId {
         &self.user_id
     }
 
     /// Get the session id of this context.
     #[must_use]
-    pub fn session_id(&self) -> &RemoteId {
+    pub fn session_id(&self) -> &AuthId {
         &self.session_id
     }
 

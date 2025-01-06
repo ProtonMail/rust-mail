@@ -23,7 +23,10 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{HumanVerificationType, RemoteId};
+use crate::services::proton::common::{
+    AddressId, ContactEmailId, ContactUID, HumanVerificationType, LabelId, SaltId, UserId,
+};
+use crate::services::proton::prelude::ContactId;
 use crate::services::proton::responses::GetEventResponse;
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
@@ -36,7 +39,6 @@ use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
 use serde_with::{serde_as, BoolFromInt, FromInto};
-
 //  ENUMS
 //==============================================================================
 
@@ -298,7 +300,7 @@ pub enum WeekStart {
 pub struct Address {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AddressId,
 
     /// TODO: Document this field.
     #[serde(rename = "Type")]
@@ -384,7 +386,7 @@ pub struct AddressSignedKeyList {
 pub struct AddressEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AddressId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -436,14 +438,14 @@ impl ApiErrorInfo {
 #[serde(rename_all = "PascalCase")]
 pub struct ContactBasic {
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactId,
 
     /// TODO: Document this field.
     pub create_time: u64,
 
     /// TODO: Document this field.
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub modify_time: u64,
@@ -456,7 +458,7 @@ pub struct ContactBasic {
 
     /// TODO: Document this field.
     #[serde(rename = "UID")]
-    pub uid: RemoteId,
+    pub uid: ContactUID,
 }
 
 /// Represents a contact card returned by the API.
@@ -487,11 +489,11 @@ pub struct ContactCard {
 pub struct ContactEmail {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactEmailId,
 
     /// TODO: Document this field.
     #[serde(rename = "ContactID")]
-    pub contact_id: RemoteId,
+    pub contact_id: ContactId,
 
     /// TODO: Document this field.
     pub canonical_email: String,
@@ -512,7 +514,7 @@ pub struct ContactEmail {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub last_used_time: u64,
@@ -532,7 +534,7 @@ pub struct ContactEmail {
 pub struct ContactEmailEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactEmailId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -551,7 +553,7 @@ impl GetEventResponse for ContactEmailEvent {}
 pub struct ContactEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -573,7 +575,7 @@ impl GetEventResponse for ContactEvent {}
 pub struct ContactFull {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactId,
 
     /// TODO: Document this field.
     pub cards: Vec<ContactCard>,
@@ -586,7 +588,7 @@ pub struct ContactFull {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub modify_time: u64,
@@ -599,7 +601,7 @@ pub struct ContactFull {
 
     /// TODO: Document this field.
     #[serde(rename = "UID")]
-    pub uid: RemoteId,
+    pub uid: ContactUID,
 }
 
 /// TODO: Document this struct.
@@ -783,7 +785,7 @@ pub struct Referral {
 pub struct Salt {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: SaltId,
 
     /// TODO: Document this field.
     pub key_salt: Option<String>,
@@ -828,7 +830,7 @@ pub struct TwoFa {
 pub struct User {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: UserId,
 
     /// TODO: Document this field.
     pub create_time: u64,

@@ -2,7 +2,7 @@
 
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::{LocalId, PasswordMode, RemoteId, TfaStatus};
+use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
@@ -13,6 +13,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
@@ -56,7 +57,7 @@ pub enum CoreContextError {
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
     #[error("Attempting to create more than one context for the user with id {0}")]
-    DuplicateContext(RemoteId),
+    DuplicateContext(UserId),
     #[error("{0}")]
     Other(AnyhowError),
 }
@@ -94,7 +95,7 @@ pub enum ContactError {
     #[error("Validation: {0}")]
     Validation(#[from] VcardValidationError),
     #[error("Contact {0} does not have remote id")]
-    ContactDoesNotHaveRemoteId(LocalId),
+    ContactDoesNotHaveRemoteId(LocalContactId),
 }
 
 /// Represents the state of an account.
@@ -105,15 +106,15 @@ pub enum CoreAccountState {
 
     /// The account has at least one fully logged-in session;
     /// the variant holds the (remote) IDs of the fullly logged-in sessions.
-    LoggedIn(Vec<RemoteId>),
+    LoggedIn(Vec<AuthId>),
 
     /// The account has authenticated sessions but they are missing the key secret.
     /// The variant holds the (remote) IDs of the sessions that are missing the key secret.
-    NeedMbp(Vec<RemoteId>),
+    NeedMbp(Vec<AuthId>),
 
     /// The account has partially authenticated sessions that require a second factor.
     /// The variant holds the (remote) IDs of the sessions that require a second factor.
-    NeedTfa(Vec<RemoteId>),
+    NeedTfa(Vec<AuthId>),
 
     /// The account has no active sessions.
     LoggedOut,
@@ -196,7 +197,7 @@ pub struct Context {
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    active_user_contexts: Mutex<HashMap<RemoteId, Weak<UserContext>>>,
+    active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
     sender_image_cache_size: u64,
     api_config: ApiConfig,
@@ -330,7 +331,7 @@ impl Context {
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_account_sessions(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> CoreContextResult<Vec<CoreSession>> {
         let tether = self.stash().connection();
         Ok(CoreSession::find_by_user_id(user_id, &tether).await?)
@@ -346,7 +347,7 @@ impl Context {
     pub async fn watch_account_sessions(
         // TODO: Two types of watchers on session, it needs to be unified.
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let sessions = self.get_account_sessions(user_id).await?;
         let handle = CoreSession::watch(self.stash())?;
@@ -362,7 +363,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_account(&self, user_id: RemoteId) -> CoreContextResult<Option<CoreAccount>> {
+    pub async fn get_account(&self, user_id: UserId) -> CoreContextResult<Option<CoreAccount>> {
         let tether = self.stash().connection();
         Ok(CoreAccount::find_by_id(user_id, &tether).await?)
     }
@@ -374,7 +375,7 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_account_state(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> CoreContextResult<Option<CoreAccountState>> {
         let tether = self.stash().connection();
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
@@ -396,10 +397,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(
-        &self,
-        session_id: RemoteId,
-    ) -> CoreContextResult<Option<CoreSession>> {
+    pub async fn get_session(&self, session_id: AuthId) -> CoreContextResult<Option<CoreSession>> {
         let tether = self.stash().connection();
         Ok(CoreSession::find_by_id(session_id, &tether).await?)
     }
@@ -411,7 +409,7 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
-        session_id: RemoteId,
+        session_id: AuthId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
         let tether = self.stash().connection();
         let Some(session) = CoreSession::find_by_id(session_id, &tether).await? else {
@@ -446,7 +444,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the account is not found.
-    pub async fn set_primary_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+    pub async fn set_primary_account(&self, user_id: UserId) -> CoreContextResult<()> {
         let mut tether = self.stash().connection();
         let mut account = CoreAccount::find_by_id(user_id, &tether)
             .await?
@@ -489,8 +487,8 @@ impl Context {
     /// or if no session with the given IDs is able to be resumed.
     pub async fn resume_login_flow(
         &self,
-        user_id: RemoteId,
-        session_id: RemoteId,
+        user_id: UserId,
+        session_id: AuthId,
     ) -> CoreContextResult<Flow> {
         let tether = self.stash().connection();
 
@@ -532,8 +530,8 @@ impl Context {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         }
 
-        let user_id: RemoteId = flow.user_id()?.to_owned();
-        let session_id: RemoteId = flow.session_id()?.to_owned();
+        let user_id: UserId = flow.user_id()?.to_owned();
+        let session_id: AuthId = flow.session_id()?.to_owned();
         let session = flow.take_session()?;
 
         self.new_user_context(user_id, session, session_id).await
@@ -576,7 +574,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn logout_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+    pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
         for session in &self.get_account_sessions(user_id).await? {
             let Ok(api) = self
                 .new_api_session(Some(session))
@@ -604,7 +602,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+    pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
         if let Some(path) = self.find_user_db(&user_id) {
             tokio::fs::remove_file(&path)
                 .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
@@ -616,7 +614,7 @@ impl Context {
 
         let mut tether = self.stash().connection();
         let tx = tether.transaction().await?;
-        CoreAccount::delete_by_remote_id(user_id, &tx)
+        CoreAccount::delete_by_remote_id(user_id.into(), &tx)
             .inspect_err(|e| error!("Failed to delete account from db: {e}"))
             .await?;
         tx.commit().await?;
@@ -648,7 +646,7 @@ impl Context {
         SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
     }
 
-    fn user_db_path(&self, user_id: &RemoteId) -> PathBuf {
+    fn user_db_path(&self, user_id: &UserId) -> PathBuf {
         get_user_db_path(&self.user_db_path, user_id)
     }
 
@@ -670,7 +668,7 @@ impl Context {
     }
 
     /// Find the user's database file.
-    fn find_user_db(&self, user_id: &RemoteId) -> Option<PathBuf> {
+    fn find_user_db(&self, user_id: &UserId) -> Option<PathBuf> {
         let path = get_user_db_path(&self.user_db_path, user_id);
 
         if path.try_exists().is_ok() {
@@ -695,9 +693,9 @@ impl Context {
     /// different session id.
     async fn new_user_context(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
         session: ApiSession,
-        session_id: RemoteId,
+        session_id: AuthId,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -743,6 +741,6 @@ fn get_account_db_path(path: impl AsRef<Path>) -> PathBuf {
     path.as_ref().join("account.db")
 }
 
-fn get_user_db_path(path: impl AsRef<Path>, user_id: &RemoteId) -> PathBuf {
+fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
     path.as_ref().join(user_id.to_string()).with_extension("db")
 }

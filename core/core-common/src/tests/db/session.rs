@@ -1,11 +1,12 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{AuthScopes, RemoteId};
+use crate::datatypes::AuthScopes;
 use crate::db::account::{
     CoreAccount, CoreSession, EncryptedAccessToken, EncryptedRefreshToken, SessionEncryptionKey,
 };
 use crate::models::ModelExtension;
 use proton_api_core::auth::{Tokens, UserKeySecret};
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
@@ -35,7 +36,7 @@ async fn new_test_connection() -> Stash {
 async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
     let tx = tether.transaction().await?;
 
-    let account = CoreAccount::new(RemoteId::from("user_id"), String::from("name_or_addr"))
+    let account = CoreAccount::new(UserId::from("user_id"), String::from("name_or_addr"))
         .with_save(&tx)
         .await?;
 
@@ -70,7 +71,7 @@ async fn test_session_store_load() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth_id = RemoteId::from("remote_id");
+    let auth_id = AuthId::from("remote_id");
     let tokens = new_test_tokens();
 
     let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();
@@ -104,7 +105,7 @@ async fn test_session_update() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth_id = RemoteId::from("remote_id");
+    let auth_id = AuthId::from("remote_id");
     let tokens = new_test_tokens();
 
     let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key)
@@ -159,7 +160,7 @@ async fn test_session_delete_user_id() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth_id = RemoteId::from("remote_id");
+    let auth_id = AuthId::from("remote_id");
     let tokens = new_test_tokens();
 
     let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();
@@ -197,7 +198,7 @@ async fn test_session_delete_session_id() {
     let key = SessionEncryptionKey::random();
     let mut tether = new_test_connection().await.connection();
     let account = new_test_account(&mut tether).await.unwrap();
-    let auth_id = RemoteId::from("remote_id");
+    let auth_id = AuthId::from("remote_id");
     let tokens = new_test_tokens();
 
     let mut session = CoreSession::new(account.remote_id, auth_id, &tokens, &key).unwrap();

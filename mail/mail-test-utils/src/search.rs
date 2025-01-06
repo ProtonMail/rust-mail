@@ -1,6 +1,6 @@
 use crate::test_context::MailTestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -10,8 +10,8 @@ use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
     MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::RemoteId;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId};
+use proton_core_common::datatypes::{LocalLabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
@@ -21,9 +21,9 @@ use stash::stash::Tether;
 use std::collections::BTreeMap;
 
 lazy_static! {
-    pub static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");
-    pub static ref MY_LABEL_ID1: ApiRemoteId = ApiRemoteId::from("MyLabelID1");
-    pub static ref MY_LABEL_ID2: ApiRemoteId = ApiRemoteId::from("MyLabelID2");
+    pub static ref MY_ADDRESS_ID: AddressId = AddressId::from("MyRemoteId");
+    pub static ref MY_LABEL_ID1: LabelId = LabelId::from("MyLabelID1");
+    pub static ref MY_LABEL_ID2: LabelId = LabelId::from("MyLabelID2");
     pub static ref MY_ATTACHMENT_ID: ApiRemoteId = ApiRemoteId::from("MyAttachmentID1");
     pub static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
 }
@@ -33,7 +33,7 @@ lazy_static! {
 macro_rules! lid {
     ($id:expr) => {{
         use proton_core_common::datatypes::LocalId;
-        Some(LocalId::from($id))
+        Some($id.into())
     }};
 }
 
@@ -229,23 +229,18 @@ impl MailTestContext {
     pub fn get_test_msgs(&self) -> Vec<MessageMetadata> {
         let m1 = MessageMetadata {
             id: "Message1".into(),
-            address_id: ApiRemoteId::from("Addr1"),
-            label_ids: vec![ApiRemoteId::from("Label1"), ApiRemoteId::from("Label2")],
+            address_id: AddressId::from("Addr1"),
+            label_ids: vec![LabelId::from("Label1"), LabelId::from("Label2")],
             ..Default::default()
         };
         let m2 = MessageMetadata {
             id: "Message2".into(),
-            address_id: ApiRemoteId::from("Addr2"),
-            label_ids: vec![ApiRemoteId::from("Label2"), ApiRemoteId::from("Label3")],
+            address_id: AddressId::from("Addr2"),
+            label_ids: vec![LabelId::from("Label2"), LabelId::from("Label3")],
             ..Default::default()
         };
         vec![m1, m2]
     }
-}
-
-/// # Panics
-pub async fn remote_counterpart<T: Model>(id: LocalId, tx: &Tether) -> RemoteId {
-    id.counterpart::<T>(tx).await.unwrap().unwrap()
 }
 
 #[allow(dead_code)]
@@ -259,7 +254,7 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
 /// failed.
 ///
 /// # Panics
-pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
+pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
     let mut labels = [test_label1(), test_label2()];
     let tx = tether
         .transaction()
@@ -284,7 +279,7 @@ pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
 #[must_use]
 pub fn test_label1() -> Label {
     label!(
-        remote_id: Some(MY_LABEL_ID1.clone().into()),
+        remote_id: Some(MY_LABEL_ID1.clone()),
         name: "MyLabel".to_owned(),
         color: LabelColor::black(),
         label_type: LabelType::Label
@@ -294,7 +289,7 @@ pub fn test_label1() -> Label {
 #[must_use]
 pub fn test_label2() -> Label {
     label!(
-       remote_id: Some(MY_LABEL_ID2.clone().into()),
+       remote_id: Some(MY_LABEL_ID2.clone()),
        name: "MyFolder".to_owned(),
        color: LabelColor::black(),
        label_type: LabelType::Folder,

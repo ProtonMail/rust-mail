@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, RemoteId};
+use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType};
 use crate::models::Address;
 use crate::tests::common::new_core_test_connection;
+use proton_api_core::services::proton::common::AddressId;
 use proton_crypto_account::keys::{
     AddressKeys as RealAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyId, KeyTokenSignature,
     LockedKey,
@@ -74,7 +75,7 @@ async fn test_address_delete() {
 fn create_test_address() -> Address {
     Address {
         local_id: None,
-        remote_id: Some(RemoteId::from("address_id")),
+        remote_id: Some(AddressId::from("address_id")),
         email: "hello@mail.com".into(),
         send: true,
         receive: false,
@@ -161,7 +162,7 @@ fn create_test_address_updated() -> Address {
     let old_address = create_test_address();
     Address {
         local_id: old_address.local_id,
-        remote_id: Some(RemoteId::from("address_id2")),
+        remote_id: Some(AddressId::from("address_id2")),
         email: "hello_bar@mail.com".into(),
         send: false,
         receive: true,

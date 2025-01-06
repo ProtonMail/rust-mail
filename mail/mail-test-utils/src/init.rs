@@ -1,6 +1,8 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{
+    AddressId, EventId, LabelId, RemoteId as ApiRemoteId, UserId,
+};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
@@ -30,7 +32,7 @@ use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetLabelsResponse, GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::RemoteId;
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
@@ -62,7 +64,7 @@ impl MailUserContextInitializationCallback for NullCallback {
 #[derive(Clone, Default)]
 pub struct Params {
     /// Last event id. If `None`, it will be set to `0`.
-    pub last_event_id: Option<ApiRemoteId>,
+    pub last_event_id: Option<EventId>,
 
     /// User info. If `None`, some default values will be set.
     pub user_info: Option<ApiUser>,
@@ -117,7 +119,7 @@ impl Params {
             mail_settings: None,
             labels: hash_map! {
                 ApiLabelType::Label: vec![ApiLabel {
-                    id: ApiRemoteId::from("mylabel"),
+                    id: LabelId::from("mylabel"),
                     parent_id: None,
                     name: "mylabel".to_owned(),
                     path: None,
@@ -131,7 +133,7 @@ impl Params {
                 }]
             },
             addresses: vec![ApiAddress {
-                id: ApiRemoteId::from(TEST_ADDRESS_ID),
+                id: AddressId::from(TEST_ADDRESS_ID),
                 email: TEST_USER_MAIL.to_owned(),
                 send: true,
                 receive: true,
@@ -169,7 +171,7 @@ impl Params {
                 expiration_time: 0,
                 size: 12,
                 labels: vec![ApiConversationLabel {
-                    id: LabelId::inbox().into(),
+                    id: LabelId::inbox(),
                     context_num_unread: 0,
                     context_num_messages: 1,
                     context_time: 0,
@@ -187,12 +189,12 @@ impl Params {
                 ApiRemoteId::from("myconv"),
             )],
             conversation_count: vec![ApiConversationCount {
-                label_id: LabelId::inbox().into(),
+                label_id: LabelId::inbox(),
                 total: 1,
                 unread: 0,
             }],
             message_count: vec![ApiMessageCount {
-                label_id: LabelId::inbox().into(),
+                label_id: LabelId::inbox(),
                 total: 1,
                 unread: 0,
             }],
@@ -248,7 +250,7 @@ impl MailTestContext {
             .and(path("/api/core/v4/events/latest"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetEventsLatestResponse {
-                    event_id: params.last_event_id.unwrap_or(ApiRemoteId::from("0")),
+                    event_id: params.last_event_id.unwrap_or(EventId::from("0")),
                 }),
             )
             .expect(1) // this should only ever be initialized once at the moment
@@ -260,7 +262,7 @@ impl MailTestContext {
             .and(path("/api/core/v4/users"))
             .respond_with(ResponseTemplate::new(200).set_body_json(GetUsersResponse {
                 user: params.user_info.unwrap_or(ApiUser {
-                    id: ApiRemoteId::from(TEST_USER_ID),
+                    id: UserId::from(TEST_USER_ID),
                     name: None,
                     display_name: None,
                     email: TEST_USER_MAIL.to_owned(),

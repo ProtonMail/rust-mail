@@ -2,8 +2,9 @@ use crate::datatypes::RollbackItemType;
 use crate::models::{Label, RollbackItem};
 use crate::{actions::ActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_core_common::datatypes::LocalLabelId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash};
@@ -11,7 +12,7 @@ use tracing::debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Expand {
-    local_id: LocalId,
+    local_id: LocalLabelId,
     remote_id: Option<LabelId>,
     expand: bool,
     original_state: Option<bool>,
@@ -19,15 +20,15 @@ pub struct Expand {
 
 impl Expand {
     #[allow(clippy::self_named_constructors)]
-    pub fn expand(local_id: LocalId) -> Self {
+    pub fn expand(local_id: LocalLabelId) -> Self {
         Self::new(local_id, true)
     }
 
-    pub fn collapse(local_id: LocalId) -> Self {
+    pub fn collapse(local_id: LocalLabelId) -> Self {
         Self::new(local_id, false)
     }
 
-    fn new(local_id: LocalId, expand: bool) -> Self {
+    fn new(local_id: LocalLabelId, expand: bool) -> Self {
         Self {
             local_id,
             expand,

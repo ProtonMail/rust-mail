@@ -3,7 +3,7 @@ use crate::MailUserContext;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::EventId;
 use proton_api_core::services::proton::prelude::GetEventOptions;
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
@@ -20,17 +20,14 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
 #[async_trait]
 impl Store for MailUserContext {
-    async fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
+    async fn load(&self) -> anyhow::Result<Option<EventId>> {
         let tether = self.user_context.stash().connection();
-        match {
-            tether
-                .query_value::<_, String>(
-                    "SELECT value FROM event_id_store WHERE id = ?1",
-                    params![MAIL_EVENT_TYPE_ID],
-                )
-                .await
-        }
-        .map(ApiRemoteId::from)
+        match tether
+            .query_value::<_, EventId>(
+                "SELECT value FROM event_id_store WHERE id = ?1",
+                params![MAIL_EVENT_TYPE_ID],
+            )
+            .await
         {
             Ok(value) => Ok(Some(value)),
             Err(e) => {
@@ -47,7 +44,7 @@ impl Store for MailUserContext {
         }
     }
 
-    async fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
+    async fn store(&self, id: EventId) -> anyhow::Result<()> {
         {
             let mut tether = self.user_context.stash().connection();
             let tx = tether.transaction().await?;
@@ -69,11 +66,11 @@ impl Store for MailUserContext {
 
 #[async_trait]
 impl Provider<MailEvent> for MailUserContext {
-    async fn get_latest_event_id(&self) -> Result<ApiRemoteId, ApiServiceError> {
+    async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
         Ok(self.session().api().get_events_latest().await?.event_id)
     }
 
-    async fn get_event(&self, event_id: &ApiRemoteId) -> Result<MailEvent, ApiServiceError> {
+    async fn get_event(&self, event_id: &EventId) -> Result<MailEvent, ApiServiceError> {
         Ok(self
             .session()
             .api()

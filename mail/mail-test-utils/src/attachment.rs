@@ -1,5 +1,5 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
@@ -45,7 +45,7 @@ pub fn testdata_attachment_metadata_complete(
         signature: None,
         enc_signature: None,
         sender: None,
-        address_id: ApiRemoteId::from(TEST_ADDRESS_ID),
+        address_id: AddressId::from(TEST_ADDRESS_ID),
         message_id,
         conversation_id,
         is_auto_forwardee: false,

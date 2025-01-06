@@ -1,5 +1,5 @@
 use crate::datatypes::SystemLabelId;
-use proton_core_common::datatypes::LabelId;
+use proton_api_core::services::proton::common::LabelId;
 use stash::params;
 use stash::stash::{Bond, StashError};
 

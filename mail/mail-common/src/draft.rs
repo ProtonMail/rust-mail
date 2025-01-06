@@ -18,6 +18,7 @@ use futures::future::join3;
 use proton_action_queue::action::Metadata;
 use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
@@ -46,9 +47,9 @@ pub enum Error {
     #[error("No addresses found for current user")]
     UserHasNoAddresses,
     #[error("User Address {0} not found")]
-    AddressNotFound(RemoteId),
+    AddressNotFound(AddressId),
     #[error("User Address {0} has no primary key")]
-    AddressWithoutPrimaryKey(RemoteId),
+    AddressWithoutPrimaryKey(AddressId),
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalId),
     #[error("Create Metadata not found for {0}")]
@@ -166,7 +167,7 @@ pub struct Draft {
     /// BCC recipients addresses
     pub bcc_list: RecipientList,
     /// Address used to send the message
-    pub address_id: RemoteId,
+    pub address_id: AddressId,
     /// Draft subject
     pub subject: String,
     /// Unencrypted body of the draft.
@@ -543,7 +544,7 @@ impl Draft {
     pub async fn remote_create(
         context: &MailUserContext,
         session: &Session,
-        address_id: RemoteId,
+        address_id: AddressId,
         action: DraftAction,
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
@@ -600,7 +601,7 @@ impl Draft {
     pub async fn remote_update(
         context: &MailUserContext,
         session: &Session,
-        address_id: RemoteId,
+        address_id: AddressId,
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
         message_body: &str,

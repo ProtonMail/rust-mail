@@ -4,8 +4,8 @@ use crate::draft::{Draft, Error, ReplyMode};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
-use proton_core_common::datatypes::RemoteId;
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -138,7 +138,7 @@ impl EncryptableDraft for DraftBody<'_> {
 /// Encrypt the `body` with the key for `address_id`.
 pub(super) async fn encrypt_draft_body(
     ctx: &MailUserContext,
-    address_id: &RemoteId,
+    address_id: &AddressId,
     body: &str,
 ) -> Result<EncryptedDraft, MailContextError> {
     let draft_body = DraftBody { body };

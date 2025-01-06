@@ -102,7 +102,7 @@ impl Flow {
 
     /// Resume the login flow at the 2FA step.
     #[must_use]
-    pub fn resume_second_factor(session: Session, user_id: RemoteId, session_id: RemoteId) -> Self {
+    pub fn resume_second_factor(session: Session, user_id: UserId, session_id: AuthId) -> Self {
         let SessionParts {
             client,
             config,
@@ -116,11 +116,7 @@ impl Flow {
 
     /// Resume the login flow at the mailbox password step.
     #[must_use]
-    pub fn resume_mailbox_password(
-        session: Session,
-        user_id: RemoteId,
-        session_id: RemoteId,
-    ) -> Self {
+    pub fn resume_mailbox_password(session: Session, user_id: UserId, session_id: AuthId) -> Self {
         let SessionParts {
             client,
             config,
@@ -211,7 +207,7 @@ impl Flow {
     /// # Errors
     ///
     /// Returns an error if the user ID is not yet known.
-    pub fn user_id(&self) -> Result<&RemoteId, LoginError> {
+    pub fn user_id(&self) -> Result<&UserId, LoginError> {
         self.0.user_id()
     }
 
@@ -220,7 +216,7 @@ impl Flow {
     /// # Errors
     ///
     /// Returns an error if the session ID is not yet known.
-    pub fn session_id(&self) -> Result<&RemoteId, LoginError> {
+    pub fn session_id(&self) -> Result<&AuthId, LoginError> {
         self.0.auth_id()
     }
 

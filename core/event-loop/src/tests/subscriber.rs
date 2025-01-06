@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::*;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::EventId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
 
@@ -9,7 +9,7 @@ const DUMMY_EVENT_ID: &str = "EVT_FOO";
 
 fn new_dummy_events() -> Vec<TestEvent> {
     vec![TestEvent {
-        event_id: RemoteId::from(DUMMY_EVENT_ID),
+        event_id: EventId::from(DUMMY_EVENT_ID),
         has_more: false,
         foo: 0,
     }]
@@ -17,7 +17,7 @@ fn new_dummy_events() -> Vec<TestEvent> {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TestEvent {
-    pub event_id: RemoteId,
+    pub event_id: EventId,
     pub foo: u32,
     pub has_more: bool,
 }
@@ -25,7 +25,7 @@ pub struct TestEvent {
 impl Event for TestEvent {
     type Response = TestEvent;
 
-    fn event_id(&self) -> &RemoteId {
+    fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -42,7 +42,7 @@ async fn test_channeled_subscriber_handle_and_reply() {
 
     let task = tokio::spawn(async move {
         h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
-            assert_eq!(events[0].event_id, RemoteId::from(DUMMY_EVENT_ID));
+            assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
             Ok(())
         })
         .await

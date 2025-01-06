@@ -7,7 +7,8 @@ use crate::{
     models::Label,
 };
 use itertools::Itertools;
-use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
@@ -16,11 +17,11 @@ use stash::stash::{StashError, Tether};
 pub enum ExclusiveLocation {
     System {
         name: SystemLabel,
-        local_id: LocalId,
+        local_id: LocalLabelId,
     },
     Custom {
         name: String,
-        local_id: LocalId,
+        local_id: LocalLabelId,
         color: LabelColor,
     },
 }
@@ -78,11 +79,7 @@ impl ExclusiveLocation {
         label_ids: &[LabelId],
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        let label_ids = label_ids
-            .iter()
-            .map(|l| l.clone().into_inner())
-            .collect_vec();
-        let labels = Label::find_by_ids(label_ids, tether).await?;
+        let labels = Label::find_by_ids(label_ids.iter().cloned(), tether).await?;
         Ok(ExclusiveLocation::from_labels(&labels))
     }
 

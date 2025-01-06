@@ -7,10 +7,11 @@ use crate::models::{Conversation, Label, Message};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
@@ -21,9 +22,9 @@ use tracing::{debug, error};
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
     #[error("Could not find label with local id '{0}'")]
-    LabelNotFound(LocalId),
+    LabelNotFound(LocalLabelId),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(LocalId),
+    LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Attachment '{0}' not found")]
     AttachmentNotFound(LocalId),
     #[error("Attachment decryption failed: {0}")]
@@ -69,12 +70,15 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 #[derive(Clone)]
 pub struct Mailbox {
     user_ctx: Arc<MailUserContext>,
-    label_id: LocalId,
+    label_id: LocalLabelId,
     view_mode: ViewMode,
 }
 
 impl Mailbox {
-    pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {
+    pub async fn new(
+        user_ctx: Arc<MailUserContext>,
+        label_id: LocalLabelId,
+    ) -> MailboxResult<Self> {
         let tether = user_ctx.user_stash().connection();
         let Some(label) = Label::load(label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
@@ -124,7 +128,7 @@ impl Mailbox {
         self.user_ctx.user_stash()
     }
 
-    pub fn label_id(&self) -> LocalId {
+    pub fn label_id(&self) -> LocalLabelId {
         self.label_id
     }
 

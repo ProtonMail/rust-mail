@@ -247,7 +247,7 @@ impl DecryptedMessageBody {
             remote_content,
             block_quote,
             &mail_settings,
-            user_session_id,
+            user_session_id.as_ref(),
             self.metadata.mime_type,
         );
         Ok(BodyOutput {

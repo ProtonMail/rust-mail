@@ -1,5 +1,6 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_core_common::datatypes::LocalId;
 use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};

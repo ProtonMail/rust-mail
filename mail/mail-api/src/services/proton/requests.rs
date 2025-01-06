@@ -25,7 +25,7 @@ use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::{LabelId, RemoteId};
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
@@ -135,7 +135,7 @@ pub struct GetLabelsOptions {
 pub struct GetLabelsByIdsOptions {
     /// Label IDs to get.
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 }
 
 /// Parameters to filter/search messages with a given criteria.
@@ -205,7 +205,7 @@ pub struct GetMessagesOptions {
 
     /// Label IDs to filter on.
     #[serde(rename = "LabelID")]
-    pub label_id: Option<Vec<RemoteId>>,
+    pub label_id: Option<Vec<LabelId>>,
 
     /// The number of messages to return.
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -265,7 +265,7 @@ pub struct PutConversationsDeleteRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 }
 
 /// TODO: Document this struct.
@@ -282,7 +282,7 @@ pub struct PutConversationsLabelRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 
     /// TODO: Document this field.
     #[serde_as(as = "Option<BoolFromInt>")]
@@ -308,7 +308,7 @@ pub struct PutConversationsUnlabelRequest {
 
     /// The label for the request
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 }
 
 /// TODO: Document this struct.
@@ -345,7 +345,7 @@ pub struct PutMessagesDeleteRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "CurrentLabelID")]
-    pub label_id: Option<RemoteId>,
+    pub label_id: Option<LabelId>,
 }
 
 /// TODO: Document this struct.
@@ -362,7 +362,7 @@ pub struct PutMessagesLabelRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 
     /// TODO: Document this field.
     #[serde_as(as = "Option<BoolFromInt>")]
@@ -388,7 +388,7 @@ pub struct PutMessagesUnlabelRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 }
 
 /// TODO: Document this struct.

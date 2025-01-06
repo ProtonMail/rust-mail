@@ -1,10 +1,11 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::Address as ApiAddress;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount, Label as ApiLabel,
     MessageCount as ApiMessageCount,
 };
-use proton_core_common::datatypes::{IdCounterpart, LabelId};
+use proton_core_common::datatypes::IdCounterpart;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Conversation, Label};
@@ -58,14 +59,14 @@ async fn action_label_as_without_archive() {
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &label1_id.clone().into_inner(),
+        &label1_id,
         vec![conversation1.id.clone(), conversation2.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &label3_id.into_inner(),
+        &label3_id,
         vec![
             conversation2.id,
             conversation3.id.clone(),
@@ -245,20 +246,15 @@ async fn action_label_as_with_archive() {
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &LabelId::archive().into(),
+        &LabelId::archive(),
         vec![conversation1.id.clone(), conversation2.id.clone()],
         None,
         vec![],
     )
     .await;
-    ctx.mock_label_conversation(
-        &label1_id.clone().into_inner(),
-        vec![conversation1.id.clone()],
-        None,
-        vec![],
-    )
-    .await;
-    ctx.mock_unlabel_conversation(&label3_id.into_inner(), vec![conversation2.id], vec![])
+    ctx.mock_label_conversation(&label1_id, vec![conversation1.id.clone()], None, vec![])
+        .await;
+    ctx.mock_unlabel_conversation(&label3_id, vec![conversation2.id], vec![])
         .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -375,12 +371,12 @@ fn test_init_params(
     conversations: Vec<ApiConversation>,
 ) -> TestParams {
     let conversation_count = vec![ApiConversationCount {
-        label_id: LabelId::inbox().clone().into(),
+        label_id: LabelId::inbox().clone(),
         total: conversations.len() as u64,
         unread: 0,
     }];
     let message_count = vec![ApiMessageCount {
-        label_id: LabelId::inbox().clone().into(),
+        label_id: LabelId::inbox().clone(),
         total: 1,
         unread: 0,
     }];
@@ -396,7 +392,7 @@ fn test_init_params(
 
 fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
     ApiLabel {
-        id: label_id.clone().into(),
+        id: label_id.clone(),
         label_type: ApiLabelType::Label,
         name: name.to_owned(),
         ..Default::default()

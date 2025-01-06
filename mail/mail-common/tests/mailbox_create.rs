@@ -1,10 +1,10 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MailSettings as ApiMailSettings, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
@@ -21,7 +21,7 @@ async fn test_new_mailbox_sync_conversations() {
         .get_mut(&ApiLabelType::Label)
         .unwrap()
         .push(ApiLabel {
-            id: ApiRemoteId::from("testlabel"),
+            id: LabelId::from("testlabel"),
             parent_id: None,
             name: "testlabel".to_owned(),
             path: None,
@@ -44,8 +44,7 @@ async fn test_new_mailbox_sync_conversations() {
         ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
-            .clone()
-            .into(),
+            .clone(),
     )
     .await
     .unwrap();
@@ -55,8 +54,7 @@ async fn test_new_mailbox_sync_conversations() {
         ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
-            .clone()
-            .into(),
+            .clone(),
     )
     .await
     .unwrap();
@@ -89,7 +87,7 @@ async fn test_new_mailbox_sync_messages() {
         conversation_id: params.conversations[0].id.clone(),
         order: 0,
         address_id: params.addresses[0].id.clone(),
-        label_ids: vec![LabelId::inbox().into()],
+        label_ids: vec![LabelId::inbox()],
         external_id: None,
         subject: "foo".to_owned(),
         sender: Default::default(),
@@ -115,7 +113,7 @@ async fn test_new_mailbox_sync_messages() {
         .get_mut(&ApiLabelType::Label)
         .unwrap()
         .push(ApiLabel {
-            id: ApiRemoteId::from("testlabel"),
+            id: LabelId::from("testlabel"),
             parent_id: None,
             name: "testlabel".to_owned(),
             path: None,
@@ -137,8 +135,7 @@ async fn test_new_mailbox_sync_messages() {
         ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
-            .clone()
-            .into(),
+            .clone(),
     )
     .await
     .unwrap();
@@ -148,8 +145,7 @@ async fn test_new_mailbox_sync_messages() {
         ctx.mail_user_context().await,
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
-            .clone()
-            .into(),
+            .clone(),
     )
     .await
     .unwrap();
@@ -185,7 +181,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         conversation_id: params.conversations[0].id.clone(),
         order: 0,
         address_id: params.addresses[0].id.clone(),
-        label_ids: vec![LabelId::drafts().into(), LabelId::sent().into()],
+        label_ids: vec![LabelId::drafts(), LabelId::sent()],
         external_id: None,
         subject: "foo".to_owned(),
         sender: Default::default(),
@@ -211,7 +207,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         .get_mut(&ApiLabelType::Label)
         .unwrap()
         .push(ApiLabel {
-            id: ApiRemoteId::from("testlabel"),
+            id: LabelId::from("testlabel"),
             parent_id: None,
             name: "testlabel".to_owned(),
             path: None,

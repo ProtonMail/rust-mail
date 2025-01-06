@@ -71,7 +71,7 @@ mod tests;
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::EventId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
 use std::fmt::Debug;
@@ -102,7 +102,7 @@ pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
         + Sync;
 
     /// Get the event id of the event.
-    fn event_id(&self) -> &RemoteId;
+    fn event_id(&self) -> &EventId;
 
     /// Check if the event has more data.
     fn has_more(&self) -> bool;

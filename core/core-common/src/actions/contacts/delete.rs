@@ -1,20 +1,21 @@
-use crate::datatypes::{IdCounterpart, LocalId, RemoteId};
+use crate::datatypes::{IdCounterpart, LocalContactId};
 use crate::models::{Contact, ModelExtension};
 use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
-    local_ids: Vec<LocalId>,
-    remote_ids: Vec<RemoteId>,
+    local_ids: Vec<LocalContactId>,
+    remote_ids: Vec<ContactId>,
 }
 
 impl Delete {
     #[must_use]
-    pub fn new(local_ids: Vec<LocalId>) -> Self {
+    pub fn new(local_ids: Vec<LocalContactId>) -> Self {
         Self {
             local_ids,
             remote_ids: Vec::new(),

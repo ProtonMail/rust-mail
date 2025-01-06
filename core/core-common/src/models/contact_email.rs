@@ -1,7 +1,9 @@
 use crate::datatypes::{
-    ContactSendingPreferences, ContactTypes, IdCounterpart, LabelId, Labels, LocalId, RemoteId,
+    ContactSendingPreferences, ContactTypes, IdCounterpart, Labels, LocalContactEmailId,
+    LocalContactId,
 };
 use crate::models::{Contact, ModelExtension};
+use proton_api_core::services::proton::common::{ContactEmailId, ContactId};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -20,21 +22,21 @@ pub struct ContactEmail {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalContactEmailId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<ContactEmailId>,
 
     /// Remote contact ID to which this email belongs.
     #[DbField]
-    pub remote_contact_id: Option<RemoteId>,
+    pub remote_contact_id: Option<ContactId>,
 
     /// Local contact ID to which this email belongs.
     #[DbField]
-    pub local_contact_id: Option<LocalId>,
+    pub local_contact_id: Option<LocalContactId>,
 
     /// Canonical email address.
     #[DbField]
@@ -93,7 +95,7 @@ impl From<ApiContactEmail> for ContactEmail {
             display_order: value.order,
             email: value.email,
             is_proton: value.is_proton,
-            label_ids: Labels::new(value.label_ids.into_iter().map(LabelId::from).collect()),
+            label_ids: Labels::new(value.label_ids),
             last_used_time: value.last_used_time,
             name: value.name,
             row_id: None,

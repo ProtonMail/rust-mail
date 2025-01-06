@@ -1,5 +1,5 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
@@ -32,7 +32,7 @@ impl MailTestContext {
     ///
     pub async fn mock_label_conversation(
         &self,
-        label_id: &ApiRemoteId,
+        label_id: &LabelId,
         ids: Vec<ApiRemoteId>,
         spam_action: Option<bool>,
         failed: Vec<ApiRemoteId>,
@@ -72,7 +72,7 @@ impl MailTestContext {
     ///
     pub async fn mock_unlabel_conversation(
         &self,
-        label_id: &ApiRemoteId,
+        label_id: &LabelId,
         ids: Vec<ApiRemoteId>,
         failed: Vec<ApiRemoteId>,
     ) {

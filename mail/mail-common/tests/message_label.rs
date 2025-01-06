@@ -1,4 +1,5 @@
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace,
     User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
@@ -12,7 +13,6 @@ use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::LabelId;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{SystemLabel, SystemLabelId};
@@ -47,7 +47,7 @@ async fn label_message() {
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(&label_id.clone().into(), vec![message.metadata.id.clone()])
+    ctx.mock_label_messages(&label_id.clone(), vec![message.metadata.id.clone()])
         .await;
     ctx.catch_all().await;
 
@@ -108,14 +108,10 @@ async fn unlabel_message() {
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(&label_id.clone().into(), vec![message.metadata.id.clone()])
+    ctx.mock_label_messages(&label_id.clone(), vec![message.metadata.id.clone()])
         .await;
-    ctx.mock_unlabel_messages(
-        &label_id.clone().into(),
-        vec![message.metadata.id.clone()],
-        vec![],
-    )
-    .await;
+    ctx.mock_unlabel_messages(&label_id.clone(), vec![message.metadata.id.clone()], vec![])
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -339,7 +335,7 @@ fn test_mail_settings() -> ApiMailSettings {
 
 fn test_label(label_id: &LabelId) -> ApiLabel {
     ApiLabel {
-        id: label_id.clone().into(),
+        id: label_id.clone(),
         parent_id: None,
         name: "mylabel".to_owned(),
         path: None,
@@ -355,7 +351,7 @@ fn test_label(label_id: &LabelId) -> ApiLabel {
 
 fn test_user_info() -> ApiUser {
     ApiUser {
-        id: ApiRemoteId::from(TEST_USER_ID),
+        id: UserId::from(TEST_USER_ID),
         name: Some("rust_test".to_owned()),
         display_name: None,
         email: "rust_test@proton.ch".to_owned(),
@@ -395,7 +391,7 @@ fn test_user_info() -> ApiUser {
 }
 
 fn test_user_key() -> LockedKey {
-    LockedKey  {
+    LockedKey {
         id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
         version: 3,
         private_key: ArmoredPrivateKey::from("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: ProtonMail\n\nxYYEZie3jRYJKwYBBAHaRw8BAQdAAp+4PE1Sf5V95XrIY/P2dUNk1TOojoEG\nLuuOzULTa1v+CQMINYn0u3DCV01gjT+Noe2HzLxwP2hieZC1aoGCxSrLn0fs\nLeShqv2pCPZ+SdrjXB5s5Rq7OP5Kr/2gN+0KS0yLGdyirFZWe6m5T8j20UQ5\n0M07bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp\nbF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZie3jQQLCQcICZA4nKgbRZBl\nGQMVCAoEFgACAQIZAQKbAwIeARYhBOZJEArPLqrMMxX8fzicqBtFkGUZAADk\n/AD+LA6NW1K+Z3IT66/DEtjH0cmw6HNqxkBdT7kaL2o5pAMA/j9b4JCurWk/\n62MBM4I9RwXzSo8lmgPiYwPp4d/xgEsMx4sEZie3jRIKKwYBBAGXVQEFAQEH\nQHvLC7RWIDsorX5ZmYwjZbUhbXnEcO2sYt8OFaIh5KtHAwEIB/4JAwhKivkG\nshycUGA6wZtPR2HqO6+jvvSlRau/g2eZnWqhnvB4iIYTcD+CPpcPnWrrNgTz\nAU+kQ5sVrP6OiKKHIkUvHT5+MwelTbcpievGx2zGwngEGBYKACoFgmYnt40J\nkDicqBtFkGUZApsMFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkAAJ6BAQDv4nBl\nNnj0W7XiAjiwRmVrY/sdybelB6j01p7UrcVAxQEAtEmT2cSIScVdWH1j3H9l\n0gGE7amH+cm6CjXOA7+Uwwc=\n=RGJ0\n-----END PGP PRIVATE KEY BLOCK-----\n".to_owned()),
@@ -417,8 +413,8 @@ fn test_message() -> ApiMessage {
             id: ApiRemoteId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
             conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
             order: 0,
-            address_id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
-            label_ids: vec![LabelId::inbox().into()],
+            address_id: AddressId::from(TEST_USER_ADDRESS_ID),
+            label_ids: vec![LabelId::inbox()],
             external_id: None,
             subject: "A simple message".to_owned(),
             sender: Default::default(),
@@ -427,7 +423,7 @@ fn test_message() -> ApiMessage {
             bcc_list: vec![],
             reply_tos: vec![],
             flags: ApiMessageFlags::DKIM_FAIL,
-            time:  1715863508,
+            time: 1715863508,
             size: 333,
             unread: false,
             is_replied: false,
@@ -444,6 +440,6 @@ fn test_message() -> ApiMessage {
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
             mime_type: ApiMimeType::TextHtml,
             attachments: vec![],
-        }
+        },
     }
 }

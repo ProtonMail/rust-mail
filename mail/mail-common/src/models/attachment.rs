@@ -7,12 +7,13 @@ use crate::AppError;
 use bytes::Bytes;
 use indoc::indoc;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalAddressId, LocalId, RemoteId};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -92,12 +93,12 @@ pub struct Attachment {
 
     /// Address with which this attachment was encrypted.
     #[DbField]
-    pub local_address_id: Option<LocalId>,
+    pub local_address_id: Option<LocalAddressId>,
 
     /// Address with which this attachment was encrypted. The address id can
     /// only be retrieved from a [`Message`] or the full [`Attachment`] type.
     #[DbField]
-    pub remote_address_id: Option<RemoteId>,
+    pub remote_address_id: Option<AddressId>,
 
     /// Local conversation id where this attachment is present.
     #[DbField]

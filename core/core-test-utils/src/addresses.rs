@@ -1,6 +1,6 @@
 use crate::test_context::TestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -77,7 +77,7 @@ impl ApiAddressTestUtils for ApiAddress {
             revision: 1,
         };
         ApiAddress {
-            id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+            id: AddressId::from(TEST_USER_ADDRESS_ID),
             email: "rust_test@proton.ch".to_owned(),
             send: true,
             receive: true,
@@ -96,7 +96,7 @@ impl ApiAddressTestUtils for ApiAddress {
 
     fn test_addresses() -> Vec<ApiAddress> {
         vec![ApiAddress {
-            id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+            id: AddressId::from(TEST_USER_ADDRESS_ID),
             email: "rust_test@proton.ch".to_owned(),
             send: true,
             receive: true,

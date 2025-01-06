@@ -36,6 +36,7 @@ mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
+use proton_api_core::services::proton::common::EventId;
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -97,7 +98,7 @@ impl From<ApiLabelEvent> for LabelEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailEvent {
     /// TODO: Document this field.
-    pub event_id: RemoteId,
+    pub event_id: EventId,
 
     /// TODO: Document this field.
     pub addresses: Option<Vec<AddressEvent>>,
@@ -195,7 +196,7 @@ impl CoreEvent for MailEvent {
 impl Event for MailEvent {
     type Response = ApiMailEvent;
 
-    fn event_id(&self) -> &proton_api_core::services::proton::common::RemoteId {
+    fn event_id(&self) -> &EventId {
         &self.event_id
     }
 

@@ -1,6 +1,6 @@
 #![allow(clippy::needless_pass_by_value)]
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
     ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
@@ -8,7 +8,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{
-    ContactSendingPreferences, ContactTypes, IdCounterpart, LabelId, Labels, RemoteId,
+    ContactSendingPreferences, ContactTypes, IdCounterpart, Labels,
 };
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelExtension};
@@ -429,7 +429,7 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
     vec![
         Contact {
             local_id: None,
-            remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            remote_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             cards: vec![],
             contact_emails: vec![],
             create_time: 1_503_815_366,
@@ -437,13 +437,13 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
             modify_time: 1_503_815_366,
             name: "contact_name".to_owned(),
             size: 1443,
-            uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
+            uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
             deleted: false,
             row_id: None,
         },
         Contact {
             local_id: None,
-            remote_id: Some(RemoteId::from("z29olIjFv0rnXxBhSMz==")),
+            remote_id: Some(ContactId::from("z29olIjFv0rnXxBhSMz==")),
             cards: vec![],
             contact_emails: vec![],
             create_time: 1_503_815_367,
@@ -453,7 +453,7 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
             modify_time: 1_503_815_367,
             name: "contact_name2".to_owned(),
             size: 1445,
-            uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
+            uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
             deleted: false,
             row_id: None,
         },
@@ -463,24 +463,24 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
 fn create_test_remote_partial_contacts() -> Vec<ApiContactBasic> {
     vec![
         ApiContactBasic {
-            id: ApiRemoteId::from("a29olIjFv0rnXxBhSMw=="),
+            id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
             create_time: 1_503_815_366,
-            label_ids: vec![ApiRemoteId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
+            label_ids: vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
             modify_time: 1_503_815_366,
             name: "contact_name".to_owned(),
             size: 1443,
-            uid: ApiRemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
+            uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
         },
         ApiContactBasic {
-            id: ApiRemoteId::from("z29olIjFv0rnXxBhSMz=="),
+            id: ContactId::from("z29olIjFv0rnXxBhSMz=="),
             create_time: 1_503_815_367,
-            label_ids: vec![ApiRemoteId::from(
+            label_ids: vec![LabelId::from(
                 "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
             )],
             modify_time: 1_503_815_367,
             name: "contact_name2".to_owned(),
             size: 1445,
-            uid: ApiRemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
+            uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
         },
     ]
 }
@@ -489,9 +489,9 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
     vec![
         ContactEmail {
             local_id: None,
-            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMw==")),
+            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMw==")),
             local_contact_id: None,
-            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             canonical_email: "keytransparencymailer@gmail.com".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
@@ -507,9 +507,9 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
         },
         ContactEmail {
             local_id: None,
-            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMz==")),
+            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMz==")),
             local_contact_id: None,
-            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
@@ -523,9 +523,9 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
         },
         ContactEmail {
             local_id: None,
-            remote_id: Some(RemoteId::from("oZfew4323jFv0BhSMz==")),
+            remote_id: Some(ContactEmailId::from("oZfew4323jFv0BhSMz==")),
             local_contact_id: None,
-            remote_contact_id: Some(RemoteId::from("z29olIjFv0rnXxBhSMz==")),
+            remote_contact_id: Some(ContactId::from("z29olIjFv0rnXxBhSMz==")),
             canonical_email: "contact_email_3@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Custom,
@@ -543,14 +543,14 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
 fn create_test_remote_contact_emails() -> Vec<ApiContactEmail> {
     vec![
         ApiContactEmail {
-            id: ApiRemoteId::from("aefew4323jFv0BhSMw=="),
-            contact_id: ApiRemoteId::from("a29olIjFv0rnXxBhSMw=="),
+            id: ContactEmailId::from("aefew4323jFv0BhSMw=="),
+            contact_id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
             canonical_email: "keytransparencymailer@gmail.com".to_owned(),
             contact_type: vec!["work".to_owned()],
             defaults: ApiContactSendingPreferences::Default,
             email: "keytransparencymailer@gmail.com".to_owned(),
             is_proton: true,
-            label_ids: vec![ApiRemoteId::from(
+            label_ids: vec![LabelId::from(
                 "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
             )],
             last_used_time: 0,
@@ -558,27 +558,27 @@ fn create_test_remote_contact_emails() -> Vec<ApiContactEmail> {
             order: 1,
         },
         ApiContactEmail {
-            id: ApiRemoteId::from("aefew4323jFv0BhSMz=="),
-            contact_id: ApiRemoteId::from("a29olIjFv0rnXxBhSMw=="),
+            id: ContactEmailId::from("aefew4323jFv0BhSMz=="),
+            contact_id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             contact_type: vec!["work".to_owned()],
             defaults: ApiContactSendingPreferences::Default,
             email: "contact_email_2@contact.test".to_owned(),
             is_proton: true,
-            label_ids: vec![ApiRemoteId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
+            label_ids: vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
             last_used_time: 0,
             name: "contact_email_name_2".to_owned(),
             order: 1,
         },
         ApiContactEmail {
-            id: ApiRemoteId::from("oZfew4323jFv0BhSMz=="),
-            contact_id: ApiRemoteId::from("z29olIjFv0rnXxBhSMz=="),
+            id: ContactEmailId::from("oZfew4323jFv0BhSMz=="),
+            contact_id: ContactId::from("z29olIjFv0rnXxBhSMz=="),
             canonical_email: "contact_email_3@contact.test".to_owned(),
             contact_type: vec!["work".to_owned()],
             defaults: ApiContactSendingPreferences::Custom,
             email: "contact_email_3@contact.test".to_owned(),
             is_proton: true,
-            label_ids: vec![ApiRemoteId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
+            label_ids: vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
             last_used_time: 0,
             name: "contact_email_name_3".to_owned(),
             order: 1,
@@ -714,9 +714,9 @@ fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactE
     let removed_mail = contact.contact_emails.pop().unwrap();
     let new_email = ContactEmail {
         local_id: None,
-        remote_id: Some(RemoteId::from("aefew4323jFv0BhScc==".to_owned())),
+        remote_id: Some(ContactEmailId::from("aefew4323jFv0BhScc==".to_owned())),
         local_contact_id: None,
-        remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==".to_owned())),
+        remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==".to_owned())),
         canonical_email: "contact_email_mod@contact.test".to_owned(),
         contact_type: ContactTypes::new(vec!["work".to_owned()]),
         defaults: ContactSendingPreferences::Default,

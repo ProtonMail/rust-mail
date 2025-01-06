@@ -12,8 +12,9 @@ use itertools::Itertools;
 use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, LocalLabelId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
@@ -92,7 +93,7 @@ where
     T: Model,
 {
     /// Local label id which this action applies to.
-    label_id: LocalId,
+    label_id: LocalLabelId,
     /// Resolved remote label id.
     ///
     /// Note: this is only for user with remote execution, it should be set by then.
@@ -109,7 +110,7 @@ where
     T: Model,
 {
     /// Create a new instance with the given `label_id` and target `ids`.
-    pub fn new(label_id: LocalId, target_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self {
             label_id,
             remote_label_id: None,
@@ -185,9 +186,9 @@ where
     T: Model,
 {
     /// The current label whether the items are locate.
-    source_label_id: LocalId,
+    source_label_id: LocalLabelId,
     /// The destination label where the items should move to.
-    destination_label_id: LocalId,
+    destination_label_id: LocalLabelId,
     /// Resolved remote id for the destination label.
     remote_destination_label_id: Option<LabelId>,
     /// Local item ids that need to be moved.
@@ -204,8 +205,8 @@ where
     /// Create a new action which moves items with `target_ids` from `source_label_id` to
     ///`destination_label_id`.
     pub fn new(
-        source_label_id: LocalId,
-        destination_label_id: LocalId,
+        source_label_id: LocalLabelId,
+        destination_label_id: LocalLabelId,
         target_ids: impl IntoIterator<Item = LocalId>,
     ) -> Self {
         Self {
@@ -239,18 +240,18 @@ pub struct LabelAsData<T>
 where
     T: Model,
 {
-    source_label_id: LocalId,
+    source_label_id: LocalLabelId,
     local_ids: Vec<LocalId>,
     remote_ids: Vec<RemoteId>,
-    local_all_label_ids: Vec<LocalId>,
-    remote_all_label_ids: Vec<RemoteId>,
-    local_selected_label_ids: Vec<LocalId>,
-    remote_selected_label_ids: Vec<RemoteId>,
-    local_partially_selected_label_ids: Vec<LocalId>,
-    remote_partially_selected_label_ids: Vec<RemoteId>,
+    local_all_label_ids: Vec<LocalLabelId>,
+    remote_all_label_ids: Vec<LabelId>,
+    local_selected_label_ids: Vec<LocalLabelId>,
+    remote_selected_label_ids: Vec<LabelId>,
+    local_partially_selected_label_ids: Vec<LocalLabelId>,
+    remote_partially_selected_label_ids: Vec<LabelId>,
     must_archive: bool,
-    added_labels: HashMap<LocalId, HashSet<LocalId>>,
-    removed_labels: HashMap<LocalId, HashSet<LocalId>>,
+    added_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
+    removed_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
     original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
     phantom_data: PhantomData<T>,
 }
@@ -260,10 +261,10 @@ where
     T: Model,
 {
     fn new(
-        source_label_id: LocalId,
+        source_label_id: LocalLabelId,
         local_ids: Vec<LocalId>,
-        selected_label_ids: Vec<LocalId>,
-        partially_selected_label_ids: Vec<LocalId>,
+        selected_label_ids: Vec<LocalLabelId>,
+        partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
     ) -> Self {
         Self {
@@ -288,13 +289,15 @@ where
     async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
         self.remote_ids = LocalId::counterparts::<T>(self.local_ids.clone(), tx).await?;
         self.remote_all_label_ids =
-            LocalId::counterparts::<Label>(self.local_all_label_ids.clone(), tx).await?;
+            LocalLabelId::counterparts::<Label>(self.local_all_label_ids.clone(), tx).await?;
         let remote_selected_label_ids =
-            LocalId::counterparts::<Label>(self.local_selected_label_ids.clone(), tx).await?;
+            LocalLabelId::counterparts::<Label>(self.local_selected_label_ids.clone(), tx).await?;
         self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
-        let remote_partially_selected_label_ids =
-            LocalId::counterparts::<Label>(self.local_partially_selected_label_ids.clone(), tx)
-                .await?;
+        let remote_partially_selected_label_ids = LocalLabelId::counterparts::<Label>(
+            self.local_partially_selected_label_ids.clone(),
+            tx,
+        )
+        .await?;
         self.remote_partially_selected_label_ids = remote_partially_selected_label_ids
             .into_iter()
             .map_into()

@@ -25,10 +25,11 @@ pub use user_context::{
 // re-exports
 use crate::datatypes::LabelType;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
 pub use proton_core_common;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use stash::stash::StashError;
 
 use proton_action_queue::action::Id as ActionId;
@@ -82,9 +83,9 @@ pub enum AppError {
     #[error("InvalidMobileActions: {0}")]
     InvalidMobileActions(String),
     #[error("Label with local id {0} does not have remote id")]
-    LabelDoesNotHaveRemoteId(LocalId),
+    LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Label with local id {0} not found")]
-    LabelNotFound(LocalId),
+    LabelNotFound(LocalLabelId),
     #[error("Local ID not found for {0} with remote ID {1}")]
     LocalIdNotFound(String, RemoteId),
     #[error("MessageBodyMetadata missing in database for message {0}")]
