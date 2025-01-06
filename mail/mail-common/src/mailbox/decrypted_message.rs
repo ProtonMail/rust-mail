@@ -444,7 +444,11 @@ pub fn transform_html(
         remote_images_disabled = transformer.disable_remote_content();
     } else if let Some(auth_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
-        images_proxied = transformer.proxy_images(auth_id.as_ref());
+
+        // FIXME: https://protonag.atlassian.net/jira/software/c/projects/ET/boards/241?search=orion&selectedIssue=ET-1834
+        if false {
+            images_proxied = transformer.proxy_images(auth_id.as_ref());
+        }
     }
 
     let had_blockquote = if !show_block_quote {

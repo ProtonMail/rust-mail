@@ -132,7 +132,7 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
 
 /// Proxies all images through proton's proxy.
 ///
-/// `auth_id` must be a valid `AuthId`.
+/// `auth_id` must be a valid `UID`.
 #[allow(clippy::missing_panics_doc)] // the select is well formed.
 pub fn proxy_images(document: NodeRef, auth_id: &str) -> u64 {
     let elements = document.select("img").unwrap();
