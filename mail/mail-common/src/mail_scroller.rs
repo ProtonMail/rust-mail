@@ -159,7 +159,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         })
     }
 
-    pub async fn watch(&self) -> Result<WatcherHandle, StashError> {
+    pub fn watch(&self) -> Result<WatcherHandle, StashError> {
         self.ctx.user_stash().subscribe_to(|sender| {
             Box::new(MailScrollerWatcher {
                 sender,
@@ -181,7 +181,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         // but we may as well check the source for the final "truth".
         let visible_items = self.source.visible_items_total(&self.ctx).await?;
 
-        Ok(visible_items < self.total)
+        Ok(dbg!(visible_items) < dbg!(self.total))
     }
 
     /// Fetch more data from the server.
@@ -260,6 +260,8 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let label = self.get_label(&tether).await?;
         let session = ctx.session().clone();
         let unread = self.unread;
+
+        dbg!(&label);
 
         // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = CachedConverstationScrollData::new(

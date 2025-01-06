@@ -1,6 +1,5 @@
 use stash::exports::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 
-// TODO: move it to datatypes
 /// Conversation and message read filter.
 #[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy)]
 #[repr(u8)]

@@ -1669,7 +1669,7 @@ impl Conversation {
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save(bond).await?
+            label.save(bond).await?;
         }
 
         // If exclusive location is not set, we try to calculate it now.

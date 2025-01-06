@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Mark unread action
 
+### Added
+
+  - function `scroll_conversations_for_label` which utilies new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
+
 ## [0.31.5] - 2024-12-23
 
 ### Added
