@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.8.1] - 2025-01-06
+
+### Added 
+
+- Add `export_public_key` method  on unlocked address key types.
+  
 ## [0.8.0] - 2024-12-17
 
 ### Added 

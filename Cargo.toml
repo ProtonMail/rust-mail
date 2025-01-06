@@ -147,7 +147,7 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.8.0"
+version = "0.8.1"
 path = "crypto/crypto-account"
 registry = "proton"
 features = ["sql"]
