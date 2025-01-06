@@ -27,7 +27,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
 use stash::orm::Model;
-use stash::stash::{Bond, Stash};
+use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
@@ -170,6 +170,7 @@ impl MailUserContext {
     /// # Parameters
     ///
     /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `conn`         - The database connection to load the keys from database.
     ///
     /// # Errors
     /// Returns a wrapped [`MailContextError::KeyHandlingError`] if the operation fails.
@@ -177,10 +178,11 @@ impl MailUserContext {
     pub async fn unlocked_user_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
         let keys = self
             .user_context
-            .unlocked_user_keys(pgp_provider, self)
+            .unlocked_user_keys(pgp_provider, conn, self)
             .await?;
         Ok(keys)
     }
@@ -190,6 +192,7 @@ impl MailUserContext {
     /// # Parameters
     ///
     /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `conn`         - The database connection to load the keys from database.
     /// * `address_id`   - The address identifier to load the keys for.
     ///
     /// # Errors
@@ -198,11 +201,12 @@ impl MailUserContext {
     pub async fn unlocked_address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         address_id: &RemoteId,
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
             .user_context
-            .unlocked_address_keys(pgp_provider, self, address_id)
+            .unlocked_address_keys(pgp_provider, conn, self, address_id)
             .await?;
         Ok(keys)
     }
@@ -219,7 +223,7 @@ impl MailUserContext {
     /// # Parameters
     ///
     /// * `pgp_provider`        - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
-    /// * `db_interface`        - The database interface to query from.
+    /// * `tx `                 - The transaction to query from.
     /// * `email`               - The email address of the recipient.
     /// * `settings`            - The [`CryptoMailSettings`] extracted from the mail settings [`super::models::MailSettings::crypto_mail_settings`]
     /// * `composer_preference` - (currently unused) The composer preferences, use [`ComposerPreference::default()`].
@@ -230,7 +234,7 @@ impl MailUserContext {
     pub async fn recipient_send_preferences<Provider>(
         &self,
         pgp_provider: &Provider,
-        bond: &Bond<'_>,
+        tx: &Bond<'_>,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
@@ -241,7 +245,7 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email, bond).await.inspect_err(|err| {
+        if let Some(address) = Address::by_email(email, tx).await.inspect_err(|err| {
             error!("send preferences: failed to search address by email: {err}")
         })? {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
@@ -252,7 +256,7 @@ impl MailUserContext {
             })?;
 
             let address_keys = self
-                .unlocked_address_keys(pgp_provider, address_rid)
+                .unlocked_address_keys(pgp_provider, tx, address_rid)
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err}"))?;
             let send_preferences =
@@ -261,14 +265,14 @@ impl MailUserContext {
             return Ok(send_preferences);
         }
 
-        let user_keys = self.unlocked_user_keys(pgp_provider).await?;
+        let user_keys = self.unlocked_user_keys(pgp_provider, tx).await?;
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
             self.user_context
                 .public_address_keys(pgp_provider, email, false),
             self.user_context.public_address_keys_from_contacts(
                 pgp_provider,
-                bond,
+                tx,
                 &user_keys,
                 email
             )

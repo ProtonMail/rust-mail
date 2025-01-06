@@ -55,9 +55,10 @@ async fn mailbox_message_body_simple() {
     let _local_id = saved_message.local_id.unwrap();
     let address_id = saved_message.remote_address_id.clone();
     let address_keys = user_ctx
-        .unlocked_address_keys(&pgp_provider, &address_id)
+        .unlocked_address_keys(&pgp_provider, &tether, &address_id)
         .await
         .unwrap();
+
     let decrypted_body = saved_message
         .fetch_message_body(
             address_keys.clone(),
@@ -129,8 +130,9 @@ async fn mailbox_message_body_mime() {
     let pgp_provider = new_pgp_provider();
     let _local_id = saved_message.local_id.unwrap();
     let address_id = saved_message.remote_address_id.clone();
+
     let address_keys = user_ctx
-        .unlocked_address_keys(&pgp_provider, &address_id)
+        .unlocked_address_keys(&pgp_provider, &tether, &address_id)
         .await
         .unwrap();
 

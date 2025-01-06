@@ -172,8 +172,10 @@ impl MailUserContext {
         let mut result_buffer: Vec<u8> =
             Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
+        let tether = self.user_stash().connection();
+
         let address_keys = self
-            .unlocked_address_keys(pgp_provider, remote_address_id)
+            .unlocked_address_keys(pgp_provider, &tether, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.
