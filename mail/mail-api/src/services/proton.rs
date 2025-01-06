@@ -15,7 +15,7 @@
 
 use bytes::Bytes;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::{LabelId, RemoteId};
 
 use crate::services::proton::prelude::*;
 
@@ -61,7 +61,7 @@ pub trait ProtonMail {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_attachment(&self, attachment_id: RemoteId) -> ApiServiceResult<Bytes>;
+    async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes>;
 
     /// GETs metadata for an attachment.
     ///
@@ -80,7 +80,7 @@ pub trait ProtonMail {
     ///
     async fn get_attachment_metadata(
         &self,
-        attachment_id: RemoteId,
+        attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse>;
 
     /// TODO: Document this method.
@@ -150,7 +150,7 @@ pub trait ProtonMail {
     ///
     async fn get_labels_by_ids(
         &self,
-        label_ids: Vec<RemoteId>,
+        label_ids: Vec<LabelId>,
     ) -> ApiServiceResult<GetLabelsResponse>;
 
     /// TODO: Document this method.
@@ -222,7 +222,7 @@ pub trait ProtonMail {
     async fn put_conversations_delete(
         &self,
         conversation_ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsDeleteResponse>;
 
     /// TODO: Document this method.
@@ -240,7 +240,7 @@ pub trait ProtonMail {
     async fn put_conversations_label(
         &self,
         conversation_ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutConversationsLabelResponse>;
 
@@ -273,7 +273,7 @@ pub trait ProtonMail {
     async fn put_conversations_unlabel(
         &self,
         conversation_ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnlabelResponse>;
 
     /// TODO: Document this method.
@@ -304,7 +304,7 @@ pub trait ProtonMail {
     ///
     async fn put_label(
         &self,
-        label_id: RemoteId,
+        label_id: LabelId,
         body: PutLabelRequest,
     ) -> ApiServiceResult<PutLabelResponse>;
 
@@ -322,7 +322,7 @@ pub trait ProtonMail {
     async fn put_messages_delete(
         &self,
         message_ids: Vec<RemoteId>,
-        label_id: Option<RemoteId>,
+        label_id: Option<LabelId>,
     ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
     /// Put a label on some messages.
@@ -340,7 +340,7 @@ pub trait ProtonMail {
     async fn put_messages_label(
         &self,
         message_ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutMessagesLabelResponse>;
 
@@ -373,7 +373,7 @@ pub trait ProtonMail {
     async fn put_messages_unlabel(
         &self,
         message_ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutMessagesUnlabelResponse>;
 
     /// TODO: Document this method.

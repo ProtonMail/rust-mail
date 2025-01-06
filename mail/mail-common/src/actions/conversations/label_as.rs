@@ -6,10 +6,11 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler as ActionHandler, Type,
 };
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -24,10 +25,10 @@ pub struct LabelAs {
 
 impl LabelAs {
     pub fn new(
-        source_label_id: LocalId,
+        source_label_id: LocalLabelId,
         conversation_ids: Vec<LocalId>,
-        selected_label_ids: Vec<LocalId>,
-        partially_selected_label_ids: Vec<LocalId>,
+        selected_label_ids: Vec<LocalLabelId>,
+        partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
     ) -> Self {
         Self {
@@ -104,8 +105,8 @@ pub struct Handler;
 impl Handler {
     pub(crate) async fn revert_one_locally(
         conversation_id: &LocalId,
-        added_labels: HashSet<LocalId>,
-        removed_labels: HashSet<LocalId>,
+        added_labels: HashSet<LocalLabelId>,
+        removed_labels: HashSet<LocalLabelId>,
         original_locations: Option<Option<ExclusiveLocation>>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
@@ -118,10 +119,10 @@ impl Handler {
             conversation
                 .labels
                 .iter()
-                .map(|l| l.local_id.expect("Should be set")),
+                .map(|l| l.local_label_id.expect("Should be set")),
         );
         let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-        conversation.labels = ConversationLabel::find_by_ids(new_labels, bond).await?;
+        conversation.labels = ConversationLabel::find_by_label_ids(new_labels, bond).await?;
 
         if let Some(location) = original_locations {
             conversation.exclusive_location = location;
@@ -210,7 +211,7 @@ impl ActionHandler for Handler {
 
         if !failed_ids.is_empty() {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
-            let failed_ids = RemoteId::counterparts::<Conversation>(failed_ids, &conn).await?;
+            let failed_ids = Conversation::remote_ids_counterpart(failed_ids, &conn).await?;
             let tx = conn.transaction().await?;
             for conversation_id in &failed_ids {
                 Self::revert_one_locally(
@@ -243,7 +244,7 @@ impl ActionHandler for Handler {
                 .collect();
             let response = session
                 .api()
-                .put_conversations_label(conversation_ids, LabelId::archive().into_inner(), None)
+                .put_conversations_label(conversation_ids, LabelId::archive(), None)
                 .await?
                 .responses;
 
@@ -252,12 +253,11 @@ impl ActionHandler for Handler {
                 error!("Archive conversation operation failed for : {failed_ids:?}");
 
                 let tx = conn.transaction().await?;
-                let archive_id =
-                    RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), &tx)
-                        .await?
-                        .expect("Archive label must have a RemoteId");
+                let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tx)
+                    .await?
+                    .expect("Archive label must have a RemoteId");
                 let local_ids =
-                    RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
+                    Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
                 Conversation::move_conversations(
                     archive_id,
                     action.data.source_label_id,

@@ -12,13 +12,14 @@ use crate::{AppError, ALL_LABEL_TYPES};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::requests::{
     PatchLabelRequest, PostLabelsRequest, PutLabelRequest,
 };
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -37,7 +38,7 @@ pub struct Label {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalLabelId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -47,7 +48,7 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_parent_id: Option<LocalId>,
+    pub local_parent_id: Option<LocalLabelId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -119,6 +120,10 @@ pub struct Label {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
+}
+
+impl ModelIdExtension for Label {
+    type RemoteId = LabelId;
 }
 
 impl Label {
@@ -313,7 +318,7 @@ impl Label {
     pub async fn sync_labels_by_ids<PM: ProtonMail>(
         api: &PM,
         tether: &mut Tether,
-        ids: Vec<ApiRemoteId>,
+        ids: Vec<LabelId>,
     ) -> Result<(), AppError> {
         let labels = api
             .get_labels_by_ids(ids)
@@ -334,12 +339,11 @@ impl Label {
 
     async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
-            self.local_parent_id = self
-                .remote_parent_id
-                .clone()
-                .expect("Should be set")
-                .counterpart::<Self>(tether)
-                .await?;
+            self.local_parent_id = Self::remote_id_counterpart(
+                self.remote_parent_id.clone().expect("Should be set"),
+                tether,
+            )
+            .await?;
         }
         // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
@@ -349,7 +353,7 @@ impl Label {
         let parent_id_option = self.remote_parent_id.clone();
         self.local_parent_id = match parent_id_option {
             Some(parent_id) => {
-                let res = parent_id.counterpart::<Self>(bond).await?;
+                let res = Self::remote_id_counterpart(parent_id, bond).await?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -395,7 +399,7 @@ impl Label {
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .put_label(
-                id.into(),
+                id,
                 PutLabelRequest {
                     parent_id: parent_id.map(|id| id.into()),
                     color,
@@ -497,14 +501,14 @@ impl Label {
     ///
     /// Returns error if the resolution failed.
     pub async fn resolve_remote_label_id(
-        local_id: LocalId,
+        local_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<LabelId, AppError> {
-        let Some(label_id) = local_id.counterpart::<Label>(tether).await? else {
+        let Some(label_id) = Self::local_id_counterpart(local_id, tether).await? else {
             return Err(AppError::LabelNotFound(local_id));
         };
 
-        Ok(label_id.into())
+        Ok(label_id)
     }
 
     /// Resolve the local id for a label with `label_id`.
@@ -515,8 +519,8 @@ impl Label {
     pub async fn resolve_local_label_id(
         label_id: LabelId,
         tether: &Tether,
-    ) -> Result<LocalId, AppError> {
-        let Some(label_id) = label_id.counterpart::<Label>(tether).await? else {
+    ) -> Result<LocalLabelId, AppError> {
+        let Some(label_id) = Self::remote_id_counterpart(label_id.clone(), tether).await? else {
             return Err(AppError::RemoteLabelDoesNotExist(label_id));
         };
         Ok(label_id)
@@ -544,9 +548,9 @@ impl From<ApiLabel> for Label {
     fn from(value: ApiLabel) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            remote_id: Some(value.id),
             local_parent_id: None,
-            remote_parent_id: value.parent_id.map(|id| id.into()),
+            remote_parent_id: value.parent_id,
             color: value.color.into(),
             display_order: value.order,
             display: value.display,

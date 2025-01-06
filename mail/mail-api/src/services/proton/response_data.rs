@@ -23,8 +23,8 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::LabelType;
-use proton_api_core::services::proton::common::RemoteId;
+use crate::services::proton::common::{AttachmentId, LabelType};
+use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, RemoteId};
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
     UserSettings,
@@ -295,11 +295,11 @@ pub enum ViewMode {
 pub struct Attachment {
     /// The remote id of this attachment.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     #[serde(rename = "AddressID")]
-    pub address_id: RemoteId,
+    pub address_id: AddressId,
 
     /// What conversation this attachment belongs to
     #[serde(rename = "ConversationID")]
@@ -347,7 +347,7 @@ pub struct Attachment {
 pub struct AttachmentMetadata {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -495,7 +495,7 @@ impl Default for Conversation {
 pub struct ConversationCount {
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 
     /// TODO: Document this field.
     pub total: u64,
@@ -530,7 +530,7 @@ impl GetEventResponse for ConversationEvent {}
 pub struct ConversationLabel {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: LabelId,
 
     /// TODO: Document this field.
     pub context_expiration_time: u64,
@@ -563,11 +563,11 @@ pub struct ConversationLabel {
 pub struct Label {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: LabelId,
 
     /// TODO: Document this field.
     #[serde(rename = "ParentID")]
-    pub parent_id: Option<RemoteId>,
+    pub parent_id: Option<LabelId>,
 
     /// TODO: Document this field.
     pub color: String,
@@ -607,7 +607,7 @@ pub struct Label {
 impl Default for Label {
     fn default() -> Self {
         Self {
-            id: RemoteId::from(""),
+            id: LabelId::from(""),
             parent_id: None,
             color: String::default(),
             display: false,
@@ -649,7 +649,7 @@ impl GetEventResponse for LabelEvent {}
 pub struct MailEvent {
     /// TODO: Document this field.
     #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
+    pub event_id: EventId,
 
     /// TODO: Document this field.
     pub addresses: Option<Vec<AddressEvent>>,
@@ -913,7 +913,7 @@ pub struct MessageBody {
 pub struct MessageAttachment {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -985,7 +985,7 @@ pub struct MessageAttachmentHeaders {
 pub struct MessageCount {
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
-    pub label_id: RemoteId,
+    pub label_id: LabelId,
 
     /// TODO: Document this field.
     pub total: u64,
@@ -1150,7 +1150,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "AddressID")]
-    pub address_id: RemoteId,
+    pub address_id: AddressId,
 
     /// TODO: Document this field.
     #[serde(default)]
@@ -1188,7 +1188,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub num_attachments: u32,
@@ -1232,7 +1232,7 @@ impl Default for MessageMetadata {
         Self {
             id: RemoteId::from(""),
             conversation_id: RemoteId::from(""),
-            address_id: RemoteId::from(""),
+            address_id: AddressId::from(""),
             attachments_metadata: Vec::default(),
             bcc_list: Vec::default(),
             cc_list: Vec::default(),

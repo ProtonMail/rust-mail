@@ -8,8 +8,9 @@ use crate::datatypes::{
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
 use itertools::Itertools;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
@@ -98,7 +99,7 @@ impl ContextualConversation {
     ///
     /// If the `local_label_id` is not present in the `conversation`, `None` is
     /// returned. This means that the conversation is not present in this label.
-    pub fn new(conversation: Conversation, local_label_id: LocalId) -> Option<Self> {
+    pub fn new(conversation: Conversation, local_label_id: LocalLabelId) -> Option<Self> {
         let label = conversation.label(local_label_id)?.clone();
         let is_starred = conversation.is_starred();
         let attachments_metadata = conversation.get_attachment_metadata();
@@ -138,7 +139,7 @@ impl ContextualConversation {
     /// Returns error if conversation could not be loaded from the database.
     pub async fn load(
         local_conversation_id: LocalId,
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         if let Some(conversation) = Conversation::find_first(
@@ -160,7 +161,7 @@ impl ContextualConversation {
     ///
     /// Returns error if the query fails.
     pub async fn in_label(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Ok(Conversation::in_label(local_label_id, tether)
@@ -183,7 +184,7 @@ impl ContextualConversation {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
     pub async fn conversation_and_messages<PM>(
         local_conversation_id: LocalId,
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         stash: &Stash,
         api: &PM,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError>
@@ -232,7 +233,7 @@ impl ContextualConversation {
     /// * `interface`         - The database interface.
     ///
     pub async fn all_available_bottom_bar_actions_for_conversations(
-        current_label_id: LocalId,
+        current_label_id: LocalLabelId,
         conversation_ids: Vec<LocalId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {

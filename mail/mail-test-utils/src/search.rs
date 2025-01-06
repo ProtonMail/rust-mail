@@ -1,30 +1,29 @@
 use crate::test_context::MailTestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
     MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::RemoteId;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
 use proton_mail_common::models::Label;
-use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::BTreeMap;
 
 lazy_static! {
-    pub static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");
-    pub static ref MY_LABEL_ID1: ApiRemoteId = ApiRemoteId::from("MyLabelID1");
-    pub static ref MY_LABEL_ID2: ApiRemoteId = ApiRemoteId::from("MyLabelID2");
-    pub static ref MY_ATTACHMENT_ID: ApiRemoteId = ApiRemoteId::from("MyAttachmentID1");
+    pub static ref MY_ADDRESS_ID: AddressId = AddressId::from("MyRemoteId");
+    pub static ref MY_LABEL_ID1: LabelId = LabelId::from("MyLabelID1");
+    pub static ref MY_LABEL_ID2: LabelId = LabelId::from("MyLabelID2");
+    pub static ref MY_ATTACHMENT_ID: AttachmentId = AttachmentId::from("MyAttachmentID1");
     pub static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
 }
 
@@ -33,7 +32,7 @@ lazy_static! {
 macro_rules! lid {
     ($id:expr) => {{
         use proton_core_common::datatypes::LocalId;
-        Some(LocalId::from($id))
+        Some($id.into())
     }};
 }
 
@@ -241,29 +240,18 @@ impl MailTestContext {
     pub fn get_test_msgs(&self) -> Vec<MessageMetadata> {
         let m1 = MessageMetadata {
             id: "Message1".into(),
-            address_id: ApiRemoteId::from("Addr1"),
-            label_ids: vec![ApiRemoteId::from("Label1"), ApiRemoteId::from("Label2")],
+            address_id: AddressId::from("Addr1"),
+            label_ids: vec![LabelId::from("Label1"), LabelId::from("Label2")],
             ..Default::default()
         };
         let m2 = MessageMetadata {
             id: "Message2".into(),
-            address_id: ApiRemoteId::from("Addr2"),
-            label_ids: vec![ApiRemoteId::from("Label2"), ApiRemoteId::from("Label3")],
+            address_id: AddressId::from("Addr2"),
+            label_ids: vec![LabelId::from("Label2"), LabelId::from("Label3")],
             ..Default::default()
         };
         vec![m1, m2]
     }
-}
-
-/// # Panics
-pub async fn remote_counterpart<T: Model>(id: LocalId, tx: &Tether) -> RemoteId {
-    id.counterpart::<T>(tx).await.unwrap().unwrap()
-}
-
-#[allow(dead_code)]
-/// # Panics
-pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
-    id.counterpart::<T>(tx).await.unwrap().unwrap()
 }
 
 /// Can panic if the local conversation `id` is not set, the remote
@@ -271,7 +259,7 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
 /// failed.
 ///
 /// # Panics
-pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
+pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
     let mut labels = [test_label1(), test_label2()];
     let tx = tether
         .transaction()
@@ -280,7 +268,7 @@ pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
     for label in &mut labels {
         label.save(&tx).await.expect("failed to create labels");
         assert!(
-            Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), &tx)
+            Label::find_by_remote_id(label.remote_id.clone().unwrap(), &tx)
                 .await
                 .expect("failed to resolve label ids")
                 .unwrap()
@@ -296,7 +284,7 @@ pub async fn create_labels(tether: &mut Tether) -> Vec<LocalId> {
 #[must_use]
 pub fn test_label1() -> Label {
     label!(
-        remote_id: Some(MY_LABEL_ID1.clone().into()),
+        remote_id: Some(MY_LABEL_ID1.clone()),
         name: "MyLabel".to_owned(),
         color: LabelColor::black(),
         label_type: LabelType::Label
@@ -306,7 +294,7 @@ pub fn test_label1() -> Label {
 #[must_use]
 pub fn test_label2() -> Label {
     label!(
-       remote_id: Some(MY_LABEL_ID2.clone().into()),
+       remote_id: Some(MY_LABEL_ID2.clone()),
        name: "MyFolder".to_owned(),
        color: LabelColor::black(),
        label_type: LabelType::Folder,

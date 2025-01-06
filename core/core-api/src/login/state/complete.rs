@@ -1,7 +1,7 @@
 use crate::auth::UserKeySecret;
 use crate::login::state::{HasAuthId, StateData};
 use crate::login::{state::HasUserId, LoginError};
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::{Proton, ProtonCore};
 use crate::session::{Session, SessionParts};
 use crate::store::UserData;
@@ -85,13 +85,13 @@ impl Complete {
 }
 
 impl HasUserId for Complete {
-    fn user_id(&self) -> &RemoteId {
+    fn user_id(&self) -> &UserId {
         &self.data.user_id
     }
 }
 
 impl HasAuthId for Complete {
-    fn auth_id(&self) -> &RemoteId {
+    fn auth_id(&self) -> &AuthId {
         &self.data.auth_id
     }
 }

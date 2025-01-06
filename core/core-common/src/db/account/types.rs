@@ -1,3 +1,5 @@
+use crate::datatypes::{AuthScopes, PasswordMode, TfaStatus, Timestamp};
+use crate::models::ModelExtension;
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
@@ -8,6 +10,7 @@ use aes_gcm::{
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use proton_api_core::auth::{Tokens, UserKeySecret};
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
@@ -22,15 +25,12 @@ use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-use crate::datatypes::{AuthScopes, PasswordMode, RemoteId, TfaStatus, Timestamp};
-use crate::models::ModelExtension;
-
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
 #[TableName("core_accounts")]
 pub struct CoreAccount {
     /// Remote ID of the account (i.e. the API User ID).
     #[IdField]
-    pub remote_id: RemoteId,
+    pub remote_id: UserId,
 
     /// The account's username or email address (used for login).
     #[DbField]
@@ -71,7 +71,7 @@ pub struct CoreAccount {
 impl CoreAccount {
     /// Create a new account.
     #[must_use]
-    pub fn new(remote_id: RemoteId, name_or_addr: String) -> Self {
+    pub fn new(remote_id: UserId, name_or_addr: String) -> Self {
         Self {
             remote_id,
             name_or_addr,
@@ -225,11 +225,11 @@ impl TableObserver for CoreAccountWatcher {
 pub struct CoreSession {
     /// Remote ID of the session (i.e. the API Auth UID).
     #[IdField]
-    pub remote_id: RemoteId,
+    pub remote_id: AuthId,
 
     /// Account ID the session is associated with (i.e. the API User ID).
     #[DbField]
-    pub account_id: RemoteId,
+    pub account_id: UserId,
 
     /// Access token for the session.
     #[DbField]
@@ -276,7 +276,7 @@ impl CoreSession {
     ///
     /// Returns error if we fail to retrieve the sessions from the db.
     pub async fn find_by_user_id(
-        user_id: RemoteId,
+        user_id: UserId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Self::find("WHERE account_id = ?", params![user_id], tether).await
@@ -288,8 +288,8 @@ impl CoreSession {
     ///
     /// Returns an error if the encryption fails.
     pub fn new(
-        user_id: RemoteId,
-        session_id: RemoteId,
+        user_id: UserId,
+        session_id: AuthId,
         tokens: &Tokens,
         key: &SessionEncryptionKey,
     ) -> Result<Self, CoreSessionError> {

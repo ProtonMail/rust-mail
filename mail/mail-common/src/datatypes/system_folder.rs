@@ -1,6 +1,6 @@
 use crate::datatypes::LabelType;
 use crate::models::Label;
-use proton_core_common::datatypes::LabelId;
+use proton_api_core::services::proton::common::LabelId;
 use serde::{Deserialize, Serialize};
 
 /// This enum represents the system labels that are valid target for Move actions.
@@ -24,7 +24,7 @@ impl MovableSystemFolder {
     }
 
     fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
-        let remote_id: u8 = label_id?.parse().ok()?;
+        let remote_id: u8 = label_id?.as_ref().parse().ok()?;
 
         match remote_id {
             x if x == Self::Inbox as u8 => Some(Self::Inbox),

@@ -1,6 +1,6 @@
 use crate::test_context::MailTestContext;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{RemoteId as ApiRemoteId, RemoteId};
+use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId, RemoteId};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -79,7 +79,7 @@ impl MailTestContext {
     /// * `failed`      - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
-    pub async fn mock_label_messages(&self, label_id: &ApiRemoteId, message_ids: Vec<ApiRemoteId>) {
+    pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<ApiRemoteId>) {
         let ids = message_ids.clone();
         let request = PutMessagesLabelRequest {
             action: 1,
@@ -210,7 +210,7 @@ impl MailTestContext {
     ///
     pub async fn mock_unlabel_messages(
         &self,
-        label_id: &ApiRemoteId,
+        label_id: &LabelId,
         message_ids: Vec<ApiRemoteId>,
         failed: Vec<ApiRemoteId>,
     ) {

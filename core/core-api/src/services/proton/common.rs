@@ -8,12 +8,13 @@
 //!
 
 use core::fmt;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sql")]
 use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 use std::ops::Deref;
-
 //  ENUMS
 //==============================================================================
 
@@ -59,6 +60,29 @@ pub enum LightOrDarkMode {
 
 //  STRUCTS
 //==============================================================================
+
+/// If the `sql` feature is enabled this marker will contain extra trait boundaries.
+#[cfg(feature = "sql")]
+pub trait ProtonIdSqlMarker: ::stash::exports::ToSql + ::stash::exports::FromSql {}
+
+#[cfg(not(feature = "sql"))]
+/// If the `sql` feature is enabled this marker will contain extra trait boundaries.
+pub trait ProtonIdSqlMarker {}
+
+/// Marker trait assigned to each id that was declared with [`declare_proton_id`].
+pub trait ProtonIdMarker:
+    Clone
+    + Debug
+    + DeserializeOwned
+    + Eq
+    + Hash
+    + PartialEq
+    + ProtonIdSqlMarker
+    + Serialize
+    + Sync
+    + Send
+{
+}
 
 /// Declare a new unique type for a Proton String Identifier.
 ///
@@ -160,7 +184,56 @@ macro_rules! declare_proton_id {
                 $crate::RemoteId::new(id.into_inner())
             }
         }
+
+        impl $crate::services::proton::common::ProtonIdSqlMarker for $name {}
+
+        impl $crate::services::proton::common::ProtonIdMarker for $name {}
     }
+}
+
+declare_proton_id! {
+    /// Represents the Id of the user.
+    pub UserId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a User Address.
+    pub AddressId
+}
+
+declare_proton_id! {
+    /// Represents the Id of an active network Session.
+    pub AuthId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a Contact.
+    pub ContactId
+}
+
+declare_proton_id! {
+    /// Represents the email Id of a Contact.
+    pub ContactEmailId
+}
+
+declare_proton_id! {
+    /// Represents the UID of a Contact.
+    pub ContactUID
+}
+
+declare_proton_id! {
+    /// Represents the Id of an Event.
+    pub EventId
+}
+
+declare_proton_id! {
+    /// Represents the Id of an Event.
+    pub LabelId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a crypto salt.
+    pub SaltId
 }
 
 /// Remote ID.
@@ -170,6 +243,10 @@ macro_rules! declare_proton_id {
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct RemoteId(String);
+
+impl ProtonIdMarker for RemoteId {}
+
+impl ProtonIdSqlMarker for RemoteId {}
 
 impl RemoteId {
     /// Create a new [`RemoteId`] from a [`String`].

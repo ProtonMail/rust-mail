@@ -1,12 +1,14 @@
 use std::collections::BTreeSet;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{GroupedContacts, IdCounterpart, LabelId, Labels, LocalId, RemoteId};
-use crate::models::{ContactCard, ContactEmail, ModelExtension};
+use crate::datatypes::{GroupedContacts, Labels, LocalContactId};
+use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
+use proton_api_core::services::proton::common::{ContactId, LabelId};
+use proton_api_core::services::proton::prelude::ContactUID;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
@@ -30,13 +32,13 @@ pub struct Contact {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalContactId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<ContactId>,
 
     /// Cards associated with the contact. They are in standard vCard format,
     /// although each field is kept separatly within new vCard.
@@ -67,7 +69,7 @@ pub struct Contact {
 
     /// Unique identifier of the contact.
     #[DbField]
-    pub uid: RemoteId,
+    pub uid: ContactUID,
 
     /// Reflects whether the record has been deleted. This is used to ensure that
     /// delete happens in a two-step process, where the record is marked as
@@ -82,6 +84,10 @@ pub struct Contact {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
+}
+
+impl ModelIdExtension for Contact {
+    type RemoteId = ContactId;
 }
 
 impl Contact {
@@ -102,7 +108,7 @@ impl Contact {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
@@ -315,13 +321,12 @@ impl Contact {
     /// Errors when the API request fails or when the database query fails.
     ///
     pub async fn sync_with_card(
-        local_id: LocalId,
+        local_id: LocalContactId,
         api: &Proton,
         bond: &Bond<'_>,
     ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
-        let remote_id = local_id
-            .counterpart::<Contact>(bond)
+        let remote_id = Contact::local_id_counterpart(local_id, bond)
             .await?
             .ok_or_else(|| {
                 CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
@@ -373,7 +378,7 @@ impl Contact {
 
     pub async fn action_delete(
         queue: &Queue,
-        contact_ids: Vec<LocalId>,
+        contact_ids: Vec<LocalContactId>,
     ) -> Result<ActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
         let action = ContactsDelete::new(contact_ids);
         queue.apply_action(action).await
@@ -399,9 +404,9 @@ impl Contact {
     }
 
     pub async fn delete_from_remote(
-        remote_ids: &[RemoteId],
+        remote_ids: &[ContactId],
         api: &Proton,
-    ) -> CoreContextResult<Vec<RemoteId>> {
+    ) -> CoreContextResult<Vec<ContactId>> {
         let response = api
             .put_delete_contacts(remote_ids.iter().cloned().map_into().collect())
             .await?;
@@ -443,7 +448,7 @@ impl From<ApiContactBasic> for Contact {
             cards: vec![],
             contact_emails: vec![],
             create_time: value.create_time,
-            label_ids: Labels::new(value.label_ids.into_iter().map(LabelId::from).collect()),
+            label_ids: Labels::new(value.label_ids),
             modify_time: value.modify_time,
             name: value.name,
             size: value.size,
@@ -468,7 +473,7 @@ impl Default for Contact {
             modify_time: Default::default(),
             name: Default::default(),
             size: Default::default(),
-            uid: RemoteId::from(String::default()),
+            uid: ContactUID::from(String::default()),
             deleted: Default::default(),
             row_id: Default::default(),
         }

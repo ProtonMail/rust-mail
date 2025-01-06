@@ -1,20 +1,21 @@
-use crate::datatypes::{IdCounterpart, LocalId, RemoteId};
-use crate::models::{Contact, ModelExtension};
+use crate::datatypes::LocalContactId;
+use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
-    local_ids: Vec<LocalId>,
-    remote_ids: Vec<RemoteId>,
+    local_ids: Vec<LocalContactId>,
+    remote_ids: Vec<ContactId>,
 }
 
 impl Delete {
     #[must_use]
-    pub fn new(local_ids: Vec<LocalId>) -> Self {
+    pub fn new(local_ids: Vec<LocalContactId>) -> Self {
         Self {
             local_ids,
             remote_ids: Vec::new(),
@@ -91,7 +92,7 @@ impl proton_action_queue::action::Handler for Handler {
         } else {
             let conn = stash.connection();
             for remote_id in failed {
-                let Some(local_id) = remote_id.counterpart::<Contact>(&conn).await? else {
+                let Some(local_id) = Contact::remote_id_counterpart(remote_id, &conn).await? else {
                     continue;
                 };
 

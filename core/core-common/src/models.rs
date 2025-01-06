@@ -42,18 +42,18 @@ pub use self::contact_email::*;
 
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, DateFormat, Density, Email,
-    Flags, HighSecurity, Id, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
-    QueryResultRemoteId, Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys,
-    UserMnemonicStatus, UserType, WeekStart,
+    Flags, HighSecurity, LocalAddressId, LocalIdMarker, LogAuth, Password, Phone, ProductUsedSpace,
+    Referral, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::CoreContextResult;
 use indoc::formatdoc;
+use proton_api_core::services::proton::common::{AddressId, ProtonIdMarker, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
-use stash::exports::ToSql;
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -123,11 +123,13 @@ pub trait ModelExtension: Model {
     /// * [`find_first()`](Model::find_first())
     /// * [`load()`](Model::load())
     ///
-    async fn find_by_id<I>(id: I, tether: &Tether) -> Result<Option<Self>, StashError>
-    where
-        I: Id,
-    {
-        id.load(tether).await
+    async fn find_by_id(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
+        Self::find_first(
+            format!("WHERE {} =?", Self::id_field_name()),
+            params![id],
+            tether,
+        )
+        .await
     }
 
     /// Finds a records by its IDs.
@@ -149,17 +151,14 @@ pub trait ModelExtension: Model {
     /// * [`load()`](Model::load())
     /// * [`load_by_id()`](ModelExtension::load_by_id())
     ///
-    async fn find_by_ids<I>(
-        ids: impl IntoIterator<Item = I>,
+    async fn find_by_ids(
+        ids: impl IntoIterator<Item = Self::IdType>,
         tether: &Tether,
-    ) -> Result<Vec<Self>, StashError>
-    where
-        I: Id + ToSql + 'static,
-    {
+    ) -> Result<Vec<Self>, StashError> {
         let mut ids = ids.into_iter().peekable();
         let field_name = if ids.peek().is_some() {
             // We make the assumption that all ids are the same AgnosticId variant
-            I::id_field_name()
+            Self::id_field_name()
         } else {
             return Ok(vec![]);
         };
@@ -171,159 +170,6 @@ pub trait ModelExtension: Model {
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
-    }
-
-    /// Finds local record IDs matching given criteria.
-    ///
-    /// This method is the counterpart to [`find()`](Model::find()), but where
-    /// only the local IDs are needed. This saves having to load the entire
-    /// model data in order to get the IDs. It operates in the same way as
-    /// [`find()`](Model::find()). except it does not support live queries.
-    ///
-    /// # WARNING
-    ///
-    /// This method will **ONLY** work with models that have a `local_id` field.
-    /// If the model does not follow this convention, use a manual approach.
-    ///
-    /// # Parameters
-    ///
-    /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
-    /// # See also
-    ///
-    /// * [`find()`](Model::find())
-    /// * [`find_remote_ids()`](ModelExtension::find_remote_ids())
-    ///
-    async fn find_local_ids<Q>(
-        query_logic: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-        tether: &Tether,
-    ) -> Result<Vec<LocalId>, StashError>
-    where
-        Q: Into<String> + Send,
-    {
-        Ok(tether
-            .query_values::<_, u64>(
-                formatdoc!(
-                    "
-                    SELECT
-                        local_id AS value
-                    FROM
-                        {}
-                    {}
-                    ",
-                    Self::table_name(),
-                    query_logic.into(),
-                ),
-                params,
-            )
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
-    }
-
-    /// Finds remote record IDs matching given criteria.
-    ///
-    /// This method is the counterpart to [`find()`](Model::find()), but where
-    /// only the remote IDs are needed. This saves having to load the entire
-    /// model data in order to get the IDs. It operates in the same way as
-    /// [`find()`](Model::find()). except it does not support live queries.
-    ///
-    /// # WARNING
-    ///
-    /// This method will **ONLY** work with models that have a `remote_id`
-    /// field. If the model does not follow this convention, use a manual
-    /// approach.
-    ///
-    /// # Parameters
-    ///
-    /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::find_first()`].
-    ///
-    /// # See also
-    ///
-    /// * [`find()`](Model::find())
-    /// * [`find_local_ids()`](ModelExtension::find_local_ids())
-    ///
-    async fn find_remote_ids<Q>(
-        query_logic: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
-        tehter: &Tether,
-    ) -> Result<Vec<RemoteId>, StashError>
-    where
-        Q: Into<String> + Send,
-    {
-        Ok(tehter
-            .query::<_, QueryResultRemoteId>(
-                formatdoc!(
-                    "
-                    SELECT
-                        remote_id AS id
-                    FROM
-                        {}
-                    {}
-                    ",
-                    Self::table_name(),
-                    query_logic.into(),
-                ),
-                params,
-            )
-            .await?
-            .into_iter()
-            .map(|r| r.id)
-            .collect())
-    }
-
-    /// Deletes a record by its remote ID.
-    ///
-    /// This method is a convenience method for deleting a record by its remote ID.
-    /// It assumes the model has a `remote_id` field; if it does not, the stash
-    /// will return an error.
-    ///
-    /// # Returns
-    ///
-    /// Returns the number of rows deleted.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if we fail to delete the account from the db.
-    #[must_use]
-    async fn delete_by_remote_id(
-        remote_id: RemoteId,
-        bond: &Bond<'_>,
-    ) -> Result<usize, StashError> {
-        let table = Self::table_name();
-        let query = format!("DELETE FROM {table} WHERE remote_id = ?");
-
-        bond.execute(query, params![remote_id]).await
     }
 
     /// Counts models in database.
@@ -377,6 +223,86 @@ pub trait ModelExtension: Model {
         Ok(self)
     }
 
+    /// Deletes a record by its ID.
+    ///
+    /// This method is a convenience method for deleting a record by its primary id.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of rows deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to delete the item from the database.
+    async fn delete_by_id(id: Self::IdType, bond: &Bond<'_>) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let query = format!("DELETE FROM {table} WHERE {} = ?", Self::id_field_name(),);
+
+        bond.execute(query, params![id]).await
+    }
+
+    /// Finds record IDs matching given criteria.
+    ///
+    /// This method is the counterpart to [`find()`](Model::find()), but where
+    /// only the local IDs are needed. This saves having to load the entire
+    /// model data in order to get the IDs. It operates in the same way as
+    /// [`find()`](Model::find()). except it does not support live queries.
+    ///
+    /// # WARNING
+    ///
+    /// This method will **ONLY** work with models that have a `local_id` field.
+    /// If the model does not follow this convention, use a manual approach.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find()`](Model::find())
+    /// * [`find_remote_ids()`](ModelExtension::find_remote_ids())
+    ///
+    async fn find_ids<Q>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        tether: &Tether,
+    ) -> Result<Vec<Self::IdType>, StashError>
+    where
+        Q: Into<String> + Send,
+    {
+        tether
+            .query_values::<_, Self::IdType>(
+                formatdoc!(
+                    "
+                    SELECT
+                        {} AS value
+                    FROM
+                        {}
+                    {}
+                    ",
+                    Self::id_field_name(),
+                    Self::table_name(),
+                    query_logic.into(),
+                ),
+                params,
+            )
+            .await
+    }
+
     /// Reloads the model from database.
     ///
     /// Especially useful for models which have `on_load` implementations
@@ -400,12 +326,360 @@ pub trait ModelExtension: Model {
     /// When querying the database fails.
     ///
     async fn delete(self, bond: &Bond<'_>) -> Result<usize, StashError> {
-        let table = Self::table_name();
-        let id_field = Self::id_field_name();
-        let query = format!("DELETE FROM {table} WHERE {id_field} = ?");
-        let id = self.id_value()?;
+        Self::delete_by_id(self.id_value()?, bond).await
+    }
+}
 
-        bond.execute(query, params![id]).await
+/// Extension trait for models where there is a relationship between a local id and remote id
+/// for a resource.
+///
+/// This relationship usually exists when the given resource can be created locally without it
+/// existing on the remote server. This relationship is expected to be expressed via
+/// the [`crate::declare_local_id`] macro.
+#[allow(async_fn_in_trait)]
+pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
+    /// Remote Id type.
+    type RemoteId: ProtonIdMarker;
+
+    /// Remote id field name.
+    #[must_use]
+    fn remote_id_field_name() -> &'static str {
+        "remote_id"
+    }
+
+    /// Finds a record by its ID.
+    ///
+    /// The [`load()`](Model::load()) method is so-called to be the counterpart
+    /// to [`save()`](Model::save()), but could equally be called `find_by_id()`
+    /// under familiar naming conventions. The reason that was not used is that
+    /// we have multiple ID types, and so "load" is a more generic term that is
+    /// closely associated with local representations.
+    ///
+    /// However, there is a need to find records by their remote IDs, and indeed
+    /// a need to *generically* find records regardless of ID type. Hence this
+    /// method is provided to help with that. It is a convenience method that
+    /// calls [`load()`](Id::load()) on the ID type itself.
+    ///
+    /// It does very little, and exists to formalise the interface for carrying
+    /// out this process, for uniformity and centralisation of this common
+    /// operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`        - The ID of the record to find.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the record.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find_first()`](Model::find_first())
+    /// * [`load()`](Model::load())
+    ///
+    async fn find_by_remote_id(
+        id: Self::RemoteId,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first(
+            format!("WHERE {} =?", Self::remote_id_field_name()),
+            params![id],
+            tether,
+        )
+        .await
+    }
+
+    /// Finds records by its remote IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`         - The IDs of the records to find
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the record.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find_first()`](Model::find_first())
+    /// * [`load()`](Model::load())
+    /// * [`load_by_id()`](ModelExtension::load_by_id())
+    ///
+    async fn find_by_remote_ids(
+        ids: impl IntoIterator<Item = Self::RemoteId>,
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        let mut ids = ids.into_iter().peekable();
+        let field_name = if ids.peek().is_some() {
+            Self::remote_id_field_name()
+        } else {
+            return Ok(vec![]);
+        };
+        #[allow(trivial_casts)]
+        let (placeholders, parameters): (Vec<_>, Vec<_>) = ids
+            .map(|i| ("?", Box::new(i) as Box<dyn ToSql + Send>))
+            .unzip();
+        let placeholders = placeholders.join(", ");
+
+        let query = format!("WHERE {field_name} IN ({placeholders})");
+        Self::find(query, parameters, tether).await
+    }
+
+    /// Deletes a record by its remote ID.
+    ///
+    /// This method is a convenience method for deleting a record by its remote ID.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of rows deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to delete the account from the db.
+    async fn delete_by_remote_id(
+        remote_id: Self::RemoteId,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let query = format!(
+            "DELETE FROM {table} WHERE {} = ?",
+            Self::remote_id_field_name()
+        );
+
+        bond.execute(query, params![remote_id]).await
+    }
+
+    /// Return the local id counterpart for a given `remote_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn remote_id_counterpart(
+        remote_id: Self::RemoteId,
+        tether: &Tether,
+    ) -> Result<Option<Self::IdType>, StashError> {
+        match tether
+            .query_value::<_, Self::IdType>(
+                formatdoc!(
+                    "
+                            SELECT
+                                {} AS value
+                            FROM
+                                {}
+                            WHERE
+                                {} = ?
+                            LIMIT 1
+                            ",
+                    Self::id_field_name(),
+                    Self::table_name(),
+                    Self::remote_id_field_name(),
+                ),
+                params![remote_id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Return the local id counterparts for a given set of `remote ids`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    #[must_use]
+    async fn remote_ids_counterpart(
+        remote_ids: Vec<Self::RemoteId>,
+        tether: &Tether,
+    ) -> Result<Vec<Self::IdType>, StashError> {
+        let placeholders = std::iter::repeat("?")
+            .take(remote_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        #[allow(trivial_casts)]
+        let values = remote_ids
+            .into_iter()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect();
+        tether
+            .query_values::<_, Self::IdType>(
+                formatdoc!(
+                    "
+                            SELECT
+                                {} AS value
+                            FROM
+                                {}
+                            WHERE
+                                {} IN ({})
+                            ",
+                    Self::id_field_name(),
+                    Self::table_name(),
+                    Self::remote_id_field_name(),
+                    placeholders,
+                ),
+                values,
+            )
+            .await
+    }
+
+    /// Return the remote id counterpart for a given `local_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn local_id_counterpart(
+        local_id: Self::IdType,
+        tether: &Tether,
+    ) -> Result<Option<Self::RemoteId>, StashError> {
+        match tether
+            .query_value::<_, Self::RemoteId>(
+                formatdoc!(
+                    "
+                            SELECT
+                                {} AS value
+                            FROM
+                                {}
+                            WHERE
+                                {} = ?
+                            LIMIT 1
+                            ",
+                    Self::remote_id_field_name(),
+                    Self::table_name(),
+                    Self::id_field_name(),
+                ),
+                params![local_id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
+
+    /// Return the remote id counterparts for a given set of `local ids`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    #[must_use]
+    async fn local_ids_counterpart(
+        local_ids: Vec<Self::IdType>,
+        tether: &Tether,
+    ) -> Result<Vec<Self::RemoteId>, StashError> {
+        let placeholders = std::iter::repeat("?")
+            .take(local_ids.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        #[allow(trivial_casts)]
+        let values = local_ids
+            .into_iter()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect();
+        tether
+            .query_values::<_, Self::RemoteId>(
+                formatdoc!(
+                    "
+                            SELECT
+                                {} AS value
+                            FROM
+                                {}
+                            WHERE
+                                {} IN ({})
+                            ",
+                    Self::remote_id_field_name(),
+                    Self::table_name(),
+                    Self::id_field_name(),
+                    placeholders,
+                ),
+                values,
+            )
+            .await
+    }
+
+    /// Finds remote record IDs matching given criteria.
+    ///
+    /// This method is the counterpart to [`find()`](Model::find()), but where
+    /// only the remote IDs are needed. This saves having to load the entire
+    /// model data in order to get the IDs. It operates in the same way as
+    /// [`find()`](Model::find()). except it does not support live queries.
+    ///
+    /// # WARNING
+    ///
+    /// This method will **ONLY** work with models that have a `remote_id`
+    /// field. If the model does not follow this convention, use a manual
+    /// approach.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find()`](Model::find())
+    /// * [`find_local_ids()`](ModelExtension::find_local_ids())
+    ///
+    async fn find_remote_ids<Q>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        tether: &Tether,
+    ) -> Result<Vec<Self::RemoteId>, StashError>
+    where
+        Q: Into<String> + Send,
+    {
+        tether
+            .query_values::<_, Self::RemoteId>(
+                formatdoc!(
+                    "
+                    SELECT
+                        {} AS value
+                    FROM
+                        {}
+                    {}
+                    ",
+                    Self::remote_id_field_name(),
+                    Self::table_name(),
+                    query_logic.into(),
+                ),
+                params,
+            )
+            .await
     }
 }
 
@@ -422,13 +696,13 @@ pub struct Address {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalAddressId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<AddressId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -490,6 +764,10 @@ pub struct Address {
     pub row_id: Option<u64>,
 }
 
+impl ModelIdExtension for Address {
+    type RemoteId = AddressId;
+}
+
 impl Address {
     /// Save an address to the database.
     ///
@@ -508,7 +786,7 @@ impl Address {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
@@ -595,7 +873,7 @@ pub struct User {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<UserId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -787,7 +1065,7 @@ pub struct UserSettings {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<UserId>,
 
     /// TODO: Document this field.
     #[DbField]

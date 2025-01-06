@@ -1,10 +1,12 @@
 pub use super::*;
 use crate::datatypes::attachment;
+use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
-use proton_core_common::datatypes::{AddressStatus, AddressType, LocalId};
+use proton_api_core::services::proton::common::RemoteId;
+use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId, LocalId};
 use std::str::FromStr;
 
 #[test]
@@ -237,21 +239,21 @@ fn remote_conversation_id() -> RemoteId {
     RemoteId::new("My remote conv id".to_owned())
 }
 
-fn local_address_id() -> LocalId {
+fn local_address_id() -> LocalAddressId {
     9000.into()
 }
 
-fn remote_address_id() -> RemoteId {
-    RemoteId::new("My remote addr id".to_owned())
+fn remote_address_id() -> AddressId {
+    AddressId::new("My remote addr id".to_owned())
 }
 const ADDRESS_SIGNATURE: &str = "My Address Signature";
 const MAIL_SETTINGS_SIGNATURE: &str = "Mail settings signature";
 
-fn inline_attachment_id() -> LocalId {
+fn inline_attachment_id() -> LocalAttachmentId {
     1245555.into()
 }
 
-fn normal_attachment_id() -> LocalId {
+fn normal_attachment_id() -> LocalAttachmentId {
     44623482634.into()
 }
 

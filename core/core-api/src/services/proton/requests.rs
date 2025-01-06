@@ -20,7 +20,7 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::{LightOrDarkMode, RemoteId};
+use crate::services::proton::common::{ContactId, LabelId, LightOrDarkMode};
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
@@ -50,7 +50,7 @@ pub struct GetContactsEmailsOptions {
     /// Label ID to filter on.
     #[serde(rename = "LabelID")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label_id: Option<RemoteId>,
+    pub label_id: Option<LabelId>,
 
     /// Page index, i.e. the page in the resultset.
     pub page: usize,
@@ -67,7 +67,7 @@ pub struct GetContactsOptions {
     /// Label ID to filter on.
     #[serde(rename = "LabelID")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label_id: Option<RemoteId>,
+    pub label_id: Option<LabelId>,
 
     /// Page index, i.e. the page in the resultset.
     pub page: usize,
@@ -153,5 +153,5 @@ pub struct GetImagesLogoOptions {
 pub struct PutDeleteContacts {
     #[serde(rename = "IDs")]
     /// The list of contact IDs to delete.
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ContactId>,
 }

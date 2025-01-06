@@ -1,6 +1,6 @@
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::consts::CoreBundle;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, ApiErrorInfo,
@@ -12,7 +12,6 @@ use proton_api_mail::services::proton::request_data::{
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
@@ -38,7 +37,7 @@ async fn basic_send_check() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
@@ -54,8 +53,8 @@ async fn basic_send_check() {
         group: None,
     });
     let mut sent_message = message.clone();
-    message.metadata.label_ids.push(LabelId::drafts().into());
-    sent_message.metadata.label_ids.push(LabelId::sent().into());
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
     sent_message.body.header = "Fancy new header".to_owned();
 
@@ -66,7 +65,7 @@ async fn basic_send_check() {
         display_snooze_reminder: false,
         expiration_time: 0,
         labels: vec![ConversationLabel {
-            id: LabelId::sent().into(),
+            id: LabelId::sent(),
             context_expiration_time: 0,
             context_num_attachments: 0,
             context_num_messages: 1,
@@ -210,7 +209,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyho
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = draft_test_params();
@@ -224,8 +223,8 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyho
         group: None,
     });
     let mut sent_message = message.clone();
-    message.metadata.label_ids.push(LabelId::drafts().into());
-    sent_message.metadata.label_ids.push(LabelId::sent().into());
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
     sent_message.body.header = "Fancy new header".to_owned();
 
@@ -299,7 +298,7 @@ fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     // correct primary address. Using this key will result in a crypto
     // error.
     params.addresses.push(ApiAddress {
-        id: ApiRemoteId::from("GIBBERISH TEST ID"),
+        id: AddressId::from("GIBBERISH TEST ID"),
         email: "gibberish@proton.ch".to_owned(),
         send: true,
         receive: true,

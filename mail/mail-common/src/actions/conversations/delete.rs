@@ -4,7 +4,8 @@ use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -17,7 +18,7 @@ pub struct Delete(GenericActionData<Conversation>);
 
 impl Delete {
     /// Create new instance.
-    pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self(GenericActionData::new(label_id, ids))
     }
 }
@@ -98,7 +99,7 @@ impl proton_action_queue::action::Handler for Handler {
             error!("Delete operation failed for: {:?}", failed_ids);
             let mut conn = stash.connection();
             let tx = conn.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
+            let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Conversation::remove_label(action.0.label_id, local_ids, &tx)
                 .await

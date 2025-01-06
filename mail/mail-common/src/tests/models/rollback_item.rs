@@ -8,6 +8,7 @@ use proton_api_mail::{
     },
     MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
 };
+use proton_core_common::models::ModelIdExtension;
 use proton_core_common::{datatypes::LocalId, models::ModelExtension};
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_mail_test_utils::db::new_test_connection_file;
@@ -270,7 +271,7 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
 
 async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether: &Tether) {
     let remote_id = &item.remote_id;
-    let db_message = Message::find_by_id(remote_id.clone(), tether)
+    let db_message = Message::find_by_remote_id(remote_id.clone(), tether)
         .await
         .unwrap()
         .unwrap();
@@ -297,12 +298,12 @@ async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether:
 
 async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
-    let api_label = api_label!(id: remote_id.clone());
+    let api_label = api_label!(id: remote_id.clone().into());
 
     Mock::given(method("POST"))
         .and(path("/api/core/v4/labels/by-ids".to_string()))
         .and(body_json(GetLabelsByIdsOptions {
-            label_ids: vec![remote_id.clone()],
+            label_ids: vec![remote_id.clone().into()],
         }))
         .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
             labels: vec![api_label],

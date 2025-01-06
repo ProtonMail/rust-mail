@@ -5,10 +5,9 @@ use super::*;
 use crate::datatypes::{ConversationCount, LabelColor, LabelType, MessageCount};
 use crate::models::Label;
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::ModelExtension as _;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::random_string;
@@ -109,7 +108,7 @@ async fn test_delete_remote() {
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id = Label::find_by_id(RemoteId::from(parent_id), &tx)
+            label.local_parent_id = Label::find_by_remote_id(parent_id, &tx)
                 .await
                 .expect("failed to get parent label")
                 .expect("parent label should exist")
@@ -120,7 +119,7 @@ async fn test_delete_remote() {
 
     tx.execute(
         "DELETE FROM labels WHERE remote_id = ?",
-        params![LabelId::from(labels[0].id.clone())],
+        params![labels[0].id.clone()],
     )
     .await
     .expect("failed to delete local label");
@@ -138,7 +137,7 @@ async fn label_with_counts() {
     let mut tether = new_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     let label = ApiLabel {
-        id: ApiRemoteId::from("label"),
+        id: LabelId::from("label"),
         parent_id: None,
         name: "Label".to_owned(),
         path: None,
@@ -427,7 +426,7 @@ async fn update_local_label() {
     new_label.save(&tx).await.expect("failed to create label");
     tx.commit().await.expect("failed to commit transaction");
 
-    async fn compare_db_label(tx: &Tether, id: LocalId, f: impl FnOnce(&Label)) {
+    async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label)) {
         let db_label = Label::load(id, tx)
             .await
             .expect("failed to get label")
@@ -515,7 +514,7 @@ async fn test_watch_label() {
     let tx = tether.transaction().await.unwrap();
 
     let mut label: Label = ApiLabel {
-        id: ApiRemoteId::from("label_id"),
+        id: LabelId::from("label_id"),
         parent_id: None,
         name: "MyLabel".to_owned(),
         path: None,
@@ -565,14 +564,14 @@ async fn compare_remote_label_with_local(tether: &Tether, remote_label: ApiLabel
     };
 
     // Check if parent ids are correct.
-    let local = find_label(&LabelId::from(remote_label.id.clone()));
+    let local = find_label(&remote_label.id);
     compare_local_to_remote(tether, local, &remote_label).await;
 }
 
 fn test_labels() -> Vec<ApiLabel> {
     vec![
         ApiLabel {
-            id: ApiRemoteId::from("label_id"),
+            id: LabelId::from("label_id"),
             parent_id: None,
             name: "MyLabel".to_owned(),
             path: None,
@@ -585,7 +584,7 @@ fn test_labels() -> Vec<ApiLabel> {
             order: 0,
         },
         ApiLabel {
-            id: ApiRemoteId::from("50"),
+            id: LabelId::from("50"),
             parent_id: None,
             name: "Inbox2".to_owned(),
             path: None,
@@ -598,7 +597,7 @@ fn test_labels() -> Vec<ApiLabel> {
             order: 0,
         },
         ApiLabel {
-            id: ApiRemoteId::from("Folder1"),
+            id: LabelId::from("Folder1"),
             parent_id: None,
             name: "Folder1".to_owned(),
             path: None,
@@ -611,8 +610,8 @@ fn test_labels() -> Vec<ApiLabel> {
             order: 2,
         },
         ApiLabel {
-            id: ApiRemoteId::from("Folder2"),
-            parent_id: Some(ApiRemoteId::from("Folder1")),
+            id: LabelId::from("Folder2"),
+            parent_id: Some(LabelId::from("Folder1")),
             name: "Folder2".to_owned(),
             path: Some("Folder1/Folder2".to_owned()),
             color: "#ffffff".to_owned(),
@@ -628,7 +627,7 @@ fn test_labels() -> Vec<ApiLabel> {
 
 fn test_label(name: &str) -> ApiLabel {
     ApiLabel {
-        id: ApiRemoteId::from("label_id"),
+        id: LabelId::from("label_id"),
         parent_id: None,
         name: name.to_owned(),
         path: None,
@@ -645,7 +644,7 @@ fn test_label(name: &str) -> ApiLabel {
 async fn compare_local_to_remote(tether: &Tether, local: &Label, remote: &ApiLabel) {
     assert_eq!(
         local.remote_id,
-        Some(remote.id.clone().into()),
+        Some(remote.id.clone()),
         "remote id does not match for {}",
         remote.id
     );
@@ -703,13 +702,13 @@ async fn compare_local_to_remote(tether: &Tether, local: &Label, remote: &ApiLab
     );
 
     if let Some(remote_parent_id) = local.remote_parent_id.clone() {
-        let parent_label = Label::find_by_id(RemoteId::from(remote_parent_id), tether)
+        let parent_label = Label::find_by_remote_id(remote_parent_id, tether)
             .await
             .expect("failed to find parent label")
             .expect("Parent label should exist");
         assert_eq!(
             parent_label.remote_id.unwrap(),
-            remote.parent_id.clone().unwrap().into(),
+            remote.parent_id.clone().unwrap(),
             "parent id value does not match for {}",
             remote.id
         );

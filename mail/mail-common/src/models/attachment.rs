@@ -1,19 +1,21 @@
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, MessageSender,
+    KeyPackets, LocalAttachmentId, MessageSender,
 };
 use crate::models::*;
 use crate::AppError;
 use bytes::Bytes;
 use indoc::indoc;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::AddressId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
-use proton_core_common::models::Address;
+use proton_core_common::datatypes::{LocalAddressId, LocalId, RemoteId};
+use proton_core_common::models::{Address, ModelIdExtension};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -84,20 +86,20 @@ pub struct Attachment {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalAttachmentId>,
 
     /// API Attachment id.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<AttachmentId>,
 
     /// Address with which this attachment was encrypted.
     #[DbField]
-    pub local_address_id: Option<LocalId>,
+    pub local_address_id: Option<LocalAddressId>,
 
     /// Address with which this attachment was encrypted. The address id can
     /// only be retrieved from a [`Message`] or the full [`Attachment`] type.
     #[DbField]
-    pub remote_address_id: Option<RemoteId>,
+    pub remote_address_id: Option<AddressId>,
 
     /// Local conversation id where this attachment is present.
     #[DbField]
@@ -176,6 +178,10 @@ pub struct Attachment {
     pub row_id: Option<u64>,
 }
 
+impl ModelIdExtension for Attachment {
+    type RemoteId = AttachmentId;
+}
+
 impl Attachment {
     /// Load attachment metadata for a given `conversation_id`.
     ///
@@ -241,21 +247,22 @@ impl Attachment {
         }
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id = remote_address_id.counterpart::<Address>(bond).await?;
+                self.local_address_id =
+                    Address::remote_id_counterpart(remote_address_id, bond).await?;
             }
         }
 
         if self.local_message_id.is_none() {
             if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id = remote_message_id.counterpart::<Message>(bond).await?;
+                self.local_message_id =
+                    Message::remote_id_counterpart(remote_message_id, bond).await?;
             }
         }
 
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
-                self.local_conversation_id = remote_conversation_id
-                    .counterpart::<Conversation>(bond)
-                    .await?;
+                self.local_conversation_id =
+                    Conversation::remote_id_counterpart(remote_conversation_id, bond).await?;
             }
         }
 
@@ -279,7 +286,7 @@ impl Attachment {
     /// Returns an error if the API request failed.
     ///
     pub async fn fetch_content<PM: ProtonMail>(
-        id: RemoteId,
+        id: AttachmentId,
         api: &PM,
     ) -> Result<Bytes, ApiServiceError> {
         api.get_attachment(id).await
@@ -302,7 +309,7 @@ impl Attachment {
     /// Returns an error if the API request failed.
     ///
     pub async fn fetch_metadata<PM: ProtonMail>(
-        id: RemoteId,
+        id: AttachmentId,
         api: &PM,
     ) -> Result<GetAttachmentMetadataResponse, ApiServiceError> {
         api.get_attachment_metadata(id).await
@@ -394,7 +401,7 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn find_by_ids(
-        attachment_ids: impl IntoIterator<Item = LocalId>,
+        attachment_ids: impl IntoIterator<Item = LocalAttachmentId>,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         let params: Vec<Box<dyn ToSql + Send>> = attachment_ids

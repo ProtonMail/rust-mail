@@ -139,7 +139,7 @@ pub trait ProtonCore {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_address_by_id(&self, id: RemoteId) -> ApiServiceResult<GetAddressResponse>;
+    async fn get_address_by_id(&self, id: AddressId) -> ApiServiceResult<GetAddressResponse>;
 
     /// GETs Captcha details.
     ///
@@ -166,7 +166,7 @@ pub trait ProtonCore {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_contact(&self, contact_id: RemoteId) -> ApiServiceResult<GetContactResponse>;
+    async fn get_contact(&self, contact_id: ContactId) -> ApiServiceResult<GetContactResponse>;
 
     /// GETs a list of contacts.
     ///
@@ -216,7 +216,7 @@ pub trait ProtonCore {
     ///
     async fn get_event<T>(
         &self,
-        event_id: RemoteId,
+        event_id: EventId,
         options: GetEventOptions,
     ) -> ApiServiceResult<T>
     where
@@ -292,6 +292,6 @@ pub trait ProtonCore {
     ///
     async fn put_delete_contacts(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<ContactId>,
     ) -> ApiServiceResult<PutDeleteContactsResponse>;
 }

@@ -1,6 +1,8 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
-use crate::datatypes::{AttachmentMetadata, Disposition, MessageSender, MessageSenders, MimeType};
+use crate::datatypes::{
+    AttachmentMetadata, Disposition, LocalAttachmentId, MessageSender, MessageSenders, MimeType,
+};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, Error, ReplyMode};
@@ -9,10 +11,11 @@ use crate::models::{
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::datatypes::LocalId;
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -39,7 +42,7 @@ pub struct Save {
     /// Local id of the conversation this message belongs to
     conversation_id: Option<LocalId>,
     /// Address used to send the message
-    address_id: RemoteId,
+    address_id: AddressId,
     /// Draft subject
     subject: String,
     /// Unencrypted body of the draft
@@ -49,7 +52,7 @@ pub struct Save {
     #[serde(skip)]
     body: String,
     /// Attachment associated with this draft
-    attachments: Vec<LocalId>,
+    attachments: Vec<LocalAttachmentId>,
     /// Draft's mime type
     mime_type: MimeType,
     /// Parent message id, used with forward and update only.
@@ -133,7 +136,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let body_len = action.body.len() as u64;
-        let Some(address) = Address::find_by_id(action.address_id.clone(), tether)
+        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), tether)
             .await
             .inspect_err(|e| error!("Failed to load address: {e}"))?
         else {
@@ -337,8 +340,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
-            let Some(remote_id) = parent_id
-                .counterpart::<Message>(&tether)
+            let Some(remote_id) = Message::local_id_counterpart(parent_id, &tether)
                 .await
                 .inspect_err(|e| error!("Failed to resolve remote parent id: {e}"))?
             else {

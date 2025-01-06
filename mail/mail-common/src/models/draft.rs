@@ -1,6 +1,7 @@
 use crate::draft::ReplyMode;
 use crate::models::Message;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::models::ModelIdExtension;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
@@ -194,7 +195,8 @@ impl DraftMetadata {
         remote_id: &RemoteId,
         tether: &Tether,
     ) -> Result<bool, StashError> {
-        let Some(local_id) = remote_id.counterpart::<Message>(tether).await? else {
+        let Some(local_id) = Message::remote_id_counterpart(remote_id.clone(), tether).await?
+        else {
             return Ok(false);
         };
         Ok(Self::find_by_message_id(local_id, tether).await?.is_some())

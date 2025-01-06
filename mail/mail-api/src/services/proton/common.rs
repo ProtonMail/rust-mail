@@ -7,6 +7,7 @@
 //! functionality.
 //!
 
+use proton_api_core::declare_proton_id;
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 /// TODO: Document this enum.
@@ -25,3 +26,8 @@ pub enum LabelType {
     /// TODO: Document this variant.
     System = 4,
 }
+
+declare_proton_id!(
+    /// Identifier for a proton Attachment.
+    pub AttachmentId
+);

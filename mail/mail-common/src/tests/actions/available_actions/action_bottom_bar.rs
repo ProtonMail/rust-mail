@@ -1,7 +1,8 @@
 use crate::actions::BottomBarActions;
 use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
 use crate::models::{Conversation, Label, MailSettings, Message};
-use proton_core_common::datatypes::{IdCounterpart, LabelId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::create_address;
 use stash::orm::Model;
@@ -396,9 +397,7 @@ mod message {
             message.save(&tx).await.unwrap();
         }
         tx.commit().await.unwrap();
-        let current_local = test_case
-            .current_local
-            .counterpart::<Label>(&tether)
+        let current_local = Label::remote_id_counterpart(test_case.current_local.clone(), &tether)
             .await
             .unwrap()
             .unwrap();
@@ -811,9 +810,7 @@ mod conversation {
             conversation.save(&tx).await.unwrap();
         }
         tx.commit().await.unwrap();
-        let current_local = test_case
-            .current_local
-            .counterpart::<Label>(&tether)
+        let current_local = Label::remote_id_counterpart(test_case.current_local.clone(), &tether)
             .await
             .unwrap()
             .unwrap();

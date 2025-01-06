@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::common::{AuthId, UserId};
 
 /// A thread-safe, shared store.
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
@@ -18,10 +18,10 @@ pub type StoreError = anyhow::Error;
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
     /// The user's ID.
-    pub user_id: RemoteId,
+    pub user_id: UserId,
 
     /// The session ID.
-    pub session_id: RemoteId,
+    pub session_id: AuthId,
 
     /// The 2FA mode.
     pub tfa_mode: TfaMode,

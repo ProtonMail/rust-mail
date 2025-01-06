@@ -7,12 +7,13 @@ use bytes::Buf;
 use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
 use crate::{
-    datatypes::RemoteId,
     models::{Contact, ContactEmail},
     ContactError,
 };
+use crate::{CoreContextResult, UserContext};
 use ical::VcardParser;
 pub use manager::*;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::{auth::UserKeySecret, session::CoreSession};
 use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
@@ -28,8 +29,6 @@ use stash::{
 };
 use thiserror::Error;
 use tracing::{debug, Level};
-
-use crate::{CoreContextResult, UserContext};
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -58,7 +57,7 @@ pub enum KeyHandlingError {
     #[error("Failed to store user keys in the cache {0}")]
     UserKeyCacheStore(#[from] CryptoError),
     #[error("No address found for id {0}")]
-    NoAddress(RemoteId),
+    NoAddress(AddressId),
     #[error("Failed to unlock at least one address key, but the user has {0} address keys")]
     AddressKeyUnlock(usize),
     #[error("Database Error: {0}")]
@@ -85,7 +84,8 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp_provider`  - The pgp provider instance from `proton_crypto`.
+    /// * `conn`          - The database connection to load the keys from database.
     /// * `secret_loader` - The struct providing the access to the secret needed to unlock the user keys
     ///
     /// # Errors
@@ -93,10 +93,11 @@ impl UserContext {
     pub async fn unlocked_user_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_loader: &Secret,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         self.key_manager
-            .user_keys(pgp_provider, secret_loader, self)
+            .user_keys(pgp_provider, conn, secret_loader, &self.user_id)
             .await
     }
 
@@ -106,20 +107,22 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp_provider`   - The pgp provider instance from `proton_crypto`.
+    /// * `conn`           - The database connection to load the keys from database.
     /// * `secret_load_fn` - The struct providing the access to the secret needed to unlock the user keys
-    /// * `address_id` - The ID of the address key
+    /// * `address_id`     - The ID of the address key
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn unlocked_address_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_loader: &Secret,
-        address_id: &RemoteId,
+        address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         self.key_manager
-            .address_keys(pgp_provider, secret_loader, self, address_id)
+            .address_keys(pgp_provider, conn, secret_loader, &self.user_id, address_id)
             .await
     }
 

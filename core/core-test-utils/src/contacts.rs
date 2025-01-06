@@ -1,5 +1,5 @@
 use crate::test_context::TestContext;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::requests::PutDeleteContacts;
 use proton_api_core::services::proton::response_data::{
     ApiErrorInfo, ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail,
@@ -76,7 +76,7 @@ impl TestContext {
     ///
     /// * `contact_ids` - The contacts that should be delted.
     ///
-    pub async fn mock_delete_contacts(&self, contact_ids: Vec<RemoteId>) {
+    pub async fn mock_delete_contacts(&self, contact_ids: Vec<ContactId>) {
         Mock::given(method("PUT"))
             .and(path("/api/contacts/delete"))
             .and(body_json(PutDeleteContacts {

@@ -1,6 +1,5 @@
 //! Implementation of the [`AuthStore`](proton-api-core::auth::Store) over the database.
 
-use crate::datatypes::RemoteId;
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::KeyChain;
@@ -8,6 +7,7 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::store::{AuthInfo, Store, StoreError, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;
@@ -20,8 +20,8 @@ use tracing::{error, info};
 pub struct AuthStore {
     stash: Stash,
     key_chain: Arc<dyn KeyChain>,
-    user_id: Option<RemoteId>,
-    session_id: Option<RemoteId>,
+    user_id: Option<UserId>,
+    session_id: Option<AuthId>,
     name_or_addr: Option<String>,
 }
 
@@ -29,8 +29,8 @@ impl AuthStore {
     pub fn new(
         stash: &Stash,
         key_chain: Arc<dyn KeyChain>,
-        user_id: Option<RemoteId>,
-        session_id: Option<RemoteId>,
+        user_id: Option<UserId>,
+        session_id: Option<AuthId>,
     ) -> Self {
         Self {
             key_chain,
@@ -130,8 +130,8 @@ impl Store for AuthStore {
         info!("setting auth in store");
 
         // Get the user and session IDs from the incoming auth session.
-        let user_id = RemoteId::from(auth.user_id().context("missing user ID")?);
-        let session_id = RemoteId::from(auth.uid().context("missing session ID")?);
+        let user_id = UserId::from(auth.user_id().context("missing user ID")?);
+        let session_id = AuthId::from(auth.uid().context("missing session ID")?);
         let tokens = auth.tokens().context("missing tokens")?;
 
         // Get the encryption key.
@@ -297,7 +297,7 @@ impl Store for AuthStore {
         if let Some(id) = &self.session_id {
             let mut tether = self.stash.connection();
             let tx = tether.transaction().await?;
-            CoreSession::delete_by_remote_id(id.to_owned(), &tx).await?;
+            CoreSession::delete_by_id(id.clone(), &tx).await?;
             tx.commit().await?;
         }
 

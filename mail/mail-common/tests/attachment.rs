@@ -1,7 +1,7 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_mail_common::cache::CacheAttachmentKey;
-use proton_mail_common::datatypes::{Disposition, SystemLabelId};
+use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::attachment::{
@@ -14,7 +14,6 @@ use stash::stash::Tether;
 use std::fs;
 
 #[tokio::test]
-#[ignore]
 async fn test_load_attachment_buffer() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
@@ -45,7 +44,7 @@ async fn test_load_attachment_buffer() {
         .expect("failed to load conversation")
         .unwrap();
 
-    let attachment_local_id = local_conversation.local_id.unwrap();
+    let attachment_local_id = local_conversation.attachments_metadata[0].local_id.unwrap();
 
     // Cache is empty
     assert!(user_ctx.attachements_cache().is_empty());
@@ -69,7 +68,6 @@ async fn test_load_attachment_buffer() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn load_attachment_from_cache() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
@@ -81,6 +79,8 @@ async fn load_attachment_from_cache() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_get_attachment_metadata(test_attachment.clone())
+        .await;
+    ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
         .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -97,7 +97,8 @@ async fn load_attachment_from_cache() {
         .await
         .expect("failed to load conversation")
         .unwrap();
-    let attachment_local_id = local_conversation.local_id.unwrap();
+
+    let attachment_local_id = local_conversation.attachments_metadata[0].local_id.unwrap();
 
     // Add another value into cache
     let key = CacheAttachmentKey::new(attachment_local_id, "foo");
@@ -201,7 +202,7 @@ async fn load_attachment_content_from_cache() {
 }
 
 async fn get_attachment(
-    id: LocalId,
+    id: LocalAttachmentId,
     attachment: &ApiAttachment,
     _interface: &Tether,
 ) -> Attachment {

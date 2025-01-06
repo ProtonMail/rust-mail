@@ -202,13 +202,14 @@ impl proton_action_queue::action::Handler for SendHandler {
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err}"))?;
-        tx.commit().await?;
 
         // Unlock sender address keys
         let address_keys = context
-            .unlocked_address_keys(&pgp_provider, &message_metadata.remote_address_id)
+            .unlocked_address_keys(&pgp_provider, &tx, &message_metadata.remote_address_id)
             .await
             .inspect_err(|err| error!("Failed to load address key for sending: {err}"))?;
+
+        tx.commit().await?;
 
         // TODO(ET-1407): Load the metadata of the attached attachments.
         let attachments = Vec::new();

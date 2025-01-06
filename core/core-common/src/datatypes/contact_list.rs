@@ -1,4 +1,5 @@
 use super::avatar::AvatarInformation;
+use crate::datatypes::{LocalContactEmailId, LocalContactId};
 use crate::{
     datatypes::LocalId,
     models::{Contact, ContactEmail},
@@ -73,7 +74,7 @@ impl From<ContactGroupItem> for ContactItemType {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactItem {
     /// The field represent the unique identifier of the contact in the database
-    pub local_id: LocalId,
+    pub local_id: LocalContactId,
 
     /// The field represent the name of the contact
     pub name: String,
@@ -124,7 +125,7 @@ pub struct ContactGroupItem {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactEmailItem {
     /// The field represent the unique identifier of the contact email in the database
-    pub local_id: LocalId,
+    pub local_id: LocalContactEmailId,
 
     /// The field represent the email of the contact
     pub email: String,

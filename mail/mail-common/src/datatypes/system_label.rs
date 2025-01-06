@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
 
@@ -44,7 +45,7 @@ impl SystemLabel {
     }
 
     pub fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
-        let remote_id = label_id?.parse::<u8>().ok()?;
+        let remote_id = label_id?.as_ref().parse::<u8>().ok()?;
 
         match remote_id {
             x if x == Self::Inbox as u8 => Some(Self::Inbox),
@@ -104,12 +105,12 @@ impl SystemLabel {
         LabelId::from(self.to_string())
     }
 
-    pub fn remote_id(&self) -> RemoteId {
-        self.label_id().into_inner()
+    pub fn remote_id(&self) -> LabelId {
+        self.label_id()
     }
 
-    pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
-        self.remote_id().counterpart::<Label>(tether).await
+    pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalLabelId>, StashError> {
+        Label::remote_id_counterpart(self.remote_id(), tether).await
     }
 }
 

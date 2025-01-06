@@ -1,7 +1,7 @@
 use bytes::Bytes;
 
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::{LabelId, RemoteId};
 use proton_api_core::services::proton::muon::serde_to_query;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{DELETE, GET, PATCH, POST, PUT};
@@ -23,7 +23,7 @@ impl ProtonMail for Proton {
         Ok(())
     }
 
-    async fn get_attachment(&self, attachment_id: RemoteId) -> ApiServiceResult<Bytes> {
+    async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}")
             .send_with(self)
             .await?
@@ -34,7 +34,7 @@ impl ProtonMail for Proton {
 
     async fn get_attachment_metadata(
         &self,
-        attachment_id: RemoteId,
+        attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}/metadata")
             .send_with(self)
@@ -88,7 +88,7 @@ impl ProtonMail for Proton {
 
     async fn get_labels_by_ids(
         &self,
-        label_ids: Vec<RemoteId>,
+        label_ids: Vec<LabelId>,
     ) -> ApiServiceResult<GetLabelsResponse> {
         Ok(POST!("{CORE_V4}/labels/by-ids")
             .body_json(GetLabelsByIdsOptions { label_ids })?
@@ -154,7 +154,7 @@ impl ProtonMail for Proton {
     async fn put_conversations_delete(
         &self,
         ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsDeleteResponse> {
         Ok(PUT!("{MAIL_V4}/conversations/delete")
             .body_json(PutConversationsDeleteRequest { ids, label_id })?
@@ -167,7 +167,7 @@ impl ProtonMail for Proton {
     async fn put_conversations_label(
         &self,
         ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutConversationsLabelResponse> {
         Ok(PUT!("{MAIL_V4}/conversations/label")
@@ -198,7 +198,7 @@ impl ProtonMail for Proton {
     async fn put_conversations_unlabel(
         &self,
         ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnlabelResponse> {
         Ok(PUT!("{MAIL_V4}/conversations/unlabel")
             .body_json(PutConversationsUnlabelRequest { ids, label_id })?
@@ -222,7 +222,7 @@ impl ProtonMail for Proton {
 
     async fn put_label(
         &self,
-        label_id: RemoteId,
+        label_id: LabelId,
         body: PutLabelRequest,
     ) -> ApiServiceResult<PutLabelResponse> {
         Ok(PUT!("{CORE_V4}/labels/{label_id}")
@@ -236,7 +236,7 @@ impl ProtonMail for Proton {
     async fn put_messages_delete(
         &self,
         ids: Vec<RemoteId>,
-        label_id: Option<RemoteId>,
+        label_id: Option<LabelId>,
     ) -> ApiServiceResult<PutMessagesDeleteResponse> {
         Ok(PUT!("{MAIL_V4}/messages/delete")
             .body_json(PutMessagesDeleteRequest { ids, label_id })?
@@ -249,7 +249,7 @@ impl ProtonMail for Proton {
     async fn put_messages_label(
         &self,
         ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutMessagesLabelResponse> {
         Ok(PUT!("{MAIL_V4}/messages/label")
@@ -280,7 +280,7 @@ impl ProtonMail for Proton {
     async fn put_messages_unlabel(
         &self,
         ids: Vec<RemoteId>,
-        label_id: RemoteId,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutMessagesUnlabelResponse> {
         Ok(PUT!("{MAIL_V4}/messages/unlabel")
             .body_json(PutMessagesUnlabelRequest { ids, label_id })?

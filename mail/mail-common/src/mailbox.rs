@@ -2,16 +2,17 @@ mod attachments;
 
 pub mod decrypted_message;
 
-use crate::datatypes::ViewMode;
+use crate::datatypes::{LocalAttachmentId, ViewMode};
 use crate::models::{Conversation, Label, Message};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};
@@ -21,11 +22,11 @@ use tracing::{debug, error};
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
     #[error("Could not find label with local id '{0}'")]
-    LabelNotFound(LocalId),
+    LabelNotFound(LocalLabelId),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(LocalId),
+    LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(LocalId),
+    AttachmentNotFound(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(#[from] AttachmentDecryptionError),
     #[error("Attachment decryption failed: {0}")]
@@ -69,12 +70,15 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 #[derive(Clone)]
 pub struct Mailbox {
     user_ctx: Arc<MailUserContext>,
-    label_id: LocalId,
+    label_id: LocalLabelId,
     view_mode: ViewMode,
 }
 
 impl Mailbox {
-    pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {
+    pub async fn new(
+        user_ctx: Arc<MailUserContext>,
+        label_id: LocalLabelId,
+    ) -> MailboxResult<Self> {
         let tether = user_ctx.user_stash().connection();
         let Some(label) = Label::load(label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
@@ -93,9 +97,7 @@ impl Mailbox {
         label_id: LabelId,
     ) -> MailboxResult<Self> {
         let tether = user_ctx.user_stash().connection();
-        let label = Label::find_by_id(RemoteId::from(label_id), &tether)
-            .await?
-            .unwrap();
+        let label = Label::find_by_remote_id(label_id, &tether).await?.unwrap();
         let view_mode = label.view_mode(&tether).await?;
         debug!(
             "Creating Mailbox ({}, view_mode={:?})",
@@ -124,7 +126,7 @@ impl Mailbox {
         self.user_ctx.user_stash()
     }
 
-    pub fn label_id(&self) -> LocalId {
+    pub fn label_id(&self) -> LocalLabelId {
         self.label_id
     }
 

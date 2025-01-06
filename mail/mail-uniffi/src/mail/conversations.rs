@@ -376,7 +376,7 @@ pub async fn conversations_for_label(
     uniffi_async(async move {
         let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            ContextualConversation::in_label(RealLocalId::from(label_id), &tether)
+            ContextualConversation::in_label(label_id.into(), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -560,7 +560,7 @@ pub async fn paginate_conversations_for_label(
     uniffi_async(async move {
         let real_paginator = RealConversation::paginate_in_label(
             &context,
-            RealLocalId::from(label_id),
+            label_id.into(),
             50,
             RealPaginatorFilter::from(filter),
             true,

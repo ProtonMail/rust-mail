@@ -15,7 +15,7 @@ use crate::widgets::{
 };
 use anyhow::{anyhow, Context};
 use futures::FutureExt;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody};
 use proton_mail_common::draft::ReplyMode;
@@ -68,7 +68,7 @@ impl MessagesState {
     }
     async fn new_impl(
         ctx: Arc<MailUserContext>,
-        label_id: LocalId,
+        label_id: LocalLabelId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let (paginator, command) = Paginator::new(
             || {
@@ -130,7 +130,7 @@ impl MessagesState {
     }
     async fn from_conversation_impl(
         ctx: Arc<MailUserContext>,
-        label_id: LocalId,
+        label_id: LocalLabelId,
         conversation_id: LocalId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
@@ -694,7 +694,7 @@ fn label_message(
     })
 }
 
-fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalLabelId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {

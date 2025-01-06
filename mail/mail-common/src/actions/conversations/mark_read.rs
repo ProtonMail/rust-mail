@@ -6,7 +6,8 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -17,7 +18,7 @@ pub struct MarkRead(GenericActionData<Conversation>);
 
 impl MarkRead {
     /// Create a new action which marks the conversations with `ids` as read.
-    pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
         Self(GenericActionData::new(label_id, ids))
     }
@@ -101,7 +102,7 @@ impl proton_action_queue::action::Handler for Handler {
 
             let mut conn = stash.connection();
             let tx = conn.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
+            let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Conversation::mark_unread(action.0.label_id, local_ids, &tx)
                 .await

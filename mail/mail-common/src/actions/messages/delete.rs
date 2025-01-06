@@ -6,7 +6,8 @@ use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -17,7 +18,7 @@ pub struct Delete(GenericActionData<Message>);
 
 impl Delete {
     /// Create a new instance which marks the messages as deleted.
-    pub fn new(label_id: LocalId, message_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, message_ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self(GenericActionData::new(label_id, message_ids))
     }
 }
@@ -81,7 +82,7 @@ impl ActionHandler for Handler {
             .into_iter()
             .map(Into::into)
             .collect();
-        let label_id = action.0.remote_label_id.clone().map(|x| x.into_inner());
+        let label_id = action.0.remote_label_id.clone();
         let response = api
             .put_messages_delete(message_ids, label_id)
             .await?
@@ -94,7 +95,7 @@ impl ActionHandler for Handler {
 
             let mut conn = stash.connection();
             let tx = conn.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
+            let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Message::mark_undeleted(local_ids, &tx)
                 .await

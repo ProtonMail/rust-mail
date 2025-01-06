@@ -1,8 +1,9 @@
+use proton_api_core::services::proton::prelude::AddressId;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::params;
 
 use crate::{
-    datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, RemoteId},
+    datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType},
     models::{Address, ModelExtension},
     tests::common::new_core_test_connection,
 };
@@ -30,7 +31,7 @@ async fn count_test() {
 fn create_test_address(id: usize) -> Address {
     Address {
         local_id: None,
-        remote_id: Some(RemoteId::from(format!("address_id_{id}"))),
+        remote_id: Some(AddressId::from(format!("address_id_{id}"))),
         email: format!("hello_{id}@mail.com"),
         send: true,
         receive: false,

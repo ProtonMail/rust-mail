@@ -30,8 +30,8 @@
 //! way.
 //!
 
-use crate::datatypes::RemoteId;
 use crate::models::{Address, Contact, ContactEmail};
+use proton_api_core::services::proton::common::{AddressId, ContactEmailId, ContactId};
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
@@ -68,7 +68,7 @@ impl From<ApiAction> for Action {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEmailEvent {
-    pub remote_id: RemoteId,
+    pub remote_id: ContactEmailId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -90,7 +90,7 @@ impl From<ApiContactEmailEvent> for ContactEmailEvent {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEvent {
-    pub remote_id: RemoteId,
+    pub remote_id: ContactId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -113,7 +113,7 @@ impl From<ApiContactEvent> for ContactEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressEvent {
     /// The remote ID of the address.
-    pub remote_id: RemoteId,
+    pub remote_id: AddressId,
 
     /// The action that was taken on the address.
     pub action: Action,

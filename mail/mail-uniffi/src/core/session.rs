@@ -1,14 +1,14 @@
 use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
 use std::{borrow::Borrow, sync::Arc};
 
+use crate::core::datatypes::AvatarInformation;
+use proton_api_core::services::proton::common::AuthId;
 use proton_core_common::{
-    datatypes::{PasswordMode, RemoteId, TfaStatus},
+    datatypes::{PasswordMode, TfaStatus},
     db::account::{CoreAccount, CoreSession},
 };
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use uniffi::{Enum, Record};
-
-use crate::core::datatypes::AvatarInformation;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -178,8 +178,8 @@ impl From<CoreAccountState> for StoredAccountState {
 
 impl From<&CoreAccountState> for StoredAccountState {
     fn from(value: &CoreAccountState) -> Self {
-        fn from_inner(value: &[RemoteId]) -> Vec<String> {
-            value.iter().cloned().map(RemoteId::into_inner).collect()
+        fn from_inner(value: &[AuthId]) -> Vec<String> {
+            value.iter().cloned().map(AuthId::into_inner).collect()
         }
 
         match value {

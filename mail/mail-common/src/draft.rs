@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::actions::draft;
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
-use crate::datatypes::{Disposition, MimeType};
+use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
@@ -18,12 +18,13 @@ use futures::future::join3;
 use proton_action_queue::action::Metadata;
 use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{LocalId, RemoteId};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
@@ -46,9 +47,9 @@ pub enum Error {
     #[error("No addresses found for current user")]
     UserHasNoAddresses,
     #[error("User Address {0} not found")]
-    AddressNotFound(RemoteId),
+    AddressNotFound(AddressId),
     #[error("User Address {0} has no primary key")]
-    AddressWithoutPrimaryKey(RemoteId),
+    AddressWithoutPrimaryKey(AddressId),
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalId),
     #[error("Create Metadata not found for {0}")]
@@ -56,7 +57,7 @@ pub enum Error {
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalId),
     #[error("Attachment {0} does not have key packets")]
-    AttachmentDoesNotHaveKeyPackets(LocalId),
+    AttachmentDoesNotHaveKeyPackets(LocalAttachmentId),
     #[error("Can't reply or forward to a draft message {0}")]
     ReplyOrForwardToDraft(LocalId),
     #[error("Metadata with Id {0} does not exist")]
@@ -166,7 +167,7 @@ pub struct Draft {
     /// BCC recipients addresses
     pub bcc_list: RecipientList,
     /// Address used to send the message
-    pub address_id: RemoteId,
+    pub address_id: AddressId,
     /// Draft subject
     pub subject: String,
     /// Unencrypted body of the draft.
@@ -406,7 +407,7 @@ impl Draft {
 
         // Find out which address this message has and use that to craft te reply.
         let Some(address) =
-            Address::find_by_id(source_message.remote_address_id.clone(), &tether).await?
+            Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether).await?
         else {
             return Err(Error::AddressNotFound(source_message.remote_address_id.clone()).into());
         };
@@ -543,7 +544,7 @@ impl Draft {
     pub async fn remote_create(
         context: &MailUserContext,
         session: &Session,
-        address_id: RemoteId,
+        address_id: AddressId,
         action: DraftAction,
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
@@ -600,7 +601,7 @@ impl Draft {
     pub async fn remote_update(
         context: &MailUserContext,
         session: &Session,
-        address_id: RemoteId,
+        address_id: AddressId,
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
         message_body: &str,

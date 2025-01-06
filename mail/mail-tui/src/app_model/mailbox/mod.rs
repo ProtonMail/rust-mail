@@ -11,7 +11,7 @@ use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 pub use model::Model;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Label, Message as MailMessage};
 use proton_mail_common::Mailbox;
@@ -25,7 +25,7 @@ pub enum Message {
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
-    SelectLabel(LocalId),
+    SelectLabel(LocalLabelId),
     ConversationState(ConversationMessage),
     LabelRefreshed(Label),
     #[allow(clippy::enum_variant_names)]
@@ -36,10 +36,10 @@ pub enum Message {
     Composer(ComposerMessage),
 }
 pub struct LabelAs {
-    pub source_label_id: LocalId,
+    pub source_label_id: LocalLabelId,
     pub item_ids: Vec<LocalId>,
-    pub selected_label_ids: Vec<LocalId>,
-    pub partially_selected_label_ids: Vec<LocalId>,
+    pub selected_label_ids: Vec<LocalLabelId>,
+    pub partially_selected_label_ids: Vec<LocalLabelId>,
     pub must_archive: bool,
 }
 
@@ -48,7 +48,7 @@ pub enum ConversationMessage {
     MarkConversationRead(LocalId),
     MarkConversationUnread(LocalId),
     DeleteConversation(LocalId),
-    MoveConversation(LocalId, LocalId),
+    MoveConversation(LocalId, LocalLabelId),
     LabelConversation(Box<LabelAs>),
     StarConversation(LocalId),
     UnstarConversation(LocalId),
@@ -74,7 +74,7 @@ pub enum MessageMessage {
     Refreshed(Vec<MailMessage>),
     NextPage(Vec<MailMessage>),
     DeleteMessage(LocalId),
-    MoveMessage(LocalId, LocalId),
+    MoveMessage(LocalId, LocalLabelId),
     LabelMessage(Box<LabelAs>), // TODO: Handle selection
     MarkMessageRead(LocalId),
     MarkMessageUnread(LocalId),

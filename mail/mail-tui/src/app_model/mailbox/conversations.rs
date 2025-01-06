@@ -10,7 +10,7 @@ use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use futures::FutureExt;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{
     Conversation, ConversationDataSource, Label, MailSettings, PaginatorFilter,
@@ -50,7 +50,7 @@ impl ConversationsState {
     }
     async fn new_impl(
         ctx: Arc<MailUserContext>,
-        label_id: LocalId,
+        label_id: LocalLabelId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let (paginator, command) = Paginator::new(
             || {
@@ -367,7 +367,7 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
 fn move_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalId,
-    label_id: LocalId,
+    label_id: LocalLabelId,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();

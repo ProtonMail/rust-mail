@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core/*", "mail/*", "xtask"]
+members = ["core/*", "crypto/*", "mail/*", "xtask"]
 package.edition = "2021"
 
 [workspace.dependencies]

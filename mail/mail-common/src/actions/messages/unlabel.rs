@@ -7,7 +7,8 @@ use proton_action_queue::action::{
 };
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -18,7 +19,7 @@ pub struct Unlabel(GenericActionData<Message>);
 
 impl Unlabel {
     /// Create a new instance which remove `label_id` from the messages with `message_ids`
-    pub fn new(label_id: LocalId, message_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, message_ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self(GenericActionData::new(label_id, message_ids))
     }
 }
@@ -81,12 +82,7 @@ impl ActionHandler for Handler {
             .into_iter()
             .map(Into::into)
             .collect();
-        let label_id = action
-            .0
-            .remote_label_id
-            .clone()
-            .expect("Should be set")
-            .into();
+        let label_id = action.0.remote_label_id.clone().expect("Should be set");
         let response = api
             .put_messages_unlabel(message_ids, label_id)
             .await?
@@ -99,7 +95,7 @@ impl ActionHandler for Handler {
 
             let mut conn = stash.connection();
             let tx = conn.transaction().await?;
-            let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
+            let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Message::apply_label(action.0.label_id, local_ids, &tx)
                 .await

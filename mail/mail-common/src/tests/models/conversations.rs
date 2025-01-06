@@ -9,12 +9,12 @@ use crate::datatypes::{
 use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
-use proton_core_common::datatypes::{IdCounterpart, LabelId};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
@@ -551,13 +551,10 @@ mod available_actions {
         }
         tx.commit().await.unwrap();
 
-        let view = Label::find_by_id(
-            test_case.view.remote_id.clone().unwrap().into_inner(),
-            &tether,
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let view = Label::find_by_remote_id(test_case.view.remote_id.clone().unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
 
         let result = Conversation::available_actions(view, conversation_ids, &tether).await;
 
@@ -587,7 +584,7 @@ mod available_move_to_actions {
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conversation, label, rid, search::remote_counterpart};
+    use proton_mail_test_utils::{conversation, label, rid};
     use stash::stash::Tether;
     use std::sync::LazyLock;
     use test_case::test_case;
@@ -621,9 +618,10 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::SystemFolder(action) => ExpectedSystemFolder {
-                    label_id: remote_counterpart::<Label>(action.local_id, tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
-                        .into(),
+                        .unwrap()
+                        .unwrap(),
                     name: action.name,
                 },
                 _ => panic!("ExpectedSystemFolder::new called with non-SystemFolder action"),
@@ -642,13 +640,10 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::CustomFolder(action) => ExpectedCustomFolder {
-                    label_id: action
-                        .local_id
-                        .counterpart::<Label>(tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
                         .unwrap()
-                        .unwrap()
-                        .into(),
+                        .unwrap(),
                     name: action.name,
                     children: stream::iter(action.children)
                         .then(|child| async move {
@@ -921,7 +916,7 @@ mod available_move_to_actions {
         }
         tx.commit().await.unwrap();
 
-        let view = Label::find_by_id(view.remote_id.clone().unwrap().into_inner(), &conn)
+        let view = Label::find_by_remote_id(view.remote_id.clone().unwrap(), &conn)
             .await
             .unwrap()
             .unwrap();
@@ -1048,7 +1043,7 @@ async fn test_unknown_conversation_messages_returns_error() {
 #[tokio::test]
 async fn test_conversation_create_starred() {
     let conv_label = ApiConversationLabel {
-        id: LabelId::starred().into(),
+        id: LabelId::starred(),
         context_num_unread: 0,
         context_num_messages: 0,
         context_time: 0,
@@ -1250,12 +1245,10 @@ async fn test_conversation_create_with_attachment() {
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
 
     assert_eq!(
         db_conversation.attachments_metadata[0],
@@ -1305,12 +1298,10 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("should have value");
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
 
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
@@ -1337,7 +1328,7 @@ async fn test_conversation_update() {
             context_snooze_time: 21,
         }],
         vec![ApiAttachmentMetadata {
-            id: ApiRemoteId::from("ATTACHMENT2"),
+            id: AttachmentId::from("ATTACHMENT2"),
             size: 224515,
             name: "Attachment.json".to_owned(),
             mime_type: attachment::MimeType::application_json().to_string(),
@@ -1415,12 +1406,10 @@ async fn test_conversation_update() {
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
-    local_conversation2.attachments_metadata[0].local_id = conv_update.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation2.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv_update.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &tether)
@@ -1439,7 +1428,7 @@ async fn test_conversation_undelete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
-    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), &tether)
+    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail(), &tether)
         .await
         .unwrap()
         .unwrap()
@@ -1454,8 +1443,8 @@ async fn test_conversation_undelete_all_mail() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(all_mail_label, vec![local_conv_id1, local_conv_id2], &tx)
         .await
@@ -1471,20 +1460,14 @@ async fn test_conversation_undelete_all_mail() {
         let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check conversation label2 values
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -1497,20 +1480,14 @@ async fn test_conversation_undelete_all_mail() {
 
         // Check label1
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1.clone()).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check label2
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2.clone()).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -1541,8 +1518,8 @@ async fn test_conversation_delete_all_mail() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(all_mail_label, vec![local_conv_id], &tx)
@@ -1566,7 +1543,7 @@ async fn test_conversation_delete_all_mail() {
         {
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
+                .get(&MY_LABEL_ID1.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1,);
@@ -1576,7 +1553,7 @@ async fn test_conversation_delete_all_mail() {
         {
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
+                .get(&MY_LABEL_ID2.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1,);
@@ -1593,12 +1570,9 @@ async fn test_conversation_delete_all_mail() {
             let (unread, total) = message_counts_for_conversation(
                 &state.messages,
                 &state.conversations[0].remote_id.clone().unwrap(),
-                &MY_LABEL_ID1.clone().into(),
+                &MY_LABEL_ID1.clone(),
             );
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1.clone()).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - unread);
             assert_eq!(label_counts.total, start_label_counts.total - total);
@@ -1608,12 +1582,9 @@ async fn test_conversation_delete_all_mail() {
             let (unread, total) = message_counts_for_conversation(
                 &state.messages,
                 &state.conversations[0].remote_id.clone().unwrap(),
-                &MY_LABEL_ID2.clone().into(),
+                &MY_LABEL_ID2.clone(),
             );
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2.clone()).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - unread);
             assert_eq!(label_counts.total, start_label_counts.total - total);
@@ -1672,8 +1643,8 @@ async fn test_conversation_delete() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone()).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone()).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -1705,7 +1676,7 @@ async fn test_conversation_delete() {
         {
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
+                .get(&MY_LABEL_ID1.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
@@ -1715,7 +1686,7 @@ async fn test_conversation_delete() {
         {
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
+                .get(&MY_LABEL_ID2.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
@@ -1732,22 +1703,16 @@ async fn test_conversation_delete() {
             let (unread, total) = message_counts_for_conversation(
                 &state.messages,
                 &state.conversations[0].remote_id.clone().unwrap(),
-                &MY_LABEL_ID1.clone().into(),
+                &MY_LABEL_ID1,
             );
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - unread);
             assert_eq!(label_counts.total, start_label_counts.total - total);
         }
         // Check label2 - should be unchanged.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -1783,10 +1748,7 @@ async fn test_conversation_delete() {
         }
         // Check conversation label2 values, should be missing one conversation.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total - 1);
@@ -1805,10 +1767,7 @@ async fn test_conversation_delete() {
         }
         // Check label2 - should be missing two messages.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total - 2);
@@ -1833,8 +1792,8 @@ async fn test_conversation_undelete() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -1870,20 +1829,14 @@ async fn test_conversation_undelete() {
         let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, should match original state.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check conversation label2 values - should be unchanged.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -1896,20 +1849,14 @@ async fn test_conversation_undelete() {
 
         // Check label1 - should match original state.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check label2 - should be unchanged.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -1926,12 +1873,12 @@ async fn test_conversation_counts() {
     let labels = create_labels(&mut tether).await;
     let counts = vec![
         ConversationCount {
-            label_id: MY_LABEL_ID1.clone().into(),
+            label_id: MY_LABEL_ID1.clone(),
             total: 20,
             unread: 4,
         },
         ConversationCount {
-            label_id: MY_LABEL_ID2.clone().into(),
+            label_id: MY_LABEL_ID2.clone(),
             total: 400,
             unread: 124,
         },
@@ -1959,7 +1906,7 @@ async fn test_conversation_counts() {
     assert!(db_labels.contains(&label_conv_counter));
 
     assert_eq!(db_labels.len(), 2);
-    assert_eq!(db_labels[0].remote_id, counts[0].label_id.clone().into());
+    assert_eq!(db_labels[0].remote_id.as_ref(), Some(&counts[0].label_id));
     assert_eq!(db_labels[0].total_conv, counts[0].total);
     assert_eq!(db_labels[0].unread_conv, counts[0].unread);
 }
@@ -1978,8 +1925,8 @@ async fn test_conversation_mark_read_no_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
@@ -2001,20 +1948,14 @@ async fn test_conversation_mark_read_no_message_metadata() {
         let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, conversation should have been removed.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check conversation label2 values - should be unchanged.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -2035,8 +1976,8 @@ async fn test_conversation_mark_read() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
@@ -2058,20 +1999,14 @@ async fn test_conversation_mark_read() {
         let conv_counts = conv_counts_as_map(&tether).await;
         // Check conversation label1 values, conversation should have been removed.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check conversation label2 values - should be unchanged.
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -2087,22 +2022,16 @@ async fn test_conversation_mark_read() {
             let (unread, _) = message_counts_for_conversation(
                 &state.messages,
                 state.conversations[0].remote_id.as_ref().unwrap(),
-                &MY_LABEL_ID1.clone().into(),
+                &MY_LABEL_ID1,
             );
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check label2 - should be unchanged.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -2125,8 +2054,8 @@ async fn test_conversation_mark_unread_no_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::mark_read(std::iter::once(local_conv_id), &tx)
         .await
@@ -2151,7 +2080,7 @@ async fn test_conversation_mark_unread_no_metadata() {
         {
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
+                .get(&MY_LABEL_ID1.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread);
@@ -2161,7 +2090,7 @@ async fn test_conversation_mark_unread_no_metadata() {
             // Label2 should have no unread messages since the message in conv 1 is not the latest.
             let start_label_counts = state_map
                 .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
+                .get(&MY_LABEL_ID2.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, start_label_counts.unread - 1);
@@ -2190,8 +2119,8 @@ async fn test_conversation_mark_unread() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
 
     let tx = tether.transaction().await.unwrap();
     // First mark all msgs as unread
@@ -2229,7 +2158,7 @@ async fn test_conversation_mark_unread() {
     assert_eq!(messages.len(), 1);
     let message = &messages[0];
 
-    assert_eq!(&message.label_ids[0], &MY_LABEL_ID1.clone().into());
+    assert_eq!(message.label_ids[0], *MY_LABEL_ID1);
 
     // There should be 1 unread message.
     assert_eq!(db_conversation.num_unread, 1);
@@ -2240,19 +2169,13 @@ async fn test_conversation_mark_unread() {
     {
         let conv_counts = conv_counts_as_map(&tether).await;
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, 0);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         {
-            let start_label_counts = state_map
-                .conversation_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, 0);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -2265,20 +2188,14 @@ async fn test_conversation_mark_unread() {
 
         // Check label1
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID1.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
             assert_eq!(label_counts.unread, 1);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check label2 - should be unchanged.
         {
-            let start_label_counts = state_map
-                .message_counts
-                .get(&MY_LABEL_ID2.clone().into())
-                .unwrap();
+            let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
             assert_eq!(label_counts.unread, 0);
             assert_eq!(label_counts.total, start_label_counts.total);
@@ -2299,7 +2216,7 @@ async fn test_conversation_label_with_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2358,7 +2275,7 @@ async fn test_conversation_double_label_with_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = conn.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2414,9 +2331,7 @@ async fn test_conversation_label_partially() {
     let mut state = new_test_label_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let mut state = state.clone();
-    state.messages[1]
-        .label_ids
-        .push(MY_LABEL_ID1.clone().into());
+    state.messages[1].label_ids.push(MY_LABEL_ID1.clone());
     state.conversations[0].labels.push(
         ApiConversationLabel {
             id: MY_LABEL_ID1.clone(),
@@ -2436,7 +2351,7 @@ async fn test_conversation_label_partially() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2496,7 +2411,7 @@ async fn test_conversation_label_without_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = conn.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2544,7 +2459,7 @@ async fn test_conversation_double_label_without_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = conn.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2597,7 +2512,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2651,7 +2566,7 @@ async fn test_conversation_unlabel_with_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = conn.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2700,7 +2615,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = conn.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2789,7 +2704,7 @@ async fn test_conversation_watcher() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
     let tx = tether.transaction().await.unwrap();
     Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
@@ -2830,7 +2745,7 @@ async fn test_contextual_conversation_messages() {
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
     let handle = ContextualConversation::watch(&stash).unwrap();
     let watch_result = &handle.receiver;

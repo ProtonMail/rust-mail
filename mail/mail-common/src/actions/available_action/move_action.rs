@@ -8,7 +8,9 @@ use crate::{
     models::Label,
     AppError,
 };
-use proton_core_common::datatypes::{IdCounterpart, LabelId, LocalId, RemoteId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use stash::orm::Model;
 use stash::stash::Tether;
 
@@ -159,7 +161,7 @@ impl MoveAction {
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct MovableSystemFolderAction {
     /// The database id of the label.
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
 
     /// The name of the system folder embedded as finite enum list.
     pub name: MovableSystemFolder,
@@ -174,7 +176,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn inbox(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = RemoteId::counterpart::<Label>(&LabelId::inbox().into_inner(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::inbox(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -184,7 +186,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn archive(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = RemoteId::counterpart::<Label>(&LabelId::archive().into_inner(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::archive(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -194,7 +196,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn trash(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = RemoteId::counterpart::<Label>(&LabelId::trash().into_inner(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::trash(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -204,7 +206,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn spam(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = RemoteId::counterpart::<Label>(&LabelId::spam().into_inner(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::spam(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -219,7 +221,7 @@ impl MovableSystemFolderAction {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CustomFolderAction {
     /// The database id of the label.
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
 
     /// The name of the folder.
     pub name: String,
@@ -231,7 +233,7 @@ pub struct CustomFolderAction {
     pub display_order: u32,
 
     /// The parent folder of the current folder.
-    pub parent: Option<LocalId>,
+    pub parent: Option<LocalLabelId>,
 
     /// It holds folder structure as self reference within vector.
     pub children: Vec<CustomFolderAction>,
@@ -253,7 +255,7 @@ impl CustomFolderAction {
 impl Default for CustomFolderAction {
     fn default() -> Self {
         Self {
-            local_id: LocalId::from(0),
+            local_id: LocalLabelId::from(0),
             name: String::default(),
             color: None,
             display_order: 0,

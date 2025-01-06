@@ -230,7 +230,7 @@ impl RollbackItem {
         use proton_api_mail::services::proton::responses::GetLabelsResponse;
 
         sync_any!(Label, Label, tether, batch => |remote_id| async {
-            api.get_labels_by_ids(vec![remote_id]).await
+            api.get_labels_by_ids(vec![remote_id.into()]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
         })

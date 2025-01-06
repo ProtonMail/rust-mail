@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
@@ -7,7 +7,7 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, Label as ApiLabel, MessageCount as ApiMessageCount,
 };
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::actions::conversations;
 use proton_mail_common::datatypes::SystemLabelId;
@@ -28,7 +28,7 @@ async fn test_move_between_folders() {
     let conv_id = RemoteId::from("conv_id");
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ApiLabel {
-            id: folder_id.clone().into(),
+            id: folder_id.clone(),
             parent_id: None,
             name: "myfolder".to_owned(),
             path: None,
@@ -47,20 +47,10 @@ async fn test_move_between_folders() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_label_conversation(
-        &folder_id.clone().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
-    ctx.mock_label_conversation(
-        &LabelId::inbox().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&folder_id.clone(), vec![conv_id.clone()], None, vec![])
+        .await;
+    ctx.mock_label_conversation(&LabelId::inbox(), vec![conv_id.clone()], None, vec![])
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -144,7 +134,7 @@ async fn test_move_from_label_does_not_unlabel() {
     let conv_id = RemoteId::from("conv_id");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
-            id: label_id.clone().into(),
+            id: label_id.clone(),
             parent_id: None,
             name: "mylabel".to_owned(),
             path: None,
@@ -162,13 +152,8 @@ async fn test_move_from_label_does_not_unlabel() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.mock_label_conversation(
-        &LabelId::inbox().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&LabelId::inbox(), vec![conv_id.clone()], None, vec![])
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -230,7 +215,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
-            id: label_id.clone().into(),
+            id: label_id.clone(),
             parent_id: None,
             name: "mylabel".to_owned(),
             path: None,
@@ -257,20 +242,10 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     ctx.setup_user(init_params).await;
 
     ctx.mock_get_conversations(conversations, 2_u64).await;
-    ctx.mock_label_conversation(
-        &LabelId::trash().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
-    ctx.mock_label_conversation(
-        &LabelId::inbox().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&LabelId::trash(), vec![conv_id.clone()], None, vec![])
+        .await;
+    ctx.mock_label_conversation(&LabelId::inbox(), vec![conv_id.clone()], None, vec![])
+        .await;
 
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -364,7 +339,7 @@ async fn test_move_into_spam_remove_labels() {
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
-            id: label_id.clone().into(),
+            id: label_id.clone(),
             parent_id: None,
             name: "mylabel".to_owned(),
             path: None,
@@ -391,7 +366,7 @@ async fn test_move_into_spam_remove_labels() {
     ctx.setup_user(init_params).await;
 
     ctx.mock_get_conversations(conversations, 2_u64).await;
-    ctx.mock_label_conversation(&LabelId::spam().into(), vec![conv_id.clone()], None, vec![])
+    ctx.mock_label_conversation(&LabelId::spam(), vec![conv_id.clone()], None, vec![])
         .await;
 
     ctx.catch_all().await;
@@ -470,13 +445,8 @@ async fn move_out_of_trash_set_almost_all_mail() {
     ctx.setup_user(init_params).await;
 
     ctx.mock_get_conversations(conversations, 3_u64).await;
-    ctx.mock_label_conversation(
-        &LabelId::inbox().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&LabelId::inbox(), vec![conv_id.clone()], None, vec![])
+        .await;
 
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -552,13 +522,8 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     ctx.setup_user(init_params).await;
 
     ctx.mock_get_conversations(conversations, 3_u64).await;
-    ctx.mock_label_conversation(
-        &LabelId::inbox().into(),
-        vec![conv_id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_conversation(&LabelId::inbox(), vec![conv_id.clone()], None, vec![])
+        .await;
 
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
@@ -635,7 +600,7 @@ fn test_init_params_conversation(
     let conversation_labels = conversation_labels
         .iter()
         .map(|id| ApiConversationLabel {
-            id: id.clone().into(),
+            id: id.clone(),
             context_num_unread: 0,
             context_num_messages: 1,
             context_time: 0,
@@ -648,7 +613,7 @@ fn test_init_params_conversation(
     TestParams {
         labels,
         addresses: vec![ApiAddress {
-            id: ApiRemoteId::from("myaddress"),
+            id: AddressId::from("myaddress"),
             email: "foo@bar.com".to_owned(),
             send: true,
             receive: true,
@@ -678,12 +643,12 @@ fn test_init_params_conversation(
             ..Default::default()
         }],
         conversation_count: vec![ApiConversationCount {
-            label_id: LabelId::inbox().clone().into(),
+            label_id: LabelId::inbox(),
             total: 1,
             unread: 0,
         }],
         message_count: vec![ApiMessageCount {
-            label_id: LabelId::inbox().clone().into(),
+            label_id: LabelId::inbox(),
             total: 1,
             unread: 0,
         }],

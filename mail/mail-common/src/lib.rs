@@ -24,12 +24,13 @@ pub use user_context::{
 };
 
 // re-exports
-use crate::datatypes::LabelType;
+use crate::datatypes::{LabelType, LocalAttachmentId};
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
 pub use proton_core_common;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use stash::stash::StashError;
 
 use proton_action_queue::action::Id as ActionId;
@@ -65,7 +66,7 @@ pub enum AppError {
     #[error("Unknown attachment with remote id {0}")]
     UnknownAttachment(RemoteId),
     #[error("Attachment {0} does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(LocalId),
+    AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Conversation with ID {0} has no messages")]
@@ -83,9 +84,9 @@ pub enum AppError {
     #[error("InvalidMobileActions: {0}")]
     InvalidMobileActions(String),
     #[error("Label with local id {0} does not have remote id")]
-    LabelDoesNotHaveRemoteId(LocalId),
+    LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Label with local id {0} not found")]
-    LabelNotFound(LocalId),
+    LabelNotFound(LocalLabelId),
     #[error("Local ID not found for {0} with remote ID {1}")]
     LocalIdNotFound(String, RemoteId),
     #[error("MessageBodyMetadata missing in database for message {0}")]

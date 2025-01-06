@@ -1,7 +1,6 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
@@ -21,7 +20,7 @@ async fn get_sender_image() {
         .get_mut(&ApiLabelType::Label)
         .unwrap()
         .push(ApiLabel {
-            id: ApiRemoteId::from("testlabel"),
+            id: LabelId::from("testlabel"),
             parent_id: None,
             name: "testlabel".to_owned(),
             path: None,

@@ -1,9 +1,10 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
     MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::datatypes::{IdCounterpart, LabelId};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
@@ -76,8 +77,7 @@ async fn sidebar_system_labels(
     let tether = user_ctx.user_stash().connection();
     for label_id in expected {
         to_expect.push(
-            label_id
-                .counterpart::<Label>(&tether)
+            Label::remote_id_counterpart(label_id.clone(), &tether)
                 .await
                 .unwrap()
                 .unwrap(),
@@ -97,7 +97,7 @@ fn sidebar_test_params(
 
     if scheduled {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::all_scheduled().into_inner(),
+            label_id: LabelId::all_scheduled(),
             total: 1,
             unread: 0,
         });
@@ -105,7 +105,7 @@ fn sidebar_test_params(
 
     if outbox {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::outbox().into_inner(),
+            label_id: LabelId::outbox(),
             total: 1,
             unread: 0,
         });
@@ -113,7 +113,7 @@ fn sidebar_test_params(
 
     if snoozed {
         message_count.push(ApiMessageCount {
-            label_id: LabelId::snoozed().into_inner(),
+            label_id: LabelId::snoozed(),
             total: 1,
             unread: 0,
         });
@@ -155,7 +155,7 @@ fn sidebar_test_mail_settings(
 
 fn create_label(label_id: LabelId) -> ApiLabel {
     ApiLabel {
-        id: label_id.into_inner(),
+        id: label_id,
         label_type: LabelType::System,
         parent_id: None,
         color: "".to_string(),

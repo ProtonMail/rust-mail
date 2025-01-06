@@ -1,10 +1,8 @@
 use clap::Parser;
-use log::info;
-use pretty_assertions::assert_eq;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::Config;
-use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{
@@ -94,7 +92,7 @@ async fn main() {
         .unwrap();
 
     let tether = user_ctx.user_stash().connection();
-    let label = Label::find_by_id::<RemoteId>(LabelId::inbox().into(), &tether)
+    let label = Label::find_by_remote_id(LabelId::inbox(), &tether)
         .await
         .unwrap()
         .unwrap();
