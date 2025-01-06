@@ -29,8 +29,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LabelType, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos, MessageSender,
-    MimeType, MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
+    LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -40,10 +40,10 @@ use crate::{AppError, MailUserContext};
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
@@ -83,13 +83,13 @@ pub struct Message {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalMessageId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<MessageId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -212,7 +212,7 @@ pub struct Message {
 }
 
 impl ModelIdExtension for Message {
-    type RemoteId = RemoteId;
+    type RemoteId = MessageId;
 }
 
 impl Message {
@@ -231,9 +231,9 @@ impl Message {
     pub async fn action_apply_label(
         queue: &Queue,
         label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
-        let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
+        let action = ActionLabel::new(label_id, message_ids);
         queue.apply_action(action).await
     }
 
@@ -251,14 +251,14 @@ impl Message {
     ///
     pub async fn action_star(
         queue: &Queue,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
-        let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
+        let action = ActionLabel::new(label_id, message_ids);
         queue.apply_action(action).await
     }
 
@@ -275,13 +275,13 @@ impl Message {
     ///
     pub async fn action_unstar(
         queue: &Queue,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
-        let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
+        let action = Unlabel::new(label_id, message_ids);
         queue.apply_action(action).await
     }
 
@@ -300,9 +300,9 @@ impl Message {
     pub async fn action_remove_label(
         queue: &Queue,
         label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
-        let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
+        let action = Unlabel::new(label_id, message_ids);
         queue.apply_action(action).await
     }
 
@@ -321,7 +321,7 @@ impl Message {
     pub async fn action_mark_read(
         queue: &Queue,
         label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Read>, QueueActionError<Read>> {
         let action = Read::new(label_id, message_ids);
         match queue.apply_action(action).await {
@@ -347,7 +347,7 @@ impl Message {
     pub async fn action_mark_unread(
         queue: &Queue,
         label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Unread>, QueueActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
         match queue.apply_action(action).await {
@@ -372,7 +372,7 @@ impl Message {
     pub async fn action_delete(
         queue: &Queue,
         label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
         queue.apply_action(action).await
@@ -395,7 +395,7 @@ impl Message {
         queue: &Queue,
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
-        target_ids: Vec<LocalId>,
+        target_ids: Vec<LocalMessageId>,
     ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
         queue.apply_action(action).await
@@ -413,7 +413,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_multiple_as_read(
-        ids: Vec<LocalId>,
+        ids: Vec<LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for id in ids {
@@ -429,7 +429,7 @@ impl Message {
     ///
     /// N.B.: `all_mail` label is the only not removable label.
     async fn remove_all_labels(
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
@@ -464,7 +464,7 @@ impl Message {
     pub async fn move_messages(
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let remote_source_id = Label::resolve_remote_label_id(source_id, bond).await?;
@@ -528,7 +528,7 @@ impl Message {
     ///
     pub async fn label_as(
         source_label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         selected_label_ids: &[LocalLabelId],
         partially_selected_label_ids: &[LocalLabelId],
         all_label_ids: &[LocalLabelId],
@@ -571,7 +571,7 @@ impl Message {
     pub async fn action_label_as(
         queue: &Queue,
         source_label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
@@ -597,17 +597,17 @@ impl Message {
     /// Remotely apply LabelAs action for conversations
     pub(crate) async fn remote_relabel(
         session: &Session,
-        added_label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
-        removed_label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
+        added_label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
+        removed_label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
         tether: &Tether,
-    ) -> Result<Vec<RemoteId>, AppError> {
+    ) -> Result<Vec<MessageId>, AppError> {
         /// Gets a hashmap of the remote label id and the local ids.
         async fn group_ids_by_label(
-            label_ids: &HashMap<LocalId, HashSet<LocalLabelId>>,
+            label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
             tether: &Tether,
-        ) -> Result<HashMap<LabelId, HashSet<LocalId>>, AppError> {
+        ) -> Result<HashMap<LabelId, HashSet<LocalMessageId>>, AppError> {
             let mut map = HashMap::new();
-            for (conv_id, local_label_ids) in label_ids {
+            for (msg_id, local_label_ids) in label_ids {
                 let remote_label_ids = Label::local_ids_counterpart(
                     Vec::from_iter(local_label_ids.iter().cloned()),
                     tether,
@@ -616,7 +616,7 @@ impl Message {
                 for remote_label_id in remote_label_ids {
                     map.entry(remote_label_id)
                         .or_insert_with(HashSet::new)
-                        .insert(*conv_id);
+                        .insert(*msg_id);
                 }
             }
             Ok(map)
@@ -627,7 +627,7 @@ impl Message {
         let added_by_label = group_ids_by_label(added_label_ids, tether).await?;
         let removed_by_label = group_ids_by_label(removed_label_ids, tether).await?;
 
-        let mut failed_ids = vec![];
+        let mut failed_ids: Vec<MessageId> = vec![];
         for (label_id, message_ids) in added_by_label {
             let message_ids =
                 Message::local_ids_counterpart(Vec::from_iter(message_ids.clone()), tether).await?;
@@ -680,7 +680,7 @@ impl Message {
     /// When database request fail.
     ///
     pub(crate) async fn find_by_ids(
-        message_ids: impl IntoIterator<Item = LocalId>,
+        message_ids: impl IntoIterator<Item = LocalMessageId>,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", message_ids);
@@ -697,7 +697,7 @@ impl Message {
     ///
     pub async fn all_available_bottom_bar_actions_for_messages(
         current_label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
         let inbox = MovableSystemFolderAction::inbox(tether).await?;
@@ -800,11 +800,11 @@ impl Message {
 
     /// Revert locally the LabelAs action for conversation.
     pub(crate) async fn undo_label_as(
-        local_ids: Vec<LocalId>,
+        local_ids: Vec<LocalMessageId>,
         source_label_id: LocalLabelId,
-        mut added_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
-        mut removed_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
-        original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
+        mut added_labels: HashMap<LocalMessageId, HashSet<LocalLabelId>>,
+        mut removed_labels: HashMap<LocalMessageId, HashSet<LocalLabelId>>,
+        original_location: HashMap<LocalMessageId, Option<ExclusiveLocation>>,
         must_archive: bool,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
@@ -925,7 +925,7 @@ impl Message {
     pub async fn create_or_update_messages_from_metadata(
         metadata: Vec<ApiMessageMetadata>,
         bond: &Bond<'_>,
-    ) -> Result<Vec<LocalId>, AppError> {
+    ) -> Result<Vec<LocalMessageId>, AppError> {
         Ok(
             Self::create_or_update_messages_from_metadata_vec(metadata, bond)
                 .await?
@@ -948,11 +948,11 @@ impl Message {
     /// Returns an error if the API request failed.
     ///
     pub async fn delete_multiple_remote<PM: ProtonMail>(
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
         label_id: LabelId,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let request = |ids: Vec<ApiRemoteId>| {
+    ) -> Result<Vec<OperationResult<MessageId>>, ApiServiceError> {
+        let request = |ids: Vec<MessageId>| {
             let label_id = label_id.clone();
             async {
                 api.put_messages_delete(ids, Some(label_id))
@@ -979,7 +979,7 @@ impl Message {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_deleted(ids: Vec<LocalId>, bond: &Bond<'_>) -> Result<(), AppError> {
+    pub async fn mark_deleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -1059,7 +1059,7 @@ impl Message {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_undeleted(ids: Vec<LocalId>, bond: &Bond<'_>) -> Result<(), AppError> {
+    pub async fn mark_undeleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
         let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -1633,7 +1633,7 @@ impl Message {
             .remote_id
             .clone()
             .ok_or(AppError::MessageHasNoRemoteId(
-                self.local_id.unwrap_or(LocalId::from(0)),
+                self.local_id.unwrap_or(LocalMessageId::from(0)),
             ))?;
         // sync the message body
         Ok(api.get_message(remote_id).await.map(|v| v.message)?)
@@ -1653,7 +1653,7 @@ impl Message {
     ///
     pub async fn available_actions(
         view: Label,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<MessageAvailableActions, AppError> {
         if message_ids.is_empty() {
@@ -1704,7 +1704,7 @@ impl Message {
     /// Returns error if the database request fail.
     ///
     pub async fn available_label_as_actions(
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<Vec<LabelAsAction>, AppError> {
         if message_ids.is_empty() {
@@ -1755,7 +1755,7 @@ impl Message {
     /// Returns error if the database request fail.
     ///
     pub async fn watch_available_label_as_actions(
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<(Vec<LabelAsAction>, WatcherHandle), AppError> {
         if message_ids.is_empty() {
@@ -1798,7 +1798,7 @@ impl Message {
     ///
     pub async fn available_move_to_actions(
         view: Label,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<Vec<MoveAction>, AppError> {
         if message_ids.is_empty() {
@@ -1833,7 +1833,7 @@ impl Message {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
     pub async fn message_body(
         user_context: Arc<MailUserContext>,
-        id: LocalId,
+        id: LocalMessageId,
     ) -> MailContextResult<DecryptedMessageBody> {
         let tether = &mut user_context.user_stash().connection();
         let saved_message = Message::load(id, tether)
@@ -1946,7 +1946,7 @@ impl Message {
     ///
     /// Returns error if the queries fails.
     pub async fn mark_read(
-        ids: impl IntoIterator<Item = LocalId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         Self::mark_read_or_unread(true, ids, bond).await
@@ -1961,7 +1961,7 @@ impl Message {
     ///
     /// Returns error if the queries fails.
     pub async fn mark_unread(
-        ids: impl IntoIterator<Item = LocalId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         Self::mark_read_or_unread(false, ids, bond).await
@@ -1969,11 +1969,11 @@ impl Message {
 
     async fn mark_read_or_unread(
         mark_read: bool,
-        ids: impl IntoIterator<Item = LocalId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         struct IdPair {
-            local_message_id: LocalId,
+            local_message_id: LocalMessageId,
             local_conversation_id: LocalId,
         }
 
@@ -2194,10 +2194,10 @@ impl Message {
     /// Returns error if the queries fail.
     pub async fn apply_label(
         local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalId>>::new();
+        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalMessageId>>::new();
 
         for id in ids {
             if match bond
@@ -2252,15 +2252,15 @@ impl Message {
     /// Returns error if the queries fail.
     pub async fn remove_label(
         local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let mut unread_count = 0_u64;
         let mut updated_count = 0_u64;
-        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalId>>::new();
+        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalMessageId>>::new();
 
         for id in ids {
-            let id = match bond.query_value::<_,LocalId>(
+            let id = match bond.query_value::<_,LocalMessageId>(
                 "DELETE FROM message_labels WHERE local_label_id=? AND local_message_id=? RETURNING local_message_id AS value",
                 params![local_label_id, id],
             ).await {
@@ -2514,12 +2514,12 @@ impl Message {
     /// This fn should be called for message endpoints.
     /// Repeatedly calls `endpoint` in batches of 150 in parallel.
     async fn split_request<F, Fut>(
-        ids: impl IntoIterator<Item = RemoteId>,
+        ids: impl IntoIterator<Item = MessageId>,
         endpoint: F,
-    ) -> Result<Vec<OperationResult>, ApiServiceError>
+    ) -> Result<Vec<OperationResult<MessageId>>, ApiServiceError>
     where
-        F: Fn(Vec<ApiRemoteId>) -> Fut,
-        Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
+        F: Fn(Vec<MessageId>) -> Fut,
+        Fut: Future<Output = Result<Vec<OperationResult<MessageId>>, ApiServiceError>>,
     {
         split_request(ids, 150, endpoint).await
     }
@@ -2601,7 +2601,7 @@ impl Message {
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx))]
     pub async fn force_sync_message_and_body(
         ctx: Arc<MailUserContext>,
-        message_id: RemoteId,
+        message_id: MessageId,
     ) -> MailContextResult<(Message, MessageBodyMetadata, String)> {
         //TODO(ET-1763): Cleanup sync code for messages to use this method.
         let response = ctx
@@ -2827,8 +2827,7 @@ impl DataSource for MessageDataSource {
             return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
         };
         // Safe to unwrap as we have validated this before.
-        let last_element_id: proton_api_core::services::proton::common::RemoteId =
-            last_element.remote_id.clone().unwrap();
+        let last_element_id = last_element.remote_id.clone().unwrap();
 
         debug!("Last Element= {last_element_id}");
         let mut response = self
@@ -2957,13 +2956,13 @@ pub struct MessageBodyMetadata {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(optional)]
-    pub local_message_id: Option<LocalId>,
+    pub local_message_id: Option<LocalMessageId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_message_id: Option<RemoteId>,
+    pub remote_message_id: Option<MessageId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -3100,7 +3099,7 @@ impl MessageBodyMetadata {
     ///
     /// Returns error if the query failed.
     pub async fn for_message(
-        local_message_id: LocalId,
+        local_message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         // There is no local id on this type so we can't use find_by_id.
@@ -3120,7 +3119,7 @@ impl MessageBodyMetadata {
     /// Returns an instance of [`Self`] and the message body.
     pub fn from_api_message_body(
         api_message_body: ApiMessageBody,
-        remote_message_id: RemoteId,
+        remote_message_id: MessageId,
         remote_conversation_id: RemoteId,
         remote_address_id: AddressId,
     ) -> (Self, String) {

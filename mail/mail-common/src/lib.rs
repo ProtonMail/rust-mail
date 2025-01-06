@@ -23,7 +23,7 @@ pub use user_context::{
 };
 
 // re-exports
-use crate::datatypes::{LabelType, LocalAttachmentId};
+use crate::datatypes::{LabelType, LocalAttachmentId, LocalMessageId};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
@@ -33,6 +33,7 @@ use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use stash::stash::StashError;
 
 use proton_action_queue::action::Id as ActionId;
+use proton_api_mail::services::proton::common::MessageId;
 use thiserror::Error;
 
 pub const ALL_LABEL_TYPES: [LabelType; 4] = [
@@ -89,17 +90,17 @@ pub enum AppError {
     #[error("Local ID not found for {0} with remote ID {1}")]
     LocalIdNotFound(String, RemoteId),
     #[error("MessageBodyMetadata missing in database for message {0}")]
-    MessageBodyMetadataMissing(LocalId),
+    MessageBodyMetadataMissing(LocalMessageId),
     #[error("The cid {0} does not exist. The available ones are: {1:#?}")]
     UnknownCid(String, Vec<String>),
     #[error("Message with ID {0} has no remote ID")]
-    MessageHasNoRemoteId(LocalId),
+    MessageHasNoRemoteId(LocalMessageId),
     #[error("Message missing in database for local_id {0}")]
-    MessageMissing(LocalId),
+    MessageMissing(LocalMessageId),
     #[error("Message body missing for local_id {0}")]
-    MessageBodyMissing(LocalId),
+    MessageBodyMissing(LocalMessageId),
     #[error("Unknown Message with remote id {0}")]
-    UnknownMessage(RemoteId),
+    UnknownMessage(MessageId),
     #[error("No conversation found in the current page which has a remote id")]
     NoConversationWithValidRemoteIdFoundInPage,
     #[error("No message found in the current page which has a remote id")]

@@ -1,5 +1,6 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
@@ -249,7 +250,7 @@ fn test_message(params: &Params) -> impl FnMut(&TestItem) -> ApiMessageMetadata 
             id: name, unread, ..
         } = message;
         ApiMessageMetadata {
-            id: ApiRemoteId::from(name.to_owned()),
+            id: MessageId::from(name.to_owned()),
             conversation_id: conversation_id.clone(),
             address_id: address_id.clone(),
             unread: *unread,

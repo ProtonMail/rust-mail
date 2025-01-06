@@ -16,7 +16,7 @@ use crate::widgets::{
 use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::{LocalId, LocalLabelId};
-use proton_mail_common::datatypes::ContextualConversation;
+use proton_mail_common::datatypes::{ContextualConversation, LocalMessageId};
 use proton_mail_common::decrypted_message::{BlockQuote, DecryptedMessageBody};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{
@@ -239,7 +239,7 @@ impl MessagesState {
         self.messages.get(index).cloned()
     }
 
-    fn selected_message_id(&self) -> Option<LocalId> {
+    fn selected_message_id(&self) -> Option<LocalMessageId> {
         let index = self.table_state.selected()?;
         self.messages.get(index).map(|c| c.local_id.unwrap())
     }
@@ -566,7 +566,7 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
-fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn mark_message_read(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
@@ -584,7 +584,7 @@ fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     })
 }
 
-fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn mark_message_unread(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
@@ -602,7 +602,7 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     })
 }
 
-fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
@@ -626,7 +626,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     ))
 }
 
-fn star_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
         match ctx
@@ -643,7 +643,7 @@ fn star_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     })
 }
 
-fn unstar_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn unstar_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
         match ctx
@@ -667,7 +667,7 @@ fn label_message(
         selected_label_ids,
         partially_selected_label_ids,
         must_archive,
-    }: LabelAs,
+    }: LabelAs<LocalMessageId>,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
@@ -694,7 +694,11 @@ fn label_message(
     })
 }
 
-fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalLabelId) -> Command<Messages> {
+fn move_message(
+    mailbox: &Mailbox,
+    id: LocalMessageId,
+    label_id: LocalLabelId,
+) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {

@@ -24,7 +24,6 @@ use proton_api_mail::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::RemoteId;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
@@ -2307,7 +2306,7 @@ async fn unlabel_messages() {
 }
 
 lazy_static! {
-    pub(super) static ref MY_MESSAGE_ID: RemoteId = RemoteId::from("MyRemoteId");
+    pub(super) static ref MY_MESSAGE_ID: MessageId = MessageId::from("MyRemoteId");
 }
 
 #[test_case(vec![], None; "TEST1 - no label")]

@@ -1,6 +1,6 @@
 use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
-use proton_api_mail::services::proton::common::AttachmentId;
+use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
@@ -32,7 +32,7 @@ pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
 /// The attachment is encrypted with the default test account address key.
 #[must_use]
 pub fn testdata_attachment_metadata_complete(
-    message_id: ApiRemoteId,
+    message_id: MessageId,
     conversation_id: ApiRemoteId,
 ) -> ApiAttachment {
     let metadata = testdata_attachment_metadata();

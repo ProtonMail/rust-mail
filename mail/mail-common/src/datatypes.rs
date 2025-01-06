@@ -58,7 +58,9 @@ use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::{AttachmentId, LabelType as ApiLabelType};
+use proton_api_mail::services::proton::common::{
+    AttachmentId, LabelType as ApiLabelType, MessageId,
+};
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
     ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
@@ -2025,3 +2027,4 @@ impl From<LabelDescription> for LabelType {
 }
 
 declare_local_id!(pub LocalAttachmentId => AttachmentId);
+declare_local_id!(pub LocalMessageId => MessageId);

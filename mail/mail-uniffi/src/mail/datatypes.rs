@@ -72,7 +72,7 @@ use proton_mail_common::datatypes::{
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelColor as RealLabelColor,
-    LabelDescription as RealLabelDescription, LabelType as RealLabelType,
+    LabelDescription as RealLabelDescription, LabelType as RealLabelType, LocalMessageId,
     MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
@@ -2042,7 +2042,7 @@ impl MessageSearchOptions {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
                     if let Some(resolved_id) =
-                        RealMessage::local_id_counterpart(RealLocalId::from(*id), tether).await?
+                        RealMessage::local_id_counterpart(LocalMessageId::from(*id), tether).await?
                     {
                         ids.push(resolved_id);
                     }
@@ -2086,7 +2086,7 @@ impl MessageSearchOptions {
             bcc: self.bcc,
             begin: self.begin,
             begin_id: match self.begin_id {
-                Some(id) => RealMessage::local_id_counterpart(RealLocalId::from(id), tether)
+                Some(id) => RealMessage::local_id_counterpart(LocalMessageId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -2101,7 +2101,7 @@ impl MessageSearchOptions {
             desc: self.desc,
             end: self.end,
             end_id: match self.end_id {
-                Some(id) => RealMessage::local_id_counterpart(RealLocalId::from(id), tether)
+                Some(id) => RealMessage::local_id_counterpart(LocalMessageId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,

@@ -175,18 +175,25 @@ impl crate::app_model::Popup for LabelItemPopup {
                         Some(false) => (),
                     }
                 }
-                let label_as = Box::new(LabelAs {
-                    source_label_id: action.label_id,
-                    item_ids: vec![self.item.get_id()],
-                    selected_label_ids,
-                    partially_selected_label_ids,
-                    must_archive: false, // TODO: add this button
-                });
                 match self.item {
-                    Item::Conversation(_) => {
+                    Item::Conversation(id) => {
+                        let label_as = Box::new(LabelAs {
+                            source_label_id: action.label_id,
+                            item_ids: vec![id],
+                            selected_label_ids,
+                            partially_selected_label_ids,
+                            must_archive: false, // TODO: add this button
+                        });
                         Command::message(ConversationMessage::LabelConversation(label_as).into())
                     }
-                    Item::Message(_) => {
+                    Item::Message(id) => {
+                        let label_as = Box::new(LabelAs {
+                            source_label_id: action.label_id,
+                            item_ids: vec![id],
+                            selected_label_ids,
+                            partially_selected_label_ids,
+                            must_archive: false, // TODO: add this button
+                        });
                         Command::message(MessageMessage::LabelMessage(label_as).into())
                     }
                 }

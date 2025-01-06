@@ -8,7 +8,6 @@
 //!
 
 use core::fmt;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "sql")]
 use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
@@ -73,12 +72,12 @@ pub trait ProtonIdSqlMarker {}
 pub trait ProtonIdMarker:
     Clone
     + Debug
-    + DeserializeOwned
+    + ::serde::de::DeserializeOwned
     + Eq
     + Hash
     + PartialEq
     + ProtonIdSqlMarker
-    + Serialize
+    + ::serde::Serialize
     + Sync
     + Send
 {

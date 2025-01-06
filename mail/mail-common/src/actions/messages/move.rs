@@ -1,5 +1,5 @@
 use crate::actions::{filter_responses, ActionError, ActionMoveData};
-use crate::datatypes::RollbackItemType;
+use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Message, RollbackItem};
 use crate::MailUserContext;
 use itertools::Itertools;
@@ -7,7 +7,7 @@ use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -23,7 +23,7 @@ impl Move {
     pub fn new(
         source_label_id: LocalLabelId,
         destination_label_id: LocalLabelId,
-        target_ids: impl IntoIterator<Item = LocalId>,
+        target_ids: impl IntoIterator<Item = LocalMessageId>,
     ) -> Self {
         Self(ActionMoveData::new(
             source_label_id,
@@ -86,7 +86,7 @@ impl ActionHandler for Handler {
         .await?;
 
         for remote_id in &action.0.remote_target_ids {
-            RollbackItem::new(remote_id.clone(), RollbackItemType::Message)
+            RollbackItem::new(remote_id.clone().into(), RollbackItemType::Message)
                 .save(tx)
                 .await?;
         }

@@ -4,7 +4,7 @@ use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace,
     User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
 use proton_api_mail::services::proton::response_data::{
     ConversationCount, Label as ApiLabel, MessageCount,
 };
@@ -410,7 +410,7 @@ fn test_user_key() -> LockedKey {
 fn test_message() -> ApiMessage {
     ApiMessage {
         metadata: ApiMessageMetadata {
-            id: ApiRemoteId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
+            id: MessageId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
             conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
             order: 0,
             address_id: AddressId::from(TEST_USER_ADDRESS_ID),

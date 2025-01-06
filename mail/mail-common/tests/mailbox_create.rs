@@ -1,6 +1,5 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MailSettings as ApiMailSettings, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
@@ -83,7 +82,7 @@ async fn test_new_mailbox_sync_messages() {
     });
 
     let messages = vec![ApiMessageMetadata {
-        id: ApiRemoteId::from("MyRemoteId"),
+        id: MessageId::from("MyRemoteId"),
         conversation_id: params.conversations[0].id.clone(),
         order: 0,
         address_id: params.addresses[0].id.clone(),
@@ -177,7 +176,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     });
 
     let messages = vec![ApiMessageMetadata {
-        id: ApiRemoteId::from("MyRemoteId"),
+        id: MessageId::from("MyRemoteId"),
         conversation_id: params.conversations[0].id.clone(),
         order: 0,
         address_id: params.addresses[0].id.clone(),

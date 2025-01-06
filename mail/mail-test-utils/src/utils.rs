@@ -1,13 +1,14 @@
 use crate::search::MY_ADDRESS_ID;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
 use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
-    ConversationCount, MessageCount, MessageRecipient, MessageRecipients, MessageSender,
-    MessageSenders,
+    ConversationCount, LocalMessageId, MessageCount, MessageRecipient, MessageRecipients,
+    MessageSender, MessageSenders,
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
@@ -26,7 +27,7 @@ pub struct TestDBState {
 pub struct TestDBStateMap {
     pub labels: HashMap<LabelId, LocalLabelId>,
     pub conversations: HashMap<RemoteId, LocalId>,
-    pub messages: HashMap<RemoteId, LocalId>,
+    pub messages: HashMap<MessageId, LocalMessageId>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
     pub message_counts: HashMap<LabelId, MessageCount>,
 }

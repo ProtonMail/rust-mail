@@ -430,7 +430,7 @@ fn label_conversation(
         selected_label_ids,
         partially_selected_label_ids,
         must_archive,
-    }: LabelAs,
+    }: LabelAs<LocalId>,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {

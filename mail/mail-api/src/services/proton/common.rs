@@ -31,3 +31,8 @@ declare_proton_id!(
     /// Identifier for a proton Attachment.
     pub AttachmentId
 );
+
+declare_proton_id!(
+    /// Identifier for a proton Messages.
+    pub MessageId
+);

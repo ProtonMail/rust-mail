@@ -1,6 +1,7 @@
 pub use super::*;
 use crate::datatypes::attachment;
 use crate::datatypes::LocalAttachmentId;
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -227,7 +228,7 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
     }
 }
 
-fn local_msg_id() -> LocalId {
+fn local_msg_id() -> LocalMessageId {
     424.into()
 }
 

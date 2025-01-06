@@ -3724,6 +3724,7 @@ trait OperationLogic {
     /// * `result` - The result to send back to the caller.
     /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
+    #[allow(clippy::used_underscore_binding)]
     fn send_back(&mut self, result: Result<Self::Output, StashError>, _stash: &Stash) {
         #[cfg(feature = "stats_log")]
         if result.is_err() {

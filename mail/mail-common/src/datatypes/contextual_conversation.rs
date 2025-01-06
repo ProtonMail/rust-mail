@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
-    AttachmentMetadata, CustomLabel, ExclusiveLocation, MessageRecipients, MessageSenders,
-    MobileActions,
+    AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
+    MessageSenders, MobileActions,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
@@ -353,7 +353,7 @@ pub struct ContextualConversationAndMessages {
     /// The conversation's messages.
     pub messages: Vec<Message>,
     /// The id of message to display first.
-    pub message_id_to_open: LocalId,
+    pub message_id_to_open: LocalMessageId,
 }
 
 pub struct ContextualConversationWatcher {
