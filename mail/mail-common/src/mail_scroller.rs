@@ -4,12 +4,13 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::prelude::{
     GetConversationsOptions, GetConversationsResponse,
 };
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalLabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
@@ -231,14 +232,14 @@ impl<T: MailScrollerSource> MailScroller<T> {
 /// new data from the server.
 #[derive(Debug)]
 pub struct MailConversationScrollerSource {
-    local_label_id: LocalId,
+    local_label_id: LocalLabelId,
     unread: ReadFilter,
     page_size: usize,
     cached: Arc<Mutex<Option<CachedConverstationScrollData>>>,
 }
 
 impl MailConversationScrollerSource {
-    pub fn new(local_label_id: LocalId, unread: ReadFilter, page_size: usize) -> Self {
+    pub fn new(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
         Self {
             local_label_id,
             unread,
@@ -426,7 +427,7 @@ impl MailConversationScrollerSource {
     async fn sync_first_page(
         session: &Session,
         mut tether: Tether,
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
@@ -476,7 +477,7 @@ impl MailConversationScrollerSource {
     async fn sync_next_page(
         session: &Session,
         mut tether: Tether,
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: RemoteId,
         last_element_time: u64,
@@ -553,7 +554,7 @@ impl MailConversationScrollerSource {
     }
 
     fn contextual_conversations(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         conversations: Vec<Conversation>,
     ) -> Vec<ContextualConversation> {
         conversations
@@ -563,7 +564,7 @@ impl MailConversationScrollerSource {
     }
 
     async fn save_conversations(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         conversations: &mut [Conversation],
         unread: ReadFilter,
         context_time: Option<u64>,
@@ -615,7 +616,7 @@ impl MailConversationScrollerSource {
     }
 
     async fn update_scroller_data(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         remote_conv_id: RemoteId,
         unread: ReadFilter,
         context_time: u64,

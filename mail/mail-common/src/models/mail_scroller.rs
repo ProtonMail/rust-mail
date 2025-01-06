@@ -1,7 +1,7 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use indoc::formatdoc;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -39,7 +39,7 @@ pub struct MessageScrollData {
 
 #[derive(Debug)]
 pub struct CachedConverstationScrollData {
-    local_label_id: LocalId,
+    local_label_id: LocalLabelId,
     unread: ReadFilter,
     page_size: usize,
     data: ConversationScrollData,
@@ -48,7 +48,7 @@ pub struct CachedConverstationScrollData {
 
 impl CachedConverstationScrollData {
     pub async fn new(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
         tether: &Tether,
@@ -147,7 +147,7 @@ impl Deref for CachedConverstationScrollData {
 pub struct ConversationScrollData {
     /// Label id used in the sync.
     #[IdField]
-    pub local_label_id: LocalId,
+    pub local_label_id: LocalLabelId,
     /// Read filter used in the sync.
     #[DbField]
     pub unread: ReadFilter,
@@ -176,7 +176,7 @@ pub struct ConversationScrollData {
 
 impl ConversationScrollData {
     pub async fn find_with_key(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         unread: ReadFilter,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {

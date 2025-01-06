@@ -548,6 +548,7 @@ pub async fn move_conversations(
 ///
 /// Returns an error if the database query fails.
 ///
+/// TODO: Outdated, remove when `scroll_conversations_for_label` is utilized.
 #[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
 pub async fn paginate_conversations_for_label(

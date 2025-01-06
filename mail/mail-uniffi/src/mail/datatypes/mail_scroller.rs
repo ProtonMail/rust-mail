@@ -3,7 +3,6 @@
 //! For more information, see the [`RealPaginator`] struct.
 //!
 
-use crate::core::datatypes::Id;
 use crate::errors::UserSessionError;
 use crate::mail::datatypes::Conversation;
 use crate::{async_runtime, uniffi_async, WatchHandle};

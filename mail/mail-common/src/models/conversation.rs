@@ -164,7 +164,7 @@ impl ModelIdExtension for Conversation {
 }
 
 impl Conversation {
-    pub fn label(&self, local_id: LocalId) -> Option<&ConversationLabel> {
+    pub fn label(&self, local_id: LocalLabelId) -> Option<&ConversationLabel> {
         self.labels
             .iter()
             .find(|&label| label.local_label_id == Some(local_id))

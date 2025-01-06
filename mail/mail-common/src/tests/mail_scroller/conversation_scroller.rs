@@ -5,8 +5,9 @@ use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use crate::models::{CachedConverstationScrollData, ConversationScrollData, Label};
 use maplit::hashmap;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::{conv_label, conversation, label, rid};
 use stash::orm::Model;
@@ -85,15 +86,13 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     save_to_database(&mut data, &mut tether).await;
 
-    let remote_label_id = RemoteId::from(REMOTE_LABEL_ID);
-    let local_label_id = remote_label_id
-        .counterpart::<Label>(&tether)
+    let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
+    let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
         .await
-        .unwrap()
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_id(RemoteId::from("50"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("50"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -197,15 +196,13 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     save_to_database(&mut data, &mut tether).await;
 
-    let remote_label_id = RemoteId::from(REMOTE_LABEL_ID);
-    let local_label_id = remote_label_id
-        .counterpart::<Label>(&tether)
+    let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
+    let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
         .await
-        .unwrap()
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_id(RemoteId::from("50"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("50"), &tether)
         .await
         .unwrap()
         .unwrap();

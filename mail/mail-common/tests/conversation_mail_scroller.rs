@@ -1,21 +1,17 @@
 use itertools::Itertools;
-use log::warn;
 use maplit::hashmap;
-use proton_api_core::RemoteId;
+use proton_api_core::{services::proton::common::LabelId, RemoteId};
 use proton_api_mail::services::proton::{
     prelude::GetConversationsResponse, response_data::Conversation as ApiConversation,
 };
-use proton_core_common::{
-    datatypes::{IdCounterpart, LocalId},
-    models::ModelExtension,
-};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter, SystemLabel},
     mail_scroller::{MailConversationScrollerSource, MailScroller},
     models::{Conversation, ConversationScrollData, Label},
 };
+use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{conv_label, conversation, label, rid, test_context::MailTestContext};
-use proton_mail_test_utils::{init::Params as TestParams, search::test_conversation};
 use stash::{
     orm::Model,
     stash::{Bond, Tether, WatcherHandle},
@@ -103,14 +99,12 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
 
     save_to_database(&mut data, &mut tether).await;
 
-    let remote_label_id = RemoteId::from(REMOTE_LABEL_ID);
-    let local_label_id = remote_label_id
-        .counterpart::<Label>(&tether)
+    let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
+    let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
         .await
-        .unwrap()
         .unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_id(RemoteId::from("myconv_150"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("myconv_150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -424,7 +418,7 @@ async fn setup_api_conversation_pages(ctx: &MailTestContext, page_size: usize) -
         .collect_vec();
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_conversations_second_page(&ctx, second_page, &first_page_last_id, 1_u64).await;
+    mock_get_conversations_second_page(ctx, second_page, &first_page_last_id, 1_u64).await;
     ctx.mock_get_conversations(first_page, 1_u64).await;
 
     // Do not download any conv on init
