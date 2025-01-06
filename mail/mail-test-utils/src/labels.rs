@@ -1,8 +1,8 @@
 use crate::test_context::MailTestContext;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::requests::PatchLabelRequest;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::responses::{GetLabelsResponse, PatchLabelResponse};
-use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::LabelType;
 use proton_mail_common::datatypes::SystemLabelId;
 use wiremock::matchers::{body_json, method, path};
@@ -38,7 +38,7 @@ impl MailTestContext {
         let response = PatchLabelResponse {
             label: ApiLabel {
                 expanded: expand,
-                id: label_id.clone().into(),
+                id: label_id.clone(),
                 ..Default::default()
             },
         };
@@ -62,7 +62,7 @@ impl ApiLabelTestUtils for ApiLabel {
         let label_id = LabelId::from(label_name);
         (
             ApiLabel {
-                id: label_id.clone().into(),
+                id: label_id.clone(),
                 parent_id: None,
                 name: label_name.to_owned(),
                 path: None,
@@ -152,7 +152,7 @@ impl ApiLabelTestUtils for ApiLabel {
             }
         }
         ApiLabel {
-            id: label_id.clone().into(),
+            id: label_id.clone(),
             parent_id: None,
             name: label_name.to_owned(),
             path: None,

@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
@@ -8,13 +8,13 @@ use test_case::test_case;
 use velcro::hash_map;
 
 #[test_case(&[], &[]; "empty")]
-#[test_case(&[(ApiRemoteId::from("foo"), "foo".to_owned(), 42)], &["foo".to_owned()]; "single")]
+#[test_case(&[(LabelId::from("foo"), "foo".to_owned(), 42)], &["foo".to_owned()]; "single")]
 #[test_case(&[
-    (ApiRemoteId::from("bar"), "bar".to_owned(), 2),
-    (ApiRemoteId::from("baz"), "baz".to_owned(), 3),
-    (ApiRemoteId::from("foo"), "foo".to_owned(), 1),
-    (ApiRemoteId::from("titi"), "titi".to_owned(), 5),
-    (ApiRemoteId::from("toto"), "toto".to_owned(), 4),
+    (LabelId::from("bar"), "bar".to_owned(), 2),
+    (LabelId::from("baz"), "baz".to_owned(), 3),
+    (LabelId::from("foo"), "foo".to_owned(), 1),
+    (LabelId::from("titi"), "titi".to_owned(), 5),
+    (LabelId::from("toto"), "toto".to_owned(), 4),
 ], &[
     "foo".to_owned(),
     "bar".to_owned(),
@@ -23,7 +23,7 @@ use velcro::hash_map;
     "titi".to_owned()
 ]; "many")]
 #[tokio::test]
-async fn sidebar_custom_labels(labels: &[(ApiRemoteId, String, u32)], expected: &[String]) {
+async fn sidebar_custom_labels(labels: &[(LabelId, String, u32)], expected: &[String]) {
     // Setup:
     //   * Setup User:
     //     + Create Custom Folders
@@ -46,14 +46,14 @@ async fn sidebar_custom_labels(labels: &[(ApiRemoteId, String, u32)], expected: 
     assert_eq!(result, expected);
 }
 
-fn sidebar_test_params(labels: &[(ApiRemoteId, String, u32)]) -> TestParams {
+fn sidebar_test_params(labels: &[(LabelId, String, u32)]) -> TestParams {
     TestParams {
         labels: hash_map! { ApiLabelType::Label: labels.iter().map(create_label).collect()},
         ..Default::default()
     }
 }
 
-fn create_label((id, name, order): &(ApiRemoteId, String, u32)) -> ApiLabel {
+fn create_label((id, name, order): &(LabelId, String, u32)) -> ApiLabel {
     ApiLabel {
         id: id.clone(),
         parent_id: None,

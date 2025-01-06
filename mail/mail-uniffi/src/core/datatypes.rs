@@ -57,7 +57,8 @@ use proton_core_common::datatypes::{
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
-    HighSecurity as RealHighSecurity, IdCounterpart as RealIdCounterpart, LocalId as RealLocalId,
+    HighSecurity as RealHighSecurity, IdCounterpart as RealIdCounterpart, LocalAddressId,
+    LocalContactEmailId, LocalContactId, LocalId as RealLocalId, LocalLabelId,
     LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
     ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
@@ -1051,17 +1052,28 @@ impl From<u64> for Id {
     }
 }
 
-impl From<Id> for RealLocalId {
-    fn from(id: Id) -> Self {
-        Self::from(id.value)
-    }
+macro_rules! impl_into_id {
+    ($name:ident) => {
+        impl From<Id> for $name {
+            fn from(id: Id) -> Self {
+                Self::from(id.value)
+            }
+        }
+
+        impl From<$name> for Id {
+            fn from(id: $name) -> Self {
+                Self { value: id.as_u64() }
+            }
+        }
+    };
 }
 
-impl From<RealLocalId> for Id {
-    fn from(id: RealLocalId) -> Self {
-        Self { value: id.as_u64() }
-    }
-}
+//TODO: Improve uniffi local_id types without causing mayhem.
+impl_into_id!(RealLocalId);
+impl_into_id!(LocalAddressId);
+impl_into_id!(LocalLabelId);
+impl_into_id!(LocalContactId);
+impl_into_id!(LocalContactEmailId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]

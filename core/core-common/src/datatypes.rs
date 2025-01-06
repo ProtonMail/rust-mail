@@ -47,7 +47,10 @@ use core::fmt;
 use indoc::formatdoc;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use proton_api_core::services::proton::common::LightOrDarkMode as ApiLightOrDarkMode;
+use proton_api_core::services::proton::common::{
+    AddressId, AuthId, ContactEmailId, ContactId, LabelId, LightOrDarkMode as ApiLightOrDarkMode,
+    UserId,
+};
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
@@ -1030,79 +1033,6 @@ impl From<ApiFlags> for Flags {
 
 sql_using_serde!(Flags);
 
-/// Wrapper type around `RemoteId` to implement label-specific functionality.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct LabelId(RemoteId);
-
-impl LabelId {
-    /// Create a new [`LabelId`] instance from a [`String`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID to wrap.
-    ///
-    #[must_use]
-    pub fn new(id: String) -> Self {
-        Self(RemoteId::new(id))
-    }
-
-    /// Convert the [`LabelId`] into the inner [`RemoteId`].
-    #[must_use]
-    pub fn into_inner(self) -> RemoteId {
-        self.0
-    }
-}
-
-impl Deref for LabelId {
-    type Target = RemoteId;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Display for LabelId {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<LabelId> for RemoteId {
-    fn from(value: LabelId) -> Self {
-        value.into_inner()
-    }
-}
-
-impl From<RemoteId> for LabelId {
-    fn from(value: RemoteId) -> Self {
-        Self::from(value.into_inner())
-    }
-}
-
-impl From<String> for LabelId {
-    fn from(id: String) -> Self {
-        Self(RemoteId::new(id))
-    }
-}
-
-impl From<&str> for LabelId {
-    fn from(id: &str) -> Self {
-        Self(RemoteId::new(id.to_owned()))
-    }
-}
-
-impl FromSql for LabelId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        String::column_result(value).map(LabelId::from)
-    }
-}
-
-impl ToSql for LabelId {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        self.0.to_sql()
-    }
-}
-
 /// Wrapper type around `Vec<RemoteId>` to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Labels(Vec<LabelId>);
@@ -1291,7 +1221,7 @@ macro_rules! declare_local_id {
                         indoc::formatdoc!(
                             "
                             SELECT
-                                remote_id AS id
+                                remote_id AS value
                             FROM
                                 {}
                             WHERE
@@ -1388,6 +1318,13 @@ macro_rules! declare_local_id {
         }
     };
 }
+
+declare_local_id!(LocalContactId => ContactId);
+declare_local_id!(LocalContactEmailId => ContactEmailId);
+declare_local_id!(LocalAddressId => AddressId);
+declare_local_id!(LocalLabelId => LabelId);
+impl_id_for_proton_id!(AuthId);
+impl_id_for_proton_id!(UserId);
 
 /// Local ID.
 ///

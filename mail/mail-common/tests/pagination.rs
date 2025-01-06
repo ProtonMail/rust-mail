@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
@@ -8,7 +8,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageMetadata as ApiMessageMetadata, MessageMetadata,
 };
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::migrations::migrate_core_db;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
@@ -271,7 +271,7 @@ async fn compare_messages(
 fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
     let new_conversation_labels = |index| {
         vec![ApiConversationLabel {
-            id: LabelId::inbox().into(),
+            id: LabelId::inbox(),
             context_num_unread: 0,
             context_num_messages: 1,
             context_time: item_time(index),
@@ -283,7 +283,7 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
     };
     let params = TestParams {
         addresses: vec![ApiAddress {
-            id: ApiRemoteId::from("myaddress"),
+            id: AddressId::from("myaddress"),
             email: "foo@bar.com".to_owned(),
             send: true,
             receive: true,
@@ -318,12 +318,12 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
             .collect(),
         attachments: vec![],
         conversation_count: vec![ApiConversationCount {
-            label_id: LabelId::inbox().clone().into(),
+            label_id: LabelId::inbox().clone(),
             total: count.try_into().unwrap(),
             unread: 0,
         }],
         message_count: vec![ApiMessageCount {
-            label_id: LabelId::inbox().clone().into(),
+            label_id: LabelId::inbox().clone(),
             total: count.try_into().unwrap(),
             unread: 0,
         }],
@@ -334,7 +334,7 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
         .map(|i| ApiMessageMetadata {
             id: message_id(i),
             conversation_id: conversation_id(i),
-            address_id: ApiRemoteId::from("myaddress"),
+            address_id: AddressId::from("myaddress"),
             attachments_metadata: vec![],
             bcc_list: vec![],
             cc_list: vec![],
@@ -344,7 +344,7 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
             is_forwarded: false,
             is_replied: false,
             is_replied_all: false,
-            label_ids: vec![LabelId::inbox().into()],
+            label_ids: vec![LabelId::inbox()],
             num_attachments: 0,
             order: (i + 1).try_into().unwrap(),
             reply_tos: vec![],

@@ -2,7 +2,7 @@ use crate::app::Command;
 use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::actions::LabelAsAction;
 use proton_mail_common::datatypes::{LabelType, ViewMode};
 use proton_mail_common::models::{Conversation, Label};
@@ -37,7 +37,7 @@ impl MoveItemPopup {
             list_state: ScrollableListState::new(Some(0)),
         })
     }
-    fn selected_label_id(&self) -> Option<LocalId> {
+    fn selected_label_id(&self) -> Option<LocalLabelId> {
         let index = self.list_state.selected()?;
         self.folders.get(index).map(|v| v.local_id.unwrap())
     }

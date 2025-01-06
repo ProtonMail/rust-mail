@@ -4,7 +4,7 @@ use crate::subscriber::Subscriber;
 use crate::{Event, EventLoopError};
 use anyhow::anyhow;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::EventId;
 use tracing::{self, debug, error, Level};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
@@ -107,7 +107,7 @@ impl EventLoop {
     async fn collect_events<T: Event + From<<T as Event>::Response>>(
         &self,
         provider: &dyn Provider<T>,
-        mut last_event_id: &RemoteId,
+        mut last_event_id: &EventId,
     ) -> Result<Vec<T>, ApiServiceError> {
         let mut events = Vec::with_capacity(4);
 

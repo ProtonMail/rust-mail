@@ -1,7 +1,7 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
@@ -10,7 +10,6 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_core_common::datatypes::ProductUsedSpace;
-use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{ModelExtension, User, UserSettings};
@@ -40,14 +39,14 @@ use wiremock::{matchers::any, Mock, Request};
 pub trait BaseTestContext {
     /// Generate a test UID.
     #[must_use]
-    fn test_uid() -> RemoteId {
-        RemoteId::from("TEST_UID")
+    fn test_uid() -> AuthId {
+        AuthId::from("TEST_UID")
     }
 
     /// Generate a test user ID.
     #[must_use]
-    fn test_user_id() -> RemoteId {
-        RemoteId::from(TEST_USER_ID)
+    fn test_user_id() -> UserId {
+        UserId::from(TEST_USER_ID)
     }
 
     /// Generate a test user name or address.
@@ -141,7 +140,7 @@ impl TestContext {
     /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
-        user_id: RemoteId,
+        user_id: UserId,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
         Self::_new(Some(user_key_secret), Some(user_id), initializers).await
@@ -156,7 +155,7 @@ impl TestContext {
 
     async fn _new(
         user_key_secret: Option<UserKeySecret>,
-        user_id: Option<RemoteId>,
+        user_id: Option<UserId>,
         initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
         drop(set_global_default(
@@ -295,7 +294,7 @@ impl TestContext {
 
 #[async_trait]
 impl CoreEventSubscriberConnectionProvider for TestContext {
-    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
+    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, Stash)> {
         let user_ctx = self.user_context().await;
 
         Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
@@ -304,7 +303,7 @@ impl CoreEventSubscriberConnectionProvider for TestContext {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TestApiCoreEvent {
-    pub event_id: ApiRemoteId,
+    pub event_id: EventId,
     pub action: ApiAction,
     pub address: Option<Vec<ApiAddressEvent>>,
     pub contact_emails: Option<Vec<ApiContactEmailEvent>>,
@@ -318,7 +317,7 @@ impl GetEventResponse for TestApiCoreEvent {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestCoreEvent {
-    pub event_id: RemoteId,
+    pub event_id: EventId,
     pub action: Action,
     pub address: Option<Vec<AddressEvent>>,
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
@@ -331,7 +330,7 @@ pub struct TestCoreEvent {
 impl Event for TestCoreEvent {
     type Response = TestApiCoreEvent;
 
-    fn event_id(&self) -> &RemoteId {
+    fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -409,7 +408,7 @@ impl CoreEvent for TestCoreEvent {
 impl Default for TestCoreEvent {
     fn default() -> Self {
         Self {
-            event_id: RemoteId::from("test_event"),
+            event_id: EventId::from("test_event"),
             action: Action::Create,
             address: None,
             contact_emails: None,

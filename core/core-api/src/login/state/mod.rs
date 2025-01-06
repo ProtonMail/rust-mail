@@ -4,7 +4,7 @@ use crate::login::state::want_resume_mbp::WantResumeMboxPass;
 use crate::login::state::want_resume_tfa::WantResumeTfa;
 use crate::login::state::want_tfa::WantTfa;
 use crate::login::{state::want_login::WantLogin, LoginError};
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::session::{Config, Session};
 use crate::store::DynStore;
@@ -108,7 +108,7 @@ impl State {
     }
 
     /// Get the user ID of the user that has (or is in the process of) logging in.
-    pub fn user_id(&self) -> Result<&RemoteId, LoginError> {
+    pub fn user_id(&self) -> Result<&UserId, LoginError> {
         let state: &dyn HasUserId = match self {
             Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
@@ -121,7 +121,7 @@ impl State {
     }
 
     /// Get the session ID that has been (or is in the process of) being created.
-    pub fn auth_id(&self) -> Result<&RemoteId, LoginError> {
+    pub fn auth_id(&self) -> Result<&AuthId, LoginError> {
         let state: &dyn HasAuthId = match self {
             Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
@@ -146,8 +146,8 @@ impl State {
         client: Proton,
         config: Arc<Config>,
         store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
+        user_id: UserId,
+        auth_id: AuthId,
     ) -> Self {
         let data = StateData {
             config,
@@ -164,8 +164,8 @@ impl State {
         client: Proton,
         config: Arc<Config>,
         store: DynStore,
-        user_id: RemoteId,
-        auth_id: RemoteId,
+        user_id: UserId,
+        auth_id: AuthId,
     ) -> Self {
         let data = StateData {
             config,
@@ -213,18 +213,18 @@ impl Debug for State {
 pub(crate) struct StateData {
     config: Arc<Config>,
     store: DynStore,
-    user_id: RemoteId,
-    auth_id: RemoteId,
+    user_id: UserId,
+    auth_id: AuthId,
 }
 
 /// A trait for states in which the user ID is known.
 trait HasUserId {
-    fn user_id(&self) -> &RemoteId;
+    fn user_id(&self) -> &UserId;
 }
 
 /// A trait for states in which the auth ID is known.
 trait HasAuthId {
-    fn auth_id(&self) -> &RemoteId;
+    fn auth_id(&self) -> &AuthId;
 }
 
 /// A trait for states that can accept a 2FA code.

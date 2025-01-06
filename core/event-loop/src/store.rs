@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::EventId;
 
 /// This trait allows abstraction over how to store and load events. Note that this only stores the
 /// event RemoteId, you will need to ask the `Provider` for the actual event.
@@ -12,28 +12,28 @@ pub trait Store: Send + Sync {
     ///
     /// # Errors
     /// Returns error if value failed to be loaded.
-    async fn load(&self) -> anyhow::Result<Option<RemoteId>>;
+    async fn load(&self) -> anyhow::Result<Option<EventId>>;
 
     /// Store the latest event id into the store.
     ///
     /// # Errors
     /// Returns error if value failed to be stored.
     ///
-    async fn store(&self, id: RemoteId) -> anyhow::Result<()>;
+    async fn store(&self, id: EventId) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Default)]
 pub struct InMemoryStore {
-    id: std::sync::RwLock<Option<RemoteId>>,
+    id: std::sync::RwLock<Option<EventId>>,
 }
 #[async_trait]
 impl Store for InMemoryStore {
-    async fn load(&self) -> anyhow::Result<Option<RemoteId>> {
+    async fn load(&self) -> anyhow::Result<Option<EventId>> {
         let accessor = self.id.read().expect("lock poison");
         Ok(accessor.clone())
     }
 
-    async fn store(&self, id: RemoteId) -> anyhow::Result<()> {
+    async fn store(&self, id: EventId) -> anyhow::Result<()> {
         let mut accessor = self.id.write().expect("lock poison");
         *accessor = Some(id);
         Ok(())

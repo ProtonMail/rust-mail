@@ -1,6 +1,6 @@
 use crate::login::state::{HasAuthId, HasUserId, StateData, SubmitFido, SubmitTotp};
 use crate::login::{state::State, LoginError};
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::common::{AuthId, UserId};
 use muon::client::flow::LoginTwoFactorFlow;
 use tracing::info;
 
@@ -20,13 +20,13 @@ impl WantTfa {
 }
 
 impl HasUserId for WantTfa {
-    fn user_id(&self) -> &RemoteId {
+    fn user_id(&self) -> &UserId {
         &self.data.user_id
     }
 }
 
 impl HasAuthId for WantTfa {
-    fn auth_id(&self) -> &RemoteId {
+    fn auth_id(&self) -> &AuthId {
         &self.data.auth_id
     }
 }

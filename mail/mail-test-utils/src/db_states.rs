@@ -3,7 +3,8 @@ use std::sync::LazyLock;
 use crate::search::{test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2};
 use crate::utils::{test_address, TestDBState};
 use lazy_static::lazy_static;
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
 };
@@ -98,7 +99,7 @@ static BASE_CONV2_MESSAGE: LazyLock<Message> = LazyLock::new(|| Message {
 static CONV2_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
     remote_id: Some(new_message_id(4)),
     display_order: 1,
-    label_ids: vec![MY_LABEL_ID2.clone().into()],
+    label_ids: vec![MY_LABEL_ID2.clone()],
     subject: "Test".to_owned(),
     sender: "sponge.bob@square.pants".into(),
     to_list: MessageRecipients {
@@ -115,7 +116,7 @@ static CONV2_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
 static CONV2_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
     remote_id: Some(new_message_id(5)),
     display_order: 1,
-    label_ids: vec![MY_LABEL_ID2.clone().into()],
+    label_ids: vec![MY_LABEL_ID2.clone()],
     subject: "RE: Test".to_owned(),
     sender: "venture@bros.com".into(),
     to_list: MessageRecipients {
@@ -128,12 +129,12 @@ static CONV2_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
 });
 
 static CONV_LABEL1: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
-    remote_label_id: Some(MY_LABEL_ID1.clone().into()),
+    remote_label_id: Some(MY_LABEL_ID1.clone()),
     ..Default::default()
 });
 
 static CONV_LABEL2: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
-    remote_label_id: Some(MY_LABEL_ID2.clone().into()),
+    remote_label_id: Some(MY_LABEL_ID2.clone()),
     ..Default::default()
 });
 
@@ -205,32 +206,20 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 attachments_metadata: vec![TEXT_ATTACHMENT.to_owned()],
                 num_attachments: 1,
-                label_ids: vec![
-                    MY_LABEL_ID2.clone().into(),
-                    all_mail.remote_id.clone().unwrap(),
-                ],
+                label_ids: vec![MY_LABEL_ID2.clone(), all_mail.remote_id.clone().unwrap()],
                 ..CONV1_MSG1.to_owned()
             },
             Message {
-                label_ids: vec![
-                    MY_LABEL_ID1.clone().into(),
-                    all_mail.remote_id.clone().unwrap(),
-                ],
+                label_ids: vec![MY_LABEL_ID1.clone(), all_mail.remote_id.clone().unwrap()],
                 ..CONV1_MSG2.to_owned()
             },
             Message {
-                label_ids: vec![
-                    MY_LABEL_ID1.clone().into(),
-                    all_mail.remote_id.clone().unwrap(),
-                ],
+                label_ids: vec![MY_LABEL_ID1.clone(), all_mail.remote_id.clone().unwrap()],
                 ..CONV1_MSG3.to_owned()
             },
             Message {
                 unread: true,
-                label_ids: vec![
-                    MY_LABEL_ID2.clone().into(),
-                    all_mail.remote_id.clone().unwrap(),
-                ],
+                label_ids: vec![MY_LABEL_ID2.clone(), all_mail.remote_id.clone().unwrap()],
                 ..CONV1_MSG4.to_owned()
             },
             // conversation 2
@@ -259,11 +248,11 @@ pub fn new_test_unread_db_state() -> TestDBState {
             remote_id: Some(conv_id1.clone()),
             labels: vec![
                 ConversationLabel {
-                    remote_label_id: Some(MY_LABEL_ID1.clone().into()),
+                    remote_label_id: Some(MY_LABEL_ID1.clone()),
                     ..Default::default()
                 },
                 ConversationLabel {
-                    remote_label_id: Some(MY_LABEL_ID2.clone().into()),
+                    remote_label_id: Some(MY_LABEL_ID2.clone()),
                     ..Default::default()
                 },
             ],
@@ -271,25 +260,25 @@ pub fn new_test_unread_db_state() -> TestDBState {
         }],
         messages: vec![
             Message {
-                label_ids: vec![MY_LABEL_ID1.clone().into()],
+                label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
                 time: 100,
                 ..CONV1_MSG1.to_owned()
             },
             Message {
-                label_ids: vec![MY_LABEL_ID2.clone().into()],
+                label_ids: vec![MY_LABEL_ID2.clone()],
                 unread: true,
                 time: 200,
                 ..CONV1_MSG2.to_owned()
             },
             Message {
-                label_ids: vec![MY_LABEL_ID1.clone().into()],
+                label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
                 time: 300,
                 ..CONV1_MSG3.to_owned()
             },
             Message {
-                label_ids: vec![MY_LABEL_ID1.clone().into()],
+                label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
                 time: 400,
                 ..CONV1_MSG4.to_owned()
@@ -309,7 +298,7 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
         conversations: vec![Conversation {
             remote_id: Some(conv_id1.clone()),
             labels: vec![ConversationLabel {
-                remote_label_id: Some(MY_LABEL_ID2.clone().into()),
+                remote_label_id: Some(MY_LABEL_ID2.clone()),
                 ..Default::default()
             }],
             ..Default::default()

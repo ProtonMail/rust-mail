@@ -163,6 +163,51 @@ macro_rules! declare_proton_id {
     }
 }
 
+declare_proton_id! {
+    /// Represents the Id of the user.
+    pub UserId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a User Address.
+    pub AddressId
+}
+
+declare_proton_id! {
+    /// Represents the Id of an active network Session.
+    pub AuthId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a Contact.
+    pub ContactId
+}
+
+declare_proton_id! {
+    /// Represents the email Id of a Contact.
+    pub ContactEmailId
+}
+
+declare_proton_id! {
+    /// Represents the UID of a Contact.
+    pub ContactUID
+}
+
+declare_proton_id! {
+    /// Represents the Id of an Event.
+    pub EventId
+}
+
+declare_proton_id! {
+    /// Represents the Id of an Event.
+    pub LabelId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a crypto salt.
+    pub SaltId
+}
+
 /// Remote ID.
 ///
 /// This minimal struct is simply a wrapper around a [`String`], and is used to

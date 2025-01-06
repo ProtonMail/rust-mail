@@ -1,5 +1,5 @@
 use proton_api_core::auth::UserKeySecret;
-use proton_core_common::datatypes::RemoteId;
+use proton_api_core::services::proton::common::UserId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
@@ -54,14 +54,14 @@ impl MailTestContext {
     /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> Self {
         Self::_new(Some(user_key_secret), Some(user_id)).await
     }
 
     /// Function to create `MailContext` instance based on parameters provided.
     /// TODO: ET-1381, decouple Mail database initialization.
-    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<RemoteId>) -> Self {
+    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
         let initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>> =
             Some(vec![Box::new(MailUserDatabaseInitializer {})]);
 

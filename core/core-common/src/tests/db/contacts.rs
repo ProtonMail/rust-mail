@@ -1,8 +1,9 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId};
+use crate::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use crate::models::{Contact, ContactCard, ContactEmail};
 use crate::tests::common::new_core_test_connection;
+use proton_api_core::services::proton::common::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;
@@ -92,7 +93,7 @@ async fn test_partial_contact() {
     let contact = contacts.first_mut().unwrap();
     assert_eq!(
         contact.remote_id,
-        Some(RemoteId::from("a29olIjFv0rnXxBhSMw=="))
+        Some(ContactId::from("a29olIjFv0rnXxBhSMw=="))
     );
     assert_eq!(
         contact.emails(&tether).await.unwrap().len(),
@@ -118,9 +119,9 @@ async fn test_partial_contact() {
 fn create_test_full_contact() -> Contact {
     Contact {
         local_id: None,
-        remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+        remote_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
         name: "contact_name".to_owned(),
-        uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
+        uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
         size: 1443,
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,
@@ -131,7 +132,7 @@ fn create_test_full_contact() -> Contact {
             ContactCard {
                 local_id: None,
                 local_contact_id: None,
-                remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+                remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
                 card_type: ContactCardType::Signed,
                 data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
@@ -140,7 +141,7 @@ fn create_test_full_contact() -> Contact {
             ContactCard {
                 local_id: None,
                 local_contact_id: None,
-                remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+                remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
                 card_type: ContactCardType::EncryptedAndSigned,
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
@@ -155,13 +156,13 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
     vec![
         ContactEmail {
             local_id: None,
-            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMw==")),
+            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMw==")),
             name: "contact_email_name_1".to_owned(),
             email: "contact_email_1@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
-            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             local_contact_id: None,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             canonical_email: "contact_email_1@contact.test".to_owned(),
@@ -171,13 +172,13 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
         },
         ContactEmail {
             local_id: None,
-            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMz==")),
+            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMz==")),
             name: "contact_email_name_2".to_owned(),
             email: "contact_email_2@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
-            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             local_contact_id: None,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             canonical_email: "contact_email_2@contact.test".to_owned(),
@@ -191,9 +192,9 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
 fn create_test_partial_contacts() -> Vec<Contact> {
     vec![Contact {
         local_id: None,
-        remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+        remote_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
         name: "contact_name".to_owned(),
-        uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04".to_owned()),
+        uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04".to_owned()),
         size: 1443,
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,

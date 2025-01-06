@@ -97,7 +97,7 @@ pub struct GetContactsResponse {
 pub struct GetEventsLatestResponse {
     /// TODO: Document this field.
     #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
+    pub event_id: EventId,
 }
 
 /// Available public keys.
@@ -176,7 +176,7 @@ pub struct PutDeleteContactsResponse {
 pub struct PutDeleteContactResponse {
     /// Remote ID of the contact.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ContactId,
     /// Response data.
     pub response: ApiErrorInfo,
 }

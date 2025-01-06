@@ -1,8 +1,8 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
-use proton_core_common::datatypes::{IdCounterpart, LabelId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, RemoteId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
@@ -238,7 +238,7 @@ fn test_conversation(conversation: &TestItem) -> ApiConversation {
         num_messages: 1,
         num_unread: if *unread { 1 } else { 0 },
         labels: vec![ApiConversationLabel {
-            id: LabelId::inbox().into(),
+            id: LabelId::inbox(),
             context_expiration_time: 0,
             context_num_attachments: 0,
             context_num_messages: 1,

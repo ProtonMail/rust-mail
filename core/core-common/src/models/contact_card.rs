@@ -1,4 +1,5 @@
-use crate::datatypes::{LocalId, RemoteId};
+use crate::datatypes::LocalContactId;
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::response_data::ContactCard as ApiContactCard;
 use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
 use stash::macros::Model;
@@ -17,15 +18,15 @@ pub struct ContactCard {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalContactId>,
 
     /// Local contact ID to which this card belongs.
     #[DbField]
-    pub local_contact_id: Option<LocalId>,
+    pub local_contact_id: Option<LocalContactId>,
 
     /// Remote contact ID to which this card belongs.
     #[DbField]
-    pub remote_contact_id: Option<RemoteId>,
+    pub remote_contact_id: Option<ContactId>,
 
     /// Status of the card.
     #[DbField]

@@ -106,8 +106,8 @@ fn test_attachment() -> ApiAttachment {
     }
 }
 
-fn address_id() -> RemoteId {
-    RemoteId::from("addr")
+fn address_id() -> AddressId {
+    AddressId::from("addr")
 }
 fn conversation_id() -> RemoteId {
     RemoteId::from("conv")
@@ -119,7 +119,7 @@ fn message_id() -> RemoteId {
 async fn create_attachment_dependencies(
     tether: &mut Tether,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(RemoteId, LocalId, LocalId), AppError> {
+) -> Result<(AddressId, LocalId, LocalId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
     let tx = tether.transaction().await.unwrap();
 

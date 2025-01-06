@@ -1,3 +1,4 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::Address as ApiAddress;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -5,7 +6,6 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount, Label as ApiLabel,
     MessageCount as ApiMessageCount,
 };
-use proton_core_common::datatypes::LabelId;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_common::datatypes::{LabelType, SystemLabelId};
 use proton_mail_common::models::{Conversation, Label};
@@ -51,14 +51,14 @@ async fn test_labeling_conversation_with_custom_label() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &remote_label_id.clone().into_inner(),
+        &remote_label_id,
         vec![remote_conversation.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &remote_label_id.clone().into_inner(),
+        &remote_label_id,
         vec![remote_conversation.id.clone()],
         vec![],
     )
@@ -176,14 +176,14 @@ async fn test_labeling_conversation_with_starred_label() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &LabelId::starred().into_inner(),
+        &LabelId::starred(),
         vec![remote_conversation.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
-        &LabelId::starred().into_inner(),
+        &LabelId::starred(),
         vec![remote_conversation.id.clone()],
         vec![],
     )
@@ -319,12 +319,12 @@ fn test_init_params(
     conversations: Vec<ApiConversation>,
 ) -> TestParams {
     let conversation_count = vec![ApiConversationCount {
-        label_id: LabelId::inbox().clone().into(),
+        label_id: LabelId::inbox().clone(),
         total: conversations.len() as u64,
         unread: 0,
     }];
     let message_count = vec![ApiMessageCount {
-        label_id: LabelId::inbox().clone().into(),
+        label_id: LabelId::inbox().clone(),
         total: 1,
         unread: 0,
     }];

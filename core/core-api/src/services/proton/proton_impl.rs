@@ -38,7 +38,7 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn get_address_by_id(&self, id: RemoteId) -> ApiServiceResult<GetAddressResponse> {
+    async fn get_address_by_id(&self, id: AddressId) -> ApiServiceResult<GetAddressResponse> {
         Ok(GET!("{CORE_V4}/addresses/{id}")
             .send_with(self)
             .await?
@@ -55,7 +55,7 @@ impl ProtonCore for Proton {
             .into_body_string()?)
     }
 
-    async fn get_contact(&self, contact_id: RemoteId) -> ApiServiceResult<GetContactResponse> {
+    async fn get_contact(&self, contact_id: ContactId) -> ApiServiceResult<GetContactResponse> {
         Ok(GET!("/contacts/{contact_id}")
             .send_with(self)
             .await?
@@ -89,7 +89,7 @@ impl ProtonCore for Proton {
 
     async fn put_delete_contacts(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<ContactId>,
     ) -> ApiServiceResult<PutDeleteContactsResponse> {
         Ok(PUT!("/contacts/delete")
             .body_json(PutDeleteContacts { ids })?
@@ -102,11 +102,7 @@ impl ProtonCore for Proton {
     // Event APIs
     // https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Events
 
-    async fn get_event<T>(
-        &self,
-        event_id: RemoteId,
-        options: GetEventOptions,
-    ) -> ApiServiceResult<T>
+    async fn get_event<T>(&self, event_id: EventId, options: GetEventOptions) -> ApiServiceResult<T>
     where
         T: GetEventResponse + for<'de> Deserialize<'de>,
     {

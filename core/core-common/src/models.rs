@@ -42,12 +42,13 @@ pub use self::contact_email::*;
 
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, DateFormat, Density, Email,
-    Flags, HighSecurity, Id, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
+    Flags, HighSecurity, Id, LocalAddressId, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
     QueryResultRemoteId, Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys,
     UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::CoreContextResult;
 use indoc::formatdoc;
+use proton_api_core::services::proton::common::{AddressId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
 };
@@ -390,13 +391,13 @@ pub struct Address {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalAddressId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<AddressId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -563,7 +564,7 @@ pub struct User {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<UserId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -755,7 +756,7 @@ pub struct UserSettings {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<UserId>,
 
     /// TODO: Document this field.
     #[DbField]

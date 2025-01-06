@@ -5,10 +5,10 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
@@ -68,7 +68,7 @@ pub enum MailContextError {
     #[error("Draft: {0}")]
     Draft(#[from] draft::Error),
     #[error("Attempting to create more than one context for the user with id {0}")]
-    DuplicateContext(RemoteId),
+    DuplicateContext(UserId),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -124,7 +124,7 @@ pub struct MailContext {
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
     pub(crate) mail_cache_size: u64,
-    active_user_contexts: Mutex<HashMap<RemoteId, Weak<MailUserContext>>>,
+    active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
 }
 
 impl MailContext {
@@ -214,8 +214,8 @@ impl MailContext {
     /// See [`Context::resume_login_flow`].
     pub async fn resume_login_flow(
         &self,
-        user_id: RemoteId,
-        session_id: RemoteId,
+        user_id: UserId,
+        session_id: AuthId,
     ) -> MailContextResult<Flow> {
         let flow = self
             .core_context
@@ -318,7 +318,7 @@ impl MailContext {
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_account_sessions(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> MailContextResult<Vec<CoreSession>> {
         Ok(self.core_context.get_account_sessions(user_id).await?)
     }
@@ -332,7 +332,7 @@ impl MailContext {
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_account_sessions(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_account_sessions(user_id).await?)
     }
@@ -345,7 +345,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_account(&self, user_id: RemoteId) -> MailContextResult<Option<CoreAccount>> {
+    pub async fn get_account(&self, user_id: UserId) -> MailContextResult<Option<CoreAccount>> {
         Ok(self.core_context.get_account(user_id).await?)
     }
 
@@ -356,7 +356,7 @@ impl MailContext {
     /// Returns an error if the database operation fails.
     pub async fn get_account_state(
         &self,
-        user_id: RemoteId,
+        user_id: UserId,
     ) -> MailContextResult<Option<CoreAccountState>> {
         Ok(self.core_context.get_account_state(user_id).await?)
     }
@@ -369,10 +369,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(
-        &self,
-        session_id: RemoteId,
-    ) -> MailContextResult<Option<CoreSession>> {
+    pub async fn get_session(&self, session_id: AuthId) -> MailContextResult<Option<CoreSession>> {
         Ok(self.core_context.get_session(session_id).await?)
     }
 
@@ -383,7 +380,7 @@ impl MailContext {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
-        session_id: RemoteId,
+        session_id: AuthId,
     ) -> MailContextResult<Option<CoreSessionState>> {
         Ok(self.core_context.get_session_state(session_id).await?)
     }
@@ -402,7 +399,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the account is not found.
-    pub async fn set_primary_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+    pub async fn set_primary_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.set_primary_account(user_id).await?)
     }
 
@@ -411,7 +408,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn logout_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+    pub async fn logout_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.logout_account(user_id).await?)
     }
 
@@ -420,7 +417,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+    pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.delete_account(user_id).await?)
     }
 
@@ -435,7 +432,7 @@ impl MailContext {
     }
 
     /// Path where mail content should be cached for user with `user_id`.
-    pub fn mail_cache_path(&self, user_id: &RemoteId) -> PathBuf {
+    pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
         self.mail_cache_path.join(user_id.to_string())
     }
 

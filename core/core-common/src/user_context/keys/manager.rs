@@ -1,8 +1,11 @@
-use crate::datatypes::RemoteId;
+use super::KeyHandlingError;
+use super::KeyHandlingResult;
+use super::LoadKeySecret;
 use crate::models::User;
 use crate::models::{Address, ModelExtension};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
+use proton_api_core::services::proton::common::{AddressId, UserId};
 use proton_api_core::services::proton::requests::GetKeysAllOptions;
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
@@ -14,10 +17,6 @@ use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProvider
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::{collections::HashMap, time::Duration};
-
-use super::KeyHandlingError;
-use super::KeyHandlingResult;
-use super::LoadKeySecret;
 
 use super::{
     cache::{
@@ -36,7 +35,7 @@ pub struct CryptoKeyManager {
     /// A cache for user keys.
     user_keys: RwLock<CacheOption<CachedUserKeys>>,
     /// A cache for address keys.
-    address_keys: RwLock<HashMap<RemoteId, CacheOption<CachedAddressKeys>>>,
+    address_keys: RwLock<HashMap<AddressId, CacheOption<CachedAddressKeys>>>,
 }
 
 impl Default for CryptoKeyManager {
@@ -69,7 +68,7 @@ impl CryptoKeyManager {
         pgp_provider: &Provider,
         conn: &Tether,
         secret_load: &impl LoadKeySecret,
-        user_id: &RemoteId,
+        user_id: &UserId,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         let cached_keys = self.user_keys.read().get(self.user_key_lifetime);
         let unlocked_keys = match cached_keys {
@@ -93,8 +92,8 @@ impl CryptoKeyManager {
         pgp_provider: &Provider,
         conn: &Tether,
         secret_load: &impl LoadKeySecret,
-        user_id: &RemoteId,
-        address_id: &RemoteId,
+        user_id: &UserId,
+        address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         let cached_keys = self
             .address_keys
@@ -151,7 +150,7 @@ impl CryptoKeyManager {
     }
 
     /// Clears the address key cache for a specific address id.
-    pub fn clear_item_address_key_cache(&self, address_id: &RemoteId) {
+    pub fn clear_item_address_key_cache(&self, address_id: &AddressId) {
         self.address_keys.write().remove(address_id);
     }
 
@@ -181,7 +180,7 @@ impl CryptoKeyManager {
     fn update_address_key_cache<Provider: PgpProviderSync>(
         &self,
         pgp_provider: &Provider,
-        address_id: &RemoteId,
+        address_id: &AddressId,
         keys: &[UnlockedAddressKey<Provider>],
     ) -> KeyHandlingResult<()> {
         let mut new_cached_keys: CachedAddressKeys = Vec::with_capacity(keys.len());
@@ -239,8 +238,8 @@ impl CryptoKeyManager {
         pgp_provider: &Provider,
         conn: &Tether,
         secret_load_fn: &impl LoadKeySecret,
-        user_id: &RemoteId,
-        address_id: &RemoteId,
+        user_id: &UserId,
+        address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
         let address = Address::find_by_id(address_id.clone(), conn)
@@ -276,7 +275,7 @@ impl CryptoKeyManager {
         pgp_provider: &Provider,
         conn: &Tether,
         secret_loader: &impl LoadKeySecret,
-        user_id: &RemoteId,
+        user_id: &UserId,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         // Load the user from the DB.
         let user = User::load(user_id.clone(), conn)

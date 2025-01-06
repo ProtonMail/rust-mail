@@ -62,7 +62,7 @@ use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
+use proton_core_common::datatypes::{AvatarInformation as RealAvatarInformation, LocalLabelId};
 use proton_core_common::datatypes::{
     IdCounterpart as RealIdCounterpart, LocalId as RealLocalId, RemoteId as RealRemoteId,
 };
@@ -2067,7 +2067,7 @@ impl MessageSearchOptions {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
-                    if let Some(resolved_id) = RealLocalId::from(*id)
+                    if let Some(resolved_id) = LocalLabelId::from(*id)
                         .counterpart::<RealLabel>(tether)
                         .await?
                     {

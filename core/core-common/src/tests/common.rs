@@ -6,8 +6,7 @@ use stash::stash::Stash;
 #[macro_export]
 macro_rules! lid {
     ($id:expr) => {{
-        use $crate::datatypes::LocalId;
-        Some(LocalId::from($id))
+        Some($id.into())
     }};
 }
 

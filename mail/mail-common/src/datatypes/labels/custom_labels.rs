@@ -2,13 +2,13 @@ use crate::datatypes::labels::messages_counts;
 use crate::datatypes::{LabelColor, LabelDescription};
 use crate::models::Label;
 use crate::AppError;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::Tether;
 
 /// Represent a `Label` defined by End User
 pub struct CustomLabel {
     /// Local id of the Label.
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
 
     /// The color of the Label.
     pub color: LabelColor,

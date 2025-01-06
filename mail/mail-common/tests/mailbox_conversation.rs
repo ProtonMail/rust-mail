@@ -1,10 +1,10 @@
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
-use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
@@ -23,7 +23,7 @@ async fn test_new_mailbox_sync_conversations() {
         .get_mut(&ApiLabelType::Label)
         .unwrap()
         .push(ApiLabel {
-            id: ApiRemoteId::from("testlabel"),
+            id: LabelId::from("testlabel"),
             parent_id: None,
             name: "testlabel".to_owned(),
             path: None,
@@ -45,7 +45,7 @@ async fn test_new_mailbox_sync_conversations() {
             conversation_id: params.conversations[0].id.clone(),
             order: 0,
             address_id: params.addresses[0].id.clone(),
-            label_ids: vec![LabelId::inbox().into()],
+            label_ids: vec![LabelId::inbox()],
             external_id: None,
             subject: String::new(),
             sender: Default::default(),
@@ -70,7 +70,7 @@ async fn test_new_mailbox_sync_conversations() {
             conversation_id: params.conversations[0].id.clone(),
             order: 1,
             address_id: params.addresses[0].id.clone(),
-            label_ids: vec![LabelId::inbox().into()],
+            label_ids: vec![LabelId::inbox()],
             external_id: None,
             subject: String::new(),
             sender: Default::default(),

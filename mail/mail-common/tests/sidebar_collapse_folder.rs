@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::RemoteId;
@@ -92,7 +92,7 @@ fn sidebar_test_params(name: &str, state: bool) -> Params {
 
 fn create_label(name: &str, expanded: bool) -> ApiLabel {
     ApiLabel {
-        id: ApiRemoteId::from(name),
+        id: LabelId::from(name),
         parent_id: None,
         color: "".to_string(),
         display: false,

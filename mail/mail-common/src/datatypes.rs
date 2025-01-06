@@ -57,6 +57,7 @@ use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -73,7 +74,7 @@ use proton_api_mail::services::proton::response_data::{
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{AvatarInformation, LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{AvatarInformation, LocalId, LocalLabelId, RemoteId};
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };
@@ -1005,7 +1006,7 @@ pub struct ConversationCount {
 impl From<ApiConversationCount> for ConversationCount {
     fn from(value: ApiConversationCount) -> Self {
         Self {
-            label_id: value.label_id.into(),
+            label_id: value.label_id,
             total: value.total,
             unread: value.unread,
         }
@@ -1535,7 +1536,7 @@ pub struct MessageCount {
 impl From<ApiMessageCount> for MessageCount {
     fn from(value: ApiMessageCount) -> Self {
         Self {
-            label_id: value.label_id.into(),
+            label_id: value.label_id,
             total: value.total,
             unread: value.unread,
         }
@@ -1945,7 +1946,7 @@ impl SystemLabelId for LabelId {}
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CustomLabel {
     /// Local id of the label
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
     /// Name of the label
     pub name: String,
     /// Color of the label.

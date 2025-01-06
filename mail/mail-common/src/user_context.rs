@@ -15,10 +15,11 @@ pub use initialization::*;
 use proton_action_queue::queue::{Queue, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::crypto_clock;
+use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalAddressId, LocalId};
 use proton_core_common::models::{Address, User};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
@@ -140,12 +141,12 @@ impl MailUserContext {
     }
 
     /// Get the remote (API) ID of the user associated with this context.
-    pub fn user_id(&self) -> &RemoteId {
+    pub fn user_id(&self) -> &UserId {
         self.user_context.user_id()
     }
 
     /// Get the remote (API) ID of the session associated with this context.
-    pub fn session_id(&self) -> &RemoteId {
+    pub fn session_id(&self) -> &AuthId {
         self.user_context.session_id()
     }
 
@@ -202,7 +203,7 @@ impl MailUserContext {
         &self,
         pgp_provider: &Provider,
         conn: &Tether,
-        address_id: &RemoteId,
+        address_id: &AddressId,
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
             .user_context
@@ -251,7 +252,7 @@ impl MailUserContext {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                 MailContextError::App(AppError::RemoteIdNotFound(
                     "address".to_owned(),
-                    address.local_id.unwrap_or(LocalId::from(0)),
+                    LocalId::from(address.local_id.unwrap_or(LocalAddressId::from(0)).as_u64()),
                 ))
             })?;
 

@@ -1,7 +1,8 @@
 use crate::actions::labels::Expand;
 use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
 use crate::{AppError, MailContextError};
-use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
 use stash::params;
 use stash::{orm::Model, stash::Tether};
 use tracing::error;
@@ -108,7 +109,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: LocalId) -> SidebarResult<()> {
+    pub async fn collapse_folder(&self, local_id: LocalLabelId) -> SidebarResult<()> {
         self.user_ctx
             .execute_action(Expand::collapse(local_id))
             .await?;
@@ -120,7 +121,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: LocalId) -> SidebarResult<()> {
+    pub async fn expand_folder(&self, local_id: LocalLabelId) -> SidebarResult<()> {
         self.user_ctx
             .execute_action(Expand::expand(local_id))
             .await?;

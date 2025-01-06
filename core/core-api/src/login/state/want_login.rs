@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::prelude::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::session::Config;
 use crate::store::{AuthInfo, DynStore, MbpMode, TfaMode};
@@ -49,8 +49,8 @@ impl WantLogin {
                 } = flow_data;
 
                 let auth_info = AuthInfo {
-                    user_id: RemoteId::from(user_id.clone()),
-                    session_id: RemoteId::from(session_id.clone()),
+                    user_id: UserId::from(user_id.clone()),
+                    session_id: AuthId::from(session_id.clone()),
                     tfa_mode: TfaMode::none(),
                     mbp_mode: MbpMode::from(password_mode),
                 };
@@ -60,8 +60,8 @@ impl WantLogin {
                 let data = StateData {
                     config,
                     store,
-                    user_id: RemoteId::from(user_id),
-                    auth_id: RemoteId::from(session_id),
+                    user_id: UserId::from(user_id),
+                    auth_id: AuthId::from(session_id),
                 };
 
                 match password_mode {
@@ -80,8 +80,8 @@ impl WantLogin {
                 } = flow_data;
 
                 let auth_info = AuthInfo {
-                    user_id: RemoteId::from(user_id.clone()),
-                    session_id: RemoteId::from(session_id.clone()),
+                    user_id: UserId::from(user_id.clone()),
+                    session_id: AuthId::from(session_id.clone()),
                     tfa_mode: TfaMode::new(flow.has_totp(), flow.has_fido()),
                     mbp_mode: MbpMode::from(password_mode),
                 };
@@ -91,8 +91,8 @@ impl WantLogin {
                 let data = StateData {
                     config,
                     store,
-                    user_id: RemoteId::from(user_id),
-                    auth_id: RemoteId::from(session_id),
+                    user_id: UserId::from(user_id),
+                    auth_id: AuthId::from(session_id),
                 };
 
                 match password_mode {

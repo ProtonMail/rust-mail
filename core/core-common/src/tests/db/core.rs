@@ -2,11 +2,11 @@
 
 use crate::datatypes::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
-    RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
-    WeekStart,
+    SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::models::{User, UserSettings};
 use crate::tests::common::new_core_test_connection;
+use proton_api_core::services::proton::common::UserId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 
@@ -67,7 +67,7 @@ async fn test_core_user_space_updates() {
 async fn test_core_store_and_load_user_settings() {
     let mut tether = new_core_test_connection().await.connection();
 
-    let user_id = RemoteId::from("USER");
+    let user_id = UserId::from("USER");
 
     let mut settings = UserSettings {
         remote_id: Some(user_id.clone()),
@@ -135,7 +135,7 @@ async fn test_core_store_and_load_user_settings() {
 
 fn new_test_user() -> User {
     User {
-        remote_id: Some(RemoteId::from("my_user_id")),
+        remote_id: Some(UserId::from("my_user_id")),
         name: Some("my_user_name".to_owned()),
         display_name: Some("My User Name".to_owned()),
         email: "my_name@user.me".to_owned(),

@@ -6,7 +6,7 @@ use crate::{
     datatypes::{LabelColor, LabelType},
     models::Label,
 };
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::LocalLabelId;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 ///
 pub struct LabelAsAction {
     /// The database id of the label.
-    pub label_id: LocalId,
+    pub label_id: LocalLabelId,
 
     /// The name of the label.
     pub name: String,
@@ -78,7 +78,7 @@ impl LabelAsAction {
 }
 
 struct LabelAsActionMap {
-    map: BTreeMap<LocalId, Vec<LabelAsAction>>,
+    map: BTreeMap<LocalLabelId, Vec<LabelAsAction>>,
 }
 
 impl LabelAsActionMap {
@@ -88,7 +88,7 @@ impl LabelAsActionMap {
         }
     }
 
-    fn insert(&mut self, label_id: LocalId, action: LabelAsAction) {
+    fn insert(&mut self, label_id: LocalLabelId, action: LabelAsAction) {
         self.map.entry(label_id).or_default().push(action);
     }
 

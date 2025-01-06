@@ -1,7 +1,7 @@
 use proton_api_core::consts::CoreBundle;
+use proton_api_core::services::proton::common::UserId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
-use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::draft::recipients::{
     ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
     ValidatingRecipientList, ValidationState,
@@ -38,7 +38,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let user_ctx = ctx.mail_user_context().await;
@@ -113,7 +113,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let user_ctx = ctx.mail_user_context().await;

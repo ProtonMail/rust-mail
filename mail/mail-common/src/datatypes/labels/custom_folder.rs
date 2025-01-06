@@ -2,17 +2,17 @@ use crate::datatypes::labels::{color_to_display, messages_counts};
 use crate::datatypes::{LabelColor, LabelDescription};
 use crate::models::Label;
 use crate::AppError;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::Tether;
 
 /// Contextual representation of a `Label` when it is opened for display.
 #[derive(Clone, Debug)]
 pub struct CustomFolder {
     /// Local id of the Label.
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
 
     /// TODO: Document this field.
-    pub parent_id: Option<LocalId>,
+    pub parent_id: Option<LocalLabelId>,
 
     /// List of the Labels contained in this Folder
     pub children: Vec<CustomFolder>,

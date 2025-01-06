@@ -1,4 +1,4 @@
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_api_core::services::proton::common::{LabelId, UserId};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
@@ -18,7 +18,7 @@ async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let params = message_body_test_params();
@@ -98,7 +98,7 @@ async fn mailbox_message_body_mime() {
 
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        RemoteId::from(TEST_USER_ID),
+        UserId::from(TEST_USER_ID),
     )
     .await;
     let user_ctx = ctx.mail_user_context().await;

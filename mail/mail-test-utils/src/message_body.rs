@@ -2,6 +2,7 @@
 use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, Flags as ApiFlags,
@@ -13,7 +14,6 @@ use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::LabelId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_inbox::proton_crypto::new_srp_provider;
@@ -54,7 +54,7 @@ pub const TEST_MESSAGE_BODY_MIME_SIGNATURE: &str = "-----BEGIN PGP PUBLIC KEY BL
 #[must_use]
 pub fn message_body_test_user_info() -> ApiUser {
     ApiUser {
-        id: ApiRemoteId::from(TEST_USER_ID),
+        id: UserId::from(TEST_USER_ID),
         name: Some("rust_test".to_owned()),
         display_name: None,
         email: "rust_test@proton.ch".to_owned(),
@@ -94,7 +94,7 @@ pub fn message_body_test_user_info() -> ApiUser {
 }
 
 fn message_body_test_user_key() -> LockedKey {
-    LockedKey  {
+    LockedKey {
         id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
         version: 3,
         private_key: ArmoredPrivateKey::from("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: ProtonMail\n\nxYYEZie3jRYJKwYBBAHaRw8BAQdAAp+4PE1Sf5V95XrIY/P2dUNk1TOojoEG\nLuuOzULTa1v+CQMINYn0u3DCV01gjT+Noe2HzLxwP2hieZC1aoGCxSrLn0fs\nLeShqv2pCPZ+SdrjXB5s5Rq7OP5Kr/2gN+0KS0yLGdyirFZWe6m5T8j20UQ5\n0M07bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp\nbF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZie3jQQLCQcICZA4nKgbRZBl\nGQMVCAoEFgACAQIZAQKbAwIeARYhBOZJEArPLqrMMxX8fzicqBtFkGUZAADk\n/AD+LA6NW1K+Z3IT66/DEtjH0cmw6HNqxkBdT7kaL2o5pAMA/j9b4JCurWk/\n62MBM4I9RwXzSo8lmgPiYwPp4d/xgEsMx4sEZie3jRIKKwYBBAGXVQEFAQEH\nQHvLC7RWIDsorX5ZmYwjZbUhbXnEcO2sYt8OFaIh5KtHAwEIB/4JAwhKivkG\nshycUGA6wZtPR2HqO6+jvvSlRau/g2eZnWqhnvB4iIYTcD+CPpcPnWrrNgTz\nAU+kQ5sVrP6OiKKHIkUvHT5+MwelTbcpievGx2zGwngEGBYKACoFgmYnt40J\nkDicqBtFkGUZApsMFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkAAJ6BAQDv4nBl\nNnj0W7XiAjiwRmVrY/sdybelB6j01p7UrcVAxQEAtEmT2cSIScVdWH1j3H9l\n0gGE7amH+cm6CjXOA7+Uwwc=\n=RGJ0\n-----END PGP PRIVATE KEY BLOCK-----\n".to_owned()),
@@ -113,7 +113,7 @@ fn message_body_test_user_key() -> LockedKey {
 #[must_use]
 pub fn message_body_test_addresses() -> Vec<ApiAddress> {
     vec![ApiAddress {
-        id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+        id: AddressId::from(TEST_USER_ADDRESS_ID),
         email: "rust_test@proton.ch".to_owned(),
         send: true,
         receive: true,
@@ -124,7 +124,7 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
         display_name: "rust_test".to_owned(),
         signature: String::new(),
         keys: ApiAddressKeys(
-            vec![LockedKey{
+            vec![LockedKey {
                 id: KeyId::from("gzKDANARz0i8OHhGuZV-oFfURju0I3XeW_hNn09g13dS_NJ57UbW420UAcWb-0s93xoav22O_jARq61FyL3guw=="),
                 version: 3,
                 private_key: ArmoredPrivateKey::from("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: ProtonMail\n\nxYYEZie3jRYJKwYBBAHaRw8BAQdA0lnAs/zJxwALYyLq9jnthTTJauaqwvLQ\nod3cCVOua+v+CQMIcWjkpeADcjxgwP+7tEc2sfM3J4oWV/p344AsSBiK442t\n5GmxcPBNuj7P82Mjfj10MfhzxIgDF39KW85vcrL4BRuDYq4uSUURFnZmiLFS\nx80vcnVzdF90ZXN0QHByb3Rvbi5ibGFjayA8cnVzdF90ZXN0QHByb3Rvbi5i\nbGFjaz7CjAQQFgoAPgWCZie3jQQLCQcICZDD5SnHczmG6wMVCAoEFgACAQIZ\nAQKbAwIeARYhBBGxOGij+OleubdsX8PlKcdzOYbrAABxyQEA53ij2BO8KHOi\nlmhaB9qeaNDnZhlvNazM9O87r2Cm03UA/jLgvtPQe+HgIDbguMFSeacvAKSG\n2A5jl6AAPWjifF4Jx4sEZie3jRIKKwYBBAGXVQEFAQEHQLJ401cWczKQigvx\njfQ5DxVXvA9p+HRuW16642Ybd99+AwEIB/4JAwjsnBN5czXnymCSAHHIugJH\nwwH1rvooZGeZ26QZ/UhsjQwXy1O5J66plmBD1Oe/uZG4Ed6ylw1VwROmW03q\nrRWwYeeVSN20YMavgbAZT7AVwngEGBYKACoFgmYnt40JkMPlKcdzOYbrApsM\nFiEEEbE4aKP46V65t2xfw+Upx3M5husAAPU7AQCMKF564vtdGCY/KIGqAhm2\nSNUnK5w6MkGKgrztbAhvngD/VK3t0WB8mUqXC3JoS2xC6rtyiyciAjQvuwWT\n2ePDxgI=\n=5IIS\n-----END PGP PRIVATE KEY BLOCK-----\n".to_owned()),
@@ -141,7 +141,7 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
         ),
         catch_all: false,
         proton_mx: true,
-        signed_key_list: ApiAddressSignedKeyList{
+        signed_key_list: ApiAddressSignedKeyList {
             min_epoch_id: Some(3),
             max_epoch_id: Some(66),
             expected_min_epoch_id: None,
@@ -183,8 +183,8 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             id: ApiRemoteId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
             conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
             order: 0,
-            address_id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
-            label_ids: vec![LabelId::inbox().into()],
+            address_id: AddressId::from(TEST_USER_ADDRESS_ID),
+            label_ids: vec![LabelId::inbox()],
             external_id: None,
             subject: "Mail with test body".to_owned(),
             sender: ApiMessageSender::default(),
@@ -193,7 +193,7 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             bcc_list: vec![],
             reply_tos: vec![],
             flags: ApiMessageFlags::DKIM_FAIL,
-            time:  1_715_863_508,
+            time: 1_715_863_508,
             size: 333,
             unread: false,
             is_replied: false,
@@ -210,17 +210,17 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
             mime_type: ApiMimeType::TextHtml,
             attachments: vec![],
-        }
+        },
     }
 }
 
 #[must_use]
 pub fn message_body_test_message_mime() -> ApiMessage {
     ApiMessage {
-        metadata: ApiMessageMetadata{
+        metadata: ApiMessageMetadata {
             id: ApiRemoteId::from("sUrSuXEN_wQ9dPeKcwquBnOJXqr4Lsb9Y1iAo2AXi0Wj-z2T5pAf2iANsmvXJBZr-mLTXeGnkEb_S56SfEUHOQ==".to_owned()),
             conversation_id: ApiRemoteId::from("sEaYBselvkhNF_KB4QK-aVYUrZYJnGJovDdSxQMQ8NUwsJUgHLtLwtQdeKBVEYZ33obagXEj36yDTTejiXhKGg==".to_owned()),
-            address_id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+            address_id: AddressId::from(TEST_USER_ADDRESS_ID),
             attachments_metadata: vec![],
             bcc_list: vec![],
             cc_list: vec![],
@@ -242,7 +242,7 @@ pub fn message_body_test_message_mime() -> ApiMessage {
             to_list: vec![],
             unread: false,
         },
-        body: ApiMessageBody{
+        body: ApiMessageBody {
             attachments: vec![],
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\n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\nGelSG3lI\n=fy7R\n-----END PGP MESSAGE-----\n".to_string(),
             header: String::new(),

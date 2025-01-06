@@ -1,11 +1,12 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::datatypes::{ProductUsedSpace, RemoteId};
+use crate::datatypes::ProductUsedSpace;
 use crate::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
 use crate::models::{User, UserSettings};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::TryFutureExt;
+use proton_api_core::services::proton::common::UserId;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
@@ -43,7 +44,7 @@ pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
     ///
     /// # Errors
     /// Return error if the connection or the user id can not be obtained.
-    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)>;
+    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, Stash)>;
 }
 pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(Weak<T>);
 

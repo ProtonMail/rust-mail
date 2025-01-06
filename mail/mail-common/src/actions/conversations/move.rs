@@ -7,7 +7,7 @@ use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, RemoteId};
+use proton_core_common::datatypes::{IdCounterpart, LocalId, LocalLabelId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -20,8 +20,8 @@ impl Move {
     /// Create a new action which moves conversations with `ids` from `source_label_id` to
     /// `destination_label_id`.
     pub fn new(
-        source_label_id: LocalId,
-        destination_label_id: LocalId,
+        source_label_id: LocalLabelId,
+        destination_label_id: LocalLabelId,
         target_ids: impl IntoIterator<Item = LocalId>,
     ) -> Self {
         Self(ActionMoveData::new(
@@ -113,8 +113,7 @@ impl ActionHandler for Handler {
             .0
             .remote_destination_label_id
             .clone()
-            .expect("Should be set")
-            .into();
+            .expect("Should be set");
         let responses = api
             .put_conversations_label(conversation_ids, label_id, None)
             .await?

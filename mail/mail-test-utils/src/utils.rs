@@ -1,8 +1,9 @@
 use crate::search::MY_ADDRESS_ID;
+use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_mail_common::datatypes::{
     ConversationCount, MessageCount, MessageRecipient, MessageRecipients, MessageSender,
@@ -23,7 +24,7 @@ pub struct TestDBState {
 
 #[derive(Default, Debug)]
 pub struct TestDBStateMap {
-    pub labels: HashMap<LabelId, LocalId>,
+    pub labels: HashMap<LabelId, LocalLabelId>,
     pub conversations: HashMap<RemoteId, LocalId>,
     pub messages: HashMap<RemoteId, LocalId>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
@@ -296,7 +297,7 @@ pub fn message_counts_for_conversation(
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, ConversationCount> {
+pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, ConversationCount> {
     BTreeMap::from_iter(Label::all(tether).await.unwrap().into_iter().map(|c| {
         (
             c.local_id.unwrap(),
@@ -311,7 +312,7 @@ pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, Conversati
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalId, MessageCount> {
+pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageCount> {
     BTreeMap::from_iter(Label::all(tether).await.unwrap().into_iter().map(|c| {
         (
             c.local_id.unwrap(),

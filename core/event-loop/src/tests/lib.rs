@@ -11,7 +11,6 @@ use crate::{Event, EventLoopError, SubscriberError};
 use anyhow::anyhow;
 use mockall::Sequence;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::responses::GetEventResponse;
 use serde::Deserialize;
 use std::time::Duration;
@@ -19,7 +18,7 @@ use tokio::spawn;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct LoopEvent {
-    pub event_id: RemoteId,
+    pub event_id: EventId,
     pub f: bool,
     pub has_more: bool,
 }
@@ -27,7 +26,7 @@ pub struct LoopEvent {
 impl Event for LoopEvent {
     type Response = LoopEvent;
 
-    fn event_id(&self) -> &RemoteId {
+    fn event_id(&self) -> &EventId {
         &self.event_id
     }
 
@@ -41,9 +40,9 @@ impl GetEventResponse for LoopEvent {}
 #[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn test_loop_event_collection() {
-    let first_event_id = RemoteId::from("0");
-    let second_event_id = RemoteId::from("1");
-    let third_event_id = RemoteId::from("2");
+    let first_event_id = EventId::from("0");
+    let second_event_id = EventId::from("1");
+    let third_event_id = EventId::from("2");
 
     let expected_events = [
         LoopEvent {
@@ -166,8 +165,8 @@ async fn test_loop_event_collection() {
 
 #[tokio::test]
 async fn test_error_handler_retry_retries_loop() {
-    let first_event_id = RemoteId::from("0");
-    let second_event_id = RemoteId::from("1");
+    let first_event_id = EventId::from("0");
+    let second_event_id = EventId::from("1");
 
     let expected_events = [LoopEvent {
         event_id: second_event_id.clone(),
@@ -288,7 +287,7 @@ async fn test_error_handler_retry_retries_loop() {
 
 #[tokio::test]
 async fn test_error_handler_pause_pauses_loop() {
-    let first_event_id = RemoteId::from("0");
+    let first_event_id = EventId::from("0");
 
     let mut sequence = Sequence::new();
     let mut store = MockStore::new();
@@ -352,7 +351,7 @@ async fn test_error_handler_pause_pauses_loop() {
 
 #[tokio::test]
 async fn test_error_handler_abort_causes_loop_exit() {
-    let first_event_id = RemoteId::from("0");
+    let first_event_id = EventId::from("0");
 
     let mut sequence = Sequence::new();
     let mut store = MockStore::new();

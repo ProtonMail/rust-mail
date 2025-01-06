@@ -12,10 +12,12 @@ use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyModifiers};
 use flume::{Receiver, Sender};
 use futures::FutureExt;
-use proton_core_common::datatypes::{LabelId, LocalId};
+
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
 use proton_mail_common::models::{Label, MailSettings};
+use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
 };
@@ -259,7 +261,7 @@ impl Model {
         })
     }
 
-    fn select_label(&mut self, label_id: LocalId) -> Command<Messages> {
+    fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
             Command::message(match Mailbox::new(ctx, label_id).await {
