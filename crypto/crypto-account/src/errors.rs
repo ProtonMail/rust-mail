@@ -24,6 +24,14 @@ pub enum AddressKeySelectionError {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum AddressKeyExportError {
+    #[error("No valid address key found to export")]
+    NoKeyFound,
+    #[error("Failed to export key: {0}")]
+    Export(String),
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum AccountCryptoError {
     #[error("Failed to verify signature for token {0}")]
     TokenVerification(#[from] VerificationError),

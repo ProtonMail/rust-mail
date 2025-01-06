@@ -7,7 +7,7 @@ use crate::{
         generate_locked_pgp_key_with_token, generate_token_values, unlock_legacy_key,
         unlock_legacy_key_async,
     },
-    errors::{AccountCryptoError, AddressKeySelectionError},
+    errors::{AccountCryptoError, AddressKeyExportError, AddressKeySelectionError},
     salts::KeySecret,
 };
 
@@ -204,6 +204,37 @@ impl<Priv: PrivateKey, Pub: PublicKey> PrimaryUnlockedAddressKey<Priv, Pub> {
     pub fn for_signing(&self) -> &[Priv] {
         &self.sign
     }
+
+    /// Exports the public key in `OpenPGP` armored format to be shared with recipients.
+    ///
+    /// For example, the exported key might be attached to an email if the user selected this option.
+    /// For compatibility reasons, this function will return the internal v4 public key for v6 primary keys.
+    /// The returned key has the form:
+    /// ```skip
+    /// -----BEGIN PGP PUBLIC KEY BLOCK-----
+    ///
+    /// mDMEWx6DORYJKwYBBAHaRw8BAQdABJa6xH6/nQoBQtVuqaenNLrKvkJ5gniGtBH3
+    /// tsK...
+    /// -----END PGP PUBLIC KEY BLOCK-----
+    /// ```
+    pub fn export_public_key<Provider>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> Result<String, AddressKeyExportError>
+    where
+        Provider: PGPProviderSync<PrivateKey = Priv>,
+    {
+        // We use the first signing key for compatibility reasons for now.
+        let private_key: &Priv = self.sign.first().ok_or(AddressKeyExportError::NoKeyFound)?;
+        let public_key = pgp_provider
+            .private_key_to_public_key(private_key)
+            .map_err(|err| AddressKeyExportError::Export(err.to_string()))?;
+        let public_key_bytes = pgp_provider
+            .public_key_export(&public_key, DataEncoding::Armor)
+            .map_err(|err| AddressKeyExportError::Export(err.to_string()))?;
+        String::from_utf8(public_key_bytes.as_ref().to_vec())
+            .map_err(|_| AddressKeyExportError::Export("Failed to convert to utf-8".to_owned()))
+    }
 }
 
 /// Represents locked address keys of a user retrieved from the API.
@@ -381,6 +412,33 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv,
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressKey<Priv, Pub> {
     fn as_public_key(&self) -> &Pub {
         &self.public_key
+    }
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> DecryptedAddressKey<Priv, Pub> {
+    /// Exports the public key in `OpenPGP` armored format to be shared with recipients.
+    ///
+    /// For example, the exported key might be attached to an email if the user selected this option.
+    /// The returned key has the form:
+    /// ``````skip
+    /// -----BEGIN PGP PUBLIC KEY BLOCK-----
+    ///
+    /// mDMEWx6DORYJKwYBBAHaRw8BAQdABJa6xH6/nQoBQtVuqaenNLrKvkJ5gniGtBH3
+    /// tsK...
+    /// -----END PGP PUBLIC KEY BLOCK-----
+    /// ```
+    pub fn export_public_key<Provider>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> Result<String, AddressKeyExportError>
+    where
+        Provider: PGPProviderSync<PublicKey = Pub>,
+    {
+        let public_key_bytes = pgp_provider
+            .public_key_export(&self.public_key, DataEncoding::Armor)
+            .map_err(|err| AddressKeyExportError::Export(err.to_string()))?;
+        String::from_utf8(public_key_bytes.as_ref().to_vec())
+            .map_err(|_| AddressKeyExportError::Export("Failed to convert to utf-8".to_owned()))
     }
 }
 
