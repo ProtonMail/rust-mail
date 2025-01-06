@@ -59,6 +59,8 @@ pub enum LightOrDarkMode {
 
 //  STRUCTS
 //==============================================================================
+/// Marker trait assigned to each id that was declared with [`declare_proton_id`].
+pub trait ProtonIdMarker {}
 
 /// Declare a new unique type for a Proton String Identifier.
 ///
@@ -160,6 +162,8 @@ macro_rules! declare_proton_id {
                 $crate::RemoteId::new(id.into_inner())
             }
         }
+
+        impl $crate::services::proton::common::ProtonIdMarker for $name {}
     }
 }
 
@@ -215,6 +219,8 @@ declare_proton_id! {
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct RemoteId(String);
+
+impl ProtonIdMarker for RemoteId {}
 
 impl RemoteId {
     /// Create a new [`RemoteId`] from a [`String`].

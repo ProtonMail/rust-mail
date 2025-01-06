@@ -13,8 +13,8 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalAddressId, LocalId, RemoteId};
-use proton_core_common::models::Address;
+use proton_core_common::datatypes::{LocalAddressId, LocalId, RemoteId};
+use proton_core_common::models::{Address, ModelIdExtension};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -177,6 +177,10 @@ pub struct Attachment {
     pub row_id: Option<u64>,
 }
 
+impl ModelIdExtension for Attachment {
+    type RemoteId = RemoteId;
+}
+
 impl Attachment {
     /// Load attachment metadata for a given `conversation_id`.
     ///
@@ -242,21 +246,22 @@ impl Attachment {
         }
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
-                self.local_address_id = remote_address_id.counterpart::<Address>(bond).await?;
+                self.local_address_id =
+                    Address::remote_id_counterpart(remote_address_id, bond).await?;
             }
         }
 
         if self.local_message_id.is_none() {
             if let Some(remote_message_id) = self.remote_message_id.clone() {
-                self.local_message_id = remote_message_id.counterpart::<Message>(bond).await?;
+                self.local_message_id =
+                    Message::remote_id_counterpart(remote_message_id, bond).await?;
             }
         }
 
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
-                self.local_conversation_id = remote_conversation_id
-                    .counterpart::<Conversation>(bond)
-                    .await?;
+                self.local_conversation_id =
+                    Conversation::remote_id_counterpart(remote_conversation_id, bond).await?;
             }
         }
 

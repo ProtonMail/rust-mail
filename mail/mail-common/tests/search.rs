@@ -1,9 +1,8 @@
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
-use proton_core_common::{
-    datatypes::RemoteId,
-    models::{Address, ModelExtension},
-};
+use proton_core_common::models::Address;
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::models::{Conversation, Label, Message};
 use proton_mail_test_utils::test_context::MailTestContext;
 
@@ -23,15 +22,15 @@ async fn unsynced_conversations() {
         .expect("Error searching for conversations");
 
     // Now all of the labels should exist!
-    Label::find_by_id(RemoteId::from("Label1"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label1"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Label::find_by_id(RemoteId::from("Label2"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label2"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Label::find_by_id(RemoteId::from("Label3"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label3"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -60,23 +59,23 @@ async fn unsynced_messages() {
         .expect("Error searching for messages");
 
     // Now all of the labels should exist!
-    Label::find_by_id(RemoteId::from("Label1"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label1"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Label::find_by_id(RemoteId::from("Label2"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label2"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Label::find_by_id(RemoteId::from("Label3"), &tether)
+    Label::find_by_remote_id(LabelId::from("Label3"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Address::find_by_id(RemoteId::from("Addr1"), &tether)
+    Address::find_by_remote_id(AddressId::from("Addr1"), &tether)
         .await
         .unwrap()
         .unwrap();
-    Address::find_by_id(RemoteId::from("Addr2"), &tether)
+    Address::find_by_remote_id(AddressId::from("Addr2"), &tether)
         .await
         .unwrap()
         .unwrap();

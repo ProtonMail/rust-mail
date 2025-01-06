@@ -1,10 +1,11 @@
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactSendingPreferences,
 };
 use proton_core_common::datatypes::{
-    AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts, RemoteId,
+    AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
 };
-use proton_core_common::models::{Contact, ModelExtension};
+use proton_core_common::models::{Contact, ModelIdExtension};
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 
@@ -109,7 +110,7 @@ async fn delete_contacts() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
-    let contact = Contact::find_by_id(RemoteId::from("123"), &tether)
+    let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -121,7 +122,7 @@ async fn delete_contacts() {
         .await
         .unwrap();
 
-    let contact = Contact::find_by_id(RemoteId::from("123"), &tether)
+    let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await
         .unwrap()
         .unwrap();

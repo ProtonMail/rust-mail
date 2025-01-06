@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{GroupedContacts, IdCounterpart, Labels, LocalContactId};
-use crate::models::{ContactCard, ContactEmail, ModelExtension};
+use crate::datatypes::{GroupedContacts, Labels, LocalContactId};
+use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
@@ -86,6 +86,10 @@ pub struct Contact {
     pub row_id: Option<u64>,
 }
 
+impl ModelIdExtension for Contact {
+    type RemoteId = ContactId;
+}
+
 impl Contact {
     /// Save a contact to the database.
     ///
@@ -104,7 +108,7 @@ impl Contact {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
@@ -322,8 +326,7 @@ impl Contact {
         bond: &Bond<'_>,
     ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
-        let remote_id = local_id
-            .counterpart::<Contact>(bond)
+        let remote_id = Contact::local_id_counterpart(local_id, bond)
             .await?
             .ok_or_else(|| {
                 CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))

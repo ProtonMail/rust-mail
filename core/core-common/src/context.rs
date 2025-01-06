@@ -614,7 +614,7 @@ impl Context {
 
         let mut tether = self.stash().connection();
         let tx = tether.transaction().await?;
-        CoreAccount::delete_by_remote_id(user_id.into(), &tx)
+        CoreAccount::delete_by_id(user_id, &tx)
             .inspect_err(|e| error!("Failed to delete account from db: {e}"))
             .await?;
         tx.commit().await?;

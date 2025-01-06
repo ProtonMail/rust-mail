@@ -11,8 +11,8 @@ use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};
@@ -97,9 +97,7 @@ impl Mailbox {
         label_id: LabelId,
     ) -> MailboxResult<Self> {
         let tether = user_ctx.user_stash().connection();
-        let label = Label::find_by_id(RemoteId::from(label_id), &tether)
-            .await?
-            .unwrap();
+        let label = Label::find_by_remote_id(label_id, &tether).await?.unwrap();
         let view_mode = label.view_mode(&tether).await?;
         debug!(
             "Creating Mailbox ({}, view_mode={:?})",

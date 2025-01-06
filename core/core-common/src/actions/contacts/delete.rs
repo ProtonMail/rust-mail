@@ -1,5 +1,5 @@
-use crate::datatypes::{IdCounterpart, LocalContactId};
-use crate::models::{Contact, ModelExtension};
+use crate::datatypes::LocalContactId;
+use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::ContactId;
@@ -92,7 +92,7 @@ impl proton_action_queue::action::Handler for Handler {
         } else {
             let conn = stash.connection();
             for remote_id in failed {
-                let Some(local_id) = remote_id.counterpart::<Contact>(&conn).await? else {
+                let Some(local_id) = Contact::remote_id_counterpart(remote_id, &conn).await? else {
                     continue;
                 };
 

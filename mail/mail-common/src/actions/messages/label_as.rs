@@ -9,7 +9,8 @@ use proton_action_queue::action::{
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -120,10 +121,9 @@ impl Handler {
         let current_labels = message.label_ids.iter().cloned().collect_vec();
         let current_labels: HashSet<_> = HashSet::from_iter(current_labels);
         let removed_labels =
-            LocalLabelId::counterparts::<Label>(Vec::from_iter(removed_labels), bond).await?;
+            Label::local_ids_counterpart(Vec::from_iter(removed_labels), bond).await?;
         let removed_labels = HashSet::from_iter(removed_labels);
-        let added_labels =
-            LocalLabelId::counterparts::<Label>(Vec::from_iter(added_labels), bond).await?;
+        let added_labels = Label::local_ids_counterpart(Vec::from_iter(added_labels), bond).await?;
         let added_labels = HashSet::from_iter(added_labels);
         let new_labels = &(&current_labels - &removed_labels) | &added_labels;
         message.label_ids = new_labels.into_iter().map_into().collect();
@@ -209,7 +209,7 @@ impl ActionHandler for Handler {
 
         if !failed_ids.is_empty() {
             error!("LabelAs message operation failed for messages: {failed_ids:?}");
-            let failed_ids = RemoteId::counterparts::<Message>(failed_ids, &tether).await?;
+            let failed_ids = Message::remote_ids_counterpart(failed_ids, &tether).await?;
             let tx = tether.transaction().await?;
             for message_id in &failed_ids {
                 Self::revert_one_locally(
@@ -250,10 +250,10 @@ impl ActionHandler for Handler {
                 error!("Archive messages operation failed for : {failed_ids:?}");
 
                 let tx = tether.transaction().await?;
-                let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), &tx)
+                let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tx)
                     .await?
                     .expect("Archive label must have a RemoteId");
-                let local_ids = RemoteId::counterparts::<Message>(failed_ids.clone(), &tx).await?;
+                let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
                 Message::move_messages(archive_id, action.data.source_label_id, local_ids, &tx)
                     .await?;
                 tx.commit().await?;

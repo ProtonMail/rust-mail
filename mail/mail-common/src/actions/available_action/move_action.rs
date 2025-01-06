@@ -9,7 +9,8 @@ use crate::{
     AppError,
 };
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::{IdCounterpart, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use stash::orm::Model;
 use stash::stash::Tether;
 
@@ -175,7 +176,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn inbox(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = LabelId::counterpart::<Label>(&LabelId::inbox(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::inbox(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -185,7 +186,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn archive(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = LabelId::counterpart::<Label>(&LabelId::archive(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::archive(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -195,7 +196,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn trash(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = LabelId::counterpart::<Label>(&LabelId::trash(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::trash(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {
@@ -205,7 +206,7 @@ impl MovableSystemFolderAction {
     }
 
     pub(crate) async fn spam(tether: &Tether) -> Result<Self, AppError> {
-        let local_id = LabelId::counterpart::<Label>(&LabelId::spam(), tether)
+        let local_id = Label::remote_id_counterpart(LabelId::spam(), tether)
             .await?
             .expect("Should be set");
         Ok(Self {

@@ -9,8 +9,8 @@ use proton_action_queue::action::{
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, LocalLabelId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -211,7 +211,7 @@ impl ActionHandler for Handler {
 
         if !failed_ids.is_empty() {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
-            let failed_ids = RemoteId::counterparts::<Conversation>(failed_ids, &conn).await?;
+            let failed_ids = Conversation::remote_ids_counterpart(failed_ids, &conn).await?;
             let tx = conn.transaction().await?;
             for conversation_id in &failed_ids {
                 Self::revert_one_locally(
@@ -253,11 +253,11 @@ impl ActionHandler for Handler {
                 error!("Archive conversation operation failed for : {failed_ids:?}");
 
                 let tx = conn.transaction().await?;
-                let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), &tx)
+                let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tx)
                     .await?
                     .expect("Archive label must have a RemoteId");
                 let local_ids =
-                    RemoteId::counterparts::<Conversation>(failed_ids.clone(), &tx).await?;
+                    Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
                 Conversation::move_conversations(
                     archive_id,
                     action.data.source_label_id,

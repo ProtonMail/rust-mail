@@ -259,7 +259,7 @@ mod available_actions {
         }
         tx.commit().await.unwrap();
 
-        let view = Label::find_by_id(test_case.view.remote_id.clone().unwrap(), &conn)
+        let view = Label::find_by_remote_id(test_case.view.remote_id.clone().unwrap(), &conn)
             .await
             .unwrap()
             .unwrap();
@@ -470,9 +470,7 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::SystemFolder(action) => ExpectedSystemFolder {
-                    label_id: action
-                        .local_id
-                        .counterpart::<Label>(tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
                         .unwrap()
                         .unwrap(),
@@ -494,9 +492,7 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::CustomFolder(action) => ExpectedCustomFolder {
-                    label_id: action
-                        .local_id
-                        .counterpart::<Label>(tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
                         .unwrap()
                         .unwrap(),
@@ -791,7 +787,7 @@ mod available_move_to_actions {
 
         tx.commit().await.unwrap();
         let new_conn = || stash.connection();
-        let view = Label::find_by_id(view.remote_id.clone().unwrap(), &conn)
+        let view = Label::find_by_remote_id(view.remote_id.clone().unwrap(), &conn)
             .await
             .unwrap()
             .unwrap();
@@ -836,7 +832,7 @@ async fn test_create_message() {
         .expect("failed to get message")
         .expect("must have a value");
     let (mut expected, _, _) = Message::from_api_data(message, &tether).await.unwrap();
-    let label = Label::find_by_id(MY_LABEL_ID1.clone(), &tether)
+    let label = Label::find_by_remote_id(MY_LABEL_ID1.clone(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -844,7 +840,7 @@ async fn test_create_message() {
     expected.local_id = Some(1.into());
     expected.row_id = Some(1_u64);
     expected.exclusive_location = ExclusiveLocation::new(
-        &Label::find_by_id(LabelId::inbox(), &tether)
+        &Label::find_by_remote_id(LabelId::inbox(), &tether)
             .await
             .unwrap()
             .unwrap(),
@@ -874,7 +870,7 @@ async fn test_create_message_without_synced_conversation() {
         .await
         .expect("failed to create message");
     tx.commit().await.unwrap();
-    let db_metadata = Message::find_by_id(remote_id, &tether)
+    let db_metadata = Message::find_by_remote_id(remote_id, &tether)
         .await
         .expect("failed to get message")
         .expect("must have a value");
@@ -1073,7 +1069,7 @@ async fn test_update_message() {
         .expect("failed to update message");
     tx.commit().await.unwrap();
 
-    let label = Label::find_by_id(MY_LABEL_ID1.clone(), &tether)
+    let label = Label::find_by_remote_id(MY_LABEL_ID1.clone(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -2438,7 +2434,7 @@ async fn test_create_message_dependencies_core(tether: &mut Tether) {
     create_address(tether).await;
 }
 
-async fn test_create_message_dependencies(tether: &mut Tether) -> u64 {
+async fn test_create_message_dependencies(tether: &mut Tether) -> LocalId {
     create_labels(tether).await;
     let mut conversation: Conversation = test_conversation(
         vec![ApiConversationLabel {
@@ -2459,7 +2455,7 @@ async fn test_create_message_dependencies(tether: &mut Tether) -> u64 {
     conversation.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    conversation.local_id.unwrap().into()
+    conversation.local_id.unwrap()
 }
 
 fn test_message_metadata(
@@ -2600,11 +2596,13 @@ async fn watch_messages_in_label() {
 
 pub(super) async fn resolve_local_ids(tether: &Tether, message: &mut Message) {
     if message.local_conversation_id.is_none() {
-        let conversation =
-            Conversation::find_by_id(message.remote_conversation_id.clone().unwrap(), tether)
-                .await
-                .unwrap()
-                .unwrap();
+        let conversation = Conversation::find_by_remote_id(
+            message.remote_conversation_id.clone().unwrap(),
+            tether,
+        )
+        .await
+        .unwrap()
+        .unwrap();
         message.local_conversation_id = conversation.local_id;
     }
 }

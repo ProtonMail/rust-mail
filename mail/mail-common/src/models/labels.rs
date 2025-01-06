@@ -18,7 +18,8 @@ use proton_api_mail::services::proton::requests::{
 };
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{IdCounterpart, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -119,6 +120,10 @@ pub struct Label {
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
+}
+
+impl ModelIdExtension for Label {
+    type RemoteId = LabelId;
 }
 
 impl Label {
@@ -326,12 +331,11 @@ impl Label {
 
     async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
-            self.local_parent_id = self
-                .remote_parent_id
-                .clone()
-                .expect("Should be set")
-                .counterpart::<Self>(tether)
-                .await?;
+            self.local_parent_id = Self::remote_id_counterpart(
+                self.remote_parent_id.clone().expect("Should be set"),
+                tether,
+            )
+            .await?;
         }
         // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
@@ -341,7 +345,7 @@ impl Label {
         let parent_id_option = self.remote_parent_id.clone();
         self.local_parent_id = match parent_id_option {
             Some(parent_id) => {
-                let res = parent_id.counterpart::<Self>(bond).await?;
+                let res = Self::remote_id_counterpart(parent_id, bond).await?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -492,7 +496,7 @@ impl Label {
         local_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<LabelId, AppError> {
-        let Some(label_id) = local_id.counterpart::<Label>(tether).await? else {
+        let Some(label_id) = Self::local_id_counterpart(local_id, tether).await? else {
             return Err(AppError::LabelNotFound(local_id));
         };
 
@@ -508,7 +512,7 @@ impl Label {
         label_id: LabelId,
         tether: &Tether,
     ) -> Result<LocalLabelId, AppError> {
-        let Some(label_id) = label_id.counterpart::<Label>(tether).await? else {
+        let Some(label_id) = Self::remote_id_counterpart(label_id.clone(), tether).await? else {
             return Err(AppError::RemoteLabelDoesNotExist(label_id));
         };
         Ok(label_id)

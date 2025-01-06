@@ -297,7 +297,7 @@ impl Store for AuthStore {
         if let Some(id) = &self.session_id {
             let mut tether = self.stash.connection();
             let tx = tether.transaction().await?;
-            CoreSession::delete_by_remote_id(id.clone().into(), &tx).await?;
+            CoreSession::delete_by_id(id.clone(), &tx).await?;
             tx.commit().await?;
         }
 

@@ -13,10 +13,12 @@ use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::RemoteId;
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{IdCounterpart, LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::models::ModelIdExtension;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
@@ -90,7 +92,10 @@ pub(crate) fn new_action_factory() -> Factory {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GenericActionData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     /// Local label id which this action applies to.
     label_id: LocalLabelId,
@@ -99,18 +104,21 @@ where
     /// Note: this is only for user with remote execution, it should be set by then.
     remote_label_id: Option<LabelId>,
     /// Local ids for the action to act on.
-    target_ids: Vec<LocalId>,
+    target_ids: Vec<T::IdType>,
     /// Resolved remote ids.
-    remote_target_ids: Vec<RemoteId>,
+    remote_target_ids: Vec<T::RemoteId>,
     phantom: PhantomData<T>,
 }
 
 impl<T> GenericActionData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     /// Create a new instance with the given `label_id` and target `ids`.
-    pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         Self {
             label_id,
             remote_label_id: None,
@@ -134,7 +142,7 @@ where
 
         self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tx).await?);
 
-        let conv_ids = LocalId::counterparts::<T>(self.target_ids.clone(), tx)
+        let conv_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
             .await
             .map_err(|e| {
                 error!("Failed to resolve ids: {e}");
@@ -153,7 +161,7 @@ where
         tx: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
-            RollbackItem::new(remote_id.clone(), item_type)
+            RollbackItem::new(remote_id.clone().into(), item_type)
                 .save(tx)
                 .await?;
         }
@@ -183,7 +191,10 @@ pub fn filter_responses_by_codes(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionMoveData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     /// The current label whether the items are locate.
     source_label_id: LocalLabelId,
@@ -192,22 +203,25 @@ where
     /// Resolved remote id for the destination label.
     remote_destination_label_id: Option<LabelId>,
     /// Local item ids that need to be moved.
-    target_ids: Vec<LocalId>,
+    target_ids: Vec<T::IdType>,
     /// Resolved remote conversation ids.
-    remote_target_ids: Vec<RemoteId>,
+    remote_target_ids: Vec<T::RemoteId>,
     phantom_data: PhantomData<T>,
 }
 
 impl<T> ActionMoveData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     /// Create a new action which moves items with `target_ids` from `source_label_id` to
     ///`destination_label_id`.
     pub fn new(
         source_label_id: LocalLabelId,
         destination_label_id: LocalLabelId,
-        target_ids: impl IntoIterator<Item = LocalId>,
+        target_ids: impl IntoIterator<Item = T::IdType>,
     ) -> Self {
         Self {
             source_label_id,
@@ -227,7 +241,7 @@ where
     async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
         self.remote_destination_label_id =
             Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
-        self.remote_target_ids = LocalId::counterparts::<T>(self.target_ids.clone(), tx)
+        self.remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
             .await
             .inspect_err(|e| error!("Failed to resolve ids: {e}"))?;
         Ok(())
@@ -238,11 +252,14 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LabelAsData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     source_label_id: LocalLabelId,
-    local_ids: Vec<LocalId>,
-    remote_ids: Vec<RemoteId>,
+    local_ids: Vec<T::IdType>,
+    remote_ids: Vec<T::RemoteId>,
     local_all_label_ids: Vec<LocalLabelId>,
     remote_all_label_ids: Vec<LabelId>,
     local_selected_label_ids: Vec<LocalLabelId>,
@@ -258,11 +275,14 @@ where
 
 impl<T> LabelAsData<T>
 where
-    T: Model,
+    T: ModelIdExtension<
+        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned,
+    >,
 {
     fn new(
         source_label_id: LocalLabelId,
-        local_ids: Vec<LocalId>,
+        local_ids: Vec<T::IdType>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
@@ -287,17 +307,15 @@ where
 
     /// Resolve all local ids into the remote counterpart.
     async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
-        self.remote_ids = LocalId::counterparts::<T>(self.local_ids.clone(), tx).await?;
+        self.remote_ids = T::local_ids_counterpart(self.local_ids.clone(), tx).await?;
         self.remote_all_label_ids =
-            LocalLabelId::counterparts::<Label>(self.local_all_label_ids.clone(), tx).await?;
+            Label::local_ids_counterpart(self.local_all_label_ids.clone(), tx).await?;
         let remote_selected_label_ids =
-            LocalLabelId::counterparts::<Label>(self.local_selected_label_ids.clone(), tx).await?;
+            Label::local_ids_counterpart(self.local_selected_label_ids.clone(), tx).await?;
         self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
-        let remote_partially_selected_label_ids = LocalLabelId::counterparts::<Label>(
-            self.local_partially_selected_label_ids.clone(),
-            tx,
-        )
-        .await?;
+        let remote_partially_selected_label_ids =
+            Label::local_ids_counterpart(self.local_partially_selected_label_ids.clone(), tx)
+                .await?;
         self.remote_partially_selected_label_ids = remote_partially_selected_label_ids
             .into_iter()
             .map_into()
@@ -311,7 +329,7 @@ where
         bond: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
-            RollbackItem::new(remote_id.clone(), kind)
+            RollbackItem::new(remote_id.clone().into(), kind)
                 .save(bond)
                 .await?;
         }

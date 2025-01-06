@@ -62,11 +62,11 @@ use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_core_common::datatypes::{AvatarInformation as RealAvatarInformation, LocalLabelId};
+use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_core_common::datatypes::{
-    IdCounterpart as RealIdCounterpart, LocalId as RealLocalId, RemoteId as RealRemoteId,
+    AvatarInformation as RealAvatarInformation, LocalAddressId, LocalLabelId,
 };
-use proton_core_common::models::Address as RealAddress;
+use proton_core_common::models::{Address as RealAddress, ModelIdExtension};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -102,7 +102,6 @@ use smart_default::SmartDefault;
 use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
 pub use system_label::*;
-
 //  ENUMS
 //==============================================================================
 
@@ -1049,8 +1048,7 @@ impl ConversationCount {
         tether: &Tether,
     ) -> Result<Self, AppError> {
         Ok(Self {
-            label_id: RealRemoteId::from(value.label_id.clone())
-                .counterpart::<RealLabel>(tether)
+            label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
                     AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
@@ -1157,9 +1155,9 @@ impl ConversationSearchOptions {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
-                    if let Some(resolved_id) = RealLocalId::from(*id)
-                        .counterpart::<RealConversation>(tether)
-                        .await?
+                    if let Some(resolved_id) =
+                        RealConversation::local_id_counterpart(RealLocalId::from(*id), tether)
+                            .await?
                     {
                         ids.push(resolved_id);
                     }
@@ -1175,8 +1173,7 @@ impl ConversationSearchOptions {
 
         Ok(GetConversationsOptions {
             address_id: match self.address_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealAddress>(tether)
+                Some(id) => RealAddress::local_id_counterpart(LocalAddressId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1185,8 +1182,7 @@ impl ConversationSearchOptions {
             auto_wildcard: self.auto_wildcard,
             begin: self.begin,
             begin_id: match self.begin_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation>(tether)
+                Some(id) => RealConversation::local_id_counterpart(RealLocalId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1194,8 +1190,7 @@ impl ConversationSearchOptions {
             desc: self.desc,
             end: self.end,
             end_id: match self.end_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation>(tether)
+                Some(id) => RealConversation::local_id_counterpart(RealLocalId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1205,8 +1200,7 @@ impl ConversationSearchOptions {
             ids,
             keyword: self.keyword,
             label_id: match self.label_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealLabel>(tether)
+                Some(id) => RealLabel::local_id_counterpart(LocalLabelId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -1913,8 +1907,7 @@ impl MessageCount {
     ///
     pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
-            label_id: RealRemoteId::from(value.label_id.clone())
-                .counterpart::<RealLabel>(tether)
+            label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
                     AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
@@ -2048,9 +2041,8 @@ impl MessageSearchOptions {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
-                    if let Some(resolved_id) = RealLocalId::from(*id)
-                        .counterpart::<RealMessage>(tether)
-                        .await?
+                    if let Some(resolved_id) =
+                        RealMessage::local_id_counterpart(RealLocalId::from(*id), tether).await?
                     {
                         ids.push(resolved_id);
                     }
@@ -2067,9 +2059,8 @@ impl MessageSearchOptions {
             Some(local_ids) => {
                 let mut ids = Vec::with_capacity(local_ids.len());
                 for id in &local_ids {
-                    if let Some(resolved_id) = LocalLabelId::from(*id)
-                        .counterpart::<RealLabel>(tether)
-                        .await?
+                    if let Some(resolved_id) =
+                        RealLabel::local_id_counterpart(LocalLabelId::from(*id), tether).await?
                     {
                         ids.push(resolved_id);
                     }
@@ -2085,8 +2076,7 @@ impl MessageSearchOptions {
 
         Ok(GetMessagesOptions {
             address_id: match self.address_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealAddress>(tether)
+                Some(id) => RealAddress::local_id_counterpart(LocalAddressId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
@@ -2095,26 +2085,23 @@ impl MessageSearchOptions {
             auto_wildcard: self.auto_wildcard,
             bcc: self.bcc,
             begin: self.begin,
-            begin_id: match self.address_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealMessage>(tether)
+            begin_id: match self.begin_id {
+                Some(id) => RealMessage::local_id_counterpart(RealLocalId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
             },
             cc: self.cc,
             conversation_id: match self.conversation_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealConversation>(tether)
+                Some(id) => RealConversation::local_id_counterpart(RealLocalId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,
             },
             desc: self.desc,
             end: self.end,
-            end_id: match self.address_id {
-                Some(id) => RealLocalId::from(id)
-                    .counterpart::<RealMessage>(tether)
+            end_id: match self.end_id {
+                Some(id) => RealMessage::local_id_counterpart(RealLocalId::from(id), tether)
                     .await?
                     .map(Into::into),
                 None => None,

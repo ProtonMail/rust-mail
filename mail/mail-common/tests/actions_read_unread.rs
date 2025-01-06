@@ -2,7 +2,7 @@ use itertools::Itertools;
 use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
-use proton_core_common::datatypes::{IdCounterpart, RemoteId};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
@@ -144,7 +144,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     inbox.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation_ids = RemoteId::counterparts::<Conversation>(to_mark, &tether)
+    let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
     user_ctx
@@ -212,7 +212,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     inbox.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
-    let conversation_ids = RemoteId::counterparts::<Conversation>(to_mark, &tether)
+    let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
     user_ctx

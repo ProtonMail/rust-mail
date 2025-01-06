@@ -8,9 +8,8 @@ use proton_api_mail::services::proton::response_data::{
     MessageMetadata as ApiMessageMetadata, MessageMetadata,
 };
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
-use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::migrations::migrate_core_db;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::db::migrations::migrate_db;
@@ -246,7 +245,7 @@ async fn compare_conversations(
 ) {
     let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv = Conversation::find_by_id::<RemoteId>(api_conv.id.clone(), &tether)
+        let api_local_conv = Conversation::find_by_remote_id(api_conv.id.clone(), &tether)
             .await
             .unwrap()
             .unwrap();
@@ -260,7 +259,7 @@ async fn compare_messages(
 ) {
     let tether = user_ctx.user_stash().connection();
     for (local_conv, api_conv) in std::iter::zip(page, api) {
-        let api_local_conv = Message::find_by_id::<RemoteId>(api_conv.id.clone(), &tether)
+        let api_local_conv = Message::find_by_remote_id(api_conv.id.clone(), &tether)
             .await
             .unwrap()
             .unwrap();

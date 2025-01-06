@@ -8,7 +8,6 @@ use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::RemoteId;
 use proton_core_common::models::ModelExtension as _;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::random_string;
@@ -109,7 +108,7 @@ async fn test_delete_remote() {
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id = Label::find_by_id(RemoteId::from(parent_id), &tx)
+            label.local_parent_id = Label::find_by_remote_id(parent_id, &tx)
                 .await
                 .expect("failed to get parent label")
                 .expect("parent label should exist")
@@ -703,7 +702,7 @@ async fn compare_local_to_remote(tether: &Tether, local: &Label, remote: &ApiLab
     );
 
     if let Some(remote_parent_id) = local.remote_parent_id.clone() {
-        let parent_label = Label::find_by_id(RemoteId::from(remote_parent_id), tether)
+        let parent_label = Label::find_by_remote_id(remote_parent_id, tether)
             .await
             .expect("failed to find parent label")
             .expect("Parent label should exist");

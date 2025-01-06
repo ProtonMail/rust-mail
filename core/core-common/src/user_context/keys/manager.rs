@@ -1,8 +1,8 @@
 use super::KeyHandlingError;
 use super::KeyHandlingResult;
 use super::LoadKeySecret;
-use crate::models::User;
-use crate::models::{Address, ModelExtension};
+use crate::models::Address;
+use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
 use proton_api_core::services::proton::common::{AddressId, UserId};
@@ -242,7 +242,7 @@ impl CryptoKeyManager {
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let address = Address::find_by_id(address_id.clone(), conn)
+        let address = Address::find_by_remote_id(address_id.clone(), conn)
             .await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.

@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use proton_core_common::datatypes::{IdCounterpart, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
 
@@ -109,7 +110,7 @@ impl SystemLabel {
     }
 
     pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalLabelId>, StashError> {
-        self.remote_id().counterpart::<Label>(tether).await
+        Label::remote_id_counterpart(self.remote_id(), tether).await
     }
 }
 
