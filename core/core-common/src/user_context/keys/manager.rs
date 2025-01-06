@@ -12,6 +12,7 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use stash::orm::Model;
+use stash::stash::Tether;
 use std::{collections::HashMap, time::Duration};
 
 use super::KeyHandlingError;
@@ -66,14 +67,15 @@ impl CryptoKeyManager {
     pub async fn user_keys<Provider: PgpProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_load: &impl LoadKeySecret,
-        user_ctx: &UserContext,
+        user_id: &RemoteId,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         let cached_keys = self.user_keys.read().get(self.user_key_lifetime);
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_user_keys_cache(pgp_provider, cached_keys.as_ref())?,
             None => {
-                self.load_user_keys_db(pgp_provider, secret_load, user_ctx)
+                self.load_user_keys_db(pgp_provider, conn, secret_load, user_id)
                     .await?
             }
         };
@@ -89,8 +91,9 @@ impl CryptoKeyManager {
     pub async fn address_keys<Provider: PgpProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_load: &impl LoadKeySecret,
-        user_ctx: &UserContext,
+        user_id: &RemoteId,
         address_id: &RemoteId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         let cached_keys = self
@@ -101,7 +104,7 @@ impl CryptoKeyManager {
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_address_keys_cache(pgp_provider, cached_keys.as_ref())?,
             None => {
-                self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id)
+                self.load_address_keys_db(pgp_provider, conn, secret_load, user_id, address_id)
                     .await?
             }
         };
@@ -234,18 +237,18 @@ impl CryptoKeyManager {
     async fn load_address_keys_db<Provider: PgpProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_load_fn: &impl LoadKeySecret,
-        user_ctx: &UserContext,
+        user_id: &RemoteId,
         address_id: &RemoteId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let conn = user_ctx.user_stash.connection();
-        let address = Address::find_by_id(address_id.clone(), &conn)
+        let address = Address::find_by_id(address_id.clone(), conn)
             .await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.
         let user_keys = self
-            .user_keys(pgp_provider, secret_load_fn, user_ctx)
+            .user_keys(pgp_provider, conn, secret_load_fn, user_id)
             .await?;
         let passphrase = secret_load_fn
             .key_secret()
@@ -271,12 +274,12 @@ impl CryptoKeyManager {
     async fn load_user_keys_db<Provider: PgpProviderSync>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_loader: &impl LoadKeySecret,
-        user_ctx: &UserContext,
+        user_id: &RemoteId,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
-        let conn = user_ctx.user_stash.connection();
         // Load the user from the DB.
-        let user = User::load(user_ctx.user_id().clone(), &conn)
+        let user = User::load(user_id.clone(), conn)
             .await?
             .ok_or(KeyHandlingError::NoUser)?;
         // Load the user secret to unlock the key.

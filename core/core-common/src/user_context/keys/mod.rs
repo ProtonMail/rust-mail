@@ -85,7 +85,8 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp_provider`  - The pgp provider instance from `proton_crypto`.
+    /// * `conn`          - The database connection to load the keys from database.
     /// * `secret_loader` - The struct providing the access to the secret needed to unlock the user keys
     ///
     /// # Errors
@@ -93,10 +94,11 @@ impl UserContext {
     pub async fn unlocked_user_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_loader: &Secret,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         self.key_manager
-            .user_keys(pgp_provider, secret_loader, self)
+            .user_keys(pgp_provider, conn, secret_loader, &self.user_id)
             .await
     }
 
@@ -106,20 +108,22 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp_provider`   - The pgp provider instance from `proton_crypto`.
+    /// * `conn`           - The database connection to load the keys from database.
     /// * `secret_load_fn` - The struct providing the access to the secret needed to unlock the user keys
-    /// * `address_id` - The ID of the address key
+    /// * `address_id`     - The ID of the address key
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn unlocked_address_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
+        conn: &Tether,
         secret_loader: &Secret,
         address_id: &RemoteId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         self.key_manager
-            .address_keys(pgp_provider, secret_loader, self, address_id)
+            .address_keys(pgp_provider, conn, secret_loader, &self.user_id, address_id)
             .await
     }
 

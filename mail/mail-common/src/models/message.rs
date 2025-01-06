@@ -1851,9 +1851,11 @@ impl Message {
 
         let pgp_provider = proton_crypto::new_pgp_provider();
         let address_id = saved_message.remote_address_id.clone();
+
         let address_keys = user_context
-            .unlocked_address_keys(&pgp_provider, &address_id)
+            .unlocked_address_keys(&pgp_provider, tether, &address_id)
             .await?;
+
         Ok(saved_message
             .fetch_message_body(address_keys, pgp_provider, user_context.clone(), tether)
             .await?)
@@ -2627,12 +2629,12 @@ impl Message {
                 .inspect_err(|e| error!("Failed to convert to local types: {e}"))?;
 
         let pgp_provider = proton_crypto::new_pgp_provider();
+        let tx = tether.transaction().await?;
+
         let address_keys = ctx
-            .unlocked_address_keys(&pgp_provider, &metadata.remote_address_id)
+            .unlocked_address_keys(&pgp_provider, &tx, &metadata.remote_address_id)
             .await
             .inspect_err(|e| error!("Failed to retreive address keys: {e}"))?;
-
-        let tx = tether.transaction().await?;
 
         metadata.save(&tx).await?;
 

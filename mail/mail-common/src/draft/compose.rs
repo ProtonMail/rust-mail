@@ -143,7 +143,12 @@ pub(super) async fn encrypt_draft_body(
 ) -> Result<EncryptedDraft, MailContextError> {
     let draft_body = DraftBody { body };
     let pgp_provider = new_pgp_provider();
-    let unlocked_keys = ctx.unlocked_address_keys(&pgp_provider, address_id).await?;
+
+    let tether = ctx.user_stash().connection();
+    let unlocked_keys = ctx
+        .unlocked_address_keys(&pgp_provider, &tether, address_id)
+        .await?;
+
     let draft_encryption_key = unlocked_keys
         .primary_for_mail()
         .map_err(|_| {
