@@ -1,11 +1,10 @@
 use crate::cache::CacheAttachmentKey;
-use crate::datatypes::AttachmentMetadata;
+use crate::datatypes::{AttachmentMetadata, LocalAttachmentId};
 use crate::models::Attachment;
 use crate::{AppError, MailContextError, MailUserContext, MailboxError, MailboxResult};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::{CacheData, CacheError, CacheResult};
-use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -55,7 +54,7 @@ impl MailUserContext {
     /// Signature verification failures are not returned as errors.
     pub async fn get_attachment(
         &self,
-        attachment_id: LocalId,
+        attachment_id: LocalAttachmentId,
     ) -> MailboxResult<DecryptedAttachment> {
         let attachment = self.sync_attachment(attachment_id).await?;
         let data_path = self.get_attachment_content_path(&attachment).await?;
@@ -132,7 +131,7 @@ impl MailUserContext {
     }
 
     /// Sync attachment metadata
-    async fn sync_attachment(&self, attachment_id: LocalId) -> MailboxResult<Attachment> {
+    async fn sync_attachment(&self, attachment_id: LocalAttachmentId) -> MailboxResult<Attachment> {
         let user_context = self.user_context();
         let mut conn = user_context.stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)

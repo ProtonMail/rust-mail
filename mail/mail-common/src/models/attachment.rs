@@ -1,6 +1,6 @@
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, MessageSender,
+    KeyPackets, LocalAttachmentId, MessageSender,
 };
 use crate::models::*;
 use crate::AppError;
@@ -8,6 +8,7 @@ use bytes::Bytes;
 use indoc::indoc;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
@@ -85,11 +86,11 @@ pub struct Attachment {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalAttachmentId>,
 
     /// API Attachment id.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<AttachmentId>,
 
     /// Address with which this attachment was encrypted.
     #[DbField]
@@ -178,7 +179,7 @@ pub struct Attachment {
 }
 
 impl ModelIdExtension for Attachment {
-    type RemoteId = RemoteId;
+    type RemoteId = AttachmentId;
 }
 
 impl Attachment {
@@ -285,7 +286,7 @@ impl Attachment {
     /// Returns an error if the API request failed.
     ///
     pub async fn fetch_content<PM: ProtonMail>(
-        id: RemoteId,
+        id: AttachmentId,
         api: &PM,
     ) -> Result<Bytes, ApiServiceError> {
         api.get_attachment(id).await
@@ -308,7 +309,7 @@ impl Attachment {
     /// Returns an error if the API request failed.
     ///
     pub async fn fetch_metadata<PM: ProtonMail>(
-        id: RemoteId,
+        id: AttachmentId,
         api: &PM,
     ) -> Result<GetAttachmentMetadataResponse, ApiServiceError> {
         api.get_attachment_metadata(id).await
@@ -400,7 +401,7 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn find_by_ids(
-        attachment_ids: impl IntoIterator<Item = LocalId>,
+        attachment_ids: impl IntoIterator<Item = LocalAttachmentId>,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         let params: Vec<Box<dyn ToSql + Send>> = attachment_ids

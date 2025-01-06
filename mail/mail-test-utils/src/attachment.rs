@@ -1,5 +1,6 @@
 use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
@@ -18,7 +19,7 @@ const TEST_ATTACHMENT_ID: &str =
 #[must_use]
 pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
     ApiAttachmentMetadata {
-        id: ApiRemoteId::from(TEST_ATTACHMENT_ID),
+        id: AttachmentId::from(TEST_ATTACHMENT_ID),
         size: 61,
         name: "attachment.txt".to_owned(),
         mime_type: attachment::MimeType::text_plain().to_string(),
@@ -102,7 +103,7 @@ impl MailTestContext {
     ///
     pub async fn mock_get_attachment_data(
         &self,
-        attachment_id: ApiRemoteId,
+        attachment_id: AttachmentId,
         attachment_content: Vec<u8>,
     ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
@@ -126,7 +127,7 @@ impl MailTestContext {
     ///
     pub async fn mock_maybe_get_attachment_data(
         &self,
-        attachment_id: ApiRemoteId,
+        attachment_id: AttachmentId,
         attachment_content: Vec<u8>,
     ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");

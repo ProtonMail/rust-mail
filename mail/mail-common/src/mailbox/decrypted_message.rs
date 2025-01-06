@@ -2,11 +2,10 @@
 
 //! Everything related to processing a decrypted message.
 
-use crate::datatypes::MimeType;
+use crate::datatypes::{LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext, MailboxError};
 use parking_lot::Mutex;
-use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
@@ -45,7 +44,7 @@ pub enum ParsedHeaderValue {
     Array(Vec<String>),
 }
 
-type InFlightAttachments = HashMap<LocalId, JoinHandle<MailboxResult<Vec<u8>>>>;
+type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailboxResult<Vec<u8>>>>;
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::actions::draft;
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
-use crate::datatypes::{Disposition, MimeType};
+use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
@@ -57,7 +57,7 @@ pub enum Error {
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalId),
     #[error("Attachment {0} does not have key packets")]
-    AttachmentDoesNotHaveKeyPackets(LocalId),
+    AttachmentDoesNotHaveKeyPackets(LocalAttachmentId),
     #[error("Can't reply or forward to a draft message {0}")]
     ReplyOrForwardToDraft(LocalId),
     #[error("Metadata with Id {0} does not exist")]

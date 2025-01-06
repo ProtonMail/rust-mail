@@ -23,7 +23,7 @@ pub use user_context::{
 };
 
 // re-exports
-use crate::datatypes::LabelType;
+use crate::datatypes::{LabelType, LocalAttachmentId};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
@@ -65,7 +65,7 @@ pub enum AppError {
     #[error("Unknown attachment with remote id {0}")]
     UnknownAttachment(RemoteId),
     #[error("Attachment {0} does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(LocalId),
+    AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Conversation with ID {0} has no messages")]

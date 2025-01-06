@@ -70,12 +70,12 @@ use proton_core_common::models::{
     UserSettings as RealUserSettings,
 };
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
+use proton_mail_common::datatypes::LocalAttachmentId;
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
-
 //  ENUMS
 //==============================================================================
 
@@ -1061,6 +1061,7 @@ impl_into_id!(LocalAddressId);
 impl_into_id!(LocalLabelId);
 impl_into_id!(LocalContactId);
 impl_into_id!(LocalContactEmailId);
+impl_into_id!(LocalAttachmentId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]

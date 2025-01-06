@@ -1,10 +1,10 @@
+use crate::datatypes::LocalAttachmentId;
 use crate::models::{Attachment, Message};
 use crate::{AppError, MailContextResult};
 use anyhow::anyhow;
 use proton_core_common::cache::{
     CacheConfig, CacheError, CacheKey, CacheResult, ProtonCache, WeightingStrategy,
 };
-use proton_core_common::datatypes::LocalId;
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_file, DirEntry};
 use std::hash::{Hash, Hasher};
@@ -84,7 +84,7 @@ impl CacheAttachmentKey {
     /// * `attachment_id` - local id of the corresponding Attachment.
     /// * `filename`      - original filename for the corresponding Attachment.
     ///
-    pub fn new(attachment_id: LocalId, filename: &str) -> Self {
+    pub fn new(attachment_id: LocalAttachmentId, filename: &str) -> Self {
         Self {
             attachment_id: attachment_id.as_u64(),
             filename: filename.to_owned(),

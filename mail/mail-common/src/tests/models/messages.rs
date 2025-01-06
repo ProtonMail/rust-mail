@@ -15,7 +15,7 @@ use futures::future::BoxFuture;
 use futures::FutureExt;
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
@@ -920,7 +920,7 @@ async fn test_create_message_with_attachments() {
     let mut conn = stash.connection();
     test_create_message_dependencies_core(&mut conn).await;
     let attachment_metadata = ApiAttachmentMetadata {
-        id: ApiRemoteId::from("myattachment"),
+        id: AttachmentId::from("myattachment"),
         size: 80,
         name: "foo.pdf".to_owned(),
         mime_type: attachment::MimeType::application_pdf().to_string(),
@@ -1640,7 +1640,7 @@ async fn test_create_message_and_body_with_attachments() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let mut conn = stash.connection();
     test_create_message_dependencies_core(&mut conn).await;
-    let attachment_id = RemoteId::from("attachment");
+    let attachment_id = AttachmentId::from("attachment");
     test_create_message_dependencies(&mut conn).await;
     let message = ApiMessage {
         metadata: test_message_metadata(

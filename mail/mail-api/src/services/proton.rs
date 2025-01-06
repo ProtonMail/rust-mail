@@ -61,7 +61,7 @@ pub trait ProtonMail {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_attachment(&self, attachment_id: RemoteId) -> ApiServiceResult<Bytes>;
+    async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes>;
 
     /// GETs metadata for an attachment.
     ///
@@ -80,7 +80,7 @@ pub trait ProtonMail {
     ///
     async fn get_attachment_metadata(
         &self,
-        attachment_id: RemoteId,
+        attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse>;
 
     /// TODO: Document this method.
