@@ -3,7 +3,6 @@
 use super::*;
 use pretty_assertions::assert_eq;
 use proton_mail_test_utils::db::new_test_connection;
-use stash::orm::Model;
 
 #[tokio::test]
 async fn test_mail_settings_store_read() {
