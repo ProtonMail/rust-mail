@@ -307,8 +307,10 @@ impl DecryptedMessageBody {
     /// or if the message doesn't exist.
     pub async fn transformed(&self, ctx: &MailUserContext, opts: TransformOpts) -> BodyOutput {
         let tether = ctx.user_stash().connection();
+        // FIXME: This is straight up wrong.
         let user_session_id = ctx.user_id();
-        let resolved = opts.resolve(&tether, user_session_id).await;
+        // FIXME: use actual type safety instead of a &str
+        let resolved = opts.resolve(&tether, user_session_id.as_str()).await;
         transform_html(&self.body, resolved, self.metadata.mime_type)
     }
 
