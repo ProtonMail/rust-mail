@@ -42,6 +42,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 sqlite-watcher = { workspace = true }
 log = "0.4.22"
+uniffi = { workspace = true, optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }

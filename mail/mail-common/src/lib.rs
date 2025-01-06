@@ -35,6 +35,14 @@ use stash::stash::StashError;
 use proton_action_queue::action::Id as ActionId;
 use thiserror::Error;
 
+// Avoid breaking back compat.
+//
+// TODO: We should probably use a better name at some point for the clients like "protonSdk" or something
+// but that would be a breaking change
+// (fixed with search and replace but something we need to coordinate.)
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
+
 pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::Label,
     LabelType::ContactGroup,

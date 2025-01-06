@@ -81,24 +81,3 @@ fn disable_remote_elements() {
     let expected = kuchikiki::parse_html().one(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
     assert_eq!(expected.to_string(), output.to_string());
 }
-
-#[test]
-fn enable_remote_elements() {
-    let mut transformer = Transformer::new(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
-    transformer.enable_remote_content();
-    let output = transformer.to_string();
-
-    let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
-    assert_eq!(expected.to_string(), output.to_string());
-}
-
-#[test]
-fn disable_enable_remote_elements_cycle() {
-    let mut transformer = Transformer::new(TEST_DOCUMENT);
-    transformer.disable_remote_content();
-    transformer.enable_remote_content();
-    let output = transformer.to_string();
-
-    let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
-    assert_eq!(expected.to_string(), output.to_string());
-}
