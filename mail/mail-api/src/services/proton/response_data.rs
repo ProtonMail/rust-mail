@@ -23,7 +23,7 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::LabelType;
+use crate::services::proton::common::{AttachmentId, LabelType};
 use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, RemoteId};
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
@@ -295,7 +295,7 @@ pub enum ViewMode {
 pub struct Attachment {
     /// The remote id of this attachment.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     #[serde(rename = "AddressID")]
@@ -347,7 +347,7 @@ pub struct Attachment {
 pub struct AttachmentMetadata {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -903,7 +903,7 @@ pub struct MessageBody {
 pub struct MessageAttachment {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     pub disposition: Disposition,

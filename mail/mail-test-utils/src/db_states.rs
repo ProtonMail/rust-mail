@@ -4,6 +4,7 @@ use crate::search::{test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LA
 use crate::utils::{test_address, TestDBState};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
@@ -19,7 +20,7 @@ lazy_static! {
 
 static TEXT_ATTACHMENT: LazyLock<AttachmentMetadata> = LazyLock::new(|| AttachmentMetadata {
     local_id: None,
-    remote_id: Some(RemoteId::from("MyAttachId")),
+    remote_id: Some(AttachmentId::from("MyAttachId")),
     size: 1024,
     filename: "text.text".to_owned(),
     mime_type: attachment::MimeType::text_plain(),

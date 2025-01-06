@@ -10,7 +10,7 @@ use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSett
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
@@ -1328,7 +1328,7 @@ async fn test_conversation_update() {
             context_snooze_time: 21,
         }],
         vec![ApiAttachmentMetadata {
-            id: ApiRemoteId::from("ATTACHMENT2"),
+            id: AttachmentId::from("ATTACHMENT2"),
             size: 224515,
             name: "Attachment.json".to_owned(),
             mime_type: attachment::MimeType::application_json().to_string(),

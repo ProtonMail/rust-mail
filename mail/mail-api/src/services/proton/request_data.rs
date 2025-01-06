@@ -17,8 +17,8 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
+use crate::services::proton::common::AttachmentId;
 use crate::services::proton::response_data::MimeType;
-use proton_api_core::services::proton::common::RemoteId;
 use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, KeyPackets};
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
 use proton_crypto_inbox::message::packages::PackageMimeType;
@@ -121,7 +121,7 @@ pub struct DraftParams {
     pub mime_type: MimeType,
 }
 
-pub type DraftAttachmentKeyPackets = HashMap<RemoteId, KeyPackets>;
+pub type DraftAttachmentKeyPackets = HashMap<AttachmentId, KeyPackets>;
 
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
 pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;

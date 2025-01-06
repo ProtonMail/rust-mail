@@ -23,7 +23,7 @@ impl ProtonMail for Proton {
         Ok(())
     }
 
-    async fn get_attachment(&self, attachment_id: RemoteId) -> ApiServiceResult<Bytes> {
+    async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}")
             .send_with(self)
             .await?
@@ -34,7 +34,7 @@ impl ProtonMail for Proton {
 
     async fn get_attachment_metadata(
         &self,
-        attachment_id: RemoteId,
+        attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}/metadata")
             .send_with(self)

@@ -83,7 +83,7 @@ async fn test_attachment_create_with_metadata() {
 }
 fn test_attachment() -> ApiAttachment {
     ApiAttachment {
-        id: RemoteId::from("attachment"),
+        id: AttachmentId::from("attachment"),
         name: "attachment_foo".to_owned(),
         size: 1024,
         mime_type: attachment::MimeType::text_plain().to_string(),

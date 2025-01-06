@@ -58,7 +58,7 @@ use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{AttachmentId, LabelType as ApiLabelType};
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
     ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
@@ -74,7 +74,8 @@ use proton_api_mail::services::proton::response_data::{
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{AvatarInformation, LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{AvatarInformation, LocalLabelId, RemoteId};
+use proton_core_common::declare_local_id;
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };
@@ -908,10 +909,10 @@ sql_using_serde!(AttachmentEncryptedSignature);
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
     /// Local attachment id.
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<LocalAttachmentId>,
 
     /// Attachment Id on the server.
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<AttachmentId>,
 
     /// Whether attachment is inlined or not.
     pub disposition: Disposition,
@@ -1381,7 +1382,7 @@ sql_using_serde!(MessageReplyTos);
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct MessageAttachment {
     /// TODO: Document this field.
-    pub id: RemoteId,
+    pub id: AttachmentId,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -2022,3 +2023,5 @@ impl From<LabelDescription> for LabelType {
         }
     }
 }
+
+declare_local_id!(pub LocalAttachmentId => AttachmentId);

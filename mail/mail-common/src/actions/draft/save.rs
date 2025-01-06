@@ -1,6 +1,8 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
-use crate::datatypes::{AttachmentMetadata, Disposition, MessageSender, MessageSenders, MimeType};
+use crate::datatypes::{
+    AttachmentMetadata, Disposition, LocalAttachmentId, MessageSender, MessageSenders, MimeType,
+};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, Error, ReplyMode};
@@ -50,7 +52,7 @@ pub struct Save {
     #[serde(skip)]
     body: String,
     /// Attachment associated with this draft
-    attachments: Vec<LocalId>,
+    attachments: Vec<LocalAttachmentId>,
     /// Draft's mime type
     mime_type: MimeType,
     /// Parent message id, used with forward and update only.

@@ -2,7 +2,7 @@ mod attachments;
 
 pub mod decrypted_message;
 
-use crate::datatypes::ViewMode;
+use crate::datatypes::{LocalAttachmentId, ViewMode};
 use crate::models::{Conversation, Label, Message};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
@@ -26,7 +26,7 @@ pub enum MailboxError {
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(LocalId),
+    AttachmentNotFound(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(#[from] AttachmentDecryptionError),
     #[error("Attachment decryption failed: {0}")]

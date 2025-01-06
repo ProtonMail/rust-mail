@@ -1,5 +1,6 @@
 pub use super::*;
 use crate::datatypes::attachment;
+use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -248,11 +249,11 @@ fn remote_address_id() -> AddressId {
 const ADDRESS_SIGNATURE: &str = "My Address Signature";
 const MAIL_SETTINGS_SIGNATURE: &str = "Mail settings signature";
 
-fn inline_attachment_id() -> LocalId {
+fn inline_attachment_id() -> LocalAttachmentId {
     1245555.into()
 }
 
-fn normal_attachment_id() -> LocalId {
+fn normal_attachment_id() -> LocalAttachmentId {
     44623482634.into()
 }
 
