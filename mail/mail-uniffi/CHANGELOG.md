@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Mark unread action
   - Significant performance improvements to the body transformation process.
   - Fixed a bug where not all images got proxied in the presence of embedded images.
+  - Remote images are properly loaded.
 
 
 ## [0.31.5] - 2024-12-23
