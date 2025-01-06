@@ -7,11 +7,9 @@ use proton_api_core::services::proton::response_data::{
     ContactSendingPreferences as ApiContactSendingPreferences,
 };
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{
-    ContactSendingPreferences, ContactTypes, IdCounterpart, Labels,
-};
+use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelExtension};
+use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
 use proton_core_common::{CoreEventSubscriber, UserContext};
 use proton_core_test_utils::account::unlocked_user_key;
 use proton_core_test_utils::test_context::{TestContext, TestCoreEvent};
@@ -128,7 +126,7 @@ async fn test_sync_and_load_contacts_mixed() {
     let conn = user_ctx.stash().connection();
 
     let remote_id = test_contacts.first().unwrap().id.clone();
-    let mut contact = Contact::find_by_id(remote_id, &conn)
+    let mut contact = Contact::find_by_remote_id(remote_id, &conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -281,7 +279,7 @@ async fn test_sync_and_modify_event_contact() {
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let mut contact = Contact::find_by_id(remote_id, &conn)
+    let mut contact = Contact::find_by_remote_id(remote_id, &conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -410,8 +408,7 @@ async fn prepare_sync_test_data_contacts(
     Contact::sync(user_ctx.session().api(), user_ctx.stash())
         .await
         .expect("failed to sync contacts");
-    let local_id = remote_contact_id
-        .counterpart::<Contact>(&tether)
+    let local_id = Contact::remote_id_counterpart(remote_contact_id, &tether)
         .await
         .unwrap()
         .unwrap();

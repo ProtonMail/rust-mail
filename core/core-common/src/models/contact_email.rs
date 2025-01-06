@@ -1,8 +1,7 @@
 use crate::datatypes::{
-    ContactSendingPreferences, ContactTypes, IdCounterpart, Labels, LocalContactEmailId,
-    LocalContactId,
+    ContactSendingPreferences, ContactTypes, Labels, LocalContactEmailId, LocalContactId,
 };
-use crate::models::{Contact, ModelExtension};
+use crate::models::{Contact, ModelIdExtension};
 use proton_api_core::services::proton::common::{ContactEmailId, ContactId};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
@@ -82,6 +81,10 @@ pub struct ContactEmail {
     pub row_id: Option<u64>,
 }
 
+impl ModelIdExtension for ContactEmail {
+    type RemoteId = ContactEmailId;
+}
+
 impl From<ApiContactEmail> for ContactEmail {
     fn from(value: ApiContactEmail) -> Self {
         Self {
@@ -144,14 +147,14 @@ impl ContactEmail {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
         }
 
         if let Some(contact_remote_id) = self.remote_contact_id.clone() {
-            self.local_contact_id = contact_remote_id.counterpart::<Contact>(bond).await?;
+            self.local_contact_id = Contact::remote_id_counterpart(contact_remote_id, bond).await?;
         }
 
         <Self as Model>::save(self, bond).await

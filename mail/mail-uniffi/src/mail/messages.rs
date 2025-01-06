@@ -20,7 +20,8 @@ use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{IdCounterpart as RealIdCounterpart, LocalId as RealLocalId};
+use proton_core_common::datatypes::LocalId as RealLocalId;
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
@@ -426,8 +427,7 @@ pub async fn paginate_search(
         let tether = session.user_stash().connection();
         let real_paginator = RealMessage::paginate_in_label(
             &context,
-            RealLabelId::all_mail()
-                .counterpart::<RealLabel>(&tether)
+            RealLabel::remote_id_counterpart(RealLabelId::all_mail(), &tether)
                 .await?
                 .expect("All mail system label not found"),
             50,

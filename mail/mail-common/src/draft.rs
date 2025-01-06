@@ -24,7 +24,7 @@ use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachme
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{LocalId, RemoteId};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
@@ -407,7 +407,7 @@ impl Draft {
 
         // Find out which address this message has and use that to craft te reply.
         let Some(address) =
-            Address::find_by_id(source_message.remote_address_id.clone(), &tether).await?
+            Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether).await?
         else {
             return Err(Error::AddressNotFound(source_message.remote_address_id.clone()).into());
         };

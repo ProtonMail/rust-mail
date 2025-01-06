@@ -3,8 +3,7 @@ use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
-use proton_core_common::datatypes::{IdCounterpart, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label, Message};
 use proton_mail_common::Mailbox;
@@ -148,7 +147,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 
     if !messages.is_empty() {
         let mut conversation =
-            Conversation::find_by_id(params.conversations[0].id.clone(), &tether)
+            Conversation::find_by_remote_id(params.conversations[0].id.clone(), &tether)
                 .await
                 .unwrap()
                 .unwrap();
@@ -159,7 +158,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     }
 
     // Action
-    let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
+    let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
     user_ctx
@@ -225,7 +224,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let message_ids = RemoteId::counterparts::<Message>(to_mark, &tether)
+    let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
     user_ctx

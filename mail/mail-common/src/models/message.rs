@@ -53,10 +53,8 @@ use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{
-    IdCounterpart, LocalAddressId, LocalId, LocalLabelId, RemoteId,
-};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::datatypes::{LocalAddressId, LocalId, LocalLabelId, RemoteId};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
@@ -212,6 +210,11 @@ pub struct Message {
     #[RowIdField]
     pub row_id: Option<u64>,
 }
+
+impl ModelIdExtension for Message {
+    type RemoteId = RemoteId;
+}
+
 impl Message {
     /// Label multiple messages.
     ///
@@ -251,8 +254,7 @@ impl Message {
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let tether = queue.stash().connection();
-        let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label>(&tether)
+        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
@@ -276,8 +278,7 @@ impl Message {
         message_ids: Vec<LocalId>,
     ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let tether = queue.stash().connection();
-        let label_id = LabelId::starred()
-            .counterpart::<crate::models::Label>(&tether)
+        let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
@@ -431,8 +432,7 @@ impl Message {
         message_ids: Vec<LocalId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let all_mail_id = LabelId::all_mail()
-            .counterpart::<Label>(bond)
+        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
             .await?
             .expect("AllMail should be set");
 
@@ -545,7 +545,7 @@ impl Message {
         }
 
         if must_archive {
-            let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), bond)
+            let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
                 .await?
                 .expect("Archive label must have a RemoteId");
             Self::move_messages(source_label_id, archive_id, message_ids, bond).await?;
@@ -608,7 +608,7 @@ impl Message {
         ) -> Result<HashMap<LabelId, HashSet<LocalId>>, AppError> {
             let mut map = HashMap::new();
             for (conv_id, local_label_ids) in label_ids {
-                let remote_label_ids = LocalLabelId::counterparts::<Label>(
+                let remote_label_ids = Label::local_ids_counterpart(
                     Vec::from_iter(local_label_ids.iter().cloned()),
                     tether,
                 )
@@ -630,8 +630,7 @@ impl Message {
         let mut failed_ids = vec![];
         for (label_id, message_ids) in added_by_label {
             let message_ids =
-                LocalId::counterparts::<Message>(Vec::from_iter(message_ids.clone()), tether)
-                    .await?;
+                Message::local_ids_counterpart(Vec::from_iter(message_ids.clone()), tether).await?;
             let response = api
                 .put_messages_label(
                     message_ids.iter().cloned().map_into().collect(),
@@ -650,8 +649,7 @@ impl Message {
         }
         for (label_id, message_ids) in removed_by_label {
             let message_ids =
-                LocalId::counterparts::<Message>(Vec::from_iter(message_ids.clone()), tether)
-                    .await?;
+                Message::local_ids_counterpart(Vec::from_iter(message_ids.clone()), tether).await?;
             let response = api
                 .put_messages_unlabel(
                     message_ids.iter().cloned().map_into().collect(),
@@ -810,7 +808,7 @@ impl Message {
         must_archive: bool,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let archive_id = LabelId::counterpart::<Label>(&LabelId::archive(), bond)
+        let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
             .await?
             .expect("Archive label must have a RemoteId");
 
@@ -823,11 +821,10 @@ impl Message {
             let added_labels = added_labels.remove(message_id).unwrap_or_default();
             let removed_labels = removed_labels.remove(message_id).unwrap_or_default();
             let current_labels =
-                LabelId::counterparts::<Label>(message.label_ids.clone(), bond).await?;
+                Label::remote_ids_counterpart(message.label_ids.clone(), bond).await?;
             let current_labels = HashSet::from_iter(current_labels.into_iter());
             let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-            let new_labels =
-                LocalLabelId::counterparts::<Label>(Vec::from_iter(new_labels), bond).await?;
+            let new_labels = Label::local_ids_counterpart(Vec::from_iter(new_labels), bond).await?;
             message.label_ids = new_labels.into_iter().map_into().collect();
 
             if let Some(location) = original_location.get(message_id) {
@@ -860,7 +857,7 @@ impl Message {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
@@ -869,7 +866,7 @@ impl Message {
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 if let Some(conversation) =
-                    Conversation::find_by_id(remote_conversation_id.clone(), bond).await?
+                    Conversation::find_by_remote_id(remote_conversation_id.clone(), bond).await?
                 {
                     self.local_conversation_id = conversation.local_id;
                 } else {
@@ -1408,7 +1405,7 @@ impl Message {
         // First we load the addresses because the addresses need to exist before the messages get
         // loaded.
         for msg in messages {
-            if (Address::find_by_id(msg.address_id.to_owned(), tether).await?).is_none() {
+            if (Address::find_by_remote_id(msg.address_id.to_owned(), tether).await?).is_none() {
                 debug!("Address {} not found, syncing...", msg.address_id);
                 let addr = api
                     .get_address_by_id(msg.address_id.to_owned())
@@ -1427,8 +1424,7 @@ impl Message {
         let mut missing_labels = vec![];
         for msg in messages {
             for rid in &msg.label_ids {
-                // let api_rid = rid.to_owned().into();
-                if (Label::find_by_id(RemoteId::from(rid.as_str()), tether))
+                if (Label::find_by_remote_id(rid.clone(), tether))
                     .await?
                     .is_none()
                 {
@@ -1923,7 +1919,7 @@ impl Message {
 
     /// Finds all messages that have expired and deletes them.
     pub async fn delete_expired(tether: &mut Tether) -> Result<(), AppError> {
-        let ids = Self::find_local_ids(
+        let ids = Self::find_ids(
             r"
         WHERE
           expiration_time < STRFTIME('%s', 'NOW')
@@ -2144,10 +2140,7 @@ impl Message {
             remote_id: Some(value.id),
             local_conversation_id: None,
             remote_conversation_id: Some(value.conversation_id),
-            local_address_id: value
-                .address_id
-                .clone()
-                .counterpart::<Address>(tether)
+            local_address_id: Address::remote_id_counterpart(value.address_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
                     AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone().into())
@@ -2755,7 +2748,7 @@ impl MessageDataSource {
         options: PaginatorSearchOptions,
     ) -> Result<Self, AppError> {
         let tether = context.user_stash().connection();
-        let Some(remote_id) = label_id.counterpart::<Label>(&tether).await? else {
+        let Some(remote_id) = Label::local_id_counterpart(label_id, &tether).await? else {
             return Err(AppError::LabelDoesNotHaveRemoteId(label_id));
         };
 
@@ -3072,7 +3065,7 @@ impl MessageBodyMetadata {
                     self.local_message_id = existing.local_message_id;
                     self.row_id = existing.row_id;
                 } else {
-                    let Some(message) = Message::find_by_id(remote_id, bond).await? else {
+                    let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
                         return Err(StashError::Custom(format!(
                             "Failed to find message with remote id {}",
                             self.remote_message_id.as_ref().unwrap()

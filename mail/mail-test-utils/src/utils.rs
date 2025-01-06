@@ -4,7 +4,7 @@ use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
 use proton_core_common::datatypes::{LocalId, RemoteId};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
     ConversationCount, MessageCount, MessageRecipient, MessageRecipients, MessageSender,
     MessageSenders,
@@ -62,12 +62,10 @@ pub async fn prepare_and_patch_db_state_and_skip(
     // create labels
     let mut local_label_ids = vec![];
     for label in &mut env.labels {
-        let db_label = Label::find_by_id(
-            RemoteId::from(label.remote_id.clone().expect("No remote id in label")),
-            &tx,
-        )
-        .await
-        .expect("failed to find label");
+        let db_label =
+            Label::find_by_remote_id(label.remote_id.clone().expect("No remote id in label"), &tx)
+                .await
+                .expect("failed to find label");
         let the_label = if let Some(ref l) = db_label {
             l
         } else {

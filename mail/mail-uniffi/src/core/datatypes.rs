@@ -57,17 +57,17 @@ use proton_core_common::datatypes::{
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
-    HighSecurity as RealHighSecurity, IdCounterpart as RealIdCounterpart, LocalAddressId,
-    LocalContactEmailId, LocalContactId, LocalId as RealLocalId, LocalLabelId,
-    LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
-    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
+    HighSecurity as RealHighSecurity, LocalAddressId, LocalContactEmailId, LocalContactId,
+    LocalId as RealLocalId, LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword,
+    Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
     TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
-    ContactEmail as RealContactEmail, User as RealUser, UserSettings as RealUserSettings,
+    ContactEmail as RealContactEmail, ModelIdExtension, User as RealUser,
+    UserSettings as RealUserSettings,
 };
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
 use proton_mail_common::models::Label as RealLabel;
@@ -756,13 +756,8 @@ impl Contact {
             cards: value.cards.into_iter().map(ContactCard::from).collect(),
             contact_emails,
             create_time: value.create_time,
-            label_ids: RealRemoteId::counterparts::<RealLabel>(
-                value
-                    .label_ids
-                    .into_inner()
-                    .into_iter()
-                    .map(RealRemoteId::from)
-                    .collect(),
+            label_ids: RealLabel::remote_ids_counterpart(
+                value.label_ids.into_inner().into_iter().collect(),
                 tether,
             )
             .await?
@@ -859,19 +854,11 @@ impl ContactEmail {
             display_order: value.display_order,
             email: value.email,
             is_proton: value.is_proton,
-            label_ids: RealRemoteId::counterparts::<RealLabel>(
-                value
-                    .label_ids
-                    .into_inner()
-                    .into_iter()
-                    .map(RealRemoteId::from)
-                    .collect(),
-                tether,
-            )
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect(),
+            label_ids: RealLabel::remote_ids_counterpart(value.label_ids.into_inner(), tether)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             last_used_time: value.last_used_time,
             name: value.name,
         })

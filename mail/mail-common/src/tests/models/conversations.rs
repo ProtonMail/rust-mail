@@ -15,7 +15,6 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
-use proton_core_common::datatypes::IdCounterpart;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
@@ -552,7 +551,7 @@ mod available_actions {
         }
         tx.commit().await.unwrap();
 
-        let view = Label::find_by_id(test_case.view.remote_id.clone().unwrap(), &tether)
+        let view = Label::find_by_remote_id(test_case.view.remote_id.clone().unwrap(), &tether)
             .await
             .unwrap()
             .unwrap();
@@ -619,9 +618,7 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::SystemFolder(action) => ExpectedSystemFolder {
-                    label_id: action
-                        .local_id
-                        .counterpart::<Label>(tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
                         .unwrap()
                         .unwrap(),
@@ -643,9 +640,7 @@ mod available_move_to_actions {
         async fn new(action: MoveAction, tx: &Tether) -> Self {
             match action {
                 MoveAction::CustomFolder(action) => ExpectedCustomFolder {
-                    label_id: action
-                        .local_id
-                        .counterpart::<Label>(tx)
+                    label_id: Label::local_id_counterpart(action.local_id, tx)
                         .await
                         .unwrap()
                         .unwrap(),
@@ -921,7 +916,7 @@ mod available_move_to_actions {
         }
         tx.commit().await.unwrap();
 
-        let view = Label::find_by_id(view.remote_id.clone().unwrap(), &conn)
+        let view = Label::find_by_remote_id(view.remote_id.clone().unwrap(), &conn)
             .await
             .unwrap()
             .unwrap();
@@ -1250,12 +1245,10 @@ async fn test_conversation_create_with_attachment() {
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
 
     assert_eq!(
         db_conversation.attachments_metadata[0],
@@ -1305,12 +1298,10 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("should have value");
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = conv.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
 
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
@@ -1415,12 +1406,10 @@ async fn test_conversation_update() {
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
-    local_conversation2.attachments_metadata[0].local_id = conv_update.attachments_metadata[0]
-        .id
-        .clone()
-        .counterpart::<Attachment>(&tether)
-        .await
-        .unwrap();
+    local_conversation2.attachments_metadata[0].local_id =
+        Attachment::remote_id_counterpart(conv_update.attachments_metadata[0].id.clone(), &tether)
+            .await
+            .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &tether)
@@ -1439,7 +1428,7 @@ async fn test_conversation_undelete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&mut tether, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
-    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), &tether)
+    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail(), &tether)
         .await
         .unwrap()
         .unwrap()

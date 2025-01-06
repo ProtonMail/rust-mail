@@ -4,7 +4,7 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
     MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::datatypes::IdCounterpart;
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
@@ -77,8 +77,7 @@ async fn sidebar_system_labels(
     let tether = user_ctx.user_stash().connection();
     for label_id in expected {
         to_expect.push(
-            label_id
-                .counterpart::<Label>(&tether)
+            Label::remote_id_counterpart(label_id.clone(), &tether)
                 .await
                 .unwrap()
                 .unwrap(),

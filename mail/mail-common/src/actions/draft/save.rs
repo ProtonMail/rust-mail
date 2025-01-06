@@ -12,8 +12,8 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{IdCounterpart, LocalId};
-use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::datatypes::LocalId;
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -134,7 +134,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let body_len = action.body.len() as u64;
-        let Some(address) = Address::find_by_id(action.address_id.clone(), tether)
+        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), tether)
             .await
             .inspect_err(|e| error!("Failed to load address: {e}"))?
         else {
@@ -338,8 +338,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
-            let Some(remote_id) = parent_id
-                .counterpart::<Message>(&tether)
+            let Some(remote_id) = Message::local_id_counterpart(parent_id, &tether)
                 .await
                 .inspect_err(|e| error!("Failed to resolve remote parent id: {e}"))?
             else {

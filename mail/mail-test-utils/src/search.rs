@@ -10,13 +10,11 @@ use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
     MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::{IdCounterpart, LocalId};
-use proton_core_common::datatypes::{LocalLabelId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
 use proton_mail_common::models::Label;
-use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::BTreeMap;
 
@@ -243,12 +241,6 @@ impl MailTestContext {
     }
 }
 
-#[allow(dead_code)]
-/// # Panics
-pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
-    id.counterpart::<T>(tx).await.unwrap().unwrap()
-}
-
 /// Can panic if the local conversation `id` is not set, the remote
 /// `label_id` is not set, the local `label` can not be found or the query
 /// failed.
@@ -263,7 +255,7 @@ pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
     for label in &mut labels {
         label.save(&tx).await.expect("failed to create labels");
         assert!(
-            Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), &tx)
+            Label::find_by_remote_id(label.remote_id.clone().unwrap(), &tx)
                 .await
                 .expect("failed to resolve label ids")
                 .unwrap()
