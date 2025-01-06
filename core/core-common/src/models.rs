@@ -53,7 +53,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
-use stash::exports::{FromSql, SqliteError, ToSql};
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -312,15 +312,7 @@ pub trait ModelExtension: Model {
 #[allow(async_fn_in_trait)]
 pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// Remote Id type.
-    type RemoteId: ProtonIdMarker
-        + Clone
-        + Send
-        + Sync
-        + ToSql
-        + FromSql
-        + std::fmt::Debug
-        + Eq
-        + PartialEq;
+    type RemoteId: ProtonIdMarker;
 
     /// Remote id field name.
     #[must_use]

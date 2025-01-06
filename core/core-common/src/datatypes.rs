@@ -62,6 +62,7 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -939,7 +940,7 @@ sql_using_serde!(Labels);
 
 /// Marker trait to signal that this type was declared as a local id.
 pub trait LocalIdMarker: Sized {
-    type Counterpart: Clone + Send + Sync + ToSql + FromSql;
+    type Counterpart: Clone + Send + Sync + ToSql + FromSql + Serialize + DeserializeOwned + Debug;
 }
 
 /// Declare a new Local id type that maps to a remote Proton Id.
