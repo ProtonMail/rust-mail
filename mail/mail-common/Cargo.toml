@@ -41,7 +41,7 @@ tracing = { workspace = true }
 typed-builder = { workspace = true }
 url = { workspace = true }
 sqlite-watcher = { workspace = true }
-log = "0.4.22"
+proton-mail-ids = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }

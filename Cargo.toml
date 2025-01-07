@@ -128,6 +128,12 @@ version = "0.5"
 path = "mail/mail-api"
 registry = "proton"
 
+[workspace.dependencies.proton-mail-ids]
+version = "0.1"
+path = "mail/mail-ids"
+registry = "proton"
+features = ["sql"]
+
 [workspace.dependencies.proton-mail-common]
 version = "0.8"
 path = "mail/mail-common"
