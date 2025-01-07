@@ -1,12 +1,13 @@
 #![allow(non_snake_case)]
 #![allow(clippy::needless_raw_string_hashes)]
 
-use crate::Transformer;
+use crate::{InsertLinkToken, Transformer};
 #[test]
 fn inject_style() {
     let html = include_str!("../../tests/htmls/empty.html");
-    let html = Transformer::new(html).inject_style().to_string();
-    insta::assert_snapshot!(html);
+    let mut html = Transformer::new(html);
+    html.inject_style();
+    insta::assert_snapshot!(html.to_string());
 }
 
 #[test]
@@ -16,8 +17,10 @@ fn inject_style_no_head() {
           ain't no `head` here boss
         </div>
         ";
-    let html = Transformer::new(html).inject_style().to_string();
-    insta::assert_snapshot!(html);
+
+    let mut html = Transformer::new(html);
+    html.inject_style();
+    insta::assert_snapshot!(html.to_string());
 }
 
 #[test]
@@ -28,8 +31,9 @@ fn add_noreferrer() {
           <a href="proton.me" rel="foobar"/>
         </div>
         "#;
-    let html = Transformer::new(html).add_noreferrer().to_string();
-    insta::assert_snapshot!(html);
+    let mut html = Transformer::new(html);
+    html.add_noreferrer();
+    insta::assert_snapshot!(html.to_string());
 }
 
 #[test]
@@ -46,8 +50,9 @@ fn insert_links() {
         <div id="9"> ip http://127.0.0.1 </div>
         <div id="10"> mailto:foo@bar </div>
         "#;
-    let html = Transformer::new(html).insert_links().to_string();
-    insta::assert_snapshot!(html);
+    let mut html = Transformer::new(html);
+    html.insert_links(InsertLinkToken(()));
+    insta::assert_snapshot!(html.to_string());
 }
 
 #[test]
@@ -66,8 +71,9 @@ fn insert_links_text() {
 
         "#;
 
-    let html = Transformer::new(html).insert_links().to_string();
-    insta::assert_snapshot!(html);
+    let mut html = Transformer::new(html);
+    html.insert_links(InsertLinkToken(()));
+    insta::assert_snapshot!(html.to_string());
 }
 #[test]
 fn proxy_images() {
@@ -78,8 +84,7 @@ fn proxy_images() {
         <img id="2" src="https://ads.com?utm_source=tracker">
         </body>
         "#;
-    let html = Transformer::new(html)
-        .proxy_images("MYTOKEN123")
-        .to_string();
-    insta::assert_snapshot!(html);
+    let mut html = Transformer::new(html);
+    html.proxy_images("MYTOKEN123");
+    insta::assert_snapshot!(html.to_string());
 }

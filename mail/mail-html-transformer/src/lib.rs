@@ -12,13 +12,27 @@
 //! # Example
 //!
 //! ```
-//! use proton_mail_html_transformer::Transformer;
+//! let input = r#"
+//! <html>
+//!     <body>
+//!         <a href="https://ads.com?utm_source=tracker">bar</a>
+//!     </body>
+//! </html>
+//! "#;
 //!
-//! let html = "<html>..</html>";
 //!
-//! let transformed_html = Transformer::new(html)
-//!   .strip_utm() // Strip utm codes.
-//!   .to_string();// Convert back to textual representation
+//! let mut transformer = Transformer::new(html);
+//! transformer.strip_utm();
+//! let output = transformer.to_string();
+//!
+//! let expected = r#"
+//! <html>
+//!     <body>
+//!         <a href="https://ads.com/">bar</a>
+//!     </body>
+//! </html>
+//! "#;
+//! assert_eq!(expected, output);
 //! ```
 //!
 
@@ -45,24 +59,24 @@ mod tests;
 /// This type contains a couple of passes which transform the parsed HTML in order to sanitize
 /// and/or enhance the privacy of the user.
 ///
-/// Each pass is exposed as separate method. Some of the passes are destructive in nature, while
-/// others can be undone. See each method for more details.
+/// Each pass is exposed as separate method.
 #[derive(Debug, Clone)]
 pub struct Transformer {
-    ///Parsed document.
+    /// Parsed document.
     document: NodeRef,
-    insert_links_called: bool,
 }
+
+/// This exists because `add_noreferrer` should be called before `insert_links` for performance
+/// reasons.
+#[derive(Clone, Copy)]
+pub struct InsertLinkToken(());
 
 impl Transformer {
     /// Create a new [`Transformer`] with the given `document` HTML string.
     #[must_use]
     pub fn new(document: &str) -> Self {
         let document = kuchikiki::parse_html().one(document);
-        Self {
-            document,
-            insert_links_called: false,
-        }
+        Self { document }
     }
 
     /// Create a new [`Transformer`] with the given plain text string.
@@ -70,19 +84,13 @@ impl Transformer {
     pub fn new_text_plain(plain_text: &str) -> Self {
         let document = keep_spaces(plain_text);
         let document = kuchikiki::parse_html().one(document.as_str());
-        Self {
-            document,
-            insert_links_called: false,
-        }
+        Self { document }
     }
 
     /// Create a new [`Transformer`] with a previously parsed `document`.
     #[must_use]
     pub fn with_parsed(document: NodeRef) -> Self {
-        Self {
-            document,
-            insert_links_called: false,
-        }
+        Self { document }
     }
 
     /// Access the parsed document.
@@ -95,10 +103,6 @@ impl Transformer {
     ///
     /// See [`utm::strip()`] for more details.
     /// Returns how many tracking codes it removed.
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
     pub fn strip_utm(&mut self) -> u64 {
         utm::strip(self.document.clone())
     }
@@ -106,111 +110,59 @@ impl Transformer {
     /// Disables remote content.
     ///
     /// See [`remote_content::disable_remote_content()`] for more details.
-    ///
-    /// # Remarks
-    ///
-    /// This is a non-destructive operation and can be undone with [`enable_remote_content()`].
-    ///
-    pub fn disable_remote_content(&mut self) -> &mut Self {
-        remote_content::disable_remote_content(&self.document);
-        self
-    }
-
-    /// Enables remote content.
-    ///
-    /// See [`remote_content::undo_disable_remote_content()`] for more details.
-    ///
-    /// # Remarks
-    ///
-    /// This is a non-destructive operation and can be undone with [`disable_remote_content()`].
-    pub fn enable_remote_content(&mut self) -> &mut Self {
-        remote_content::undo_disable_remote_content(&self.document);
-        self
+    pub fn disable_remote_content(&mut self) -> u64 {
+        remote_content::disable_remote_content(&self.document)
     }
 
     /// If true, inject metadata for iOS web view.
     ///
     /// See [`ios::inject_content_size()`] for more details.
-    pub fn inject_ios_content_size(&mut self) -> &mut Self {
+    pub fn inject_ios_content_size(&mut self) {
         ios::inject_content_size(self.document.clone());
-        self
     }
 
     /// This function removes disallowed tags and attributes.
     ///
     /// See [`sanitizer::strip_whitelist`] for more details.
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
     pub fn strip_whitelist(&mut self) -> u64 {
         sanitizer::strip_whitelist(self.document.clone())
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
-    pub fn inject_style(&mut self) -> &mut Self {
+    pub fn inject_style(&mut self) {
         transforms::inject_style(self.document.clone());
-        self
     }
 
     ///
     /// See [`transforms::add_noreferrer`] for more details.
     ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
-    ///
-    /// # Panics
-    ///
-    /// For performance reasons call this before [`Transformer::insert_links`]
-    pub fn add_noreferrer(&mut self) -> &mut Self {
-        assert!(
-            !self.insert_links_called,
-            "For performance reasons call this before `Transformer::insert_links`"
-        );
+    /// This requires an [`InsertLinkToken`]
+    pub fn add_noreferrer(&mut self) -> InsertLinkToken {
         transforms::add_noreferrer(self.document.clone());
-        self
+        InsertLinkToken(())
     }
 
     /// Proxies all images through proton's proxy.
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
-    pub fn proxy_images(&mut self, user_session_id: &str) -> &mut Self {
-        transforms::proxy_images(self.document(), user_session_id);
-        self
+    pub fn proxy_images(&mut self, user_session_id: &str) -> u64 {
+        transforms::proxy_images(self.document(), user_session_id)
+    }
+
+    /// Disables embedded images
+    pub fn disable_embedded_images(&mut self) -> u64 {
+        transforms::disable_embedded_images(self.document())
     }
 
     /// Inserts `<a>` elements in plain text links
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
-    pub fn insert_links(&mut self) -> &mut Self {
-        self.insert_links_called = true;
+    pub fn insert_links(&mut self, _token: InsertLinkToken) {
         transforms::insert_links(self.document.clone());
-        self
     }
 
     /// Removes the blockquote from the html
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
     pub fn strip_blockquote(&mut self) -> bool {
         message_detector::strip_blockquote(self.document().clone())
     }
 
     /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail
-    ///
-    /// # Remarks
-    ///
-    /// This is a destructive operation and can not be undone.
     pub fn extract_blockquote(&mut self) -> SplitDoc {
         message_detector::locate_blockquote(self.document().clone())
     }
@@ -225,7 +177,7 @@ impl Display for Transformer {
 
 #[cfg(test)]
 mod integration_tests {
-    // I get a really stranget linker error if I `import cpuprofiler as _`.
+    // I get a really strange linker error if I `import cpuprofiler as _`.
     // TODO: Report this bug to rustc.
     // use cpuprofiler as _;
     use criterion as _;

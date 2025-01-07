@@ -8,9 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed 
+
+  - `DecryptedMessage::body` is now infailable.
+  - `TranformOpts` has been changed to contain exclusively `bool` and `Option<bool>`
+  - New helper method `DecryptedMessage::body_with_defaults` with the default options for the user.
+
+#### BodyOutput changes
+
+  - It now returns the used `TransformOpts`.
+  - It returns the `BodyBanners` that should be displayed to the user.
+  - More stats:
+    - `remote_images_disabled`
+    - `embedded_images_disabled`
+    - `images_proxied`
+
+
+### Removed
+
+  - `RemoteContent` enum
+  - `BlockQuote` enum
+
+### Added
+
+  - Disable embedded images pass and toggle.
+
 ### Fix
 
   - Mark unread action
+  - Significant performance improvements to the body transformation process.
+  - Fixed a bug where not all images got proxied in the presence of embedded images.
+  - Remote images are properly loaded.
+
 
 ## [0.31.5] - 2024-12-23
 

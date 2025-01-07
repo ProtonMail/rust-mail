@@ -42,6 +42,7 @@ typed-builder = { workspace = true }
 url = { workspace = true }
 sqlite-watcher = { workspace = true }
 proton-mail-ids = { workspace = true }
+uniffi = { workspace = true, optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
