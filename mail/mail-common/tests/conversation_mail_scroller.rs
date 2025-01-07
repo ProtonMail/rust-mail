@@ -300,6 +300,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
 
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
+    ctx.catch_all().await;
 
     // Update the inbox label to have all conversations
     let mut label = Label::load(local_label_id, &tether).await.unwrap().unwrap();

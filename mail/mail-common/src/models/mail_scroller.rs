@@ -37,6 +37,12 @@ pub struct MessageScrollData {
     pub row_id: Option<u64>,
 }
 
+/// In memory Conversation scroll data.
+///
+/// This is a cache for the conversation scroll data. It is used to store the
+/// cursor for the conversation scroll data. This is used to buffer data fetch
+/// over the switch between views in order to not load all available items everytime.
+/// This is useful for offline mode and for performance reasons.
 #[derive(Debug)]
 pub struct CachedConverstationScrollData {
     local_label_id: LocalLabelId,
@@ -47,6 +53,26 @@ pub struct CachedConverstationScrollData {
 }
 
 impl CachedConverstationScrollData {
+    /// Create a new cache for the conversation scroll data.
+    ///
+    /// This will load the data from the database and create a cursor for the
+    /// conversation scroll data in the place where first page should end.
+    ///
+    /// # Returns
+    ///
+    /// A cursor when the data is found, otherwise `None` as the view was displayed before.
+    ///
+    /// # Arguments
+    ///
+    /// `local_label_id` - The local label id of the label in which the scroll is performed.
+    /// `unread` - The read filter used in the scroll.
+    /// `page_size` - The size of the page to load.
+    /// `tether` - The tether to use for the database access.
+    ///
+    /// # Errors
+    ///
+    /// Specific to database access.
+    ///
     pub async fn new(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -93,6 +119,11 @@ impl CachedConverstationScrollData {
         })
     }
 
+    /// Fetch more items from the database.
+    ///
+    /// This will load the next page of items from the database and update the cursor.
+    /// If there are no more items to load, an empty vector is returned.
+    ///
     pub async fn fetch_more(
         &mut self,
         tether: &Tether,
@@ -126,6 +157,8 @@ impl CachedConverstationScrollData {
         }
     }
 
+    /// Check if there are more items to fetch for in memory cursor.
+    ///
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
         let all = self.data.visible_element_count(tether).await?;
         let cursor_count = self.cursor.visible_element_count(tether).await?;
@@ -175,9 +208,10 @@ pub struct ConversationScrollData {
 }
 
 impl ConversationScrollData {
-    /// Find the first record with the given key.
-    ///
-    /// If no record is found, return `None` and remote_conversation_id is not null.
+    /// Find the first record with matching:
+    /// * label_id,
+    /// * read_filter
+    /// * non empty remote_conversation_id.
     ///
     pub async fn find_with_key(
         local_label_id: LocalLabelId,
@@ -185,7 +219,7 @@ impl ConversationScrollData {
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         Self::find_first(
-            "WHERE local_label_id=? AND unread=? AND remote_conversation_id <> NULL",
+            "WHERE local_label_id=? AND unread=? AND remote_conversation_id IS NOT NULL",
             params![local_label_id, unread],
             tether,
         )
@@ -235,7 +269,6 @@ impl ConversationScrollData {
         let query = self.query(None, false, None);
         Conversation::count(
             query,
-            //TODO: this could potentially be abstracted into a function.
             params![
                 self.local_label_id,
                 self.conversation_time,
