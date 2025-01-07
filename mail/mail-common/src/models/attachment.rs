@@ -1,6 +1,6 @@
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, LocalAttachmentId, MessageSender,
+    KeyPackets, LocalAttachmentId, LocalMessageId, MessageSender,
 };
 use crate::models::*;
 use crate::AppError;
@@ -8,7 +8,7 @@ use bytes::Bytes;
 use indoc::indoc;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
-use proton_api_mail::services::proton::common::AttachmentId;
+use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
@@ -111,11 +111,11 @@ pub struct Attachment {
 
     /// Local message id where this attachment is present.
     #[DbField]
-    pub local_message_id: Option<LocalId>,
+    pub local_message_id: Option<LocalMessageId>,
 
     /// Remote message id where this attachment is present.
     #[DbField]
-    pub remote_message_id: Option<RemoteId>,
+    pub remote_message_id: Option<MessageId>,
 
     /// Attachment disposition.
     #[DbField]
@@ -205,7 +205,7 @@ impl Attachment {
     ///
     /// Return error if the query failed.
     pub async fn load_message_attachment_metadata(
-        message_id: LocalId,
+        message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
@@ -373,7 +373,7 @@ impl Attachment {
     ///
     /// Returns error if the query fails.
     pub async fn for_message(
-        local_message_id: LocalId,
+        local_message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Attachment::find(

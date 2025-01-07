@@ -4,9 +4,8 @@ use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
-use proton_core_common::datatypes::LocalId;
 use proton_mail_common::actions::draft::Save;
-use proton_mail_common::datatypes::{Disposition, MimeType};
+use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{recipients, Draft, ReplyMode};
 use proton_mail_common::models::MailSettings;
@@ -63,7 +62,7 @@ impl Composer {
     /// If the message is not a draft an error will be returned.
     pub fn reply(
         context: Arc<MailUserContext>,
-        message_id: LocalId,
+        message_id: LocalMessageId,
         reply_mode: ReplyMode,
     ) -> Command<Messages> {
         Command::batch([
@@ -93,7 +92,7 @@ impl Composer {
     /// Open an existing draft with for `message_id`.
     ///
     /// If the message is not a draft an error will be returned.
-    pub fn open(context: Arc<MailUserContext>, message_id: LocalId) -> Command<Messages> {
+    pub fn open(context: Arc<MailUserContext>, message_id: LocalMessageId) -> Command<Messages> {
         Command::batch([
             Command::message(Messages::DisplayBackgroundProgress(
                 "Opening draft...".to_owned(),

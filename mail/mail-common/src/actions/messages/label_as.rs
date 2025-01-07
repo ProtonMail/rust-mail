@@ -1,5 +1,7 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType, SystemLabelId};
+use crate::datatypes::{
+    ExclusiveLocation, LabelType, LocalMessageId, RollbackItemType, SystemLabelId,
+};
 use crate::models::{Label, Message};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
@@ -9,7 +11,7 @@ use proton_action_queue::action::{
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -26,7 +28,7 @@ pub struct LabelAs {
 impl LabelAs {
     pub fn new(
         source_label_id: LocalLabelId,
-        message_ids: Vec<LocalId>,
+        message_ids: Vec<LocalMessageId>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
@@ -107,13 +109,13 @@ pub struct Handler;
 
 impl Handler {
     pub(crate) async fn revert_one_locally(
-        message_id: &LocalId,
+        message_id: LocalMessageId,
         added_labels: HashSet<LocalLabelId>,
         removed_labels: HashSet<LocalLabelId>,
         original_locations: Option<Option<ExclusiveLocation>>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let Some(mut message) = Message::load(*message_id, bond).await? else {
+        let Some(mut message) = Message::load(message_id, bond).await? else {
             warn!("While reverting locally, could not find message with local_id: {message_id:?}");
             return Ok(());
         };
@@ -211,20 +213,20 @@ impl ActionHandler for Handler {
             error!("LabelAs message operation failed for messages: {failed_ids:?}");
             let failed_ids = Message::remote_ids_counterpart(failed_ids, &tether).await?;
             let tx = tether.transaction().await?;
-            for message_id in &failed_ids {
+            for message_id in failed_ids {
                 Self::revert_one_locally(
                     message_id,
                     action
                         .data
                         .added_labels
-                        .remove(message_id)
+                        .remove(&message_id)
                         .unwrap_or_default(),
                     action
                         .data
                         .removed_labels
-                        .remove(message_id)
+                        .remove(&message_id)
                         .unwrap_or_default(),
-                    action.data.original_location.remove(message_id),
+                    action.data.original_location.remove(&message_id),
                     &tx,
                 )
                 .await?;

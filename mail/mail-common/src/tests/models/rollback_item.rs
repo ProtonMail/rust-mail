@@ -197,7 +197,7 @@ async fn messages(
         .into_iter()
         .map(|item| {
             message!(
-                remote_id: Some(item.remote_id),
+                remote_id: Some(item.remote_id.into()),
                 local_address_id: address.local_id.unwrap(),
                 remote_address_id: address.remote_id.clone().unwrap(),
                 local_conversation_id,
@@ -271,12 +271,12 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
 
 async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether: &Tether) {
     let remote_id = &item.remote_id;
-    let db_message = Message::find_by_remote_id(remote_id.clone(), tether)
+    let db_message = Message::find_by_remote_id(remote_id.clone().into(), tether)
         .await
         .unwrap()
         .unwrap();
     let api_meta = api_message_meta!(
-        id: remote_id.clone(),
+        id: remote_id.clone().into(),
         address_id: db_message.remote_address_id.clone(),
         conversation_id: db_message.remote_conversation_id.clone().unwrap()
     );

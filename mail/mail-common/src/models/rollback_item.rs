@@ -7,6 +7,7 @@ use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_api_mail::services::proton::ProtonMail;
@@ -248,7 +249,7 @@ impl RollbackItem {
         PM: ProtonMail,
     {
         sync_any!(Message, MessageAndBodyMetadata, tether, batch => |remote_id| async {
-            api.get_message(remote_id).await
+            api.get_message(remote_id.into()).await
         } => |api_message: GetMessageResponse| async {
             let remote_id = api_message.message.metadata.id.clone();
             let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, tether).await?;
@@ -333,7 +334,7 @@ impl RollbackItem {
 struct MessageAndBodyMetadata {
     message_metadata: Message,
     body_metadata: MessageBodyMetadata,
-    remote_id: Option<RemoteId>,
+    remote_id: Option<MessageId>,
 }
 
 impl MessageAndBodyMetadata {
@@ -367,7 +368,7 @@ mod test_utils {
     impl<'a> From<&'a Message> for RollbackItem {
         fn from(message: &'a Message) -> Self {
             Self {
-                remote_id: message.remote_id.clone().unwrap(),
+                remote_id: message.remote_id.clone().unwrap().into(),
                 item_type: RollbackItemType::Message,
                 row_id: None,
             }

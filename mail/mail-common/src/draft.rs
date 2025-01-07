@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::actions::draft;
 use crate::actions::draft::Save;
 use crate::cache::CacheMessageKey;
-use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
+use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
@@ -20,10 +20,11 @@ use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
@@ -51,15 +52,15 @@ pub enum Error {
     #[error("User Address {0} has no primary key")]
     AddressWithoutPrimaryKey(AddressId),
     #[error("Message {0} is not a draft")]
-    MessageNotADraft(LocalId),
+    MessageNotADraft(LocalMessageId),
     #[error("Create Metadata not found for {0}")]
     CreateMetadataNotFound(LocalId),
     #[error("Message Body for {0} missing")]
-    MessageBodyMissing(LocalId),
+    MessageBodyMissing(LocalMessageId),
     #[error("Attachment {0} does not have key packets")]
     AttachmentDoesNotHaveKeyPackets(LocalAttachmentId),
     #[error("Can't reply or forward to a draft message {0}")]
-    ReplyOrForwardToDraft(LocalId),
+    ReplyOrForwardToDraft(LocalMessageId),
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
     #[error("Draft has no message")]
@@ -188,7 +189,7 @@ impl Draft {
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn open(
         context: Arc<MailUserContext>,
-        message_id: LocalId,
+        message_id: LocalMessageId,
     ) -> Result<Self, MailContextError> {
         let tether = &mut context.user_stash().connection();
 
@@ -263,7 +264,7 @@ impl Draft {
             let mut metadata = DraftMetadata {
                 id: None,
                 local_message_id: Some(message.local_id.unwrap()),
-                local_conversation_id: Some(message.local_id.unwrap()),
+                local_conversation_id: Some(message.local_conversation_id.unwrap()),
                 local_parent_id: None,
                 reply_mode: None,
                 row_id: None,
@@ -370,7 +371,7 @@ impl Draft {
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn reply(
         context: &MailUserContext,
-        message_id: LocalId,
+        message_id: LocalMessageId,
         reply_mode: ReplyMode,
         use_utc: bool,
     ) -> Result<Self, MailContextError> {
@@ -549,7 +550,7 @@ impl Draft {
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
         message_body: &str,
-        parent_id: Option<RemoteId>,
+        parent_id: Option<MessageId>,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = crate_draft_params(message, message_body_metadata, encrypted);
@@ -707,7 +708,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn message_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+    pub async fn message_id(&self, tether: &Tether) -> Result<Option<LocalMessageId>, StashError> {
         DraftMetadata::message_id(self.metadata_id, tether).await
     }
 

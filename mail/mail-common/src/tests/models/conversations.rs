@@ -36,7 +36,6 @@ use test_case::test_case;
 mod first_unread_message {
     use super::*;
     use pretty_assertions::assert_eq;
-    use proton_core_common::datatypes::LocalId;
     use test_case::test_case;
 
     lazy_static! {
@@ -244,7 +243,7 @@ mod first_unread_message {
     fn first_unread_message(
         labels: &[&Label],
         messages: &[(MessageFlags, bool, &[&Label])],
-        expected_id: Option<LocalId>,
+        expected_id: Option<LocalMessageId>,
     ) {
         let messages = messages
             .iter()
@@ -266,7 +265,7 @@ mod first_unread_message {
     }
 
     fn message_metadata_with_flags(
-        id: LocalId,
+        id: LocalMessageId,
         flags: MessageFlags,
         unread: bool,
         labels: &[&Label],

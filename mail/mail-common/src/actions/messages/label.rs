@@ -1,12 +1,12 @@
 use crate::actions::{filter_responses, ActionError, GenericActionData};
-use crate::datatypes::RollbackItemType;
+use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use crate::MailUserContext;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -18,7 +18,10 @@ pub struct Label(GenericActionData<Message>);
 
 impl Label {
     /// Create a new instance which applies `label_id` to the messages with `message_ids`.
-    pub fn new(label_id: LocalLabelId, message_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(
+        label_id: LocalLabelId,
+        message_ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> Self {
         Self(GenericActionData::new(label_id, message_ids))
     }
 }

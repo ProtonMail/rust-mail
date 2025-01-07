@@ -17,7 +17,7 @@ use proton_api_core::services::proton::responses::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
     GetKeysAllResponse, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
 };
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
@@ -186,7 +186,7 @@ impl Params {
                 context_time: None,
             }],
             attachments: vec![testdata_attachment_metadata_complete(
-                ApiRemoteId::from("mymessage "),
+                MessageId::from("mymessage "),
                 ApiRemoteId::from("myconv"),
             )],
             conversation_count: vec![ApiConversationCount {
@@ -604,7 +604,7 @@ impl MailTestContext {
     pub async fn mock_get_message_metadata_page(
         &self,
         metadata: Vec<MessageMetadata>,
-        end_id: Option<RemoteId>,
+        end_id: Option<MessageId>,
         end_time: Option<u64>,
         page_size: u64,
         _total: u64,

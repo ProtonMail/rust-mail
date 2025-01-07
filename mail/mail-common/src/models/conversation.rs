@@ -12,7 +12,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    MessageAttachmentInfos, MessageRecipients, MessageSenders, SystemLabel, SystemLabelId,
+    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, SystemLabel,
+    SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -23,8 +24,8 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError as QueueActionError, ActionOutput, Queue};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
@@ -653,7 +654,7 @@ impl Conversation {
     ) -> Result<(), StashError> {
         for id in ids {
             let message_ids = bond
-                .query_values::<_, LocalId>(
+                .query_values::<_, LocalMessageId>(
                     indoc::formatdoc! {"
             WITH conv_msgs AS (
                 SELECT local_id,? AS label_id FROM messages WHERE local_conversation_id=?
@@ -753,7 +754,7 @@ impl Conversation {
         ids: Vec<RemoteId>,
         spam_action: Option<bool>,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
@@ -1372,7 +1373,7 @@ impl Conversation {
         ids: Vec<RemoteId>,
         label_id: LabelId,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
@@ -1422,7 +1423,7 @@ impl Conversation {
         local_id: LocalId,
         label: &Label,
         messages: &[Message],
-    ) -> Result<LocalId, AppError> {
+    ) -> Result<LocalMessageId, AppError> {
         if messages.is_empty() {
             return Err(AppError::ConversationHasNoMessages(local_id));
         }
@@ -1442,7 +1443,7 @@ impl Conversation {
     /// * `label`    - label model from where the conversation is being viewed.
     /// * `messages` - Array of message models for the conversation.
     ///
-    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalId> {
+    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalMessageId> {
         if messages.is_empty() {
             return None;
         }
@@ -1451,7 +1452,7 @@ impl Conversation {
             label_id: &LabelId,
             messages: &[Message],
             filter: impl Fn(&Message) -> bool,
-        ) -> Option<LocalId> {
+        ) -> Option<LocalMessageId> {
             let mut last_unread = None;
 
             for msg in messages.iter().rev() {
@@ -1802,7 +1803,7 @@ impl Conversation {
     pub async fn mark_multiple_as_read_remote<PM: ProtonMail>(
         ids: Vec<RemoteId>,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_read(ids).await.map(|r| r.responses)
         };
@@ -1935,7 +1936,7 @@ impl Conversation {
     pub async fn mark_multiple_as_unread_remote<PM: ProtonMail>(
         ids: Vec<RemoteId>,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
         };
@@ -2053,7 +2054,7 @@ impl Conversation {
         label_id: LabelId,
         ids: Vec<RemoteId>,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
@@ -2243,7 +2244,7 @@ impl Conversation {
         ids: Vec<RemoteId>,
         label_id: LabelId,
         api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+    ) -> Result<Vec<OperationResult<RemoteId>>, ApiServiceError> {
         let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
@@ -2423,7 +2424,7 @@ impl Conversation {
         // Thus we need all messages that belong to all conversations,
         // then we find out which labels are in all of the messages and which are only in some.
 
-        let message_ids: Vec<LocalId> = tether
+        let message_ids: Vec<LocalMessageId> = tether
             .query_values(
                 format!(
                     "SELECT local_id AS value
@@ -2647,7 +2648,7 @@ impl Conversation {
     pub async fn label_impl(
         local_label_id: LocalLabelId,
         local_conversation_id: LocalId,
-        local_message_ids: &[LocalId],
+        local_message_ids: &[LocalMessageId],
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         if local_message_ids.is_empty() {
@@ -2905,13 +2906,14 @@ impl Conversation {
     }
     /// This fn should be called for conversation endpoints.
     /// Repeatedly calls `endpoint` in batches of 1 in parallel.
-    async fn split_request<F, Fut>(
-        ids: impl IntoIterator<Item = RemoteId>,
+    async fn split_request<F, Fut, T>(
+        ids: impl IntoIterator<Item = T>,
         endpoint: F,
-    ) -> Result<Vec<OperationResult>, ApiServiceError>
+    ) -> Result<Vec<OperationResult<T>>, ApiServiceError>
     where
-        F: Fn(Vec<ApiRemoteId>) -> Fut,
-        Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
+        F: Fn(Vec<T>) -> Fut,
+        Fut: Future<Output = Result<Vec<OperationResult<T>>, ApiServiceError>>,
+        T: ProtonIdMarker,
     {
         split_request(ids, 1, endpoint).await
     }
@@ -3367,12 +3369,12 @@ impl ConversationMessageLabelStats {
     async fn with(
         conversation_id: LocalId,
         label_id: LocalLabelId,
-        message_ids: &[LocalId],
+        message_ids: &[LocalMessageId],
         tether: &Tether,
     ) -> Result<Self, StashError> {
-        let params = [LocalId::from(label_id.as_u64()), conversation_id]
+        let params = [label_id.as_u64(), conversation_id.as_u64()]
             .into_iter()
-            .chain(message_ids.iter().cloned())
+            .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
         let messages = Message::find(format!(indoc! {"
@@ -3393,12 +3395,12 @@ impl ConversationMessageLabelStats {
     pub async fn without(
         conversation_id: LocalId,
         label_id: LocalLabelId,
-        message_ids: &[LocalId],
+        message_ids: &[LocalMessageId],
         tether: &Tether,
     ) -> Result<Self, StashError> {
-        let params = [LocalId::from(label_id.as_u64()), conversation_id]
+        let params = [label_id.as_u64(), conversation_id.as_u64()]
             .into_iter()
-            .chain(message_ids.iter().cloned())
+            .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
         let messages = Message::find(format!(indoc! {"

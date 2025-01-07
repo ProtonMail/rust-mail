@@ -1,5 +1,5 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
-use crate::datatypes::MessageFlags;
+use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
 };
@@ -10,7 +10,6 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
@@ -20,7 +19,7 @@ use tracing::error;
 #[derive(Serialize, Deserialize)]
 pub struct Send {
     metadata_id: MetadataId,
-    local_message_id: Option<LocalId>,
+    local_message_id: Option<LocalMessageId>,
 }
 
 impl Send {

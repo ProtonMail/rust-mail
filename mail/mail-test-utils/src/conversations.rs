@@ -1,5 +1,5 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
@@ -202,12 +202,12 @@ impl MailTestContext {
 /// * `failed` - The list of conversation IDs for which we want to simulate
 ///              failure.
 ///
-fn build_conv_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec<OperationResult> {
+fn build_conv_responses<T: ProtonIdMarker>(ids: &[T], failed: Vec<T>) -> Vec<OperationResult<T>> {
     //TODO: ET-151
     const CODE_SUCCESS: u32 = 1000;
     const CODE_FAIL: u32 = 2000;
 
-    let failed: HashSet<ApiRemoteId> = HashSet::from_iter(failed);
+    let failed: HashSet<T> = HashSet::from_iter(failed);
     ids.iter()
         .map(|id| {
             let code = if failed.contains(id) {

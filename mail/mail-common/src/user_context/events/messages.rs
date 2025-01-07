@@ -28,8 +28,11 @@ pub async fn handle_message_events(
                 }
             }
             Action::Update | Action::UpdateFlags => {
-                if DraftMetadata::exists_for_message_with_remote_id(&message_event.remote_id, tx)
-                    .await?
+                if DraftMetadata::exists_for_message_with_remote_id(
+                    message_event.remote_id.clone(),
+                    tx,
+                )
+                .await?
                 {
                     debug!(
                         "Skipping message update for {} due to draft metadata",

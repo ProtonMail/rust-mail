@@ -23,7 +23,7 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{AttachmentId, LabelType};
+use crate::services::proton::common::{AttachmentId, LabelType, MessageId};
 use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, RemoteId};
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
@@ -307,7 +307,7 @@ pub struct Attachment {
 
     /// What message this attachment belongs to
     #[serde(rename = "MessageID")]
-    pub message_id: RemoteId,
+    pub message_id: MessageId,
 
     /// Whether this is an embedded attachment.
     pub disposition: Disposition,
@@ -1002,7 +1002,7 @@ pub struct MessageCount {
 pub struct MessageEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: MessageId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -1142,7 +1142,7 @@ bitflags::bitflags! {
 pub struct MessageMetadata {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: MessageId,
 
     /// TODO: Document this field.
     #[serde(rename = "ConversationID")]
@@ -1230,7 +1230,7 @@ pub struct MessageMetadata {
 impl Default for MessageMetadata {
     fn default() -> Self {
         Self {
-            id: RemoteId::from(""),
+            id: MessageId::from(""),
             conversation_id: RemoteId::from(""),
             address_id: AddressId::from(""),
             attachments_metadata: Vec::default(),
@@ -1354,10 +1354,11 @@ pub struct MobileSettings {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct OperationResult {
+// can't put T:ProtonIdMarker here due to https://github.com/rust-lang/rust/issues/34979
+pub struct OperationResult<T> {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: T,
 
     /// TODO: Document this field.
     #[serde(rename = "Response")]
