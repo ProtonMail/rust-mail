@@ -71,7 +71,7 @@ impl CachedConverstationScrollData {
                         Some(last) => ConversationScrollData::builder()
                             .local_label_id(local_label_id)
                             .unread(unread)
-                            .remote_conversation_id(last.remote_id.clone().unwrap())
+                            .remote_conversation_id(last.remote_id.clone())
                             .conversation_time(last.time)
                             .display_order(last.display_order)
                             .build(),
@@ -111,7 +111,7 @@ impl CachedConverstationScrollData {
                 Some(last) => ConversationScrollData::builder()
                     .local_label_id(self.local_label_id)
                     .unread(self.unread)
-                    .remote_conversation_id(last.remote_id.clone().unwrap())
+                    .remote_conversation_id(last.remote_id.clone())
                     .conversation_time(last.time)
                     .display_order(last.display_order)
                     .build(),
@@ -153,7 +153,7 @@ pub struct ConversationScrollData {
     pub unread: ReadFilter,
     /// Id of the last synced conversation.
     #[DbField]
-    pub remote_conversation_id: RemoteId,
+    pub remote_conversation_id: Option<RemoteId>,
     /// Time of the last synced conversation.
     ///
     /// Note: for filtered conversation (`ReadFilter != ReadFilter::All`) we
@@ -175,13 +175,17 @@ pub struct ConversationScrollData {
 }
 
 impl ConversationScrollData {
+    /// Find the first record with the given key.
+    ///
+    /// If no record is found, return `None` and remote_conversation_id is not null.
+    ///
     pub async fn find_with_key(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         Self::find_first(
-            "WHERE local_label_id=? AND unread=?",
+            "WHERE local_label_id=? AND unread=? AND remote_conversation_id <> NULL",
             params![local_label_id, unread],
             tether,
         )

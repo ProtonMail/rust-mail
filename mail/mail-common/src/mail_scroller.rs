@@ -31,7 +31,6 @@ use tracing::debug;
 mod conversation_scroller;
 
 type MailPaginatorInitResult<T> = Option<Receiver<Result<Vec<T>, MailContextError>>>;
-//TODO: Watcher creation
 pub trait MailScrollerSource: Send + Sync {
     type Item: Send + 'static;
 
@@ -102,11 +101,6 @@ pub trait MailScrollerSource: Send + Sync {
     fn watched_tables(&self) -> Vec<String>;
 }
 
-//TODO(testing):
-// - sync till end, `has_more` reports nothing
-// - After one sync, creating a new paginator with the same parameters should not refetch.
-// - older elements do not show up in visible range
-// - newer elements show up in visible range
 /// Paginate over mail related items which implement [`MailScrollerSource`].
 ///
 /// You should use [`has_more()`] to check if more data is available and [`fetch_more()`] to
@@ -182,7 +176,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         // but we may as well check the source for the final "truth".
         let visible_items = self.source.visible_items_total(&self.ctx).await?;
 
-        Ok(dbg!(visible_items) < dbg!(self.total))
+        Ok(visible_items < self.total)
     }
 
     /// Fetch more data from the server.
@@ -262,8 +256,6 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let session = ctx.session().clone();
         let unread = self.unread;
 
-        dbg!(&label);
-
         // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = CachedConverstationScrollData::new(
             self.local_label_id,
@@ -276,7 +268,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             debug!("We have paginated here before, create cached scroller");
             self.cached = Arc::new(Mutex::new(Some(scroller)));
 
-            return Ok((label.total(self.unread), None));
+            return Ok((label.total_conversations(self.unread), None));
         }
 
         // No entry exist, which means we have not synced this label yet.
@@ -300,7 +292,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             drop(sender.send(r));
         });
 
-        Ok((label.total(self.unread), Some(receiver)))
+        Ok((label.total_conversations(self.unread), Some(receiver)))
     }
 
     async fn visible_items(
@@ -346,7 +338,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
 
-        Ok(label.total(self.unread))
+        Ok(label.total_conversations(self.unread))
     }
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
@@ -363,7 +355,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             if scroller.has_more(&tether).await? {
                 let items = scroller.fetch_more(&tether).await?;
 
-                return Ok((items, label.total(self.unread)));
+                return Ok((items, label.total_conversations(self.unread)));
             }
         }
 
@@ -374,13 +366,15 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let conversations = if let Some(cp) =
             ConversationScrollData::find_with_key(self.local_label_id, self.unread, &tether).await?
         {
+            // Unwrap safety: `find_with_key` method ensures there is remote id.
+            let remote_id = cp.remote_conversation_id.unwrap();
             // Sync next data.
             Self::sync_next_page(
                 ctx.session(),
                 tether,
                 label.local_id.unwrap(),
                 label.remote_id.clone().unwrap(),
-                cp.remote_conversation_id,
+                remote_id,
                 cp.conversation_time,
                 self.unread,
                 self.page_size,
@@ -399,7 +393,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             .await?
         };
 
-        Ok((conversations, label.total(self.unread)))
+        Ok((conversations, label.total_conversations(self.unread)))
     }
 
     fn watched_tables(&self) -> Vec<String> {
@@ -592,12 +586,12 @@ impl MailConversationScrollerSource {
         };
 
         let context_time = context_time.unwrap_or(label.context_time);
-        let remote_id = last.remote_id.clone().unwrap();
+        let remote_id = last.remote_id.clone();
         let display_order = last.display_order;
 
-        let conv_paginator = Self::update_scroller_data(
+        Self::update_scroller_data(
             local_label_id,
-            remote_id,
+            remote_id.clone(),
             unread,
             context_time,
             display_order,
@@ -606,8 +600,8 @@ impl MailConversationScrollerSource {
         .await?;
 
         debug!(
-            "New last element id={}, time={}, order={}",
-            conv_paginator.remote_conversation_id, context_time, display_order
+            "New last element id={:?}, time={}, order={}",
+            remote_id, context_time, display_order
         );
 
         tx.commit().await?;
@@ -617,7 +611,7 @@ impl MailConversationScrollerSource {
 
     async fn update_scroller_data(
         local_label_id: LocalLabelId,
-        remote_conv_id: RemoteId,
+        remote_conv_id: Option<RemoteId>,
         unread: ReadFilter,
         context_time: u64,
         display_order: u64,

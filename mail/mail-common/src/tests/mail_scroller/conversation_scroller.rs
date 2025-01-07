@@ -101,7 +101,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let mut scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
+        .remote_conversation_id(last_conversation.remote_id.clone())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .build();
@@ -211,7 +211,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let mut scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
+        .remote_conversation_id(last_conversation.remote_id.clone())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .build();

@@ -151,7 +151,7 @@ impl Label {
         <Self as Model>::save(self, bond).await
     }
 
-    pub fn total(&self, unread: ReadFilter) -> u64 {
+    pub fn total_conversations(&self, unread: ReadFilter) -> u64 {
         match unread {
             ReadFilter::All => self.total_conv,
             ReadFilter::Unread => self.unread_conv,
