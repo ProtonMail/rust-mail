@@ -13,7 +13,6 @@ use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
-use proton_api_core::RemoteId;
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
@@ -93,10 +92,7 @@ pub(crate) fn new_action_factory() -> Factory {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GenericActionData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
     /// Local label id which this action applies to.
     label_id: LocalLabelId,
@@ -113,10 +109,7 @@ where
 
 impl<T> GenericActionData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
     /// Create a new instance with the given `label_id` and target `ids`.
     pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
@@ -162,7 +155,7 @@ where
         tx: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
-            RollbackItem::new(remote_id.clone().into(), item_type)
+            RollbackItem::new(remote_id.as_ref().to_owned(), item_type)
                 .save(tx)
                 .await?;
         }
@@ -192,10 +185,7 @@ pub fn filter_responses_by_codes<T: ProtonIdMarker>(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionMoveData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
     /// The current label whether the items are locate.
     source_label_id: LocalLabelId,
@@ -212,10 +202,7 @@ where
 
 impl<T> ActionMoveData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
     /// Create a new action which moves items with `target_ids` from `source_label_id` to
     ///`destination_label_id`.
@@ -253,10 +240,7 @@ where
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LabelAsData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash>,
 {
     source_label_id: LocalLabelId,
     local_ids: Vec<T::IdType>,
@@ -276,10 +260,7 @@ where
 
 impl<T> LabelAsData<T>
 where
-    T: ModelIdExtension<
-        RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash,
-    >,
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash>,
 {
     fn new(
         source_label_id: LocalLabelId,
@@ -330,7 +311,7 @@ where
         bond: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
-            RollbackItem::new(remote_id.clone().into(), kind)
+            RollbackItem::new(remote_id.as_ref().to_owned(), kind)
                 .save(bond)
                 .await?;
         }

@@ -2,7 +2,6 @@ use crate::datatypes::LocalMessageId;
 use crate::draft::ReplyMode;
 use crate::models::Message;
 use proton_api_mail::services::proton::common::MessageId;
-use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
@@ -144,7 +143,7 @@ impl DraftMetadata {
     ///
     /// Return error if the query failed.
     pub async fn delete_for_message(
-        local_message_id: LocalId,
+        local_message_id: LocalMessageId,
         bond: &Bond<'_>,
     ) -> Result<usize, StashError> {
         bond.execute(

@@ -41,3 +41,8 @@ declare_proton_id!(
     /// Identifier for a proton Conversation.
     pub ConversationId
 );
+
+declare_proton_id!(
+    /// Identifier for an external message id.
+    pub ExternalId
+);

@@ -306,7 +306,7 @@ mod available_actions {
     use crate::datatypes::MovableSystemFolder;
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conversation, rid};
+    use proton_mail_test_utils::{conv_id, conversation};
     use test_case::test_case;
 
     lazy_static! {
@@ -345,7 +345,7 @@ mod available_actions {
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(num_unread: 1, remote_id: rid!("conversation1")),
+            conversation: conversation!(num_unread: 1, remote_id: conv_id!("conversation1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
         expected: Ok(ConversationAvailableActions::builder()
@@ -379,7 +379,7 @@ mod available_actions {
     static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(num_unread: 1, remote_id: rid!("conversation_1")),
+            conversation: conversation!(num_unread: 1, remote_id: conv_id!("conversation_1")),
             labels: vec![STARRED.clone(), INBOX.clone()],
         }],
         expected: Ok(ConversationAvailableActions::builder()
@@ -583,7 +583,7 @@ mod available_move_to_actions {
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conversation, label, rid};
+    use proton_mail_test_utils::{conv_id, conversation, label, lbl_id};
     use stash::stash::Tether;
     use std::sync::LazyLock;
     use test_case::test_case;
@@ -666,31 +666,31 @@ mod available_move_to_actions {
     }
 
     static INBOX: LazyLock<Label> = LazyLock::new(
-        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
+        || label!(label_type: LabelType::System, remote_id: lbl_id!(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
     );
 
     static OUTBOX: LazyLock<Label> = LazyLock::new(
-        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::outbox()), name: "Outbox".to_owned(), color: LabelColor::black()),
+        || label!(label_type: LabelType::System, remote_id: lbl_id!(LabelId::outbox()), name: "Outbox".to_owned(), color: LabelColor::black()),
     );
 
     static STARRED: LazyLock<Label> = LazyLock::new(
-        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::starred()), name: "Starred".to_owned(), color: LabelColor::black()),
+        || label!(label_type: LabelType::System, remote_id: lbl_id!(LabelId::starred()), name: "Starred".to_owned(), color: LabelColor::black()),
     );
 
     static CUSTOM_FOLDER: LazyLock<Label> = LazyLock::new(
-        || label!(label_type: LabelType::Folder, remote_id: rid!("1234"), name: "My custom folder".to_owned(), color: LabelColor::purple()),
+        || label!(label_type: LabelType::Folder, remote_id: lbl_id!("1234"), name: "My custom folder".to_owned(), color: LabelColor::purple()),
     );
 
     #[test_case(&INBOX, vec![], vec![], Err(AppError::EmptyListOfConversations); "TEST1: empty")]
     #[test_case(
         &INBOX,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_2")), labels: vec![INBOX.clone()] },
         ],
         vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
+            label!(remote_id: lbl_id!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lbl_id!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
         Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
@@ -719,19 +719,19 @@ mod available_move_to_actions {
     #[test_case(
         &INBOX,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string())] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_2")), labels: vec![label!(remote_id: lbl_id!("label2"), label_type: LabelType::Folder, name: "label2".to_string())] },
         ],
         vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lbl_id!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
         ],
         Err(AppError::ConversationDoesNotHaveLabel(2.into(), "Inbox".to_string()));
         "TEST3: One conversation in inbox, other in folder")]
     #[test_case(
         &STARRED,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![STARRED.clone(), OUTBOX.clone()] },
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![STARRED.clone(), INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![STARRED.clone(), OUTBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_2")), labels: vec![STARRED.clone(), INBOX.clone()] },
         ],
         vec![],
         Ok(&[
@@ -755,10 +755,10 @@ mod available_move_to_actions {
     #[test_case(
         &CUSTOM_FOLDER,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![CUSTOM_FOLDER.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![CUSTOM_FOLDER.clone()] },
         ],
         vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lbl_id!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
             CUSTOM_FOLDER.clone(),
         ],
         Ok(&[
@@ -791,16 +791,16 @@ mod available_move_to_actions {
         ]); "TEST5: Conversation in custom folder, when viewed from custom folder")]
     #[test_case(
         &label!(
-            remote_id: rid!("folder2"),
-            remote_parent_id: rid!("folder1"),
+            remote_id: lbl_id!("folder2"),
+            remote_parent_id: lbl_id!("folder1"),
             name: "folder2".to_string(),
             label_type: LabelType::Folder
         ),
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
+            ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![
                 label!(
-                    remote_id: rid!("folder2"),
-                    remote_parent_id: rid!("folder1"),
+                    remote_id: lbl_id!("folder2"),
+                    remote_parent_id: lbl_id!("folder1"),
                     name: "folder2".to_string(),
                     label_type: LabelType::Folder
                 )
@@ -808,25 +808,25 @@ mod available_move_to_actions {
         ],
         vec![
             label!(
-                remote_id: rid!("folder1"),
+                remote_id: lbl_id!("folder1"),
                 name: "folder1".to_string(),
                 label_type: LabelType::Folder
             ),
             label!(
-                remote_id: rid!("folder2"),
-                remote_parent_id: rid!("folder1"),
+                remote_id: lbl_id!("folder2"),
+                remote_parent_id: lbl_id!("folder1"),
                 name: "folder2".to_string(),
                 label_type: LabelType::Folder
             ),
             label!(
-                remote_id: rid!("folder3"),
-                remote_parent_id: rid!("folder2"),
+                remote_id: lbl_id!("folder3"),
+                remote_parent_id: lbl_id!("folder2"),
                 name: "folder3".to_string(),
                 label_type: LabelType::Folder
             ),
             label!(
-                remote_id: rid!("folder4"),
-                remote_parent_id: rid!("folder3"),
+                remote_id: lbl_id!("folder4"),
+                remote_parent_id: lbl_id!("folder3"),
                 name: "folder4".to_string(),
                 label_type: LabelType::Folder
             )
@@ -946,12 +946,12 @@ mod available_move_to_actions {
         test_move_to_actions(
             &INBOX,
             vec![
-                ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
-                ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
+                ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_1")), labels: vec![INBOX.clone()] },
+                ConversationWithLabels { conversation: conversation!(remote_id: conv_id!("conversation_2")), labels: vec![INBOX.clone()] },
             ],
             vec![
-                label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-                label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
+                label!(remote_id: lbl_id!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: lbl_id!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
             ],
             Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
@@ -1078,8 +1078,8 @@ async fn test_conversation_create_starred() {
             .expect("should have value");
         let mut local_conversation = Conversation::from(conv.clone());
         local_conversation.row_id = Some(1);
-        local_conversation.local_id = Some(1.into());
-        local_conversation.labels[0].local_id = Some(1.into());
+        local_conversation.local_id = Some(LocalConversationId::from(1));
+        local_conversation.labels[0].local_id = Some(1);
         local_conversation.labels[0].local_conversation_id = Some(1.into());
         local_conversation.labels[0].row_id = Some(1);
         local_conversation.labels[0].local_label_id = db_conversation.labels[0].local_label_id;

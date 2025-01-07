@@ -1,6 +1,6 @@
 use crate::test_context::MailTestContext;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::request_data::{
@@ -241,7 +241,7 @@ impl MailTestContext {
     /// * `id`      - ID of the message to relabel.
     /// * `message` - modified message as response.
     ///
-    pub async fn mock_relabel_message(&self, id: &ApiRemoteId, message: MessageMetadata) {
+    pub async fn mock_relabel_message(&self, id: &MessageId, message: MessageMetadata) {
         let response = PostMessagesRelabelResponse { message };
         Mock::given(method("POST"))
             .and(path(format!("/api/mail/v4/messages/{id}/relabel")))

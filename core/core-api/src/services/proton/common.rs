@@ -7,14 +7,11 @@
 //! functionality.
 //!
 
-use core::fmt;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "sql")]
-use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::Deref;
+
 //  ENUMS
 //==============================================================================
 
@@ -71,7 +68,8 @@ pub trait ProtonIdSqlMarker {}
 
 /// Marker trait assigned to each id that was declared with [`declare_proton_id`].
 pub trait ProtonIdMarker:
-    Clone
+    AsRef<str>
+    + Clone
     + Debug
     + DeserializeOwned
     + Eq
@@ -171,20 +169,6 @@ macro_rules! declare_proton_id {
             }
         }
 
-        // Compatibility method, to be removed when conversion is complete.
-        impl From<$crate::RemoteId> for $name {
-            fn from(id: $crate::RemoteId) -> Self {
-                Self(id.into_inner())
-            }
-        }
-
-        // Compatibility method, to be removed when conversion is complete.
-        impl From<$name> for $crate::RemoteId {
-            fn from(id: $name) -> Self {
-                $crate::RemoteId::new(id.into_inner())
-            }
-        }
-
         impl $crate::services::proton::common::ProtonIdSqlMarker for $name {}
 
         impl $crate::services::proton::common::ProtonIdMarker for $name {}
@@ -234,81 +218,4 @@ declare_proton_id! {
 declare_proton_id! {
     /// Represents the Id of a crypto salt.
     pub SaltId
-}
-
-/// Remote ID.
-///
-/// This minimal struct is simply a wrapper around a [`String`], and is used to
-/// formalise all IDs used by the Proton API.
-///
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct RemoteId(String);
-
-impl ProtonIdMarker for RemoteId {}
-
-impl ProtonIdSqlMarker for RemoteId {}
-
-impl RemoteId {
-    /// Create a new [`RemoteId`] from a [`String`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID to wrap.
-    ///
-    #[must_use]
-    pub fn new(id: String) -> Self {
-        Self(id)
-    }
-
-    /// Convert the [`RemoteId`] into the inner [`String`].
-    #[must_use]
-    pub fn into_inner(self) -> String {
-        self.0
-    }
-
-    /// Get a reference to the inner [`String`]
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Deref for RemoteId {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl Display for RemoteId {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for RemoteId {
-    fn from(id: String) -> Self {
-        Self(id)
-    }
-}
-
-impl From<&str> for RemoteId {
-    fn from(id: &str) -> Self {
-        Self(id.to_owned())
-    }
-}
-
-#[cfg(feature = "sql")]
-impl ToSql for RemoteId {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        self.as_str().to_sql()
-    }
-}
-
-#[cfg(feature = "sql")]
-impl FromSql for RemoteId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        String::column_result(value).map(RemoteId)
-    }
 }

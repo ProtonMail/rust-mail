@@ -11,7 +11,7 @@ use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
@@ -32,7 +32,7 @@ pub enum MailboxError {
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryptionIO(String),
     #[error("Attachment '{0}' does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(LocalId),
+    AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("App error: {0}")]
     AppError(#[from] AppError),
     #[error("API request failed with error: '{0}'")]

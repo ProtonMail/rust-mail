@@ -23,8 +23,10 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{AttachmentId, ConversationId, LabelType, MessageId};
-use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, RemoteId};
+use crate::services::proton::common::{
+    AttachmentId, ConversationId, ExternalId, LabelType, MessageId,
+};
+use proton_api_core::services::proton::common::{AddressId, EventId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
     UserSettings,
@@ -620,7 +622,7 @@ impl Default for Label {
 pub struct LabelEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: LabelId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -1159,7 +1161,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "ExternalID")]
-    pub external_id: Option<RemoteId>,
+    pub external_id: Option<ExternalId>,
 
     /// TODO: Document this field.
     pub flags: MessageFlags,

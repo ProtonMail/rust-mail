@@ -42,7 +42,7 @@ pub async fn color_to_display(
     value: &Label,
     tether: &Tether,
 ) -> Result<Option<LabelColor>, AppError> {
-    let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), tether)
+    let settings = MailSettings::load(MAIL_SETTINGS_ID, tether)
         .await?
         .expect("MailSettings in Stash");
 

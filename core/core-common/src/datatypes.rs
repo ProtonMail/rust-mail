@@ -67,14 +67,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
-use stash::macros::DbRecord;
 use stash::utils::sql_using_serde;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 
-pub use proton_api_core::services::proton::common::RemoteId;
 //  ENUMS
 //==============================================================================
 
@@ -1016,8 +1014,6 @@ declare_local_id!(LocalContactId => ContactId);
 declare_local_id!(LocalContactEmailId => ContactEmailId);
 declare_local_id!(LocalAddressId => AddressId);
 declare_local_id!(LocalLabelId => LabelId);
-//TODO: Remove when everything has been converted.
-declare_local_id!(LocalId => RemoteId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -1122,15 +1118,6 @@ impl From<ApiProductUsedSpace> for ProductUsedSpace {
 }
 
 sql_using_serde!(ProductUsedSpace);
-
-/// A query result that returns a remote ID field.
-#[derive(Clone, DbRecord, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[non_exhaustive]
-pub struct QueryResultRemoteId {
-    /// The remote ID field value.
-    #[DbField]
-    pub id: RemoteId,
-}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]

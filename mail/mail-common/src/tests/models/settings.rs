@@ -55,10 +55,10 @@ async fn test_mail_settings_store_read() {
     let tx = tether.transaction().await.unwrap();
     settings.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
-    let db_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &tether)
+    let db_settings = MailSettings::load(MAIL_SETTINGS_ID, &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(db_settings, settings);
-    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID.into()));
+    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID));
 }

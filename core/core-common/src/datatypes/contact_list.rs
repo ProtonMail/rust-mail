@@ -1,9 +1,6 @@
 use super::avatar::AvatarInformation;
-use crate::datatypes::{LocalContactEmailId, LocalContactId};
-use crate::{
-    datatypes::LocalId,
-    models::{Contact, ContactEmail},
-};
+use crate::datatypes::{LocalContactEmailId, LocalContactId, LocalLabelId};
+use crate::models::{Contact, ContactEmail};
 use itertools::Itertools;
 use std::collections::BTreeMap;
 use unicode_segmentation::UnicodeSegmentation;
@@ -109,7 +106,7 @@ impl From<Contact> for ContactItem {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactGroupItem {
     /// The field represent the unique identifier of the contact group in the database
-    pub local_id: LocalId,
+    pub local_id: LocalLabelId,
 
     /// The field represent the name of the contact group
     pub name: String,

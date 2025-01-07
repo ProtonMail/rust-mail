@@ -43,7 +43,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
+use proton_api_mail::services::proton::common::{ConversationId, ExternalId, MessageId};
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
@@ -53,7 +53,7 @@ use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{LocalAddressId, LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
@@ -140,7 +140,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub external_id: Option<RemoteId>,
+    pub external_id: Option<ExternalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2144,7 +2144,10 @@ impl Message {
             local_address_id: Address::remote_id_counterpart(value.address_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone().into())
+                    AppError::LocalIdNotFound(
+                        "Address".to_owned(),
+                        value.address_id.clone().into_inner(),
+                    )
                 })?,
             remote_address_id: value.address_id,
             attachments_metadata: value
@@ -2693,8 +2696,10 @@ pub struct MessageLabel {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
+    // NOTE: This id does not exist, stash does not support composite primary keys. The real
+    // primary key is (local_message_id + local_label_id).
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<u64>,
 
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,

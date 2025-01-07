@@ -448,7 +448,7 @@ impl Label {
                 return Ok(ViewMode::Messages);
             }
         }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID.into(), tether)
+        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
             .await?
             .unwrap_or_default()
             .view_mode)

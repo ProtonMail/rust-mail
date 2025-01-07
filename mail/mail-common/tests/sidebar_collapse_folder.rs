@@ -1,7 +1,6 @@
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
 use proton_mail_test_utils::init::Params as TestParams;
@@ -77,7 +76,7 @@ async fn folder_collapse() {
 }
 
 async fn get_folder(name: &str, tether: &Tether) -> Label {
-    Label::find_first("WHERE remote_id = ?", params![RemoteId::from(name)], tether)
+    Label::find_first("WHERE remote_id = ?", params![name.to_owned()], tether)
         .await
         .unwrap()
         .unwrap()

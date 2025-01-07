@@ -1,13 +1,12 @@
 #![allow(clippy::needless_pass_by_value)]
 mod contact_list {
     use crate::{
-        contact, contact_email,
+        ceid, cid, contact, contact_email,
         datatypes::{
             AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
         },
         lid,
         models::{Contact, ContactEmail},
-        rid,
         tests::common::new_core_test_connection,
     };
     use pretty_assertions::assert_eq;
@@ -151,9 +150,9 @@ mod contact_list {
     }
 
     #[test_case(vec![
-        contact_email!(remote_id: rid!("3"), email: "barbara1984@yahoo.com".to_string(), display_order: 3),
-        contact_email!(remote_id: rid!("1"), email: "barbara@fox.us".to_string(), display_order: 2),
-        contact_email!(remote_id: rid!("2"), email: "bfox@proton.me".to_string(), display_order: 1),
+        contact_email!(remote_id: ceid!("3"), email: "barbara1984@yahoo.com".to_string(), display_order: 3),
+        contact_email!(remote_id: ceid!("1"), email: "barbara@fox.us".to_string(), display_order: 2),
+        contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".to_string(), display_order: 1),
     ], vec![
     GroupedContacts {
         grouped_by: "B".to_string(),
@@ -191,7 +190,7 @@ mod contact_list {
         expected: Vec<GroupedContacts>,
     ) {
         let mut tether = new_core_test_connection().await.connection();
-        let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
+        let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         let tx = tether.transaction().await.unwrap();
         contact.save(&tx).await.unwrap();
 
@@ -209,12 +208,12 @@ mod contact_list {
 mod contact_watcher {
     use stash::{orm::Model, params};
 
-    use crate::{contact, models::Contact, rid, tests::common::new_core_test_connection};
+    use crate::{cid, contact, models::Contact, tests::common::new_core_test_connection};
 
     #[tokio::test]
     async fn test_contact_list_watcher() {
         let mut tether = new_core_test_connection().await.connection();
-        let mut contact = contact!(remote_id: rid!("123"), name: "Barbara Fox".to_string());
+        let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         let tx = tether.transaction().await.unwrap();
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
