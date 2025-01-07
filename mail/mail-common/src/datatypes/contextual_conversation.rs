@@ -9,9 +9,11 @@ use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
+use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
@@ -27,10 +29,10 @@ use tracing::warn;
 #[derive(Debug)]
 pub struct ContextualConversation {
     /// Local id of the conversation.
-    pub local_id: LocalId,
+    pub local_id: LocalConversationId,
 
     /// Remote id of the conversation.
-    pub remote_id: Option<RemoteId>,
+    pub remote_id: Option<ConversationId>,
 
     /// Attachment metadata associated with this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -142,7 +144,7 @@ impl ContextualConversation {
     ///
     /// Returns error if conversation could not be loaded from the database.
     pub async fn load(
-        local_conversation_id: LocalId,
+        local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
@@ -187,7 +189,7 @@ impl ContextualConversation {
     /// the conversation has no messages.
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
     pub async fn conversation_and_messages<PM>(
-        local_conversation_id: LocalId,
+        local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         stash: &Stash,
         api: &PM,
@@ -238,7 +240,7 @@ impl ContextualConversation {
     ///
     pub async fn all_available_bottom_bar_actions_for_conversations(
         current_label_id: LocalLabelId,
-        conversation_ids: Vec<LocalId>,
+        conversation_ids: Vec<LocalConversationId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
         let inbox = MovableSystemFolderAction::inbox(tether).await?;

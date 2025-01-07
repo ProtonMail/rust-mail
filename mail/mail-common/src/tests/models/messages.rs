@@ -2433,7 +2433,7 @@ async fn test_create_message_dependencies_core(tether: &mut Tether) {
     create_address(tether).await;
 }
 
-async fn test_create_message_dependencies(tether: &mut Tether) -> LocalId {
+async fn test_create_message_dependencies(tether: &mut Tether) -> LocalConversationId {
     create_labels(tether).await;
     let mut conversation: Conversation = test_conversation(
         vec![ApiConversationLabel {

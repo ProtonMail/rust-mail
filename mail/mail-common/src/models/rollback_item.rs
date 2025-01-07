@@ -274,7 +274,7 @@ impl RollbackItem {
     {
         sync_any!(Conversation, Conversation, tether, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
-                ids: Some(vec![remote_id]),
+                ids: Some(vec![remote_id.into()]),
                 ..Default::default()
             }).await
         } => |api_conversations: GetConversationsResponse| async {
@@ -384,7 +384,7 @@ mod test_utils {
     impl<'a> From<&'a Conversation> for RollbackItem {
         fn from(conversation: &'a Conversation) -> Self {
             Self {
-                remote_id: conversation.remote_id.clone().unwrap(),
+                remote_id: conversation.remote_id.clone().unwrap().into(),
                 item_type: RollbackItemType::Conversation,
                 row_id: None,
             }

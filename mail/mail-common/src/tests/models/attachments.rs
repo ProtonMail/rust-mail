@@ -7,7 +7,7 @@ use proton_api_mail::services::proton::response_data::{
     Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
+use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -109,8 +109,8 @@ fn test_attachment() -> ApiAttachment {
 fn address_id() -> AddressId {
     AddressId::from("addr")
 }
-fn conversation_id() -> RemoteId {
-    RemoteId::from("conv")
+fn conversation_id() -> ConversationId {
+    ConversationId::from("conv")
 }
 fn message_id() -> MessageId {
     MessageId::from("msg")
@@ -119,7 +119,7 @@ fn message_id() -> MessageId {
 async fn create_attachment_dependencies(
     tether: &mut Tether,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(AddressId, LocalId, LocalMessageId), AppError> {
+) -> Result<(AddressId, LocalConversationId, LocalMessageId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
     let tx = tether.transaction().await.unwrap();
 

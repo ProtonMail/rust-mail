@@ -34,6 +34,7 @@ use stash::stash::StashError;
 
 use proton_action_queue::action::Id as ActionId;
 use proton_api_mail::services::proton::common::MessageId;
+use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
 
 // Avoid breaking back compat.
@@ -76,13 +77,13 @@ pub enum AppError {
     #[error("Attachment {0} does not have a remote id")]
     AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("Conversation with ID {0} is not in given view {1}")]
-    ConversationDoesNotHaveLabel(LocalId, String),
+    ConversationDoesNotHaveLabel(LocalConversationId, String),
     #[error("Conversation with ID {0} has no messages")]
-    ConversationHasNoMessages(LocalId),
+    ConversationHasNoMessages(LocalConversationId),
     #[error("Conversation with ID {0} has no remote ID")]
-    ConversationHasNoRemoteId(LocalId),
+    ConversationHasNoRemoteId(LocalConversationId),
     #[error("Conversation with ID {0} not found")]
-    ConversationNotFound(LocalId),
+    ConversationNotFound(LocalConversationId),
     #[error("Empty list of conversations, expected at least one")]
     EmptyListOfConversations,
     #[error("Empty list of messages, expected at least one")]

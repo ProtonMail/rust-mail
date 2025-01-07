@@ -22,9 +22,9 @@ use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::LocalId as RealLocalId;
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{LocalConversationId, SystemLabelId};
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
 };
@@ -264,7 +264,7 @@ pub async fn messages_for_conversation(
     uniffi_async(async move {
         let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_conversation(RealLocalId::from(conversation_id), &tether)
+            RealMessage::in_conversation(LocalConversationId::from(conversation_id), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
@@ -296,7 +296,7 @@ pub async fn messages_for_label(
     uniffi_async(async move {
         let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
-            RealMessage::in_label(RealLocalId::from(label_id), &tether)
+            RealMessage::in_label(LocalLabelId::from(label_id), &tether)
                 .await?
                 .into_iter()
                 .map(Into::into)

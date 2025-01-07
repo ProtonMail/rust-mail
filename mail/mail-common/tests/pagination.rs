@@ -1,8 +1,9 @@
-use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
 use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::prelude::ConversationId;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, MessageCount as ApiMessageCount, MessageFlags,
@@ -696,8 +697,8 @@ fn item_time(index: usize) -> u64 {
     (index * 100).try_into().unwrap()
 }
 
-fn conversation_id(index: usize) -> ApiRemoteId {
-    ApiRemoteId::from(format!("conv-{index}"))
+fn conversation_id(index: usize) -> ConversationId {
+    ConversationId::from(format!("conv-{index}"))
 }
 
 fn message_id(index: usize) -> MessageId {

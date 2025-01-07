@@ -9,8 +9,9 @@ use proton_action_queue::action::{
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -26,7 +27,7 @@ pub struct LabelAs {
 impl LabelAs {
     pub fn new(
         source_label_id: LocalLabelId,
-        conversation_ids: Vec<LocalId>,
+        conversation_ids: Vec<LocalConversationId>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
@@ -104,13 +105,13 @@ pub struct Handler;
 
 impl Handler {
     pub(crate) async fn revert_one_locally(
-        conversation_id: &LocalId,
+        conversation_id: LocalConversationId,
         added_labels: HashSet<LocalLabelId>,
         removed_labels: HashSet<LocalLabelId>,
         original_locations: Option<Option<ExclusiveLocation>>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let Some(mut conversation) = Conversation::load(*conversation_id, bond).await? else {
+        let Some(mut conversation) = Conversation::load(conversation_id, bond).await? else {
             warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
             return Ok(());
         };
@@ -213,20 +214,20 @@ impl ActionHandler for Handler {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
             let failed_ids = Conversation::remote_ids_counterpart(failed_ids, &conn).await?;
             let tx = conn.transaction().await?;
-            for conversation_id in &failed_ids {
+            for conversation_id in failed_ids {
                 Self::revert_one_locally(
                     conversation_id,
                     action
                         .data
                         .added_labels
-                        .remove(conversation_id)
+                        .remove(&conversation_id)
                         .unwrap_or_default(),
                     action
                         .data
                         .removed_labels
-                        .remove(conversation_id)
+                        .remove(&conversation_id)
                         .unwrap_or_default(),
-                    action.data.original_location.remove(conversation_id),
+                    action.data.original_location.remove(&conversation_id),
                     &tx,
                 )
                 .await?;

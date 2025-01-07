@@ -36,3 +36,8 @@ declare_proton_id!(
     /// Identifier for a proton Messages.
     pub MessageId
 );
+
+declare_proton_id!(
+    /// Identifier for a proton Conversation.
+    pub ConversationId
+);

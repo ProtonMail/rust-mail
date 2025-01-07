@@ -15,8 +15,8 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -41,7 +41,7 @@ pub struct Save {
     /// Local id of the message this conversation belongs to
     message_id: Option<LocalMessageId>,
     /// Local id of the conversation this message belongs to
-    conversation_id: Option<LocalId>,
+    conversation_id: Option<LocalConversationId>,
     /// Address used to send the message
     address_id: AddressId,
     /// Draft subject

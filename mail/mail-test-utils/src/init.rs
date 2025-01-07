@@ -1,8 +1,6 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{
-    AddressId, EventId, LabelId, RemoteId as ApiRemoteId, UserId,
-};
+use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
@@ -17,7 +15,9 @@ use proton_api_core::services::proton::responses::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
     GetKeysAllResponse, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
 };
-use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
+use proton_api_mail::services::proton::common::{
+    ConversationId, LabelType as ApiLabelType, MessageId,
+};
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
@@ -32,7 +32,6 @@ use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetLabelsResponse, GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
-use proton_core_common::datatypes::RemoteId;
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
@@ -153,7 +152,7 @@ impl Params {
                 testdata_address_keys_other_user(),
             )],
             conversations: vec![ApiConversation {
-                id: ApiRemoteId::from("myconv"),
+                id: ConversationId::from("myconv"),
                 order: 0,
                 subject: "Hello".to_owned(),
                 senders: vec![ApiMessageSender {
@@ -186,7 +185,7 @@ impl Params {
             }],
             attachments: vec![testdata_attachment_metadata_complete(
                 MessageId::from("mymessage "),
-                ApiRemoteId::from("myconv"),
+                ConversationId::from("myconv"),
             )],
             conversation_count: vec![ApiConversationCount {
                 label_id: LabelId::inbox(),
@@ -535,7 +534,7 @@ impl MailTestContext {
     pub async fn mock_get_conversations_page(
         &self,
         conversations: Vec<ApiConversation>,
-        end_id: Option<RemoteId>,
+        end_id: Option<ConversationId>,
         end_time: Option<u64>,
         page_size: u64,
         total: u64,
