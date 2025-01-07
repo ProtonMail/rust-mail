@@ -10,8 +10,8 @@ use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use futures::FutureExt;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
-use proton_mail_common::datatypes::ContextualConversation;
+use proton_core_common::datatypes::LocalLabelId;
+use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId};
 use proton_mail_common::models::{
     Conversation, ConversationDataSource, Label, MailSettings, PaginatorFilter,
 };
@@ -101,7 +101,7 @@ impl ConversationsState {
     }
 
     #[must_use]
-    fn open_conversation(&mut self, mbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    fn open_conversation(&mut self, mbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
         self.messages = MessagesStatus::Loading(ThrobberState::default());
         MessagesState::from_conversation(mbox, id)
     }
@@ -120,7 +120,7 @@ impl ConversationsState {
         }
     }
 
-    fn selected_conversation(&self) -> Option<LocalId> {
+    fn selected_conversation(&self) -> Option<LocalConversationId> {
         let index = self.table_state.selected()?;
         self.conversations.get(index).map(|c| c.local_id)
     }
@@ -302,7 +302,7 @@ enum MessagesStatus {
     Ready(Box<MessagesState>),
 }
 
-fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let local_label_id = mailbox.label_id();
     Command::task(async move {
@@ -320,7 +320,7 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     })
 }
 
-fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
@@ -338,7 +338,7 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages>
     })
 }
 
-fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
@@ -366,7 +366,7 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
 
 fn move_conversation(
     mailbox: &Mailbox,
-    conversation_id: LocalId,
+    conversation_id: LocalConversationId,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
@@ -388,7 +388,7 @@ fn move_conversation(
     })
 }
 
-fn star_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+fn star_conversation(mailbox: &Mailbox, conversation_id: LocalConversationId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
         match ctx
@@ -405,7 +405,10 @@ fn star_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Mes
     })
 }
 
-fn unstar_conversation(mailbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+fn unstar_conversation(
+    mailbox: &Mailbox,
+    conversation_id: LocalConversationId,
+) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
         match ctx
@@ -430,7 +433,7 @@ fn label_conversation(
         selected_label_ids,
         partially_selected_label_ids,
         must_archive,
-    }: LabelAs<LocalId>,
+    }: LabelAs<LocalConversationId>,
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {

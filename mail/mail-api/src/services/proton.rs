@@ -15,7 +15,7 @@
 
 use bytes::Bytes;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::common::{LabelId, RemoteId};
+use proton_api_core::services::proton::common::LabelId;
 
 use crate::services::proton::prelude::*;
 
@@ -42,7 +42,7 @@ pub trait ProtonMail {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn delete_label(&self, label_id: RemoteId) -> ApiServiceResult<()>;
+    async fn delete_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
 
     /// GETs a single attachment.
     ///
@@ -95,7 +95,7 @@ pub trait ProtonMail {
     ///
     async fn get_conversation(
         &self,
-        conversation_id: RemoteId,
+        conversation_id: ConversationId,
     ) -> ApiServiceResult<GetConversationResponse>;
 
     /// TODO: Document this method.
@@ -221,7 +221,7 @@ pub trait ProtonMail {
     ///
     async fn put_conversations_delete(
         &self,
-        conversation_ids: Vec<RemoteId>,
+        conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsDeleteResponse>;
 
@@ -239,7 +239,7 @@ pub trait ProtonMail {
     ///
     async fn put_conversations_label(
         &self,
-        conversation_ids: Vec<RemoteId>,
+        conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutConversationsLabelResponse>;
@@ -256,7 +256,7 @@ pub trait ProtonMail {
     ///
     async fn put_conversations_read(
         &self,
-        conversation_ids: Vec<RemoteId>,
+        conversation_ids: Vec<ConversationId>,
     ) -> ApiServiceResult<PutConversationsReadResponse>;
 
     /// TODO: Document this method.
@@ -272,7 +272,7 @@ pub trait ProtonMail {
     ///
     async fn put_conversations_unlabel(
         &self,
-        conversation_ids: Vec<RemoteId>,
+        conversation_ids: Vec<ConversationId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnlabelResponse>;
 
@@ -288,7 +288,7 @@ pub trait ProtonMail {
     ///
     async fn put_conversations_unread(
         &self,
-        conversation_ids: Vec<RemoteId>,
+        conversation_ids: Vec<ConversationId>,
     ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
     /// TODO: Document this method.
@@ -409,7 +409,7 @@ pub trait ProtonMail {
     async fn relabel_message(
         &self,
         message_id: MessageId,
-        label_ids: Vec<RemoteId>,
+        label_ids: Vec<LabelId>,
     ) -> ApiServiceResult<PostMessagesRelabelResponse>;
 
     /// This method is used to patch an existing label.
@@ -431,7 +431,7 @@ pub trait ProtonMail {
     ///
     async fn patch_label(
         &self,
-        label_id: RemoteId,
+        label_id: LabelId,
         body: PatchLabelRequest,
     ) -> ApiServiceResult<PatchLabelResponse>;
 

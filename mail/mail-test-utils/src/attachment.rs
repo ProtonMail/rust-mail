@@ -1,6 +1,6 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
-use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
+use proton_api_core::services::proton::common::AddressId;
+use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
@@ -33,7 +33,7 @@ pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
 #[must_use]
 pub fn testdata_attachment_metadata_complete(
     message_id: MessageId,
-    conversation_id: ApiRemoteId,
+    conversation_id: ConversationId,
 ) -> ApiAttachment {
     let metadata = testdata_attachment_metadata();
     ApiAttachment {

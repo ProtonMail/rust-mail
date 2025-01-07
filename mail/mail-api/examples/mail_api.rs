@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
 use proton_api_core::login::Flow;
-use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::Config;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
@@ -78,7 +78,7 @@ async fn main() {
         .get_conversations(GetConversationsOptions {
             page: 0,
             page_size: 10,
-            label_id: RemoteId::from("0".to_owned()).into(),
+            label_id: LabelId::from("0".to_owned()).into(),
             desc: Some(true),
             ..Default::default()
         })

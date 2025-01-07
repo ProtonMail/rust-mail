@@ -21,8 +21,9 @@ use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::LocalId as RealLocalId;
-use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
+use proton_mail_common::datatypes::{
+    ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
+};
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
@@ -319,7 +320,7 @@ async fn get_conversation(
     uniffi_async(async move {
         Result::<_, RealProtonMailError>::Ok(
             ContextualConversation::conversation_and_messages(
-                RealLocalId::from(id),
+                LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
                 &conn,
                 session.api(),

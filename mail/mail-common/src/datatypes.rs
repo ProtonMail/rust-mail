@@ -2024,4 +2024,5 @@ impl From<LabelDescription> for LabelType {
 }
 
 pub use proton_mail_ids::LocalAttachmentId;
+pub use proton_mail_ids::LocalConversationId;
 pub use proton_mail_ids::LocalMessageId;

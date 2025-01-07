@@ -26,12 +26,11 @@
 //! are used by both requests and responses.
 //!
 
-use crate::services::proton::common::MessageId;
+use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::response_data::{
     Attachment, Conversation, ConversationCount, Label, MailSettings, Message, MessageCount,
     MessageMetadata, OperationResult, UndoToken,
 };
-use proton_api_core::RemoteId;
 use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
@@ -153,7 +152,7 @@ pub struct PostLabelsResponse {
 pub struct PutConversationsDeleteResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
-    pub responses: Vec<OperationResult<RemoteId>>,
+    pub responses: Vec<OperationResult<ConversationId>>,
 }
 
 /// TODO: Document this struct.
@@ -163,7 +162,7 @@ pub struct PutConversationsDeleteResponse {
 pub struct PutConversationsLabelResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
-    pub responses: Vec<OperationResult<RemoteId>>,
+    pub responses: Vec<OperationResult<ConversationId>>,
 
     /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
@@ -176,7 +175,7 @@ pub struct PutConversationsLabelResponse {
 pub struct PutConversationsReadResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
-    pub responses: Vec<OperationResult<RemoteId>>,
+    pub responses: Vec<OperationResult<ConversationId>>,
 }
 
 /// TODO: Document this struct.
@@ -186,7 +185,7 @@ pub struct PutConversationsReadResponse {
 pub struct PutConversationsUnlabelResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
-    pub responses: Vec<OperationResult<RemoteId>>,
+    pub responses: Vec<OperationResult<ConversationId>>,
 
     /// TODO: Document this field.
     pub undo_token: Option<UndoToken>,
@@ -199,7 +198,7 @@ pub struct PutConversationsUnlabelResponse {
 pub struct PutConversationsUnreadResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
-    pub responses: Vec<OperationResult<RemoteId>>,
+    pub responses: Vec<OperationResult<ConversationId>>,
 }
 
 /// TODO: Document this struct.

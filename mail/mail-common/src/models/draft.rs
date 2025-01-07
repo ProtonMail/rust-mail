@@ -4,6 +4,7 @@ use crate::models::Message;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::ModelIdExtension;
+use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
@@ -51,7 +52,7 @@ pub struct DraftMetadata {
     pub local_message_id: Option<LocalMessageId>,
     #[DbField]
     /// Id of the conversation this draft belongs to.
-    pub local_conversation_id: Option<LocalId>,
+    pub local_conversation_id: Option<LocalConversationId>,
     /// Local id of the message being replied to.
     #[DbField]
     pub local_parent_id: Option<LocalMessageId>,
@@ -94,7 +95,7 @@ impl DraftMetadata {
     pub async fn reply(
         reply_mode: ReplyMode,
         source_message_id: LocalMessageId,
-        source_conversation_id: LocalId,
+        source_conversation_id: LocalConversationId,
         bond: &Bond<'_>,
     ) -> Result<Self, StashError> {
         let mut metadata = Self {

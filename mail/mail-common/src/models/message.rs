@@ -43,7 +43,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
@@ -59,6 +59,7 @@ use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
+use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -93,11 +94,11 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_conversation_id: Option<LocalId>,
+    pub local_conversation_id: Option<LocalConversationId>,
 
     /// TODO: Document this field.
     #[DbField]
-    pub remote_conversation_id: Option<RemoteId>,
+    pub remote_conversation_id: Option<ConversationId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1974,7 +1975,7 @@ impl Message {
     ) -> Result<(), StashError> {
         struct IdPair {
             local_message_id: LocalMessageId,
-            local_conversation_id: LocalId,
+            local_conversation_id: LocalConversationId,
         }
 
         let ids = ids.into_iter();
@@ -2197,11 +2198,11 @@ impl Message {
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalMessageId>>::new();
+        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
 
         for id in ids {
             if match bond
-                .query_value::<_, LocalId>(
+                .query_value::<_, LocalConversationId>(
                     "INSERT OR IGNORE INTO message_labels VALUES (?,?) RETURNING local_message_id AS value",
                     params![id, local_label_id],
                 )
@@ -2257,7 +2258,7 @@ impl Message {
     ) -> Result<(), StashError> {
         let mut unread_count = 0_u64;
         let mut updated_count = 0_u64;
-        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalMessageId>>::new();
+        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
 
         for id in ids {
             let id = match bond.query_value::<_,LocalMessageId>(
@@ -2381,7 +2382,7 @@ impl Message {
     ///
     /// Returns error if the query fails.
     pub async fn in_label(
-        local_label_id: LocalId,
+        local_label_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Message::find(
@@ -2415,7 +2416,7 @@ impl Message {
     ///
     /// Returns error if the query failed
     pub async fn in_conversation(
-        local_conversation_id: LocalId,
+        local_conversation_id: LocalConversationId,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Message::find(
@@ -2696,10 +2697,10 @@ pub struct MessageLabel {
     pub local_id: Option<LocalId>,
 
     #[DbField]
-    pub local_message_id: Option<LocalId>,
+    pub local_message_id: Option<LocalMessageId>,
 
     #[DbField]
-    pub local_label_id: LocalId,
+    pub local_label_id: LocalLabelId,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
@@ -3120,7 +3121,7 @@ impl MessageBodyMetadata {
     pub fn from_api_message_body(
         api_message_body: ApiMessageBody,
         remote_message_id: MessageId,
-        remote_conversation_id: RemoteId,
+        remote_conversation_id: ConversationId,
         remote_address_id: AddressId,
     ) -> (Self, String) {
         let attachments = api_message_body

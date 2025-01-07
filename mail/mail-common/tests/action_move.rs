@@ -2,17 +2,17 @@ use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{ConversationId, LabelType as ApiLabelType};
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, Label as ApiLabel, MessageCount as ApiMessageCount,
 };
-use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::actions::conversations;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
+use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
@@ -25,7 +25,7 @@ async fn test_move_between_folders() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let folder_id = LabelId::from("myfolder");
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
     let labels = hash_map! {
         ApiLabelType::Folder: vec![ApiLabel {
             id: folder_id.clone(),
@@ -131,7 +131,7 @@ async fn test_move_from_label_does_not_unlabel() {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let label_id = LabelId::from("mylabel");
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
             id: label_id.clone(),
@@ -211,7 +211,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
@@ -335,7 +335,7 @@ async fn test_move_into_spam_remove_labels() {
     //   + Create Conversation in inbox
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
     let label_id = LabelId::from("mylabel");
     let labels = hash_map! {
         ApiLabelType::Label: vec![ApiLabel {
@@ -437,7 +437,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
 
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
 
     let init_params =
         test_init_params_conversation(&conv_id, HashMap::new(), vec![LabelId::trash().clone()]);
@@ -514,7 +514,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
 
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
-    let conv_id = RemoteId::from("conv_id");
+    let conv_id = ConversationId::from("conv_id");
 
     let init_params =
         test_init_params_conversation(&conv_id, HashMap::new(), vec![LabelId::spam().clone()]);
@@ -584,7 +584,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     assert!(has_conversation(&mailbox_almost_all_mail, local_conv_id).await);
 }
 
-async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalId) -> bool {
+async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalConversationId) -> bool {
     let tether = mailbox.stash().connection();
     let conversations = Conversation::find_first("", vec![], &tether).await.unwrap();
     conversations
@@ -593,7 +593,7 @@ async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalId) -> 
 }
 
 fn test_init_params_conversation(
-    conv_id: &RemoteId,
+    conv_id: &ConversationId,
     labels: HashMap<ApiLabelType, Vec<ApiLabel>>,
     conversation_labels: Vec<LabelId>,
 ) -> TestParams {

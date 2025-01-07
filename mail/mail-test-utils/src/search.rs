@@ -1,11 +1,11 @@
 use crate::test_context::MailTestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_mail::services::proton::common::AttachmentId;
+use proton_api_mail::services::proton::common::{AttachmentId, ConversationId};
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
@@ -24,7 +24,7 @@ lazy_static! {
     pub static ref MY_LABEL_ID1: LabelId = LabelId::from("MyLabelID1");
     pub static ref MY_LABEL_ID2: LabelId = LabelId::from("MyLabelID2");
     pub static ref MY_ATTACHMENT_ID: AttachmentId = AttachmentId::from("MyAttachmentID1");
-    pub static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
+    pub static ref MY_CONVERSATION_ID: ConversationId = ConversationId::from("MyConversationID");
 }
 
 /// Macro wrapping u64 into Option<LocalId> for easier model definition.

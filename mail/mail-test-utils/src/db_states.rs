@@ -4,8 +4,7 @@ use crate::search::{test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LA
 use crate::utils::{test_address, TestDBState};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
-use proton_core_common::datatypes::RemoteId;
+use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
 };
@@ -14,8 +13,8 @@ use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message
 // ------- TEST DATA -------
 
 lazy_static! {
-    pub(super) static ref DELETE_DB_CONV1: RemoteId = RemoteId::from("MyConvId1");
-    pub(super) static ref DELETE_DB_CONV2: RemoteId = RemoteId::from("MyConvId2");
+    pub(super) static ref DELETE_DB_CONV1: ConversationId = ConversationId::from("MyConvId1");
+    pub(super) static ref DELETE_DB_CONV2: ConversationId = ConversationId::from("MyConvId2");
 }
 
 static TEXT_ATTACHMENT: LazyLock<AttachmentMetadata> = LazyLock::new(|| AttachmentMetadata {

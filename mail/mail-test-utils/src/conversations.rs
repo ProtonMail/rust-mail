@@ -1,6 +1,7 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
 };
@@ -33,9 +34,9 @@ impl MailTestContext {
     pub async fn mock_label_conversation(
         &self,
         label_id: &LabelId,
-        ids: Vec<ApiRemoteId>,
+        ids: Vec<ConversationId>,
         spam_action: Option<bool>,
-        failed: Vec<ApiRemoteId>,
+        failed: Vec<ConversationId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = PutConversationsLabelRequest {
@@ -73,8 +74,8 @@ impl MailTestContext {
     pub async fn mock_unlabel_conversation(
         &self,
         label_id: &LabelId,
-        ids: Vec<ApiRemoteId>,
-        failed: Vec<ApiRemoteId>,
+        ids: Vec<ConversationId>,
+        failed: Vec<ConversationId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = PutConversationsUnlabelRequest {
@@ -108,8 +109,8 @@ impl MailTestContext {
     ///
     pub async fn mock_mark_conversation_read(
         &self,
-        ids: Vec<ApiRemoteId>,
-        failed: Vec<ApiRemoteId>,
+        ids: Vec<ConversationId>,
+        failed: Vec<ConversationId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = PutConversationsReadRequest { ids: ids.clone() };
@@ -139,8 +140,8 @@ impl MailTestContext {
     ///
     pub async fn mock_mark_conversation_unread(
         &self,
-        ids: Vec<ApiRemoteId>,
-        failed: Vec<ApiRemoteId>,
+        ids: Vec<ConversationId>,
+        failed: Vec<ConversationId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = PutConversationsReadRequest { ids: ids.clone() };

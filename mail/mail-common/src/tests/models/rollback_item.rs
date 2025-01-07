@@ -1,5 +1,6 @@
 use crate as proton_mail_common;
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
+use proton_api_mail::services::proton::common::ConversationId;
 #[allow(unused_imports)]
 use proton_api_mail::{
     services::proton::{
@@ -8,9 +9,10 @@ use proton_api_mail::{
     },
     MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
 };
+use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
-use proton_core_common::{datatypes::LocalId, models::ModelExtension};
 use proton_core_test_utils::test_context::MockApiEnv;
+use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{
     api_conversation, api_label, api_message, api_message_meta, conversation, label, message,
@@ -179,13 +181,13 @@ async fn conversations(tether: &Tether) -> Vec<Conversation> {
 
     items
         .into_iter()
-        .map(|item| conversation!(remote_id: Some(item.remote_id)))
+        .map(|item| conversation!(remote_id: Some(item.remote_id.into())))
         .collect()
 }
 
 async fn messages(
-    local_conversation_id: Option<LocalId>,
-    remote_conversation_id: Option<RemoteId>,
+    local_conversation_id: Option<LocalConversationId>,
+    remote_conversation_id: Option<ConversationId>,
     tether: &mut Tether,
 ) -> Vec<Message> {
     let items = RollbackItem::find_by_kind(RollbackItemType::Message, tether)
@@ -252,7 +254,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
 
 async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
-    let api_conversation = api_conversation!(id: remote_id.clone());
+    let api_conversation = api_conversation!(id: remote_id.clone().into());
 
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations".to_string()))

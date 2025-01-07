@@ -15,8 +15,8 @@ use crate::widgets::{
 };
 use anyhow::{anyhow, Context};
 use futures::FutureExt;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
-use proton_mail_common::datatypes::{ContextualConversation, LocalMessageId};
+use proton_core_common::datatypes::LocalLabelId;
+use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{
@@ -109,7 +109,10 @@ impl MessagesState {
         ))
     }
 
-    pub(super) fn from_conversation(mbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+    pub(super) fn from_conversation(
+        mbox: &Mailbox,
+        conversation_id: LocalConversationId,
+    ) -> Command<Messages> {
         let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
@@ -131,7 +134,7 @@ impl MessagesState {
     async fn from_conversation_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
-        conversation_id: LocalId,
+        conversation_id: LocalConversationId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
             conversation_id,

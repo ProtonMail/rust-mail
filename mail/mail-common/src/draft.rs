@@ -29,6 +29,7 @@ use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
+use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
@@ -720,7 +721,10 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn conversation_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+    pub async fn conversation_id(
+        &self,
+        tether: &Tether,
+    ) -> Result<Option<LocalConversationId>, StashError> {
         let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, tether).await? else {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };

@@ -70,7 +70,7 @@ use proton_core_common::models::{
     UserSettings as RealUserSettings,
 };
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
-use proton_mail_common::datatypes::{LocalAttachmentId, LocalMessageId};
+use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use std::fmt::{Display, Formatter};
@@ -1063,6 +1063,7 @@ impl_into_id!(LocalContactId);
 impl_into_id!(LocalContactEmailId);
 impl_into_id!(LocalAttachmentId);
 impl_into_id!(LocalMessageId);
+impl_into_id!(LocalConversationId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
