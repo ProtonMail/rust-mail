@@ -2,7 +2,7 @@ use proton_crypto::crypto::{DataEncoding, KeyGeneratorAlgorithm, PGPProviderSync
 use proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::keys::{
     AddressKeys, ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyFlag, KeyId,
-    KeyTokenSignature, LocalAddressKey, LocalUserKey, LockedKey, UserKeys,
+    KeyTokenSignature, LocalAddressKey, LocalUserKey, LockedKey, UnlockedAddressKeys, UserKeys,
 };
 use proton_crypto_account::salts::{KeySalt, KeySecret, Salt, Salts};
 
@@ -132,6 +132,15 @@ fn get_test_key_id() -> KeyId {
     KeyId::from(
         "aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ==",
     )
+}
+
+fn get_unlocked_address_keys<Provider: PGPProviderSync>(
+    provider: &Provider,
+) -> UnlockedAddressKeys<Provider> {
+    let user_keys = get_test_decrypted_user_key(provider, TEST_USER_KEY);
+    let address_keys = get_test_locked_address_key();
+    let unlock_result = address_keys.unlock(provider, user_keys.as_slice(), None);
+    unlock_result.unlocked_keys.into()
 }
 
 #[test]
@@ -319,4 +328,23 @@ fn test_address_key_change_parent_key() {
         &KeySecret::new("test_secret_wrong".into()),
     );
     assert!(unlock_result.is_err());
+}
+
+#[test]
+fn test_address_key_export() {
+    let provider = new_pgp_provider();
+    let address_keys = get_unlocked_address_keys(&provider);
+    let primary = address_keys.primary_for_mail().expect("No key found");
+    let exported_public_key = primary
+        .export_public_key(&provider)
+        .expect("Export should not fail");
+
+    let primary = address_keys.primary_default().expect("No key found");
+    let exported_public_key_default = primary
+        .export_public_key(&provider)
+        .expect("Export should not fail");
+
+    assert!(exported_public_key.contains("-----BEGIN PGP PUBLIC KEY BLOCK-----"));
+    assert!(exported_public_key.contains("-----END PGP PUBLIC KEY BLOCK-----"));
+    assert_eq!(exported_public_key, exported_public_key_default);
 }
