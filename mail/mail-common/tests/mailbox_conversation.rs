@@ -1,7 +1,6 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
@@ -36,8 +35,8 @@ async fn test_new_mailbox_sync_conversations() {
             order: 0,
         });
 
-    let message_id1 = ApiRemoteId::from("m1");
-    let message_id2 = ApiRemoteId::from("m2");
+    let message_id1 = MessageId::from("m1");
+    let message_id2 = MessageId::from("m2");
 
     let messages = vec![
         ApiMessageMetadata {

@@ -12,15 +12,16 @@ use itertools::Itertools;
 use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_core::RemoteId;
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashError};
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use tracing::error;
 
@@ -171,15 +172,15 @@ where
 }
 
 /// Filter server response on which the operation failed.
-pub fn filter_responses(responses: Vec<OperationResult>) -> Vec<RemoteId> {
+pub fn filter_responses<T: ProtonIdMarker>(responses: Vec<OperationResult<T>>) -> Vec<T> {
     filter_responses_by_codes(responses, &[General::NoError as u32])
 }
 
 /// Filter server response on which the operation failed.
-pub fn filter_responses_by_codes(
-    responses: Vec<OperationResult>,
+pub fn filter_responses_by_codes<T: ProtonIdMarker>(
+    responses: Vec<OperationResult<T>>,
     accepted: &[u32],
-) -> Vec<RemoteId> {
+) -> Vec<T> {
     responses
         .into_iter()
         .filter(|r| !accepted.contains(&r.response.code))
@@ -254,7 +255,7 @@ pub struct LabelAsData<T>
 where
     T: ModelIdExtension<
         RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash,
     >,
 {
     source_label_id: LocalLabelId,
@@ -267,9 +268,9 @@ where
     local_partially_selected_label_ids: Vec<LocalLabelId>,
     remote_partially_selected_label_ids: Vec<LabelId>,
     must_archive: bool,
-    added_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
-    removed_labels: HashMap<LocalId, HashSet<LocalLabelId>>,
-    original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
+    added_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
+    removed_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
+    original_location: HashMap<T::IdType, Option<ExclusiveLocation>>,
     phantom_data: PhantomData<T>,
 }
 
@@ -277,7 +278,7 @@ impl<T> LabelAsData<T>
 where
     T: ModelIdExtension<
         RemoteId: Into<RemoteId> + Serialize + DeserializeOwned,
-        IdType: Serialize + DeserializeOwned,
+        IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash,
     >,
 {
     fn new(

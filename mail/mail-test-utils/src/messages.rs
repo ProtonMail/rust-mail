@@ -1,7 +1,8 @@
 use crate::test_context::MailTestContext;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId, RemoteId};
+use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -26,7 +27,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
-    pub async fn mock_get_message(&self, message_id: &ApiRemoteId, message: ApiMessage) {
+    pub async fn mock_get_message(&self, message_id: &MessageId, message: ApiMessage) {
         self.mock_get_message_with_expected(message_id, message, 1)
             .await;
     }
@@ -36,7 +37,7 @@ impl MailTestContext {
     /// This mock is expected to be called `expected` number of times.
     pub async fn mock_get_message_with_expected(
         &self,
-        message_id: &ApiRemoteId,
+        message_id: &MessageId,
         message: ApiMessage,
         expected: u64,
     ) {
@@ -79,7 +80,7 @@ impl MailTestContext {
     /// * `failed`      - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
-    pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<ApiRemoteId>) {
+    pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<MessageId>) {
         let ids = message_ids.clone();
         let request = PutMessagesLabelRequest {
             action: 1,
@@ -143,8 +144,8 @@ impl MailTestContext {
     ///
     pub async fn mock_put_messages_read(
         &self,
-        message_ids: Vec<ApiRemoteId>,
-        failed_ids: Vec<ApiRemoteId>,
+        message_ids: Vec<MessageId>,
+        failed_ids: Vec<MessageId>,
     ) {
         let message_ids = message_ids.into_iter().collect_vec();
         let request = PutMessagesReadRequest {
@@ -175,8 +176,8 @@ impl MailTestContext {
     ///                   simulate failure.
     pub async fn mock_put_messages_unread(
         &self,
-        message_ids: Vec<ApiRemoteId>,
-        failed_ids: Vec<ApiRemoteId>,
+        message_ids: Vec<MessageId>,
+        failed_ids: Vec<MessageId>,
     ) {
         let message_ids = message_ids.into_iter().collect_vec();
         let request = PutMessagesUnreadRequest {
@@ -211,8 +212,8 @@ impl MailTestContext {
     pub async fn mock_unlabel_messages(
         &self,
         label_id: &LabelId,
-        message_ids: Vec<ApiRemoteId>,
-        failed: Vec<ApiRemoteId>,
+        message_ids: Vec<MessageId>,
+        failed: Vec<MessageId>,
     ) {
         let ids = message_ids.clone();
         let request = PutMessagesUnlabelRequest {
@@ -269,7 +270,7 @@ impl MailTestContext {
         params: DraftParams,
         action: DraftAction,
         reply: ApiMessage,
-        parent_id: Option<ApiRemoteId>,
+        parent_id: Option<MessageId>,
         attachment_key_packets: DraftAttachmentKeyPackets,
     ) {
         let response = PostCreateDraftResponse { message: reply };
@@ -302,7 +303,7 @@ impl MailTestContext {
     #[allow(clippy::doc_markdown)]
     pub async fn mock_send_draft_basic(
         &self,
-        message_id: ApiRemoteId,
+        message_id: MessageId,
         result_message: ApiMessage,
         result_conversation: ApiConversation,
     ) {
@@ -333,7 +334,7 @@ impl MailTestContext {
     #[allow(clippy::doc_markdown)]
     pub async fn mock_update_draft(
         &self,
-        message_id: RemoteId,
+        message_id: MessageId,
         params: DraftParams,
         reply: ApiMessage,
         attachment_key_packets: DraftAttachmentKeyPackets,
@@ -364,11 +365,14 @@ impl MailTestContext {
 /// * `ids`    - The list of message IDs to build responses for.
 /// * `failed` - The list of message IDs for which we want to simulate failure.
 ///
-fn build_message_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec<OperationResult> {
+fn build_message_responses(
+    ids: &[MessageId],
+    failed: Vec<MessageId>,
+) -> Vec<OperationResult<MessageId>> {
     const CODE_SUCCESS: u32 = 1000;
     const CODE_FAIL: u32 = 2000;
 
-    let failed: HashSet<ApiRemoteId> = HashSet::from_iter(failed);
+    let failed: HashSet<MessageId> = HashSet::from_iter(failed);
     ids.iter()
         .map(|id| {
             let code = if failed.contains(id) {
@@ -440,7 +444,7 @@ pub struct TestCreateDraftRequest {
     pub attachment_key_packets: DraftAttachmentKeyPackets,
     #[serde(rename = "ParentID")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<RemoteId>,
+    pub parent_id: Option<MessageId>,
 }
 
 impl From<PostCreateDraftRequest> for TestCreateDraftRequest {

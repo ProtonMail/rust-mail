@@ -57,6 +57,7 @@ serde-aux = "4.5"
 serde_json = "1.0.117"
 serde_repr = "0.1"
 serde_with = "3.11.0"
+serde_qs = "0.13.0"
 smart-default = "0.7.1"
 tempdir = "0.3.1"
 tempfile = "3.10.1"
@@ -90,6 +91,7 @@ registry = "proton"
 version = "0.9"
 path = "core/core-common"
 registry = "proton"
+features = ["sql"]
 
 [workspace.dependencies.proton-event-loop]
 version = "0.7"
@@ -126,10 +128,17 @@ version = "0.5"
 path = "mail/mail-api"
 registry = "proton"
 
+[workspace.dependencies.proton-mail-ids]
+version = "0.1"
+path = "mail/mail-ids"
+registry = "proton"
+features = ["sql"]
+
 [workspace.dependencies.proton-mail-common]
 version = "0.8"
 path = "mail/mail-common"
 registry = "proton"
+features = ["sql"]
 
 [workspace.dependencies.proton-uniffi-macros]
 version = "0.1"

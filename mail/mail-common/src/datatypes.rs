@@ -75,7 +75,6 @@ use proton_api_mail::services::proton::response_data::{
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::{AvatarInformation, LocalLabelId, RemoteId};
-use proton_core_common::declare_local_id;
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };
@@ -2024,4 +2023,5 @@ impl From<LabelDescription> for LabelType {
     }
 }
 
-declare_local_id!(pub LocalAttachmentId => AttachmentId);
+pub use proton_mail_ids::LocalAttachmentId;
+pub use proton_mail_ids::LocalMessageId;

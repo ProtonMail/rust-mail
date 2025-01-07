@@ -4,7 +4,7 @@ use crate::search::{test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LA
 use crate::utils::{test_address, TestDBState};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::AttachmentId;
+use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
@@ -163,8 +163,8 @@ pub fn new_test_label_db_state() -> TestDBState {
 }
 
 #[must_use]
-pub fn new_message_id(num: usize) -> RemoteId {
-    RemoteId::from(format!("RemoteId{num}"))
+pub fn new_message_id(num: usize) -> MessageId {
+    MessageId::from(format!("RemoteId{num}"))
 }
 
 /// # Panics

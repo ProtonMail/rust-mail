@@ -20,12 +20,12 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::LabelType;
+use crate::services::proton::common::{LabelType, MessageId};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_core::services::proton::common::{LabelId, RemoteId};
+use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId};
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
@@ -145,7 +145,7 @@ pub struct GetLabelsByIdsOptions {
 pub struct GetMessagesOptions {
     /// Filter on address ID.
     #[serde(rename = "AddressID")]
-    pub address_id: Option<RemoteId>,
+    pub address_id: Option<AddressId>,
 
     /// If `true`, return only messages which have attachments. If `false`,
     /// return only messages which have no attachments.
@@ -166,7 +166,7 @@ pub struct GetMessagesOptions {
     /// Return only messages newer, in creation time (NOT timestamp), than
     /// the specified message ID.
     #[serde(rename = "BeginID")]
-    pub begin_id: Option<RemoteId>,
+    pub begin_id: Option<MessageId>,
 
     /// Keyword search of CC field.
     #[serde(rename = "CC")]
@@ -186,7 +186,7 @@ pub struct GetMessagesOptions {
     /// Return only messages older, in creation time (NOT timestamp), than the
     /// specified message ID.
     #[serde(rename = "EndID")]
-    pub end_id: Option<RemoteId>,
+    pub end_id: Option<MessageId>,
 
     /// Filter on external ID.
     // TODO: Document this properly.
@@ -198,7 +198,7 @@ pub struct GetMessagesOptions {
 
     /// Filter on the given message IDs.
     #[serde(rename = "ID")]
-    pub ids: Option<Vec<RemoteId>>,
+    pub ids: Option<Vec<MessageId>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
@@ -341,7 +341,7 @@ pub struct PutLabelRequest {
 pub struct PutMessagesDeleteRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<MessageId>,
 
     /// TODO: Document this field.
     #[serde(rename = "CurrentLabelID")]
@@ -358,7 +358,7 @@ pub struct PutMessagesLabelRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<MessageId>,
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
@@ -375,7 +375,7 @@ pub struct PutMessagesLabelRequest {
 pub struct PutMessagesReadRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<MessageId>,
 }
 
 /// TODO: Document this struct.
@@ -384,7 +384,7 @@ pub struct PutMessagesReadRequest {
 pub struct PutMessagesUnlabelRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<MessageId>,
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
@@ -397,7 +397,7 @@ pub struct PutMessagesUnlabelRequest {
 pub struct PutMessagesUnreadRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<MessageId>,
 }
 
 /// Request to relabel a message.
@@ -435,7 +435,7 @@ pub struct PostCreateDraftRequest {
     /// Parent message id.
     #[serde(rename = "ParentID")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<RemoteId>,
+    pub parent_id: Option<MessageId>,
 }
 
 /// Create a new message/draft.

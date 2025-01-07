@@ -11,8 +11,8 @@ use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 pub use model::Model;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
-use proton_mail_common::datatypes::ContextualConversation;
+use proton_core_common::datatypes::{LocalId, LocalIdMarker, LocalLabelId};
+use proton_mail_common::datatypes::{ContextualConversation, LocalMessageId};
 use proton_mail_common::models::{Label, Message as MailMessage};
 use proton_mail_common::Mailbox;
 
@@ -35,9 +35,9 @@ pub enum Message {
     NewLabelWatcher(WatchHandle),
     Composer(ComposerMessage),
 }
-pub struct LabelAs {
+pub struct LabelAs<T: LocalIdMarker> {
     pub source_label_id: LocalLabelId,
-    pub item_ids: Vec<LocalId>,
+    pub item_ids: Vec<T>,
     pub selected_label_ids: Vec<LocalLabelId>,
     pub partially_selected_label_ids: Vec<LocalLabelId>,
     pub must_archive: bool,
@@ -49,7 +49,7 @@ pub enum ConversationMessage {
     MarkConversationUnread(LocalId),
     DeleteConversation(LocalId),
     MoveConversation(LocalId, LocalLabelId),
-    LabelConversation(Box<LabelAs>),
+    LabelConversation(Box<LabelAs<LocalId>>),
     StarConversation(LocalId),
     UnstarConversation(LocalId),
     OpenConversation(LocalId),
@@ -73,13 +73,13 @@ pub enum MessageMessage {
     CloseMessageBody,
     Refreshed(Vec<MailMessage>),
     NextPage(Vec<MailMessage>),
-    DeleteMessage(LocalId),
-    MoveMessage(LocalId, LocalLabelId),
-    LabelMessage(Box<LabelAs>), // TODO: Handle selection
-    MarkMessageRead(LocalId),
-    MarkMessageUnread(LocalId),
-    StarMessage(LocalId),
-    UnstarMessage(LocalId),
+    DeleteMessage(LocalMessageId),
+    MoveMessage(LocalMessageId, LocalLabelId),
+    LabelMessage(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
+    MarkMessageRead(LocalMessageId),
+    MarkMessageUnread(LocalMessageId),
+    StarMessage(LocalMessageId),
+    UnstarMessage(LocalMessageId),
 }
 
 impl From<MessageMessage> for Messages {
@@ -104,15 +104,7 @@ impl From<ComposerMessage> for Messages {
 pub enum Item {
     Conversation(LocalId),
     //TODO:message actions
-    Message(LocalId),
-}
-
-impl Item {
-    pub fn get_id(self) -> LocalId {
-        match self {
-            Item::Message(local_id) | Item::Conversation(local_id) => local_id,
-        }
-    }
+    Message(LocalMessageId),
 }
 
 impl From<Message> for Messages {

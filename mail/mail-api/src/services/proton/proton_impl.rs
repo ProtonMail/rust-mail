@@ -98,7 +98,7 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
-    async fn get_message(&self, message_id: RemoteId) -> ApiServiceResult<GetMessageResponse> {
+    async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse> {
         Ok(GET!("{MAIL_V4}/messages/{message_id}")
             .send_with(self)
             .await?
@@ -235,7 +235,7 @@ impl ProtonMail for Proton {
 
     async fn put_messages_delete(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
         label_id: Option<LabelId>,
     ) -> ApiServiceResult<PutMessagesDeleteResponse> {
         Ok(PUT!("{MAIL_V4}/messages/delete")
@@ -248,7 +248,7 @@ impl ProtonMail for Proton {
 
     async fn put_messages_label(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
         label_id: LabelId,
         spam_action: Option<bool>,
     ) -> ApiServiceResult<PutMessagesLabelResponse> {
@@ -267,7 +267,7 @@ impl ProtonMail for Proton {
 
     async fn put_messages_read(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
     ) -> ApiServiceResult<PutMessagesReadResponse> {
         Ok(PUT!("{MAIL_V4}/messages/read")
             .body_json(PutMessagesReadRequest { ids })?
@@ -279,7 +279,7 @@ impl ProtonMail for Proton {
 
     async fn put_messages_unlabel(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
         label_id: LabelId,
     ) -> ApiServiceResult<PutMessagesUnlabelResponse> {
         Ok(PUT!("{MAIL_V4}/messages/unlabel")
@@ -292,7 +292,7 @@ impl ProtonMail for Proton {
 
     async fn put_messages_unread(
         &self,
-        ids: Vec<RemoteId>,
+        ids: Vec<MessageId>,
     ) -> ApiServiceResult<PutMessagesUnreadResponse> {
         Ok(PUT!("{MAIL_V4}/messages/unread")
             .body_json(PutMessagesUnreadRequest { ids })?
@@ -304,7 +304,7 @@ impl ProtonMail for Proton {
 
     async fn relabel_message(
         &self,
-        message_id: RemoteId,
+        message_id: MessageId,
         label_ids: Vec<RemoteId>,
     ) -> ApiServiceResult<PostMessagesRelabelResponse> {
         Ok(POST!("{MAIL_V4}/messages/{message_id}/relabel")
@@ -333,7 +333,7 @@ impl ProtonMail for Proton {
         message: DraftParams,
         action: DraftAction,
         attachment_key_packets: DraftAttachmentKeyPackets,
-        parent_id: Option<RemoteId>,
+        parent_id: Option<MessageId>,
     ) -> ApiServiceResult<PostCreateDraftResponse> {
         Ok(POST!("{MAIL_V4}/messages")
             .body_json(PostCreateDraftRequest {
@@ -350,7 +350,7 @@ impl ProtonMail for Proton {
 
     async fn update_draft(
         &self,
-        message_id: RemoteId,
+        message_id: MessageId,
         message: DraftParams,
         attachment_key_packets: DraftAttachmentKeyPackets,
     ) -> ApiServiceResult<PutUpdateDraftResponse> {
@@ -367,7 +367,7 @@ impl ProtonMail for Proton {
 
     async fn send_mail(
         &self,
-        message_id: RemoteId,
+        message_id: MessageId,
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
     ) -> Result<PostSendMessageResponse, ApiServiceError> {

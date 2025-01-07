@@ -1,7 +1,8 @@
 use crate::actions::draft::{load_message_body, local_draft_label_id};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, LocalAttachmentId, MessageSender, MessageSenders, MimeType,
+    AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
+    MessageSenders, MimeType,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::RecipientList;
@@ -38,7 +39,7 @@ pub struct Save {
     /// BCC recipients - only email to preserve display name privacy
     bcc_list: RecipientList,
     /// Local id of the message this conversation belongs to
-    message_id: Option<LocalId>,
+    message_id: Option<LocalMessageId>,
     /// Local id of the conversation this message belongs to
     conversation_id: Option<LocalId>,
     /// Address used to send the message
@@ -56,7 +57,7 @@ pub struct Save {
     /// Draft's mime type
     mime_type: MimeType,
     /// Parent message id, used with forward and update only.
-    parent_id: Option<LocalId>,
+    parent_id: Option<LocalMessageId>,
     /// Reply mode used.
     reply_mode: Option<ReplyMode>,
     /// Whether to create or update the message.

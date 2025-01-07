@@ -2,6 +2,7 @@ use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId as 
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, MessageCount as ApiMessageCount, MessageFlags,
@@ -699,6 +700,6 @@ fn conversation_id(index: usize) -> ApiRemoteId {
     ApiRemoteId::from(format!("conv-{index}"))
 }
 
-fn message_id(index: usize) -> ApiRemoteId {
-    ApiRemoteId::from(format!("msg-{index}"))
+fn message_id(index: usize) -> MessageId {
+    MessageId::from(format!("msg-{index}"))
 }

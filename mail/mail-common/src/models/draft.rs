@@ -1,6 +1,8 @@
+use crate::datatypes::LocalMessageId;
 use crate::draft::ReplyMode;
 use crate::models::Message;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_api_mail::services::proton::common::MessageId;
+use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::ModelIdExtension;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
@@ -46,13 +48,13 @@ pub struct DraftMetadata {
     pub id: Option<MetadataId>,
     /// Id of the draft message.
     #[DbField]
-    pub local_message_id: Option<LocalId>,
+    pub local_message_id: Option<LocalMessageId>,
     #[DbField]
     /// Id of the conversation this draft belongs to.
     pub local_conversation_id: Option<LocalId>,
     /// Local id of the message being replied to.
     #[DbField]
-    pub local_parent_id: Option<LocalId>,
+    pub local_parent_id: Option<LocalMessageId>,
     /// Reply mode used for the draft, if `None` is an empty draft.
     #[DbField]
     pub reply_mode: Option<ReplyMode>,
@@ -91,7 +93,7 @@ impl DraftMetadata {
     /// Returns error if the query failed.
     pub async fn reply(
         reply_mode: ReplyMode,
-        source_message_id: LocalId,
+        source_message_id: LocalMessageId,
         source_conversation_id: LocalId,
         bond: &Bond<'_>,
     ) -> Result<Self, StashError> {
@@ -124,7 +126,7 @@ impl DraftMetadata {
     ///
     /// Return error if the query failed.
     pub async fn find_by_message_id(
-        local_message_id: LocalId,
+        local_message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         DraftMetadata::find_first(
@@ -178,7 +180,7 @@ impl DraftMetadata {
     pub async fn message_id(
         id: MetadataId,
         tether: &Tether,
-    ) -> Result<Option<LocalId>, StashError> {
+    ) -> Result<Option<LocalMessageId>, StashError> {
         let Some(metadata) = DraftMetadata::find_by_id(id, tether).await? else {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
@@ -192,11 +194,10 @@ impl DraftMetadata {
     ///
     /// Returns error if the query failed.
     pub async fn exists_for_message_with_remote_id(
-        remote_id: &RemoteId,
+        remote_id: MessageId,
         tether: &Tether,
     ) -> Result<bool, StashError> {
-        let Some(local_id) = Message::remote_id_counterpart(remote_id.clone(), tether).await?
-        else {
+        let Some(local_id) = Message::remote_id_counterpart(remote_id, tether).await? else {
             return Ok(false);
         };
         Ok(Self::find_by_message_id(local_id, tether).await?.is_some())

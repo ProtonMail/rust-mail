@@ -18,8 +18,8 @@ proton-api-core = { workspace = true, features = ["sql"] }
 proton-api-mail = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true, features = ["sql"] }
 proton-event-loop = { workspace = true }
-proton-core-common = { workspace = true }
-proton-mail-common = { workspace = true }
+proton-core-common = { workspace = true, features = ["sql"] }
+proton-mail-common = { workspace = true, features = ["sql"] }
 proton-sqlite3 = { workspace = true }
 proton-vcard = { workspace = true }
 quick_cache.workspace = true

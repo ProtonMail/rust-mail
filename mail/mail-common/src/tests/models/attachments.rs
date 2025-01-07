@@ -112,14 +112,14 @@ fn address_id() -> AddressId {
 fn conversation_id() -> RemoteId {
     RemoteId::from("conv")
 }
-fn message_id() -> RemoteId {
-    RemoteId::from("msg")
+fn message_id() -> MessageId {
+    MessageId::from("msg")
 }
 
 async fn create_attachment_dependencies(
     tether: &mut Tether,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(AddressId, LocalId, LocalId), AppError> {
+) -> Result<(AddressId, LocalId, LocalMessageId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
     let tx = tether.transaction().await.unwrap();
 
