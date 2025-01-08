@@ -117,9 +117,7 @@ impl From<AppError> for ProtonMailError {
             AppError::LocalIdNotFound(_string, _remote_id) => {
                 Self::Unexpected(Unexpected::Database)
             }
-            AppError::RemoteIdNotFound(_string, _local_id) => {
-                Self::Unexpected(Unexpected::Database)
-            }
+            AppError::AddressHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::ActionStillQueued(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissing(_string) => Self::Unexpected(Unexpected::Database),
             AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Unknown),

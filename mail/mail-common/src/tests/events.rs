@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use proton_core_common::datatypes::RemoteId;
+use crate::events::EventId;
 use proton_mail_test_utils::db::new_test_connection;
 
 #[tokio::test]
@@ -10,9 +10,9 @@ async fn test_event_id_store_get_set() {
         .transaction()
         .await
         .expect("Failed to start transaction");
-    let _event_id1 = RemoteId::from("EVENT1");
-    let _event_id2 = RemoteId::from("EVENT2");
-    let _event_id3 = RemoteId::from("EVENT3");
+    let _event_id1 = EventId::from("EVENT1");
+    let _event_id2 = EventId::from("EVENT2");
+    let _event_id3 = EventId::from("EVENT3");
     /* TODO: The following code will be reworked with the new event handler
     const EVENT_TYPE_ID_2: &str = "EVENT_TYPE";
     const EVENT_TYPE_ID_1: &str = "EVENT_TYPE_2";

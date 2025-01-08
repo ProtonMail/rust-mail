@@ -27,7 +27,7 @@ impl Sidebar {
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<SystemLabel>> {
         let tether = self.user_ctx.user_stash().connection();
-        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &tether)
+        let settings = MailSettings::load(MAIL_SETTINGS_ID, &tether)
             .await?
             .unwrap_or_default();
 

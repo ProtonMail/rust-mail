@@ -58,8 +58,8 @@ use proton_core_common::datatypes::{
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
     HighSecurity as RealHighSecurity, LocalAddressId, LocalContactEmailId, LocalContactId,
-    LocalId as RealLocalId, LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword,
-    Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
+    LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
     TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
@@ -1056,7 +1056,6 @@ macro_rules! impl_into_id {
 }
 
 //TODO: Improve uniffi local_id types without causing mayhem.
-impl_into_id!(RealLocalId);
 impl_into_id!(LocalAddressId);
 impl_into_id!(LocalLabelId);
 impl_into_id!(LocalContactId);

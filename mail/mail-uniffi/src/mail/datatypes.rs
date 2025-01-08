@@ -982,7 +982,7 @@ impl ConversationCount {
             label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
+                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into_inner())
                 })?
                 .into(),
             total: value.total,
@@ -1847,7 +1847,7 @@ impl MessageCount {
             label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
+                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into_inner())
                 })?
                 .into(),
             total: value.total,

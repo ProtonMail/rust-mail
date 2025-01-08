@@ -35,7 +35,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_mail_ids::LocalConversationId;
@@ -3053,8 +3053,11 @@ pub struct ConversationLabel {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
+    //NOTE: This id is essentially useless. Stash does not support composite primary keys
+    // so we do not assign it a special value. The real primary key is
+    // (local_conversation_id + local_label_id).
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<u64>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -3125,29 +3128,6 @@ impl ConversationLabel {
         tether
             .query_values::<_, LocalLabelId>(&query, params![conversation_id])
             .await
-    }
-
-    /// Get all local label with given IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_ids` - List of ids we want to find the corresponding `ConversationLabel`.
-    /// * `interface` - The database interface.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query failed.
-    ///
-    pub async fn find_by_ids(
-        label_ids: impl IntoIterator<Item = LocalId>,
-        tether: &Tether,
-    ) -> Result<Vec<Self>, StashError> {
-        ConversationLabel::find(
-            format!("WHERE local_id IN ({})", label_ids.into_iter().join(", ")),
-            vec![],
-            tether,
-        )
-        .await
     }
 
     /// Get all local label with given label IDs.

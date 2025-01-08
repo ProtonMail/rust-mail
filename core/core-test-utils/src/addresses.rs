@@ -1,6 +1,6 @@
 use crate::test_context::TestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::{AddressId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -14,7 +14,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 lazy_static! {
-    pub static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");
+    pub static ref MY_ADDRESS_ID: AddressId = AddressId::from("MyRemoteId");
 }
 
 impl TestContext {

@@ -19,7 +19,7 @@ use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{LocalAddressId, LocalId};
+use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, User};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
@@ -250,9 +250,8 @@ impl MailUserContext {
             error!("send preferences: failed to search address by email: {err}")
         })? {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
-                MailContextError::App(AppError::RemoteIdNotFound(
-                    "address".to_owned(),
-                    LocalId::from(address.local_id.unwrap_or(LocalAddressId::from(0)).as_u64()),
+                MailContextError::App(AppError::AddressHasNoRemoteId(
+                    address.local_id.unwrap_or(LocalAddressId::from(0)),
                 ))
             })?;
 

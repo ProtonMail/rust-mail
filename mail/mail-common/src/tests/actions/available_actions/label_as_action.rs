@@ -1,8 +1,16 @@
 use super::LabelAsAction;
 use crate as proton_mail_common;
 use crate::models::Label;
-use proton_mail_test_utils::{label, lid};
+use proton_mail_test_utils::label;
 use test_case::test_case;
+
+/// Macro wrapping u64 into Option<LocalId> for easier model definition.
+macro_rules! lid {
+    ($id:expr) => {{
+        use proton_core_common::datatypes::LocalLabelId;
+        Some(LocalLabelId::from($id))
+    }};
+}
 
 #[test_case(&[], |_| false, &[]; "TEST1: empty")]
 #[test_case(&[label!(local_id: lid!(0))], |_| false, &[
