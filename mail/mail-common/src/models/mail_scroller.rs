@@ -1,7 +1,8 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use indoc::formatdoc;
-use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
+use proton_api_mail::services::proton::prelude::{ConversationId, MessageId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -16,13 +17,13 @@ use typed_builder::TypedBuilder;
 pub struct MessageScrollData {
     /// Label id used in the sync.
     #[IdField]
-    pub local_label_id: LocalId,
+    pub local_label_id: LocalLabelId,
     /// Read filter used in the sync.
     #[DbField]
     pub unread: ReadFilter,
     /// Last synced message id.
     #[DbField]
-    pub remote_message_id: RemoteId,
+    pub remote_message_id: MessageId,
     /// Last synced message time.
     #[DbField]
     pub message_time: u64,
@@ -53,7 +54,8 @@ pub struct CachedConverstationScrollData {
     cursor: ConversationScrollData,
 }
 
-static DEFAULT_REMOTE_ID: LazyLock<RemoteId> = LazyLock::new(|| RemoteId::new("NULL".to_string()));
+static DEFAULT_REMOTE_ID: LazyLock<ConversationId> =
+    LazyLock::new(|| ConversationId::new("NULL".to_string()));
 
 impl CachedConverstationScrollData {
     /// Create a new cache for the conversation scroll data.
@@ -202,7 +204,7 @@ pub struct ConversationScrollData {
     pub unread: ReadFilter,
     /// Id of the last synced conversation.
     #[DbField]
-    pub remote_conversation_id: RemoteId,
+    pub remote_conversation_id: ConversationId,
     /// Time of the last synced conversation.
     ///
     /// Note: for filtered conversation (`ReadFilter != ReadFilter::All`) we

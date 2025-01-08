@@ -6,10 +6,11 @@ use crate::models::Conversation;
 use crate::models::{CachedConverstationScrollData, ConversationScrollData, Label};
 use maplit::hashmap;
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::{LocalId, RemoteId};
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection;
-use proton_mail_test_utils::{conv_label, conversation, label, rid};
+use proton_mail_test_utils::{conv_id, conv_label, conversation, label, lbl_id};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 
@@ -17,7 +18,7 @@ fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
     (0..n)
         .map(|i| {
             let order = i as u64 + order_shift;
-            conversation!(remote_id: rid!(order), display_order: order)
+            conversation!(remote_id: conv_id!(order), display_order: order)
         })
         .collect()
 }
@@ -38,7 +39,7 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
 async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &mut Tether) {
     let bond = tether.transaction().await.unwrap();
     for (label_rid, conversations) in data.iter_mut() {
-        let mut label = label!(remote_id: rid!(label_rid));
+        let mut label = label!(remote_id: lbl_id!(label_rid));
         label.save(&bond).await.unwrap();
         for conversation in conversations.iter_mut() {
             save_single_conversation(&label, conversation, &bond).await;
@@ -60,7 +61,7 @@ fn expected_conversations(
             .rev()
             .take(n)
             .filter_map(|conv| {
-                let rid = rid!(label_id);
+                let rid = lbl_id!(label_id);
                 let label = conv
                     .labels
                     .iter()
@@ -92,7 +93,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("150"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(ConversationId::from("150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -101,7 +102,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let mut scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone())
+        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .build();
@@ -137,7 +138,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     // Store new conversation outside of the visible view
     let bond = tether.transaction().await.unwrap();
-    let mut conversation = conversation!(remote_id: rid!(0), display_order: 0);
+    let mut conversation = conversation!(remote_id: conv_id!(0), display_order: 0);
 
     save_single_conversation(&local_label, &mut conversation, &bond).await;
 
@@ -152,7 +153,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     // Store new conversation inside of the visible view
     // & make sure both scrollers "see" the change
     let bond = tether.transaction().await.unwrap();
-    let mut conversation = conversation!(remote_id: rid!(100), display_order: 200);
+    let mut conversation = conversation!(remote_id: conv_id!(100), display_order: 200);
 
     save_single_conversation(&local_label, &mut conversation, &bond).await;
 
@@ -202,7 +203,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("150"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(ConversationId::from("150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -211,7 +212,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let mut scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone())
+        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .build();
@@ -245,7 +246,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Store new conversation outside of the visible view
     let bond = tether.transaction().await.unwrap();
-    let mut conversation = conversation!(remote_id: rid!(0), display_order: 0);
+    let mut conversation = conversation!(remote_id: conv_id!(0), display_order: 0);
 
     save_single_conversation(&local_label, &mut conversation, &bond).await;
 
@@ -260,7 +261,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     // Store new conversation inside of the visible view
     // & make sure cached scroller "see" the change
     let bond = tether.transaction().await.unwrap();
-    let mut conversation = conversation!(remote_id: rid!(100), display_order: 200);
+    let mut conversation = conversation!(remote_id: conv_id!(100), display_order: 200);
 
     save_single_conversation(&local_label, &mut conversation, &bond).await;
 
@@ -330,7 +331,10 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     assert!(cached_scroller.has_more(&tether).await.unwrap());
 
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
-    assert_eq!(actual.first().unwrap().local_id, LocalId::from(100));
+    assert_eq!(
+        actual.first().unwrap().local_id,
+        LocalConversationId::from(100)
+    );
 
     // Delete whole first page
     let convs = data.get(REMOTE_LABEL_ID).unwrap();
@@ -445,7 +449,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
     let mut scroller = ConversationScrollData::builder()
         .local_label_id(local_label_id)
         .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone())
+        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
         .build();

@@ -6,11 +6,12 @@ use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::prelude::{
     GetConversationsOptions, GetConversationsResponse,
 };
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalLabelId, RemoteId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
@@ -429,7 +430,7 @@ impl MailConversationScrollerSource {
             .api()
             .get_conversations(GetConversationsOptions {
                 desc: Some(true),
-                label_id: Some(remote_label_id.into()),
+                label_id: Some(remote_label_id),
                 page_size: page_size as u64,
                 unread: unread.into(),
                 ..Default::default()
@@ -471,7 +472,7 @@ impl MailConversationScrollerSource {
         mut tether: Tether,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
-        last_element_id: RemoteId,
+        last_element_id: ConversationId,
         last_element_time: u64,
         unread: ReadFilter,
         page_size: usize,
@@ -484,7 +485,7 @@ impl MailConversationScrollerSource {
                 // time == 0 breaks the api query.
                 end: Some(last_element_time),
                 end_id: Some(last_element_id.clone()),
-                label_id: Some(remote_label_id.into()),
+                label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
                 unread: unread.into(),
                 ..Default::default()
@@ -611,7 +612,7 @@ impl MailConversationScrollerSource {
 
     async fn update_scroller_data(
         local_label_id: LocalLabelId,
-        remote_conv_id: RemoteId,
+        remote_conv_id: ConversationId,
         unread: ReadFilter,
         context_time: u64,
         display_order: u64,

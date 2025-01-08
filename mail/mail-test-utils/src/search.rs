@@ -31,7 +31,7 @@ lazy_static! {
 macro_rules! conv_id {
     ($id:expr) => {{
         use proton_api_mail::services::proton::common::ConversationId;
-        Some(ConversationId::from($id).into())
+        Some(ConversationId::from($id.to_string()).into())
     }};
 }
 
@@ -47,7 +47,7 @@ macro_rules! lbl_id {
 macro_rules! msg_id {
     ($id:expr) => {{
         use proton_api_mail::services::proton::common::MessageId;
-        Some(MessageId::from($id).into())
+        Some(MessageId::from($id.to_string()).into())
     }};
 }
 
