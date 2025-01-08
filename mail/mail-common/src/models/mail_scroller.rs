@@ -8,6 +8,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use std::ops::Deref;
+use std::sync::LazyLock;
 use typed_builder::TypedBuilder;
 
 #[derive(Debug, Model, Eq, PartialEq, Clone)]
@@ -51,6 +52,8 @@ pub struct CachedConverstationScrollData {
     data: ConversationScrollData,
     cursor: ConversationScrollData,
 }
+
+static DEFAULT_REMOTE_ID: LazyLock<RemoteId> = LazyLock::new(|| RemoteId::new("NULL".to_string()));
 
 impl CachedConverstationScrollData {
     /// Create a new cache for the conversation scroll data.
@@ -97,7 +100,9 @@ impl CachedConverstationScrollData {
                         Some(last) => ConversationScrollData::builder()
                             .local_label_id(local_label_id)
                             .unread(unread)
-                            .remote_conversation_id(last.remote_id.clone())
+                            .remote_conversation_id(
+                                last.remote_id.clone().unwrap_or(DEFAULT_REMOTE_ID.clone()),
+                            )
                             .conversation_time(last.time)
                             .display_order(last.display_order)
                             .build(),
@@ -133,7 +138,16 @@ impl CachedConverstationScrollData {
 
         if cursor_count < all {
             let offset = Some(cursor_count);
-            let limit = Some(self.page_size);
+            let remaining = all - cursor_count;
+            let double_page = self.page_size as u64 * 2;
+            let limit = if remaining < double_page {
+                // Progress two pages at a time if there are less than two pages left.
+                usize::try_from(all - cursor_count)
+                    .ok()
+                    .or(Some(self.page_size))
+            } else {
+                Some(self.page_size)
+            };
             let items = self
                 .data
                 .visible_elements_limit(limit, offset, tether)
@@ -142,7 +156,9 @@ impl CachedConverstationScrollData {
                 Some(last) => ConversationScrollData::builder()
                     .local_label_id(self.local_label_id)
                     .unread(self.unread)
-                    .remote_conversation_id(last.remote_id.clone())
+                    .remote_conversation_id(
+                        last.remote_id.clone().unwrap_or(DEFAULT_REMOTE_ID.clone()),
+                    )
                     .conversation_time(last.time)
                     .display_order(last.display_order)
                     .build(),
@@ -186,7 +202,7 @@ pub struct ConversationScrollData {
     pub unread: ReadFilter,
     /// Id of the last synced conversation.
     #[DbField]
-    pub remote_conversation_id: Option<RemoteId>,
+    pub remote_conversation_id: RemoteId,
     /// Time of the last synced conversation.
     ///
     /// Note: for filtered conversation (`ReadFilter != ReadFilter::All`) we
@@ -211,7 +227,6 @@ impl ConversationScrollData {
     /// Find the first record with matching:
     /// * label_id,
     /// * read_filter
-    /// * non empty remote_conversation_id.
     ///
     pub async fn find_with_key(
         local_label_id: LocalLabelId,
@@ -219,7 +234,7 @@ impl ConversationScrollData {
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
         Self::find_first(
-            "WHERE local_label_id=? AND unread=? AND remote_conversation_id IS NOT NULL",
+            "WHERE local_label_id=? AND unread=?",
             params![local_label_id, unread],
             tether,
         )

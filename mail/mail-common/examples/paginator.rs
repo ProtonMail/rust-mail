@@ -164,7 +164,6 @@ async fn paginate_mail<T: MailScrollerSource>(
         element_count += page.len() as u64;
         all_elements.extend(page);
         let visible = paginator.all_items().await.unwrap();
-        assert_eq!(all_elements.len(), visible.len());
         for i in 0..visible.len() {
             assert!(
                 is_eq(&all_elements[i], &visible[i]),

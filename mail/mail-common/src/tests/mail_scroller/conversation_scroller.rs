@@ -17,7 +17,7 @@ fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
     (0..n)
         .map(|i| {
             let order = i as u64 + order_shift;
-            conversation!(remote_id: rid!(i), display_order: order)
+            conversation!(remote_id: rid!(order), display_order: order)
         })
         .collect()
 }
@@ -92,7 +92,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("50"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -202,7 +202,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .unwrap();
     let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
-    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("50"), &tether)
+    let last_conversation = Conversation::find_by_remote_id(RemoteId::from("150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -417,4 +417,64 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     assert_eq!(actual.len(), page_size * 5);
     assert_eq!(actual, expected);
+}
+
+#[tokio::test]
+async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_not_filled() {
+    const REMOTE_LABEL_ID: &str = "rid1";
+
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection();
+    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+        REMOTE_LABEL_ID => test_conversations(5, 100),
+        "rid2" => test_conversations(50, 0),
+    };
+
+    save_to_database(&mut data, &mut tether).await;
+
+    let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
+    let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
+        .await
+        .unwrap();
+    let local_label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
+    dbg!(&local_label);
+    let unread = ReadFilter::All;
+    let last_conversation = data.get(REMOTE_LABEL_ID).unwrap().first().unwrap(); // order is reversed
+    let last_label = last_conversation.label(local_label_id).unwrap();
+
+    let mut scroller = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(unread)
+        .remote_conversation_id(last_conversation.remote_id.clone())
+        .conversation_time(last_label.context_time)
+        .display_order(last_conversation.display_order)
+        .build();
+
+    let bond = tether.transaction().await.unwrap();
+    scroller.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 2;
+    let mut cached_scroller =
+        CachedConverstationScrollData::new(local_label_id, unread, page_size, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+    let items = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(items, 2);
+
+    let loaded_page = cached_scroller.fetch_more(&tether).await.unwrap();
+    assert_eq!(loaded_page.len(), 3);
+
+    let items = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(items, 5);
 }

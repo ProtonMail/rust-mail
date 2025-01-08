@@ -110,19 +110,19 @@ pub trait MailScrollerSource: Send + Sync {
 /// of [`MailScrollerSource`].
 pub struct MailScroller<T: MailScrollerSource + 'static> {
     ctx: Arc<MailUserContext>,
-    source: Arc<T>,
+    source: T,
     total: u64,
     init_await: MailPaginatorInitResult<T::Item>,
 }
 
-pub struct MailScrollerWatcher<T: MailScrollerSource + 'static> {
+pub struct MailScrollerWatcher {
     sender: flume::Sender<()>,
-    source: Arc<T>,
+    tables: Vec<String>,
 }
 
-impl<T: MailScrollerSource + 'static> TableObserver for MailScrollerWatcher<T> {
+impl TableObserver for MailScrollerWatcher {
     fn tables(&self) -> Vec<String> {
-        self.source.watched_tables()
+        self.tables.clone()
     }
 
     fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
@@ -144,7 +144,6 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Returns error if something went wrong with initializing the data source.
     pub async fn new(ctx: Arc<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
         let (total, init_await) = source.initialize(&ctx).await?;
-        let source = Arc::new(source);
 
         Ok(Self {
             ctx,
@@ -158,7 +157,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         self.ctx.user_stash().subscribe_to(|sender| {
             Box::new(MailScrollerWatcher {
                 sender,
-                source: Arc::clone(&self.source),
+                tables: self.source.watched_tables(),
             })
         })
     }
@@ -366,8 +365,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let conversations = if let Some(cp) =
             ConversationScrollData::find_with_key(self.local_label_id, self.unread, &tether).await?
         {
-            // Unwrap safety: `find_with_key` method ensures there is remote id.
-            let remote_id = cp.remote_conversation_id.unwrap();
+            let remote_id = cp.remote_conversation_id;
             // Sync next data.
             Self::sync_next_page(
                 ctx.session(),
@@ -586,7 +584,9 @@ impl MailConversationScrollerSource {
         };
 
         let context_time = context_time.unwrap_or(label.context_time);
-        let remote_id = last.remote_id.clone();
+        // Unwrap safety: RemoteId is present as this method is called on conversation
+        // downloaded from API
+        let remote_id = last.remote_id.clone().unwrap();
         let display_order = last.display_order;
 
         Self::update_scroller_data(
@@ -611,7 +611,7 @@ impl MailConversationScrollerSource {
 
     async fn update_scroller_data(
         local_label_id: LocalLabelId,
-        remote_conv_id: Option<RemoteId>,
+        remote_conv_id: RemoteId,
         unread: ReadFilter,
         context_time: u64,
         display_order: u64,
