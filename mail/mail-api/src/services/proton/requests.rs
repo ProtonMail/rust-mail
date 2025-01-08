@@ -20,12 +20,12 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::{LabelType, MessageId};
+use crate::services::proton::common::{ConversationId, LabelType, MessageId};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_core::services::proton::common::{AddressId, LabelId, RemoteId};
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
@@ -39,7 +39,7 @@ use super::request_data::Package;
 pub struct GetConversationsOptions {
     #[serde(rename = "AddressID")]
     /// Address ID to filter on.
-    pub address_id: Option<RemoteId>,
+    pub address_id: Option<AddressId>,
 
     /// If `true`, only return conversations which have attachments. If `false`,
     /// only return conversations which have no attachments.
@@ -56,7 +56,7 @@ pub struct GetConversationsOptions {
     /// the specified conversation ID if timestamp = `begin`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
     #[serde(rename = "BeginID")]
-    pub begin_id: Option<RemoteId>,
+    pub begin_id: Option<ConversationId>,
 
     /// If `true`, return results in descending order rather than ascending.
     #[serde_as(as = "Option<BoolFromInt>")]
@@ -69,7 +69,7 @@ pub struct GetConversationsOptions {
     /// the specified conversation ID if timestamp = `end`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
     #[serde(rename = "EndID")]
-    pub end_id: Option<RemoteId>,
+    pub end_id: Option<ConversationId>,
 
     /// External ID to filter on.
     // TODO: Document this properly.
@@ -80,14 +80,14 @@ pub struct GetConversationsOptions {
 
     /// Conversation IDs to filter on.
     #[serde(rename = "ID")]
-    pub ids: Option<Vec<RemoteId>>,
+    pub ids: Option<Vec<ConversationId>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label ID to filter on.
     #[serde(rename = "LabelID")]
-    pub label_id: Option<RemoteId>,
+    pub label_id: Option<LabelId>,
 
     /// The number of conversations to return.
     #[serde_as(as = "Option<DisplayFromStr>")]
@@ -174,7 +174,7 @@ pub struct GetMessagesOptions {
 
     /// Filter messages by conversation ID.
     #[serde(rename = "ConversationID")]
-    pub conversation_id: Option<RemoteId>,
+    pub conversation_id: Option<ConversationId>,
 
     /// If `true`, sort results descending. If `false`, sort ascending.
     #[serde_as(as = "Option<BoolFromInt>")]
@@ -242,7 +242,7 @@ pub struct GetMessagesOptions {
 pub struct PostLabelsRequest {
     /// TODO: Document this field.
     #[serde(rename = "ParentID")]
-    pub parent_id: Option<RemoteId>,
+    pub parent_id: Option<LabelId>,
 
     /// TODO: Document this field.
     pub color: String,
@@ -261,7 +261,7 @@ pub struct PostLabelsRequest {
 pub struct PutConversationsDeleteRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ConversationId>,
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
@@ -278,7 +278,7 @@ pub struct PutConversationsLabelRequest {
 
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ConversationId>,
 
     /// TODO: Document this field.
     #[serde(rename = "LabelID")]
@@ -295,7 +295,7 @@ pub struct PutConversationsLabelRequest {
 pub struct PutConversationsReadRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ConversationId>,
 }
 
 /// TODO: Document this struct.
@@ -304,7 +304,7 @@ pub struct PutConversationsReadRequest {
 pub struct PutConversationsUnlabelRequest {
     /// The ids of the conversations to unlabel
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ConversationId>,
 
     /// The label for the request
     #[serde(rename = "LabelID")]
@@ -317,7 +317,7 @@ pub struct PutConversationsUnlabelRequest {
 pub struct PutConversationsUnreadRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
-    pub ids: Vec<RemoteId>,
+    pub ids: Vec<ConversationId>,
 }
 
 /// TODO: Document this struct.
@@ -326,7 +326,7 @@ pub struct PutConversationsUnreadRequest {
 pub struct PutLabelRequest {
     /// TODO: Document this field.
     #[serde(rename = "ParentID")]
-    pub parent_id: Option<RemoteId>,
+    pub parent_id: Option<LabelId>,
 
     /// TODO: Document this field.
     pub color: String,
@@ -405,7 +405,7 @@ pub struct PutMessagesUnreadRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct PostMessagesRelabelRequest {
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<RemoteId>,
+    pub label_ids: Vec<LabelId>,
 }
 
 #[serde_as]

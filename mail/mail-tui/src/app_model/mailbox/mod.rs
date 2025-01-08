@@ -11,8 +11,8 @@ use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 pub use model::Model;
-use proton_core_common::datatypes::{LocalId, LocalIdMarker, LocalLabelId};
-use proton_mail_common::datatypes::{ContextualConversation, LocalMessageId};
+use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
+use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
 use proton_mail_common::models::{Label, Message as MailMessage};
 use proton_mail_common::Mailbox;
 
@@ -45,14 +45,14 @@ pub struct LabelAs<T: LocalIdMarker> {
 
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
-    MarkConversationRead(LocalId),
-    MarkConversationUnread(LocalId),
-    DeleteConversation(LocalId),
-    MoveConversation(LocalId, LocalLabelId),
-    LabelConversation(Box<LabelAs<LocalId>>),
-    StarConversation(LocalId),
-    UnstarConversation(LocalId),
-    OpenConversation(LocalId),
+    MarkConversationRead(LocalConversationId),
+    MarkConversationUnread(LocalConversationId),
+    DeleteConversation(LocalConversationId),
+    MoveConversation(LocalConversationId, LocalLabelId),
+    LabelConversation(Box<LabelAs<LocalConversationId>>),
+    StarConversation(LocalConversationId),
+    UnstarConversation(LocalConversationId),
+    OpenConversation(LocalConversationId),
     OpenConversationSuccess(Box<MessagesState>),
     OpenConversationFailed(anyhow::Error),
     Refreshed(Vec<ContextualConversation>),
@@ -102,7 +102,7 @@ impl From<ComposerMessage> for Messages {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Item {
-    Conversation(LocalId),
+    Conversation(LocalConversationId),
     //TODO:message actions
     Message(LocalMessageId),
 }

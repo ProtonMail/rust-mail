@@ -23,8 +23,10 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{AttachmentId, LabelType, MessageId};
-use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, RemoteId};
+use crate::services::proton::common::{
+    AttachmentId, ConversationId, ExternalId, LabelType, MessageId,
+};
+use proton_api_core::services::proton::common::{AddressId, EventId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
     UserSettings,
@@ -303,7 +305,7 @@ pub struct Attachment {
 
     /// What conversation this attachment belongs to
     #[serde(rename = "ConversationID")]
-    pub conversation_id: RemoteId,
+    pub conversation_id: ConversationId,
 
     /// What message this attachment belongs to
     #[serde(rename = "MessageID")]
@@ -405,7 +407,7 @@ pub struct AutoResponder {
 pub struct Conversation {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ConversationId,
 
     /// TODO: Document this field.
     #[serde(default)]
@@ -469,7 +471,7 @@ pub struct Conversation {
 impl Default for Conversation {
     fn default() -> Self {
         Self {
-            id: RemoteId::from(""),
+            id: ConversationId::from(""),
             attachment_info: BTreeMap::default(),
             attachments_metadata: Vec::default(),
             display_snooze_reminder: false,
@@ -512,7 +514,7 @@ pub struct ConversationCount {
 pub struct ConversationEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: ConversationId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -630,7 +632,7 @@ impl Default for Label {
 pub struct LabelEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
-    pub id: RemoteId,
+    pub id: LabelId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -1146,7 +1148,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "ConversationID")]
-    pub conversation_id: RemoteId,
+    pub conversation_id: ConversationId,
 
     /// TODO: Document this field.
     #[serde(rename = "AddressID")]
@@ -1169,7 +1171,7 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(rename = "ExternalID")]
-    pub external_id: Option<RemoteId>,
+    pub external_id: Option<ExternalId>,
 
     /// TODO: Document this field.
     pub flags: MessageFlags,
@@ -1231,7 +1233,7 @@ impl Default for MessageMetadata {
     fn default() -> Self {
         Self {
             id: MessageId::from(""),
-            conversation_id: RemoteId::from(""),
+            conversation_id: ConversationId::from(""),
             address_id: AddressId::from(""),
             attachments_metadata: Vec::default(),
             bcc_list: Vec::default(),

@@ -1,5 +1,6 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{LabelId, RemoteId as ApiRemoteId};
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
 use proton_core_common::models::ModelIdExtension;
@@ -234,7 +235,7 @@ fn test_conversation(conversation: &TestItem) -> ApiConversation {
         id: name, unread, ..
     } = conversation;
     ApiConversation {
-        id: ApiRemoteId::from(name.to_owned()),
+        id: ConversationId::from(name.to_owned()),
         num_messages: 1,
         num_unread: if *unread { 1 } else { 0 },
         labels: vec![ApiConversationLabel {

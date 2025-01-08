@@ -30,11 +30,12 @@ use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
 pub use proton_core_common;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::{LocalId, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use stash::stash::StashError;
 
 use proton_action_queue::action::Id as ActionId;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
+use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
 
 // Avoid breaking back compat.
@@ -71,19 +72,19 @@ pub enum AppError {
     #[error("Attachment missing in database for local_id {0}")]
     ActionStillQueued(ActionId),
     #[error("Attachment missing in database for local_id {0}")]
-    AttachmentMissing(LocalId),
+    AttachmentMissing(LocalAttachmentId),
     #[error("Unknown attachment with remote id {0}")]
-    UnknownAttachment(RemoteId),
+    UnknownAttachment(AttachmentId),
     #[error("Attachment {0} does not have a remote id")]
     AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("Conversation with ID {0} is not in given view {1}")]
-    ConversationDoesNotHaveLabel(LocalId, String),
+    ConversationDoesNotHaveLabel(LocalConversationId, String),
     #[error("Conversation with ID {0} has no messages")]
-    ConversationHasNoMessages(LocalId),
+    ConversationHasNoMessages(LocalConversationId),
     #[error("Conversation with ID {0} has no remote ID")]
-    ConversationHasNoRemoteId(LocalId),
+    ConversationHasNoRemoteId(LocalConversationId),
     #[error("Conversation with ID {0} not found")]
-    ConversationNotFound(LocalId),
+    ConversationNotFound(LocalConversationId),
     #[error("Empty list of conversations, expected at least one")]
     EmptyListOfConversations,
     #[error("Empty list of messages, expected at least one")]
@@ -97,7 +98,7 @@ pub enum AppError {
     #[error("Label with local id {0} not found")]
     LabelNotFound(LocalLabelId),
     #[error("Local ID not found for {0} with remote ID {1}")]
-    LocalIdNotFound(String, RemoteId),
+    LocalIdNotFound(String, String),
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalMessageId),
     #[error("The cid {0} does not exist. The available ones are: {1:#?}")]
@@ -114,8 +115,8 @@ pub enum AppError {
     NoConversationWithValidRemoteIdFoundInPage,
     #[error("No message found in the current page which has a remote id")]
     NoMessageWithValidRemoteIdFoundInPage,
-    #[error("Remote ID not found for {0} with local ID {1}")]
-    RemoteIdNotFound(String, LocalId),
+    #[error("Address {0} does not have a remote id")]
+    AddressHasNoRemoteId(LocalAddressId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
 

@@ -1,13 +1,14 @@
 pub use super::*;
 use crate::datatypes::attachment;
 use crate::datatypes::LocalAttachmentId;
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
-use proton_api_core::services::proton::common::RemoteId;
-use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId, LocalId};
+use crate::proton_api_mail::services::proton::prelude::ConversationId;
+use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use std::str::FromStr;
 
 #[test]
@@ -232,12 +233,12 @@ fn local_msg_id() -> LocalMessageId {
     424.into()
 }
 
-fn local_conversation_id() -> LocalId {
+fn local_conversation_id() -> LocalConversationId {
     11111111.into()
 }
 
-fn remote_conversation_id() -> RemoteId {
-    RemoteId::new("My remote conv id".to_owned())
+fn remote_conversation_id() -> ConversationId {
+    ConversationId::new("My remote conv id".to_owned())
 }
 
 fn local_address_id() -> LocalAddressId {

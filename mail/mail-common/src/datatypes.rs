@@ -76,7 +76,7 @@ use proton_api_mail::services::proton::response_data::{
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{AvatarInformation, LocalLabelId, RemoteId};
+use proton_core_common::datatypes::{AvatarInformation, LocalLabelId};
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };
@@ -1833,14 +1833,6 @@ pub struct ParsedHeaders {
 
 sql_using_serde!(ParsedHeaders);
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct RemoteIds {
-    pub value: Vec<RemoteId>,
-}
-
-sql_using_serde!(RemoteIds);
-
 //  TRAITS
 //==============================================================================
 
@@ -2026,4 +2018,5 @@ impl From<LabelDescription> for LabelType {
 }
 
 pub use proton_mail_ids::LocalAttachmentId;
+pub use proton_mail_ids::LocalConversationId;
 pub use proton_mail_ids::LocalMessageId;

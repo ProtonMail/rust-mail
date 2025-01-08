@@ -8,7 +8,6 @@ use crate::datatypes::{
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
@@ -30,7 +29,7 @@ pub struct MailSettings {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<u64>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -238,7 +237,7 @@ impl MailSettings {
 
     /// Get the mail settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
-        Self::load(MAIL_SETTINGS_ID.into(), tether).await
+        Self::load(MAIL_SETTINGS_ID, tether).await
     }
 
     /// Get the mail settings from database, fallback on default

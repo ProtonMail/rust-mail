@@ -58,8 +58,8 @@ use proton_core_common::datatypes::{
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
     HighSecurity as RealHighSecurity, LocalAddressId, LocalContactEmailId, LocalContactId,
-    LocalId as RealLocalId, LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword,
-    Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
+    LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
     TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
@@ -70,7 +70,7 @@ use proton_core_common::models::{
     UserSettings as RealUserSettings,
 };
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
-use proton_mail_common::datatypes::{LocalAttachmentId, LocalMessageId};
+use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use std::fmt::{Display, Formatter};
@@ -1056,13 +1056,13 @@ macro_rules! impl_into_id {
 }
 
 //TODO: Improve uniffi local_id types without causing mayhem.
-impl_into_id!(RealLocalId);
 impl_into_id!(LocalAddressId);
 impl_into_id!(LocalLabelId);
 impl_into_id!(LocalContactId);
 impl_into_id!(LocalContactEmailId);
 impl_into_id!(LocalAttachmentId);
 impl_into_id!(LocalMessageId);
+impl_into_id!(LocalConversationId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]

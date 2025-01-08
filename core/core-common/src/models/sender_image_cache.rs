@@ -1,5 +1,5 @@
 use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResource, CacheResult};
-use crate::datatypes::{LightOrDarkMode, LocalId};
+use crate::datatypes::LightOrDarkMode;
 use crate::models::ModelExtension;
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -29,8 +29,10 @@ pub struct SenderImage {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
+    // NOTE: this field is never really used, but we are forced by stash to declare
+    // it or the model won't work.
     #[IdField(autoincrement)]
-    pub local_id: Option<LocalId>,
+    pub local_id: Option<u64>,
 
     /// TODO: Document this field.
     #[DbField]

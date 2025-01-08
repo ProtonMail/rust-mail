@@ -159,7 +159,7 @@ async fn image_extension(bytes: &[u8], expected: &str) {
 
     assert_eq!(image_path.extension().unwrap(), expected);
     let tether = user_ctx.stash().connection();
-    let sender_image = SenderImage::load(1.into(), &tether).await.unwrap().unwrap();
+    let sender_image = SenderImage::load(1, &tether).await.unwrap().unwrap();
     let received_format = sender_image.received_format.unwrap();
     assert_eq!(format!("{received_format}"), expected);
 }

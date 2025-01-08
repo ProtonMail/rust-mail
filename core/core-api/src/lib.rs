@@ -11,7 +11,6 @@ pub mod service;
 pub mod services;
 pub mod session;
 pub mod store;
-pub use services::proton::common::RemoteId;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
 pub const SYNC_CONTACT_PAGE_SIZE: usize = 1000;

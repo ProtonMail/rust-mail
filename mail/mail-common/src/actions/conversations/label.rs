@@ -5,8 +5,9 @@ use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{LocalId, LocalLabelId};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
+use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use tracing::error;
@@ -17,7 +18,7 @@ pub struct Label(GenericActionData<Conversation>);
 
 impl Label {
     /// Create a new instance which applies `label_id` to the conversations with `ids`.
-    pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         Self(GenericActionData::new(label_id, ids))
     }
 }

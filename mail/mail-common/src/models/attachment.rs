@@ -8,19 +8,20 @@ use bytes::Bytes;
 use indoc::indoc;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
-use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
+use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::{LocalAddressId, LocalId, RemoteId};
+use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelIdExtension};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
     KeyPackets as RealKeyPackets,
 };
+use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::exports::ToSql;
 use stash::macros::Model;
@@ -103,11 +104,11 @@ pub struct Attachment {
 
     /// Local conversation id where this attachment is present.
     #[DbField]
-    pub local_conversation_id: Option<LocalId>,
+    pub local_conversation_id: Option<LocalConversationId>,
 
     /// Remote conversation id where this attachment is present.
     #[DbField]
-    pub remote_conversation_id: Option<RemoteId>,
+    pub remote_conversation_id: Option<ConversationId>,
 
     /// Local message id where this attachment is present.
     #[DbField]
@@ -189,7 +190,7 @@ impl Attachment {
     ///
     /// Return error if the query failed.
     pub async fn load_conversation_attachment_metadata(
-        conversation_id: LocalId,
+        conversation_id: LocalConversationId,
         tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",

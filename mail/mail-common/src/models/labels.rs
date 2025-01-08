@@ -182,7 +182,7 @@ impl Label {
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .post_labels(PostLabelsRequest {
-                parent_id: parent_id.map(|id| id.into()),
+                parent_id,
                 color,
                 label_type: label_type.into(),
                 name,
@@ -401,7 +401,7 @@ impl Label {
             .put_label(
                 id,
                 PutLabelRequest {
-                    parent_id: parent_id.map(|id| id.into()),
+                    parent_id,
                     color,
                     name,
                 },
@@ -429,7 +429,7 @@ impl Label {
         api: &PM,
     ) -> Result<Label, ApiServiceError> {
         api.patch_label(
-            id.into(),
+            id,
             PatchLabelRequest {
                 expanded: Some(expanded),
                 ..Default::default()
@@ -456,7 +456,7 @@ impl Label {
                 return Ok(ViewMode::Messages);
             }
         }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID.into(), tether)
+        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
             .await?
             .unwrap_or_default()
             .view_mode)

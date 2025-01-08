@@ -24,11 +24,11 @@ use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
+use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
@@ -54,7 +54,7 @@ pub enum Error {
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalMessageId),
     #[error("Create Metadata not found for {0}")]
-    CreateMetadataNotFound(LocalId),
+    CreateMetadataNotFound(MetadataId),
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
     #[error("Attachment {0} does not have key packets")]
@@ -720,7 +720,10 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn conversation_id(&self, tether: &Tether) -> Result<Option<LocalId>, StashError> {
+    pub async fn conversation_id(
+        &self,
+        tether: &Tether,
+    ) -> Result<Option<LocalConversationId>, StashError> {
         let Some(metadata) = DraftMetadata::find_by_id(self.metadata_id, tether).await? else {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };

@@ -10,13 +10,19 @@ macro_rules! lid {
     }};
 }
 
-/// Macro wrapping &str into Option<RemoteId> for easier model definition.
-/// Since it calls .`into()` on the `RemoteId`, it allows creation of Option<LabelId> as well.
 #[macro_export]
-macro_rules! rid {
+macro_rules! cid {
     ($id:expr) => {{
-        use $crate::datatypes::RemoteId;
-        Some(RemoteId::from($id).into())
+        use proton_api_core::services::proton::common::ContactId;
+        Some(ContactId::from($id))
+    }};
+}
+
+#[macro_export]
+macro_rules! ceid {
+    ($id:expr) => {{
+        use proton_api_core::services::proton::common::ContactEmailId;
+        Some(ContactEmailId::from($id))
     }};
 }
 

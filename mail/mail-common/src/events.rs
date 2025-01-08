@@ -36,13 +36,13 @@ mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
-use proton_api_core::services::proton::common::EventId;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_core::services::proton::common::{EventId, LabelId};
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
 };
-use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
+use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::events::ContactEvent;
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
 use proton_core_common::models::{User, UserSettings};
@@ -53,7 +53,7 @@ use proton_event_loop::Event;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationEvent {
     /// TODO: Document this field.
-    pub remote_id: RemoteId,
+    pub remote_id: ConversationId,
 
     /// TODO: Document this field.
     pub action: Action,
@@ -76,7 +76,7 @@ impl From<ApiConversationEvent> for ConversationEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LabelEvent {
     /// TODO: Document this field.
-    pub remote_id: RemoteId,
+    pub remote_id: LabelId,
 
     /// TODO: Document this field.
     pub action: Action,

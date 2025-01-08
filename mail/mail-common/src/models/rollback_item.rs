@@ -7,11 +7,11 @@ use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::RemoteId;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
@@ -96,7 +96,7 @@ macro_rules! sync_any {
                     }
 
                     let result = Self::delete_by_rid_and_kind(
-                        item.remote_id.clone().map(Into::into),
+                        item.remote_id.clone().map(|v| v.into_inner()),
                         RollbackItemType::$item,
                         &tx,
                     )
@@ -139,7 +139,7 @@ pub struct RollbackItem {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and it is important for synchronization.
     #[IdField]
-    pub remote_id: RemoteId,
+    pub remote_id: String,
 
     /// Table can store Labels, Messages, and Conversations.
     #[DbField]
@@ -154,7 +154,7 @@ pub struct RollbackItem {
 }
 
 impl RollbackItem {
-    pub fn new(remote_id: RemoteId, item_type: RollbackItemType) -> Self {
+    pub fn new(remote_id: String, item_type: RollbackItemType) -> Self {
         Self {
             remote_id,
             item_type,
@@ -231,7 +231,7 @@ impl RollbackItem {
         use proton_api_mail::services::proton::responses::GetLabelsResponse;
 
         sync_any!(Label, Label, tether, batch => |remote_id| async {
-            api.get_labels_by_ids(vec![remote_id.into()]).await
+            api.get_labels_by_ids(vec![LabelId::from(remote_id)]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
         })
@@ -249,7 +249,7 @@ impl RollbackItem {
         PM: ProtonMail,
     {
         sync_any!(Message, MessageAndBodyMetadata, tether, batch => |remote_id| async {
-            api.get_message(remote_id.into()).await
+            api.get_message(MessageId::from(remote_id)).await
         } => |api_message: GetMessageResponse| async {
             let remote_id = api_message.message.metadata.id.clone();
             let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, tether).await?;
@@ -274,7 +274,7 @@ impl RollbackItem {
     {
         sync_any!(Conversation, Conversation, tether, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
-                ids: Some(vec![remote_id]),
+                ids: Some(vec![ConversationId::from(remote_id)]),
                 ..Default::default()
             }).await
         } => |api_conversations: GetConversationsResponse| async {
@@ -313,7 +313,7 @@ impl RollbackItem {
     /// This method will return an error if the database operation fails.
     ///
     async fn delete_by_rid_and_kind(
-        remote_id: Option<RemoteId>,
+        remote_id: Option<String>,
         kind: RollbackItemType,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
@@ -352,7 +352,7 @@ mod test_utils {
     impl<'a> From<&'a Label> for RollbackItem {
         fn from(label: &'a Label) -> Self {
             Self {
-                remote_id: label.remote_id.clone().map(RemoteId::from).unwrap(),
+                remote_id: label.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Label,
                 row_id: None,
             }
@@ -368,7 +368,7 @@ mod test_utils {
     impl<'a> From<&'a Message> for RollbackItem {
         fn from(message: &'a Message) -> Self {
             Self {
-                remote_id: message.remote_id.clone().unwrap().into(),
+                remote_id: message.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Message,
                 row_id: None,
             }
@@ -384,7 +384,7 @@ mod test_utils {
     impl<'a> From<&'a Conversation> for RollbackItem {
         fn from(conversation: &'a Conversation) -> Self {
             Self {
-                remote_id: conversation.remote_id.clone().unwrap(),
+                remote_id: conversation.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Conversation,
                 row_id: None,
             }

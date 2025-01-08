@@ -1,7 +1,6 @@
 //! Message body related state and test data
 use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -9,7 +8,7 @@ use proton_api_core::services::proton::response_data::{
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
@@ -182,7 +181,7 @@ pub fn message_body_test_message_simple() -> ApiMessage {
     ApiMessage {
         metadata: ApiMessageMetadata {
             id: MessageId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
-            conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
+            conversation_id: ConversationId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
             order: 0,
             address_id: AddressId::from(TEST_USER_ADDRESS_ID),
             label_ids: vec![LabelId::inbox()],
@@ -220,7 +219,7 @@ pub fn message_body_test_message_mime() -> ApiMessage {
     ApiMessage {
         metadata: ApiMessageMetadata {
             id: MessageId::from("sUrSuXEN_wQ9dPeKcwquBnOJXqr4Lsb9Y1iAo2AXi0Wj-z2T5pAf2iANsmvXJBZr-mLTXeGnkEb_S56SfEUHOQ==".to_owned()),
-            conversation_id: ApiRemoteId::from("sEaYBselvkhNF_KB4QK-aVYUrZYJnGJovDdSxQMQ8NUwsJUgHLtLwtQdeKBVEYZ33obagXEj36yDTTejiXhKGg==".to_owned()),
+            conversation_id: ConversationId::from("sEaYBselvkhNF_KB4QK-aVYUrZYJnGJovDdSxQMQ8NUwsJUgHLtLwtQdeKBVEYZ33obagXEj36yDTTejiXhKGg==".to_owned()),
             address_id: AddressId::from(TEST_USER_ADDRESS_ID),
             attachments_metadata: vec![],
             bcc_list: vec![],

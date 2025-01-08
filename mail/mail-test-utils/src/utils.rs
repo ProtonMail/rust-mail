@@ -1,14 +1,13 @@
 use crate::search::MY_ADDRESS_ID;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
-use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
-    ConversationCount, LocalMessageId, MessageCount, MessageRecipient, MessageRecipients,
-    MessageSender, MessageSenders,
+    ConversationCount, LocalConversationId, LocalMessageId, MessageCount, MessageRecipient,
+    MessageRecipients, MessageSender, MessageSenders,
 };
 use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use rand::{distributions::Uniform, Rng};
@@ -26,7 +25,7 @@ pub struct TestDBState {
 #[derive(Default, Debug)]
 pub struct TestDBStateMap {
     pub labels: HashMap<LabelId, LocalLabelId>,
-    pub conversations: HashMap<RemoteId, LocalId>,
+    pub conversations: HashMap<ConversationId, LocalConversationId>,
     pub messages: HashMap<MessageId, LocalMessageId>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
     pub message_counts: HashMap<LabelId, MessageCount>,
@@ -100,7 +99,10 @@ pub async fn prepare_and_patch_db_state_and_skip(
     tx.commit().await.expect("failed to commit transaction");
     // update conversation labels with message data
     #[allow(clippy::items_after_statements)]
-    fn find_conversation<'a>(list: &'a mut [Conversation], id: &RemoteId) -> &'a mut Conversation {
+    fn find_conversation<'a>(
+        list: &'a mut [Conversation],
+        id: &ConversationId,
+    ) -> &'a mut Conversation {
         list.iter_mut()
             .find(|c| c.remote_id == Some(id.clone()))
             .expect("Failed to find conversation")
@@ -150,7 +152,8 @@ pub async fn prepare_and_patch_db_state_and_skip(
         m1.remote_conversation_id
             .clone()
             .unwrap()
-            .cmp(&m2.remote_conversation_id.clone().unwrap())
+            .as_str()
+            .cmp(m2.remote_conversation_id.clone().unwrap().as_str())
     });
 
     for message in &env.messages {
@@ -270,7 +273,7 @@ pub fn find_conversation_label(conv: &Conversation, id: &LabelId) -> Conversatio
 #[must_use]
 pub fn message_counts_for_conversation(
     messages: &[Message],
-    conversation_id: &RemoteId,
+    conversation_id: &ConversationId,
     label_id: &LabelId,
 ) -> (u64, u64) {
     let mut unread = 0_u64;
