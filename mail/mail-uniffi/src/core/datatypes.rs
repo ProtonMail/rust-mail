@@ -675,6 +675,41 @@ impl From<RealAddressSignedKeyList> for AddressSignedKeyList {
     }
 }
 
+/// An environment identifier.
+///
+/// This enum represents the different environments that can be used by the
+/// API client. The environments are used to determine the base URL for the
+/// API requests and the TLS pins to use.
+#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
+pub enum ApiEnvId {
+    /// The production API environment.
+    ///
+    /// This environment represents the production Proton API, used by default.
+    /// Clients configured with this environment will connect to `https://<app>.proton.me/`,
+    /// with the exact domain depending on the app version.
+    Prod,
+
+    /// The standard atlas environment.
+    ///
+    /// Clients configured with this environment will connect to `https://proton.black/api`.
+    Atlas,
+
+    /// A named atlas environment.
+    ///
+    /// Clients configured with this environment will connect to `https://<name>.proton.black/api`.
+    Scientist(String),
+}
+
+impl From<ApiEnvId> for EnvId {
+    fn from(env_id: ApiEnvId) -> Self {
+        match env_id {
+            ApiEnvId::Prod => Self::Prod,
+            ApiEnvId::Atlas => Self::Atlas(None),
+            ApiEnvId::Scientist(name) => Self::Atlas(Some(name)),
+        }
+    }
+}
+
 /// The configuration for the Proton API service.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ApiConfig {
@@ -683,6 +718,9 @@ pub struct ApiConfig {
 
     /// TODO: Document this field.
     pub user_agent: String,
+
+    /// Env to connect to.
+    pub env_id: ApiEnvId,
 }
 
 impl Default for ApiConfig {
@@ -690,6 +728,7 @@ impl Default for ApiConfig {
         Self {
             app_version: String::from("Other"),
             user_agent: String::from("NoClient/0.1.0"),
+            env_id: ApiEnvId::Prod,
         }
     }
 }
@@ -699,16 +738,7 @@ impl From<ApiConfig> for RealApiConfig {
         Self {
             app_version: config.app_version,
             user_agent: Some(config.user_agent),
-            env_id: EnvId::Prod,
-        }
-    }
-}
-
-impl From<RealApiConfig> for ApiConfig {
-    fn from(config: RealApiConfig) -> Self {
-        Self {
-            app_version: config.app_version,
-            user_agent: config.user_agent.unwrap_or(ApiConfig::default().user_agent),
+            env_id: config.env_id.into(),
         }
     }
 }
