@@ -14,7 +14,6 @@ use crate::widgets::{
     ScrollableTableState,
 };
 use anyhow::{anyhow, Context};
-use core::panic;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
@@ -206,7 +205,7 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
-                if env::var("_PROTON_XDG_OPEN").is_ok() {
+                if env::var("PROTON_OPEN_MESSAGES").is_ok() {
                     #[allow(clippy::zombie_processes)]
                     if cfg!(unix) {
                         fs::write("tmp.html", &html.body).unwrap();
