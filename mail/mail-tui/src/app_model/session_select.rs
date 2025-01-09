@@ -2,7 +2,7 @@ use crate::app::Command;
 use crate::app_model::{login, mailbox, AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
 use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::{MailContext, MailContextError};
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -11,6 +11,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, List, ListItem};
 use ratatui::Frame;
 use std::sync::Arc;
+use tracing::{debug, error};
 
 pub enum Message {
     Submit,
@@ -61,6 +62,7 @@ impl AppStateHandler for Model {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::SessionSelect(message) = message else {
             return Command::None;
@@ -94,7 +96,7 @@ impl AppStateHandler for Model {
                     .on_accept(Command::task(async move {
                         if let Err(e) = ctx.delete_account(remote_id).await {
                             let e = anyhow!("Failed to delete session: {e}");
-                            tracing::error!("{e}");
+                            error!("{e}");
                             return Command::message(Messages::DisplayError(None, e));
                         }
 
@@ -119,29 +121,46 @@ impl AppStateHandler for Model {
 
                 let ctx = Arc::clone(ctx);
                 Command::task(async move {
-                    match ctx.get_account_sessions(account.remote_id.clone()).await {
-                        Ok(sessions) => {
-                            if sessions.is_empty() {
+                    let tri = async move {
+                        let sessions = ctx.get_account_sessions(account.remote_id.clone()).await?;
+                        let c = match sessions.first() {
+                            None => {
+                                debug!(
+                                    "No sessions found for {}. Logging in...",
+                                    account.remote_id
+                                );
                                 Command::message(Messages::SwitchAppState(
                                     login::Model::with_email(account.name_or_addr.clone()).into(),
                                 ))
-                            } else {
-                                match ctx.user_context_from_session(&sessions[0]).await {
-                                    Ok(context) => {
-                                        Command::message(match mailbox::Model::new(context).await {
-                                            Ok(model) => Messages::SwitchAppState(model.into()),
-                                            Err(e) => e.into(),
-                                        })
-                                    }
-                                    Err(e) => {
-                                        let e = anyhow!("Failed to load session: {e}");
-                                        tracing::error!("{e}");
-                                        Command::message(Messages::DisplayError(None, e))
-                                    }
-                                }
                             }
+                            Some(sess) => {
+                                let context = ctx
+                                    .user_context_from_session(sess)
+                                    .await
+                                    .context("Error creating MailUserContext")?;
+                                let message = mailbox::Model::new(context).await?;
+
+                                let tok = &sess.account_id;
+                                debug!(
+                                    "{} sessions found for {}: {}",
+                                    sessions.len(),
+                                    account.remote_id,
+                                    tok
+                                );
+                                let message = Messages::SwitchAppState(message.into());
+                                Command::message(message)
+                            }
+                        };
+                        Ok::<_, anyhow::Error>(c)
+                    }
+                    .await;
+
+                    match tri {
+                        Ok(c) => c,
+                        Err(e) => {
+                            error!("{e}");
+                            Command::message(Messages::DisplayError(None, e))
                         }
-                        Err(e) => Command::message(e.into()),
                     }
                 })
             }

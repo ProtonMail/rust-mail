@@ -31,6 +31,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
+use std::{env, fs};
 use throbber_widgets_tui::ThrobberState;
 
 use super::LabelAs;
@@ -204,6 +205,18 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
+                if env::var("PROTON_OPEN_MESSAGES").is_ok() {
+                    if cfg!(unix) {
+                        fs::write("tmp.html", &html.body).unwrap();
+                        _ = std::process::Command::new("open")
+                            .args(["tmp.html"])
+                            .spawn()
+                            .unwrap();
+                    } else {
+                        panic!("PROTON_OPEN_MESSAGES is not implemented for your platform");
+                    }
+                }
+
                 let html = html_to_text(&html.body)?;
                 Ok(Box::new(DecryptedMessage::new(
                     metadata,
