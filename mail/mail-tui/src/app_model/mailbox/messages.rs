@@ -206,7 +206,6 @@ impl MessagesState {
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
                 if env::var("PROTON_OPEN_MESSAGES").is_ok() {
-                    #[allow(clippy::zombie_processes)]
                     if cfg!(unix) {
                         fs::write("tmp.html", &html.body).unwrap();
                         _ = std::process::Command::new("open")
@@ -214,7 +213,7 @@ impl MessagesState {
                             .spawn()
                             .unwrap();
                     } else {
-                        panic!("_PROTON_XDG_OPEN is not implemented for your platform");
+                        panic!("PROTON_OPEN_MESSAGES is not implemented for your platform");
                     }
                 }
 
