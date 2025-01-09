@@ -117,6 +117,7 @@
 //! [`Factory`]: action::Factory
 pub mod action;
 pub mod db;
+pub mod observers;
 pub mod queue;
 
 #[cfg(test)]

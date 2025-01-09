@@ -208,13 +208,23 @@ impl StoredAction {
 
     /// Delete action with `id` from the database.
     ///
+    /// Returns the type of the deleted action if it still exists.
+    ///
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(bond: &Bond<'_>, id: Id) -> Result<(), StashError> {
-        bond.execute("DELETE FROM action_queue WHERE id = ?", params![id])
-            .await?;
-        Ok(())
+    pub async fn delete(bond: &Bond<'_>, id: Id) -> Result<Option<String>, StashError> {
+        match bond
+            .query_value::<_, String>(
+                "DELETE FROM action_queue WHERE id = ? RETURNING action_type AS value",
+                params![id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// Get all the actions which depend on the action with `id`.
