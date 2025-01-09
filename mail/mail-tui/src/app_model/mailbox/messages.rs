@@ -14,6 +14,7 @@ use crate::widgets::{
     ScrollableTableState,
 };
 use anyhow::{anyhow, Context};
+use core::panic;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
@@ -31,6 +32,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
+use std::{env, fs};
 use throbber_widgets_tui::ThrobberState;
 
 use super::LabelAs;
@@ -204,6 +206,19 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
+                if env::var("_PROTON_XDG_OPEN").is_ok() {
+                    #[allow(clippy::zombie_processes)]
+                    if cfg!(unix) {
+                        fs::write("tmp.html", &html.body).unwrap();
+                        _ = std::process::Command::new("open")
+                            .args(["tmp.html"])
+                            .spawn()
+                            .unwrap();
+                    } else {
+                        panic!("_PROTON_XDG_OPEN is not implemented for your platform");
+                    }
+                }
+
                 let html = html_to_text(&html.body)?;
                 Ok(Box::new(DecryptedMessage::new(
                     metadata,
