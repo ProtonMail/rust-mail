@@ -171,7 +171,7 @@ impl QueuedError {
 pub type QueuedResult<T> = std::result::Result<T, QueuedError>;
 
 /// Metadata associated with a queued [`Action`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QueuedMetadata {
     /// Identifier of the stored action.
     pub id: Id,
@@ -733,14 +733,14 @@ pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
         shared: &'a Shared,
         tx: &'a Bond,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
@@ -758,7 +758,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
@@ -772,9 +772,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 &mut self.action,
             )
             .await
-            .map_err(|e| {
-                QueuedError::Action(Arc::new(anyhow::Error::new(e)), Arc::new(metadata))
-            })?;
+            .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
             Ok(())
         })
     }
@@ -783,7 +781,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         &'a mut self,
         shared: &'a Shared,
         tx: &'a Bond,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
@@ -808,9 +806,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                     error!("Failed to delete action: {e}");
                     e
                 })
-                .map_err(|e| {
-                    QueuedError::Action(Arc::new(anyhow::Error::new(e)), Arc::new(metadata))
-                })?;
+                .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
             Ok(())
         })
     }
@@ -1153,9 +1149,9 @@ async fn cancel_action_with_dependees(
 
         let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-        decoded.cancel(shared, bond, metadata.clone()).await?;
+        decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
 
-        cancelled_actions.push(Arc::new(metadata));
+        cancelled_actions.push(metadata);
     } else {
         debug!("Reverting {} dependent actions", sorter.len());
         // Cancel all actions in reversed order
@@ -1166,9 +1162,9 @@ async fn cancel_action_with_dependees(
 
             let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-            decoded.cancel(shared, bond, metadata.clone()).await?;
+            decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
 
-            cancelled_actions.push(Arc::new(metadata));
+            cancelled_actions.push(metadata);
         }
     }
     Ok(cancelled_actions)
@@ -1178,7 +1174,7 @@ async fn cancel_action_with_dependees(
 fn decode_action(
     factory: &RwLock<Factory>,
     stored_action: StoredAction,
-) -> QueuedResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+) -> QueuedResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
     factory.read().decode(stored_action).map_err(|e| {
         error!("Failed to decode action: {e}");
