@@ -130,6 +130,8 @@ impl CachedConverstationScrollData {
     ///
     /// This will load the next page of items from the database and update the cursor.
     /// If there are no more items to load, an empty vector is returned.
+    /// In case the cursor is at the one before the last page.
+    /// It will load two pages instead of one if the last page is not complete.
     ///
     pub async fn fetch_more(
         &mut self,
@@ -183,8 +185,49 @@ impl CachedConverstationScrollData {
 
         Ok(cursor_count < all)
     }
+
+    /// Check if there are more than a page worth of items to fetch for in memory cursor.
+    ///
+    pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
+        let all = self.data.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if all > cursor_count {
+            Ok(all - cursor_count > self.page_size as u64)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Update the cache with the latest data from the database.
+    ///
+    pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
+        self.data = ConversationScrollData::find_with_key(self.local_label_id, self.unread, tether)
+            .await?
+            .ok_or_else(|| {
+                StashError::Custom(format!(
+                    "ConversationScrollData not found for label_id: {}, unread: {:?}",
+                    self.local_label_id, self.unread
+                ))
+            })?;
+
+        Ok(())
+    }
+
+    /// Get the data from the cache.
+    ///
+    pub fn data(&self) -> &ConversationScrollData {
+        &self.data
+    }
 }
 
+/// Important note: CachedConverstationScrollData is a wrapper around two instances of ConversationScrollData
+/// One of them being in memory `cursor` and the other one being the actual `data`.
+/// This is done to avoid unnecessary database queries and to keep memory usage low.
+/// The `cursor` is used to keep track of the last loaded items and to load more items when needed.
+/// It should NEVER be stored in the database. With `Deref` implementation we guarantee that
+/// the cursor cannot be access in mutation context which disallows storing it in the database
+/// as save method requires mutable reference to the model.
 impl Deref for CachedConverstationScrollData {
     type Target = ConversationScrollData;
 

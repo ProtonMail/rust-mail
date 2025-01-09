@@ -152,26 +152,30 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let tether = user_ctx.user_stash().connection();
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
-
-    ctx.mock_get_conversations(conversations, 1_u64).await;
-    ctx.setup_user(params.clone()).await;
     let user_ctx = ctx.mail_user_context().await;
 
+    // Scroller will ask for two pages, in reality second one should be empty
+    // But lets make it trickier and return the same page for the second request
+    ctx.mock_get_conversations(conversations, 2_u64).await;
+    ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
+    ctx.catch_all().await;
+
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
 
     let page_size = 5;
     let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
     let mut scroller = MailScroller::new(user_ctx, source).await.unwrap();
-    // Wait till the request is through
-    scroller.fetch_more().await.unwrap();
 
     let mut actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 1);
     let actual = actual.pop().unwrap();
     assert_eq!(actual.remote_id, conv_id!("myconv"));
     assert!(!scroller.has_more().await.unwrap());
+
+    let next_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(next_page.len(), 0);
 }
 
 #[tokio::test]
@@ -182,7 +186,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 3).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -198,11 +202,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // Online
     let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
     let mut scroller = MailScroller::new(user_ctx.clone(), source).await.unwrap();
-    // Wait till the request is through
-    scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
+
     let actual_rids = actual
         .iter()
         .map(|conv| conv.remote_id.clone())
@@ -219,7 +222,8 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     );
     assert!(scroller.has_more().await.unwrap());
 
-    // Get next page
+    // Get next page - it will progress cursor to the next page
+    // But there is no more data available, the request will return an empty page
     let actual_page = scroller.fetch_more().await.unwrap();
     assert_eq!(actual_page.len(), 5);
     let actual = scroller.all_items().await.unwrap();
@@ -245,7 +249,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     );
     assert!(!scroller.has_more().await.unwrap());
 
-    // Cached - it should not trigger any more requests
+    // Cached - it will trigger one more background requests for pages as we fetch more
+    // This is because cursor have only two pages in cache, which means we will try to get new page while progressing
+    // to the second page.
+
     let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
     let mut scroller = MailScroller::new(user_ctx, source).await.unwrap();
 
@@ -300,7 +307,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 1).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -321,10 +328,9 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
         receiver,
         ..
     } = scroller.watch().unwrap();
-    // I need to `fetch more` to get the first notification
-    scroller.fetch_more().await.unwrap();
-    // Wait for notification to arrive
-    receiver.recv_async().await.unwrap();
+    // At this point we have a scroller with one page loaded and one which may be yet loading.
+    // There is a case in which there might be a race and notification will be sent before the second page is loaded.
+    // This does not hurt anyone but we cannot be sure that we will receive the notification here.
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -346,7 +352,8 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     // Get next page
     let actual_page = scroller.fetch_more().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    receiver.recv_async().await.unwrap();
+
+    // Fetching for next, empty page will not trigger any notification
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 10);
@@ -375,7 +382,14 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     let bond = tether.transaction().await.unwrap();
     save_single_conversation(&label, &mut test_conversation.clone(), &bond).await;
     bond.commit().await.unwrap();
-    receiver.recv_async().await.unwrap();
+    // Getting an update will trigger a notification
+    if receiver.is_empty() {
+        receiver.recv_async().await.unwrap();
+    } else {
+        // We managed to get a notification for the second page request
+        receiver.recv_async().await.unwrap();
+        receiver.recv_async().await.unwrap();
+    }
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 11);
     let actual_rids = actual
@@ -400,7 +414,11 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     );
 }
 
-async fn setup_api_conversation_pages(ctx: &MailTestContext, page_size: usize) -> TestParams {
+async fn setup_api_conversation_pages(
+    ctx: &MailTestContext,
+    page_size: usize,
+    empty_pages_requests: u64,
+) -> TestParams {
     let mut params = TestParams::default_basic();
     let test_conversation = params.conversations.clone().pop().unwrap();
     // Conversations are returned and displayed in reversed order
@@ -423,8 +441,11 @@ async fn setup_api_conversation_pages(ctx: &MailTestContext, page_size: usize) -
         })
         .collect_vec();
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
+    let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_conversations_second_page(ctx, second_page, &first_page_last_id, 1_u64).await;
+    mock_get_conversations_page(ctx, second_page, &first_page_last_id, 1_u64).await;
+    // last page is empty
+    mock_get_conversations_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
     ctx.mock_get_conversations(first_page, 1_u64).await;
 
     // Do not download any conv on init
@@ -432,7 +453,7 @@ async fn setup_api_conversation_pages(ctx: &MailTestContext, page_size: usize) -
     params
 }
 
-pub async fn mock_get_conversations_second_page(
+pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
     conversations: Vec<ApiConversation>,
     last_id: &str,

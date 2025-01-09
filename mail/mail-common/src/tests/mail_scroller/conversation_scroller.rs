@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::Conversation;
 use crate::models::{CachedConverstationScrollData, ConversationScrollData, Label};
-use maplit::hashmap;
+use maplit::btreemap;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -36,7 +36,7 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
     conversation.reload(bond).await.unwrap();
 }
 
-async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &mut Tether) {
+async fn save_to_database(data: &mut BTreeMap<&str, Vec<Conversation>>, tether: &mut Tether) {
     let bond = tether.transaction().await.unwrap();
     for (label_rid, conversations) in data.iter_mut() {
         let mut label = label!(remote_id: lbl_id!(label_rid));
@@ -51,7 +51,7 @@ async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &
 fn expected_conversations(
     n: usize,
     label_id: &str,
-    data: &HashMap<&str, Vec<Conversation>>,
+    data: &BTreeMap<&str, Vec<Conversation>>,
 ) -> Option<Vec<ContextualConversation>> {
     let convs = data.get(label_id)?;
     // Conversations are read in DESC order
@@ -80,7 +80,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
         REMOTE_LABEL_ID => test_conversations(100, 100),
         "rid2" => test_conversations(50, 0),
     };
@@ -190,7 +190,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
         REMOTE_LABEL_ID => test_conversations(100, 100),
         "rid2" => test_conversations(50, 0),
     };
@@ -429,7 +429,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
         REMOTE_LABEL_ID => test_conversations(5, 100),
         "rid2" => test_conversations(50, 0),
     };
