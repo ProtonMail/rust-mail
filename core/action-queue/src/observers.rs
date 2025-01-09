@@ -48,7 +48,7 @@ impl<T: Action> ActionFailureObserver<T> {
                         return Ok(ActionFailureReason::Cancelled(meta));
                     }
                     BroadcastMessage::Deleted(id, action_type)
-                        if action_type == T::TYPE.as_ref() =>
+                        if action_type.as_ref() == T::TYPE.as_ref() =>
                     {
                         return Ok(ActionFailureReason::Deleted(id));
                     }

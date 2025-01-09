@@ -226,7 +226,7 @@ pub enum BroadcastMessage {
     /// This action was cancelled.
     Cancelled(Arc<QueuedMetadata>),
     /// This action was deleted.
-    Deleted(Id, String),
+    Deleted(Id, Arc<String>),
 }
 
 /// Provides a priority based queue for queuing and/or executing [`Action`].
@@ -995,11 +995,10 @@ impl BackgroundWorker {
         tx.commit().await?;
         if let Some(existing_action_type) = existing_action_type {
             // Send only fails if there are no receivers, which is a valid state.
-            drop(
-                self.shared
-                    .broadcast_sender
-                    .send(BroadcastMessage::Deleted(action_id, existing_action_type)),
-            );
+            drop(self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
+                action_id,
+                Arc::new(existing_action_type),
+            )));
         }
         Ok(())
     }
