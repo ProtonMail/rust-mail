@@ -957,19 +957,18 @@ impl BackgroundWorker {
             .inspect_err(|e| {
                 if let QueuedError::Action(err, metadata) = e {
                     // Send only fails if there are no receivers, which is a valid state.
-                    drop(self.shared.broadcast_sender.send(BroadcastMessage::Error(
+                    let _ = self.shared.broadcast_sender.send(BroadcastMessage::Error(
                         Arc::clone(err),
                         Arc::clone(metadata),
-                    )));
+                    ));
                 }
             })?;
 
         // Send only fails if there are no receivers, which is a valid state.
-        drop(
-            self.shared
-                .broadcast_sender
-                .send(BroadcastMessage::Success(action_id)),
-        );
+        let _ = self
+            .shared
+            .broadcast_sender
+            .send(BroadcastMessage::Success(action_id));
 
         Ok(Some(action_id))
     }
@@ -995,10 +994,10 @@ impl BackgroundWorker {
         tx.commit().await?;
         if let Some(existing_action_type) = existing_action_type {
             // Send only fails if there are no receivers, which is a valid state.
-            drop(self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
+            let _ = self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
                 action_id,
                 Arc::new(existing_action_type),
-            )));
+            ));
         }
         Ok(())
     }
@@ -1012,11 +1011,10 @@ impl BackgroundWorker {
         tx.commit().await?;
         for cancelled_action in &cancelled_actions {
             // Send only fails if there are no receivers, which is a valid state.
-            drop(
-                self.shared
-                    .broadcast_sender
-                    .send(BroadcastMessage::Cancelled(Arc::clone(cancelled_action))),
-            );
+            let _ = self
+                .shared
+                .broadcast_sender
+                .send(BroadcastMessage::Cancelled(Arc::clone(cancelled_action)));
         }
         Ok(cancelled_actions)
     }
@@ -1107,11 +1105,9 @@ async fn execute_action_remote<T: Action>(
         meta.id != id
     }) {
         // Send only fails if there are no receivers, which is a valid state.
-        drop(
-            shared
-                .broadcast_sender
-                .send(BroadcastMessage::Cancelled(cancelled_action)),
-        );
+        let _ = shared
+            .broadcast_sender
+            .send(BroadcastMessage::Cancelled(cancelled_action));
     }
     result
 }
