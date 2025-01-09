@@ -1601,14 +1601,22 @@ async fn test_conversation_delete_all_mail() {
         .expect("failed to mark conv as deleted");
     tx.commit().await.expect("failed to commit");
 
+    let all_counters = MessageCounters::all(&tether).await.expect("no error");
+    tracing::error!("ALL COUNTERS {all_counters:?}");
+
     for count in Label::all(&tether).await.unwrap() {
+        tracing::error!("Count {count:?}");
+        let msg_counters = MessageCounters::load_by_local_label_id_opt(count.local_id, &tether)
+            .await
+            .expect("no error")
+            .expect("counter assigned to the label");
         assert_eq!(
-            count.total_msg, 0,
+            msg_counters.total, 0,
             "Label {:?} does not have 0 total count",
             count.local_id
         );
         assert_eq!(
-            count.unread_msg, 0,
+            msg_counters.unread, 0,
             "Label {:?} does not have 0 unread count",
             count.local_id
         );

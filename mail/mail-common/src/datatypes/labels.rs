@@ -1,5 +1,5 @@
 use crate::datatypes::{LabelColor, ViewMode};
-use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{Label, MailSettings, MessageCounters, MAIL_SETTINGS_ID};
 use crate::AppError;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -20,7 +20,12 @@ pub mod system_labels;
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
     match label.view_mode(tether).await? {
         ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
-        ViewMode::Messages => Ok((label.unread_msg, label.total_msg)),
+        ViewMode::Messages => {
+            let counters =
+                MessageCounters::load_by_local_label_id_opt(label.local_id, tether).await?;
+            let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
+            Ok((unread, total))
+        }
     }
 }
 

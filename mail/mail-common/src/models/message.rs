@@ -2024,24 +2024,24 @@ impl Message {
 
         // Messages Counters
         for id_pair in &updated {
-            let labels = Label::find(
+            let counters = MessageCounters::find(
                 indoc! {"
-                        WHERE local_id IN (
-                            SELECT local_label_id FROM message_labels
-                            WHERE local_message_id=?
-                         )"},
+                    WHERE local_label_id IN (
+                        SELECT local_label_id FROM message_labels
+                        WHERE local_message_id=?
+                    )"},
                 params![id_pair.local_message_id],
                 bond,
             )
             .await?;
-            for mut label in labels {
+            for mut counter in counters {
                 if mark_read {
-                    label.unread_msg -= 1;
+                    counter.unread -= 1;
                 } else {
-                    label.unread_msg += 1;
+                    counter.unread += 1;
                 }
 
-                label.save(bond).await?
+                counter.save(bond).await?
             }
         }
 
@@ -2364,10 +2364,15 @@ impl Message {
             }
 
             // update message counters
-            label.unread_msg -= unread_count;
-            label.total_msg -= updated_count;
+            let mut msg_counters = MessageCounters::load_by_local_label_id(local_label_id, bond)
+                .await?
+                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+
+            msg_counters.unread -= unread_count;
+            msg_counters.total -= updated_count;
 
             label.save(bond).await?;
+            msg_counters.save(bond).await?;
         }
 
         Ok(())
@@ -2535,10 +2540,12 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
-                label.total_msg -= stats.count;
-                label.unread_msg -= stats.unread_count;
-                label.save(bond).await?;
+            if let Some(mut counters) =
+                MessageCounters::load_by_local_label_id(*label_id, bond).await?
+            {
+                counters.total -= stats.count;
+                counters.unread -= stats.unread_count;
+                counters.save(bond).await?;
             }
         }
 
@@ -2552,10 +2559,12 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
-                label.total_msg += stats.count;
-                label.unread_msg += stats.unread_count;
-                label.save(bond).await?;
+            if let Some(mut counters) =
+                MessageCounters::load_by_local_label_id(*label_id, bond).await?
+            {
+                counters.total += stats.count;
+                counters.unread += stats.unread_count;
+                counters.save(bond).await?;
             }
         }
 
@@ -2773,11 +2782,11 @@ impl DataSource for MessageDataSource {
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, tether))]
     async fn total(&self, tether: &Tether) -> Result<usize, Self::Error> {
-        let label = Label::find_by_id(self.local_label_id, tether)
+        let counters = MessageCounters::load_by_local_label_id(self.local_label_id, tether)
             .await?
             .ok_or(AppError::LabelNotFound(self.local_label_id))?;
-        debug!("Total messages: {}", label.total_msg);
-        Ok(label.total_msg.try_into().unwrap_or(0))
+        debug!("Total messages: {}", counters.total);
+        Ok(counters.total.try_into().unwrap_or(0))
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, tether))]
@@ -3204,5 +3213,132 @@ impl MessageLabelStats {
         }
 
         Ok(label_stats)
+    }
+}
+
+/// Message counters that are related to particular label
+/// Allow the user to see how many message there are assigned to the label,
+/// both unread count and total count.
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("message_counters")]
+pub struct MessageCounters {
+    /// Local id of the counters
+    #[IdField(autoincrement)]
+    pub local_id: Option<u64>,
+
+    /// Local id of the label
+    #[DbField]
+    pub local_label_id: LocalLabelId,
+
+    /// Number of total messages related to one particular label
+    #[DbField]
+    pub total: u64,
+
+    /// Number of unread messages related to one particular label
+    #[DbField]
+    pub unread: u64,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+}
+
+impl MessageCounters {
+    /// Constructor - note: [`MessageCounters`] does not implement [`Default`] trait
+    ///
+    /// # Parameters
+    /// * `local_label_id` - local id of the label
+    pub fn new(local_label_id: LocalLabelId) -> Self {
+        Self {
+            local_id: Default::default(),
+            local_label_id,
+            total: Default::default(),
+            unread: Default::default(),
+            row_id: Default::default(),
+        }
+    }
+
+    /// This method creates a new entry in the database but only if it doesn't exist in it yet.
+    /// Basically it just tries to load the row, and if empty, performs an insert.
+    ///
+    /// # Parameters
+    /// * `local_label_id` - local id of the label
+    /// * `tx` - transaction used to modify DB
+    pub async fn create_if_not_exists(
+        local_label_id: LocalLabelId,
+        tx: &Bond<'_>,
+    ) -> Result<Self, StashError> {
+        let mut counter = Self::load_by_local_label_id(local_label_id, tx)
+            .await?
+            .unwrap_or_else(|| Self::new(local_label_id));
+
+        counter.save(tx).await?;
+
+        Ok(counter)
+    }
+
+    /// Get all message counters linked to labels with given kind
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - The kind of the label, eg. System, Folder etc.
+    /// * `tether` - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find(
+            "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
+            params![kind],
+            tether
+        ).await
+    }
+
+    /// Loads counters assigned to the label
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub async fn load_by_local_label_id(
+        id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first("WHERE local_label_id = ?", params![id], tether).await
+    }
+
+    /// Loads counters assigned to the label (if the Local label ID is present)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub async fn load_by_local_label_id_opt(
+        id: Option<LocalLabelId>,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let Some(id) = id else {
+            return Ok(None);
+        };
+        Self::load_by_local_label_id(id, tether).await
+    }
+
+    /// Returns counters, first unread then total
+    pub fn counters(&self) -> (u64, u64) {
+        (self.unread, self.total)
+    }
+
+    /// Returns [`MessageCounts`] datastructure that contains label's Remote ID
+    /// instead of the Local ID.
+    pub async fn message_count(&self, tether: &Tether) -> Result<MessageCount, AppError> {
+        let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
+
+        Ok(MessageCount {
+            label_id: remote_id,
+            total: self.total,
+            unread: self.unread,
+        })
     }
 }

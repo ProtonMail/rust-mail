@@ -2,7 +2,7 @@ use crate::actions::{filter_responses, ActionError, LabelAsData};
 use crate::datatypes::{
     ExclusiveLocation, LabelType, LocalMessageId, RollbackItemType, SystemLabelId,
 };
-use crate::models::{Label, Message};
+use crate::models::{Label, Message, MessageCounters};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
@@ -262,8 +262,10 @@ impl ActionHandler for Handler {
             }
         }
 
-        if let Some(source_label) = Label::load(action.data.source_label_id, &tether).await? {
-            Ok(source_label.total_msg == 0)
+        if let Some(source_label_counters) =
+            MessageCounters::load_by_local_label_id(action.data.source_label_id, &tether).await?
+        {
+            Ok(source_label_counters.total == 0)
         } else {
             warn!(
                 "Could not find label with id: {}",

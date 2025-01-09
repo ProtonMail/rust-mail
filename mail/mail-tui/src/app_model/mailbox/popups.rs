@@ -5,13 +5,15 @@ use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::actions::LabelAsAction;
 use proton_mail_common::datatypes::{LabelType, ViewMode};
-use proton_mail_common::models::{Conversation, Label};
+use proton_mail_common::models::{Conversation, Label, MessageCounters};
 use proton_mail_common::{MailContextResult, MailUserContext};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
 use ratatui::{symbols, Frame};
+use stash::stash::{StashError, Tether};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::LabelAs;
@@ -220,10 +222,15 @@ impl crate::app_model::Popup for LabelItemPopup {
     }
 }
 
+struct LabelWithMessageCounters {
+    label: Label,
+    msg_counters: MessageCounters,
+}
+
 pub struct LabelSelectPopup {
-    system: Vec<Label>,
-    folders: Vec<Label>,
-    labels: Vec<Label>,
+    system: Vec<LabelWithMessageCounters>,
+    folders: Vec<LabelWithMessageCounters>,
+    labels: Vec<LabelWithMessageCounters>,
     system_list_state: ScrollableListState,
     folder_list_state: ScrollableListState,
     labels_list_state: ScrollableListState,
@@ -238,21 +245,21 @@ impl LabelSelectPopup {
         view_mode: ViewMode,
     ) -> MailContextResult<Self> {
         let tether = ctx.user_stash().connection();
-        let system = Label::find_by_kind(LabelType::System, &tether).await?;
-        let folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
-        let labels = Label::find_by_kind(LabelType::Label, &tether).await?;
+        let system = Self::labels_with_msg_counters(LabelType::System, &tether).await?;
+        let folders = Self::labels_with_msg_counters(LabelType::Folder, &tether).await?;
+        let labels = Self::labels_with_msg_counters(LabelType::Label, &tether).await?;
 
         let system_index = system
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label.local_id.unwrap())
             .unwrap_or_default();
         let folder_index = folders
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label.local_id.unwrap())
             .unwrap_or_default();
         let labels_index = labels
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label.local_id.unwrap())
             .unwrap_or_default();
 
         Ok(Self {
@@ -267,6 +274,32 @@ impl LabelSelectPopup {
         })
     }
 
+    async fn labels_with_msg_counters(
+        kind: LabelType,
+        tether: &Tether,
+    ) -> Result<Vec<LabelWithMessageCounters>, StashError> {
+        let labels = Label::find_by_kind(kind, tether).await?;
+        let mut label_counters = MessageCounters::find_by_kind(kind, tether)
+            .await?
+            .into_iter()
+            .map(|c| (c.local_label_id, c))
+            .collect::<BTreeMap<_, _>>();
+        let labels_with_message_counts = labels
+            .into_iter()
+            .map(|label| {
+                let msg_counts = label_counters
+                    .remove(label.local_id.as_ref().unwrap())
+                    .unwrap();
+                LabelWithMessageCounters {
+                    label,
+                    msg_counters: msg_counts,
+                }
+            })
+            .collect();
+
+        Ok(labels_with_message_counts)
+    }
+
     fn selected_tab_index(&self) -> usize {
         match self.active_label {
             LabelType::Label => 2,
@@ -275,7 +308,7 @@ impl LabelSelectPopup {
         }
     }
 
-    fn selected_label_list(&mut self) -> (&[Label], &mut ScrollableListState) {
+    fn selected_label_list(&mut self) -> (&[LabelWithMessageCounters], &mut ScrollableListState) {
         match self.active_label {
             LabelType::Label => (&self.labels, &mut self.labels_list_state),
             LabelType::Folder => (&self.folders, &mut self.folder_list_state),
@@ -340,7 +373,7 @@ impl crate::app_model::Popup for LabelSelectPopup {
                     return Command::None;
                 };
 
-                Command::message(Message::SelectLabel(label.local_id.unwrap()).into())
+                Command::message(Message::SelectLabel(label.label.local_id.unwrap()).into())
             }
 
             _ => Command::None,
@@ -365,11 +398,15 @@ impl crate::app_model::Popup for LabelSelectPopup {
             .iter()
             .map(|label| {
                 let (unread_count, total_count) = if view_mode == ViewMode::Conversations {
-                    (label.unread_conv, label.total_conv)
+                    (label.label.unread_conv, label.label.total_conv)
                 } else {
-                    (label.unread_msg, label.total_msg)
+                    (label.msg_counters.unread, label.msg_counters.total)
                 };
-                let name = label.path.as_deref().unwrap_or(label.name.as_str());
+                let name = label
+                    .label
+                    .path
+                    .as_deref()
+                    .unwrap_or(label.label.name.as_str());
                 let text = format!("[{unread_count:04}|{total_count:04}] {name}");
                 ListItem::from(text)
             })

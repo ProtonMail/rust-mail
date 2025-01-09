@@ -15,12 +15,13 @@ use proton_core_common::models::ModelIdExtension;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
-use proton_mail_common::models::{Label, Message};
+use proton_mail_common::models::{Label, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
+use stash::stash::Tether;
 use std::collections::HashMap;
 use velcro::hash_map;
 
@@ -107,21 +108,33 @@ async fn label_as_without_archive() {
         .await
         .unwrap()
         .unwrap();
-    label1.total_msg = 2;
+    let mut msg_counters1 = MessageCounters::create_if_not_exists(label1.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters1.total = 2;
+    msg_counters1.save(&tx).await.unwrap();
     label1.total_conv = 1;
     label1.save(&tx).await.unwrap();
     let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label2.total_msg = 2;
+    let mut msg_counters2 = MessageCounters::create_if_not_exists(label2.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters2.total = 2;
+    msg_counters2.save(&tx).await.unwrap();
     label2.total_conv = 1;
     label2.save(&tx).await.unwrap();
     let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label3.total_msg = 3;
+    let mut msg_counters3 = MessageCounters::create_if_not_exists(label3.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters3.total = 3;
+    msg_counters3.save(&tx).await.unwrap();
     label3.total_conv = 1;
     label3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
@@ -167,17 +180,20 @@ async fn label_as_without_archive() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(label1.total_msg, 4);
+    let msg_counter1 = msg_counter_for(&label1, &tether).await;
+    assert_eq!(msg_counter1.total, 4);
     let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tether)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(label2.total_msg, 2);
+    let msg_counter2 = msg_counter_for(&label2, &tether).await;
+    assert_eq!(msg_counter2.total, 2);
     let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tether)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(label3.total_msg, 0);
+    let msg_counter3 = msg_counter_for(&label3, &tether).await;
+    assert_eq!(msg_counter3.total, 0);
     let message1 = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert_eq!(message1.label_ids.len(), 1);
     assert!(message1.label_ids.contains(&label1_id));
@@ -261,21 +277,34 @@ async fn label_as_with_archive() {
         .await
         .unwrap()
         .unwrap();
-    label1.total_msg = 1;
+    let mut msg_counters1 = MessageCounters::create_if_not_exists(label1.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters1.total = 1;
+    msg_counters1.save(&tx).await.unwrap();
+
     label1.total_conv = 1;
     label1.save(&tx).await.unwrap();
     let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label2.total_msg = 1;
+    let mut msg_counters2 = MessageCounters::create_if_not_exists(label2.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters2.total = 1;
+    msg_counters2.save(&tx).await.unwrap();
     label2.total_conv = 1;
     label2.save(&tx).await.unwrap();
     let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label3.total_msg = 1;
+    let mut msg_counters3 = MessageCounters::create_if_not_exists(label3.local_id.unwrap(), &tx)
+        .await
+        .unwrap();
+    msg_counters3.total = 1;
+    msg_counters3.save(&tx).await.unwrap();
     label3.total_conv = 1;
     label3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
@@ -439,4 +468,11 @@ fn test_mail_settings() -> ApiMailSettings {
         view_mode: ApiViewMode::Messages,
         ..Default::default()
     }
+}
+
+async fn msg_counter_for(label: &Label, tx: &Tether) -> MessageCounters {
+    MessageCounters::load_by_local_label_id_opt(label.local_id, tx)
+        .await
+        .expect("failed to load")
+        .expect("value not found")
 }

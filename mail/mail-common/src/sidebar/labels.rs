@@ -12,7 +12,7 @@ use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
-use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{Label, MailSettings, MessageCounters, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
 impl Sidebar {
@@ -39,16 +39,22 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(LabelId::drafts(), &tether).await?);
         }
-        let all_scheduled = self.get_label(LabelId::all_scheduled(), &tether).await?;
-        if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
+        let (all_scheduled, all_scheduled_msg_counters) = self
+            .get_label_with_counters(LabelId::all_scheduled(), &tether)
+            .await?;
+        if all_scheduled_msg_counters.total != 0 || all_scheduled.total_conv != 0 {
             labels.push(all_scheduled);
         }
-        let outbox = self.get_label(LabelId::outbox(), &tether).await?;
-        if outbox.total_conv != 0 || outbox.total_msg != 0 {
+        let (outbox, outbox_msg_counters) = self
+            .get_label_with_counters(LabelId::outbox(), &tether)
+            .await?;
+        if outbox.total_conv != 0 || outbox_msg_counters.total != 0 {
             labels.push(outbox);
         }
-        let snoozed = self.get_label(LabelId::snoozed(), &tether).await?;
-        if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
+        let (snoozed, snoozed_msg_counters) = self
+            .get_label_with_counters(LabelId::snoozed(), &tether)
+            .await?;
+        if snoozed.total_conv != 0 || snoozed_msg_counters.total != 0 {
             labels.push(snoozed);
         }
         labels.push(self.get_label(LabelId::starred(), &tether).await?);
@@ -138,5 +144,23 @@ impl Sidebar {
                     label_id,
                 )))
             })
+    }
+
+    async fn get_label_with_counters(
+        &self,
+        label_id: LabelId,
+        tether: &Tether,
+    ) -> SidebarResult<(Label, MessageCounters)> {
+        let label = self.get_label(label_id.clone(), tether).await?;
+        let msg_counters = MessageCounters::load_by_local_label_id_opt(label.local_id, tether)
+            .await?
+            .ok_or_else(|| {
+                error!("Label counter doesn't exist: {}", label_id);
+                SidebarError::MailContext(MailContextError::App(
+                    AppError::RemoteLabelHasNoCounters(label_id),
+                ))
+            })?;
+
+        Ok((label, msg_counters))
     }
 }
