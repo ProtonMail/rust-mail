@@ -219,7 +219,7 @@ impl ComposerRecipientList {
             }
             draft.to_save_action()
         };
-        ctx.with_queue(|queue| queue.queue_action(action)).await?;
+        ctx.with_queue(|queue| action.queue(queue)).await?;
         Ok(())
     }
 }

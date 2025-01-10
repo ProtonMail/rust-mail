@@ -15,8 +15,8 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
-use proton_action_queue::action::Metadata;
-use proton_action_queue::queue::Queue;
+use proton_action_queue::action::MetadataBuilder;
+use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
@@ -39,6 +39,7 @@ use stash::stash::{Stash, StashError, Tether};
 use tracing::{debug, error, warn};
 
 pub mod compose;
+pub mod observers;
 pub mod recipients;
 pub(crate) mod send;
 
@@ -642,34 +643,32 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(queue))]
-    pub async fn save(&self, queue: &Queue) -> Result<(), MailContextError> {
-        queue.queue_action(self.to_save_action()).await?;
-        Ok(())
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    pub async fn save(&self, queue: &Queue) -> Result<QueuedActionOutput<Save>, MailContextError> {
+        Ok(self.to_save_action().queue(queue).await?)
     }
 
     /// Apply an action which will send this draft.
     ///
-    /// This requires both a save and send action that need to be chained.
-    ///
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(queue, save_action,send_action))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
     pub async fn send(
+        &self,
         queue: &Queue,
-        save_action: Save,
-        send_action: draft::Send,
-    ) -> Result<(), MailContextError> {
-        //TODO: Atomic commit - needs queue modifications
-        let save_output = queue.queue_action(save_action).await?;
-        queue
-            .queue_action_with_metadata(
-                send_action,
-                Metadata::builder().with_dependency(save_output.id).build(),
-            )
-            .await?;
-        Ok(())
+    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        self.to_send_action()?.queue(queue).await
+    }
+
+    /// Create a save action for the current state of the draft.
+    ///
+    /// This method is here to provide greater flexibility of integration
+    /// when used in multithreaded contexts.
+    ///
+    ///
+    pub fn to_save_action(&self) -> DraftSaveActionQueuer {
+        DraftSaveActionQueuer::new(self.metadata_id, Save::new(self))
     }
 
     /// Create a save action for the current state of the draft.
@@ -680,24 +679,18 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    pub fn to_save_action(&self) -> Save {
-        Save::new(self)
-    }
-
-    /// Create a save action for the current state of the draft.
-    ///
-    /// This method is here to provide greater flexibility of integration
-    /// when used in multithreaded contexts.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action failed to execute.
-    pub fn to_send_action(&self) -> Result<draft::Send, Error> {
+    pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(Error::NoRecipients);
         }
-
-        Ok(draft::Send::new(self.metadata_id))
+        let save_action = Save::new(self);
+        let send_action = draft::Send::new(self.metadata_id);
+        let metadata_id = self.metadata_id;
+        Ok(DraftSendActionQueuer::new(
+            metadata_id,
+            save_action,
+            send_action,
+        ))
     }
 
     /// Get the message id associated with this draft.
@@ -729,5 +722,73 @@ impl Draft {
         };
 
         Ok(metadata.local_conversation_id)
+    }
+}
+
+/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
+/// context.
+pub struct DraftSaveActionQueuer {
+    id: MetadataId,
+    action: Save,
+}
+
+impl DraftSaveActionQueuer {
+    fn new(id: MetadataId, action: Save) -> Self {
+        Self { id, action }
+    }
+
+    /// Consume and queue this action.
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip(self,queue))]
+    pub async fn queue(self, queue: &Queue) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
+        queue
+            .queue_action_with_metadata(
+                self.action,
+                MetadataBuilder::new()
+                    .with_resource(&self.id)
+                    .expect("This should never fail")
+                    .build(),
+            )
+            .await
+    }
+}
+
+/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
+/// context.
+pub struct DraftSendActionQueuer {
+    id: MetadataId,
+    save_action: Save,
+    send_action: draft::Send,
+}
+
+impl DraftSendActionQueuer {
+    fn new(id: MetadataId, save_action: Save, send_action: draft::Send) -> Self {
+        Self {
+            id,
+            save_action,
+            send_action,
+        }
+    }
+
+    /// Consume and queue this action.
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::send",skip(self,queue))]
+    pub async fn queue(
+        self,
+        queue: &Queue,
+    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        let save_metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail")
+            .build();
+        let save_output = queue
+            .queue_action_with_metadata(self.save_action, save_metadata)
+            .await?;
+        let send_metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail")
+            .with_dependency(save_output.id)
+            .build();
+        Ok(queue
+            .queue_action_with_metadata(self.send_action, send_metadata)
+            .await?)
     }
 }

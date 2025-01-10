@@ -4,10 +4,9 @@ use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
-use proton_mail_common::actions::draft::Save;
 use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
 use proton_mail_common::draft::recipients::MaybeEmptyString;
-use proton_mail_common::draft::{recipients, Draft, ReplyMode};
+use proton_mail_common::draft::{recipients, Draft, DraftSaveActionQueuer, ReplyMode};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
@@ -135,10 +134,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match context
-                        .with_queue(|queue| queue.queue_action(save_action))
-                        .await
-                    {
+                    match context.with_queue(|queue| save_action.queue(queue)).await {
                         Ok(_) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e}");
@@ -150,7 +146,7 @@ impl Composer {
         ])
     }
 
-    fn create_save_action(&mut self) -> Result<Save, recipients::RecipientError> {
+    fn update_draft_from_state(&mut self) -> Result<(), recipients::RecipientError> {
         // We are TUI, what else can we do?
         self.draft.mime_type = MimeType::TextPlain;
         self.draft.subject = self.subject_input_state.value().to_owned();
@@ -158,19 +154,21 @@ impl Composer {
         self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value())?;
         self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value())?;
         self.draft.to_list = recipients_value_to_list(self.to_input_state.value())?;
+        Ok(())
+    }
+
+    fn create_save_action(&mut self) -> Result<DraftSaveActionQueuer, recipients::RecipientError> {
+        self.update_draft_from_state()?;
         Ok(self.draft.to_save_action())
     }
 
     /// Send the draft.
     fn send(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let save_action = match self.create_save_action() {
-            Ok(action) => action,
-            Err(err) => {
-                return Command::message(Messages::DisplayError(
-                    Some("Invalid recipient".to_owned()),
-                    err.into(),
-                ));
-            }
+        if let Err(err) = self.update_draft_from_state() {
+            return Command::message(Messages::DisplayError(
+                Some("Invalid recipient".to_owned()),
+                err.into(),
+            ));
         };
         match self.draft.to_send_action() {
             Ok(send_action) => Command::batch([
@@ -180,11 +178,8 @@ impl Composer {
                 Command::task(async move {
                     Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
-                        match context
-                            .with_queue(|queue| Draft::send(queue, save_action, send_action))
-                            .await
-                        {
-                            Ok(()) => Command::message(Message::CloseComposer.into()),
+                        match context.with_queue(|queue| send_action.queue(queue)).await {
+                            Ok(_) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
                                 error!("Failed to save draft: {e}");
                                 Command::message(e.into())

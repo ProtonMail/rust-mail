@@ -141,11 +141,10 @@ async fn basic_send_check() {
     // get draft message id.
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
-    let save_action = draft.to_save_action();
     let send_action = draft.to_send_action().unwrap();
 
     user_ctx
-        .with_queue(|queue| Draft::send(queue, save_action, send_action))
+        .with_queue(|queue| send_action.queue(queue))
         .await
         .unwrap();
 
@@ -263,11 +262,10 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> Arc<a
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    let save_action = draft.to_save_action();
     let send_action = draft.to_send_action().unwrap();
 
     user_ctx
-        .with_queue(|queue| Draft::send(queue, save_action, send_action))
+        .with_queue(|queue| send_action.queue(queue))
         .await
         .unwrap();
 
