@@ -159,6 +159,14 @@ impl Label {
         }
     }
 
+    pub fn total_messages(&self, unread: ReadFilter) -> u64 {
+        match unread {
+            ReadFilter::All => self.total_msg,
+            ReadFilter::Unread => self.unread_msg,
+            ReadFilter::Read => self.total_msg.saturating_sub(self.unread_msg),
+        }
+    }
+
     /// TODO: Document this function.
     ///
     /// # Parameters

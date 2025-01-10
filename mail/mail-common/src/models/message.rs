@@ -2691,21 +2691,11 @@ pub struct EmbeddedAttachmentInfo {
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_labels")]
 pub struct MessageLabel {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    // NOTE: This id does not exist, stash does not support composite primary keys. The real
-    // primary key is (local_message_id + local_label_id).
-    #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    #[IdField]
+    pub local_label_id: LocalLabelId,
 
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,
-
-    #[DbField]
-    pub local_label_id: LocalLabelId,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
