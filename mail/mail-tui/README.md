@@ -40,3 +40,7 @@ Default locations unless you have local overwrites.
 
 * ~/Library/Caches/com.proton.proton-mail-tui
 * ~/Library/Application\ Support/com.proton.proton-mail-tui
+
+## Misc
+
+If `PROTON_OPEN_MESSAGES` is set the messages will be opened in a browser session.

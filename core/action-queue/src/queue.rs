@@ -111,7 +111,7 @@ pub enum QueuedError {
     #[error("Factory Error (ActionId={0}): {1}")]
     Factory(Id, FactoryError),
     #[error("Queued Action error: {0}")]
-    Action(anyhow::Error, Box<QueuedMetadata>),
+    Action(Arc<anyhow::Error>, Arc<QueuedMetadata>),
     #[error("DB Error: {0}")]
     DB(#[from] StashError),
     #[error("Action {0} does not exist")]
@@ -213,6 +213,22 @@ impl From<StoredAction> for QueuedMetadata {
     }
 }
 
+/// Broadcast message issued when actions are executed in the background so their
+/// progress can be tracked and potentially awaited on.
+#[derive(Debug, Clone)]
+pub enum BroadcastMessage {
+    /// This queued action was executed successfully
+    Success(Id),
+    /// This queued action failed to execute.
+    ///
+    /// Id of the action is available in the metadata.
+    Error(Arc<anyhow::Error>, Arc<QueuedMetadata>),
+    /// This action was cancelled.
+    Cancelled(Arc<QueuedMetadata>),
+    /// This action was deleted.
+    Deleted(Id, Arc<String>),
+}
+
 /// Provides a priority based queue for queuing and/or executing [`Action`].
 ///
 /// The queue ensure that each submitted [`Action`] applies their local and remote changes in the
@@ -311,6 +327,7 @@ pub(crate) struct Shared {
     stash: Stash,
     factory: RwLock<Factory>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
+    broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
 }
 
 impl Shared {
@@ -398,10 +415,12 @@ impl Queue {
         db::create_tables(&mut tether).await?;
         let default_context = Arc::new(());
         let default_context_downgraded = Arc::downgrade(&default_context);
+        let (sender, _) = tokio::sync::broadcast::channel(32);
         let shared = Arc::new(Shared {
             stash,
             factory: RwLock::new(factory),
             execution_contexts: RwLock::new(HashMap::new()),
+            broadcast_sender: sender,
         });
         let (sender, receiver) = flume::bounded::<Command>(16);
         let mut worker = BackgroundWorker::new(receiver, Arc::clone(&shared.clone()));
@@ -701,6 +720,12 @@ impl Queue {
         let tether = self.shared.stash.connection();
         StoredAction::next(&tether).await
     }
+
+    /// Create a new broadcast receiver to observe the state of queued actions.
+    #[must_use]
+    pub fn new_broadcast_receiver(&self) -> tokio::sync::broadcast::Receiver<BroadcastMessage> {
+        self.shared.broadcast_sender.subscribe()
+    }
 }
 
 /// Wrapper trait around the actual action type.
@@ -708,14 +733,14 @@ pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
         shared: &'a Shared,
         tx: &'a Bond,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
@@ -733,7 +758,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
@@ -747,7 +772,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 &mut self.action,
             )
             .await
-            .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
+            .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
             Ok(())
         })
     }
@@ -756,7 +781,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         &'a mut self,
         shared: &'a Shared,
         tx: &'a Bond,
-        metadata: QueuedMetadata,
+        metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
@@ -781,7 +806,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                     error!("Failed to delete action: {e}");
                     e
                 })
-                .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
+                .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
             Ok(())
         })
     }
@@ -884,7 +909,10 @@ impl BackgroundWorker {
                 Command::Cancel(id, tx) => {
                     self.wait_on_tasks().await;
                     let r = self.cancel(id).await;
-                    if tx.send(r).is_err() {
+                    if tx
+                        .send(r.map(|v| v.into_iter().map(|v| v.id).collect()))
+                        .is_err()
+                    {
                         error!("Failed to send cancel result back to callee");
                     }
                 }
@@ -923,7 +951,24 @@ impl BackgroundWorker {
         );
         let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
-        decoded.execute(&self.shared, metadata).await?;
+        decoded
+            .execute(&self.shared, metadata)
+            .await
+            .inspect_err(|e| {
+                if let QueuedError::Action(err, metadata) = e {
+                    // Send only fails if there are no receivers, which is a valid state.
+                    let _ = self.shared.broadcast_sender.send(BroadcastMessage::Error(
+                        Arc::clone(err),
+                        Arc::clone(metadata),
+                    ));
+                }
+            })?;
+
+        // Send only fails if there are no receivers, which is a valid state.
+        let _ = self
+            .shared
+            .broadcast_sender
+            .send(BroadcastMessage::Success(action_id));
 
         Ok(Some(action_id))
     }
@@ -945,18 +990,32 @@ impl BackgroundWorker {
     async fn delete(&mut self, action_id: Id) -> QueuedResult<()> {
         let mut tether = self.shared.stash.connection();
         let tx = tether.transaction().await?;
-        StoredAction::delete(&tx, action_id).await?;
+        let existing_action_type = StoredAction::delete(&tx, action_id).await?;
         tx.commit().await?;
+        if let Some(existing_action_type) = existing_action_type {
+            // Send only fails if there are no receivers, which is a valid state.
+            let _ = self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
+                action_id,
+                Arc::new(existing_action_type),
+            ));
+        }
         Ok(())
     }
 
     /// See [`Queue::cancel()`] for more details.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
+    async fn cancel(&self, action_id: Id) -> QueuedResult<Vec<Arc<QueuedMetadata>>> {
         let mut tether = self.shared.stash.connection();
         let tx = tether.transaction().await?;
         let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
         tx.commit().await?;
+        for cancelled_action in &cancelled_actions {
+            // Send only fails if there are no receivers, which is a valid state.
+            let _ = self
+                .shared
+                .broadcast_sender
+                .send(BroadcastMessage::Cancelled(Arc::clone(cancelled_action)));
+        }
         Ok(cancelled_actions)
     }
 
@@ -1012,6 +1071,7 @@ async fn execute_action_remote<T: Action>(
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
     let result = handler.apply_remote(context, action, &shared.stash).await;
+    let mut cancelled_actions = vec![];
     let mut tether = shared.stash.connection();
     let bond = tether.transaction().await?;
     let result = match result {
@@ -1027,14 +1087,28 @@ async fn execute_action_remote<T: Action>(
                 return Ok(ActionRemoteOutput::Queued(id));
             }
             debug!("Reverting self and dependees");
-            if let Err(e) = cancel_action_with_dependees(shared, &bond, id).await {
-                error!("Failed to cancel action and depeendees: {e}");
+            match cancel_action_with_dependees(shared, &bond, id).await {
+                Ok(ids) => {
+                    cancelled_actions = ids;
+                }
+                Err(e) => {
+                    error!("Failed to cancel action and depeendees: {e}");
+                }
             }
 
             Err(ActionError::Action(e))
         }
     };
     bond.commit().await?;
+    for cancelled_action in cancelled_actions.into_iter().filter(|meta| {
+        // We don't want to report cancellation of our own action, only of the dependees.
+        meta.id != id
+    }) {
+        // Send only fails if there are no receivers, which is a valid state.
+        let _ = shared
+            .broadcast_sender
+            .send(BroadcastMessage::Cancelled(cancelled_action));
+    }
     result
 }
 
@@ -1043,7 +1117,7 @@ async fn cancel_action_with_dependees(
     shared: &Shared,
     bond: &Bond<'_>,
     action_id: Id,
-) -> QueuedResult<Vec<Id>> {
+) -> QueuedResult<Vec<Arc<QueuedMetadata>>> {
     let mut remaining_actions = vec![action_id];
     let mut sorter = TopologicalSort::<Id>::new();
     let mut cancelled_actions = Vec::new();
@@ -1070,9 +1144,9 @@ async fn cancel_action_with_dependees(
 
         let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-        decoded.cancel(shared, bond, metadata).await?;
+        decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
 
-        cancelled_actions.push(action_id);
+        cancelled_actions.push(metadata);
     } else {
         debug!("Reverting {} dependent actions", sorter.len());
         // Cancel all actions in reversed order
@@ -1083,9 +1157,9 @@ async fn cancel_action_with_dependees(
 
             let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-            decoded.cancel(shared, bond, metadata).await?;
+            decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
 
-            cancelled_actions.push(current_action_id);
+            cancelled_actions.push(metadata);
         }
     }
     Ok(cancelled_actions)
@@ -1095,7 +1169,7 @@ async fn cancel_action_with_dependees(
 fn decode_action(
     factory: &RwLock<Factory>,
     stored_action: StoredAction,
-) -> QueuedResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+) -> QueuedResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
     factory.read().decode(stored_action).map_err(|e| {
         error!("Failed to decode action: {e}");

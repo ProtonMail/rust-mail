@@ -130,7 +130,7 @@ impl From<QueuedError> for Unexpected {
         match error {
             // TODO: Check with Leander if there is a better Category
             QueuedError::Factory(_id, factory_error) => Self::from(factory_error),
-            QueuedError::Action(anyhow, _queued_metadata) => Self::from(anyhow),
+            QueuedError::Action(_, _) => Self::Internal,
             QueuedError::DB(stash_error) => Self::from(stash_error),
             // TODO: Check with Leander if there is a better Category
             QueuedError::ActionNotFound(_id) => Self::Internal,

@@ -27,6 +27,7 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -201,7 +202,7 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
     ));
 }
 
-async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> anyhow::Error {
+async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> Arc<anyhow::Error> {
     // Check :
     // * Draft is saved before sent
     // * Send API endpoint is updated

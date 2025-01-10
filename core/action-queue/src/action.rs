@@ -14,6 +14,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 /// Actions can return any error type, but we need to be able to inspect the http request error
 /// to detect network failure.
@@ -492,7 +493,7 @@ trait Decoder: Send + Sync {
     fn decode(
         &self,
         action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)>;
+    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)>;
 }
 
 /// [`Decoder`] implementation that works for any [`Action`] type.
@@ -504,7 +505,7 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
     fn decode(
         &self,
         stored_action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
         // Check version
         let deserialized: T =
             T::VersionConverter::convert(stored_action.version, T::VERSION, &stored_action.state)?;
@@ -519,7 +520,7 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
                 handler: T::Handler::default(),
                 action: deserialized,
             }),
-            queued_metadata,
+            Arc::new(queued_metadata),
         ))
     }
 }
@@ -572,7 +573,7 @@ impl Factory {
     pub(crate) fn decode(
         &self,
         action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
         let Some(factory) = self.factories.get(&action.action_type) else {
             return Err(FactoryError::UnknownType(
                 action.id.unwrap(),

@@ -445,7 +445,7 @@ pub fn transform_html(
     } else if let Some(auth_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
 
-        // FIXME: https://protonag.atlassian.net/jira/software/c/projects/ET/boards/241?search=orion&selectedIssue=ET-1834
+        // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
         if false {
             images_proxied = transformer.proxy_images(auth_id.as_ref());
         }
