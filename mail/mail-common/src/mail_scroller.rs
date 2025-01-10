@@ -187,8 +187,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        if let Some(wait_init) = self.task.take() {
-            let result = wait_init
+        if let Some(wait_task) = self.task.take() {
+            let result = wait_task
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
                 .and_then(|res| res);
