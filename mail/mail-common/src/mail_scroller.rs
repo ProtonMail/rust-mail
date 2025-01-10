@@ -18,9 +18,7 @@ use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether, WatcherHandle};
 use std::collections::BTreeSet;
 use std::future::Future;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
@@ -46,8 +44,8 @@ pub trait MailScrollerSource: Send + Sync {
     ///
     /// Return errors if the initialization or setup failed.
     fn initialize(
-        &self,
-        ctx: Arc<MailUserContext>,
+        &mut self,
+        ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(u64, MailPaginatorJoinHandle), MailContextError>>;
 
     /// Return the items that fall into range of the synced data.
@@ -96,8 +94,8 @@ pub trait MailScrollerSource: Send + Sync {
     ///
     /// Return error if something failed.
     fn sync_next(
-        &self,
-        ctx: Arc<MailUserContext>,
+        &mut self,
+        ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError>>;
 
     fn watched_tables(&self) -> Vec<String>;
@@ -145,8 +143,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if something went wrong with initializing the data source.
-    pub async fn new(ctx: Arc<MailUserContext>, source: T) -> Result<Self, MailContextError> {
-        let (total, task) = source.initialize(ctx.clone()).await?;
+    pub async fn new(ctx: Arc<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
+        let (total, task) = source.initialize(&ctx).await?;
 
         Ok(Self {
             ctx,
@@ -203,7 +201,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
             }
         }
 
-        let (items, new_total, task) = self.source.sync_next(self.ctx.clone()).await?;
+        let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
         self.task = task;
         Ok(items)
@@ -239,8 +237,8 @@ pub struct MailConversationScrollerSource {
     local_label_id: LocalLabelId,
     unread: ReadFilter,
     page_size: usize,
-    initialized: AtomicBool,
-    cached: Arc<Mutex<Option<CachedConverstationScrollData>>>,
+    initialized: bool,
+    cached: Option<CachedConverstationScrollData>,
 }
 
 impl MailConversationScrollerSource {
@@ -249,8 +247,8 @@ impl MailConversationScrollerSource {
             local_label_id,
             unread,
             page_size,
-            initialized: AtomicBool::new(false),
-            cached: Arc::new(Mutex::new(None)),
+            initialized: false,
+            cached: None,
         }
     }
 }
@@ -260,8 +258,8 @@ impl MailScrollerSource for MailConversationScrollerSource {
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
     async fn initialize(
-        &self,
-        ctx: Arc<MailUserContext>,
+        &mut self,
+        ctx: &MailUserContext,
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
         let mut tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
@@ -279,17 +277,17 @@ impl MailScrollerSource for MailConversationScrollerSource {
         {
             debug!("We have paginated here before, create cached scroller");
             let cp = scroller.data().clone();
-            let task = if scroller.has_more_than_a_page(&tether).await? {
+            let task = if scroller.has_more_than_a_page(&tether).await?
+                || label.total_conversations(self.unread) < self.page_size as u64
+            {
                 None
             } else {
                 self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
                     .await?
             };
 
-            let mut guard = self.cached.lock().await;
-            *guard = Some(scroller);
-            self.initialized
-                .store(true, std::sync::atomic::Ordering::SeqCst);
+            self.cached = Some(scroller);
+            self.initialized = true;
 
             return Ok((label.total_conversations(self.unread), task));
         }
@@ -314,15 +312,17 @@ impl MailScrollerSource for MailConversationScrollerSource {
         // Sync the scroller data
         self.sync_scroller(&tether).await?;
 
-        if let Some(ref scroller) = *self.cached.lock().await {
+        if let Some(ref scroller) = self.cached {
             // And spawn a background task to fetch the next page
             let cp = scroller.data();
-            let task = self
-                .spawn_background_sync(ctx, cp, label.remote_id.clone().unwrap())
-                .await?;
+            let task = if label.total_conversations(self.unread) < self.page_size as u64 {
+                None
+            } else {
+                self.spawn_background_sync(ctx, cp, label.remote_id.clone().unwrap())
+                    .await?
+            };
 
-            self.initialized
-                .store(true, std::sync::atomic::Ordering::SeqCst);
+            self.initialized = true;
 
             Ok((label.total_conversations(self.unread), task))
         } else if label.total_conversations(self.unread) == 0 {
@@ -351,7 +351,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         // * a label that has not been initialized
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
-        if let Some(ref scroller) = *self.cached.lock().await {
+        if let Some(ref scroller) = self.cached {
             Ok(scroller.visible_elements(&tether).await?)
         } else {
             Ok(vec![])
@@ -366,7 +366,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         // * a label that has not been initialized
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
-        if let Some(ref scroller) = *self.cached.lock().await {
+        if let Some(ref scroller) = self.cached {
             Ok(scroller.visible_element_count(&tether).await?)
         } else {
             Ok(0)
@@ -382,17 +382,17 @@ impl MailScrollerSource for MailConversationScrollerSource {
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
     async fn sync_next(
-        &self,
-        ctx: Arc<MailUserContext>,
+        &mut self,
+        ctx: &MailUserContext,
     ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
 
         // Fallback for failing to initialize the scroller
-        if !self.initialized.load(std::sync::atomic::Ordering::SeqCst) {
+        if !self.initialized {
             debug!("Scroller not initialized, fallback to initialization");
             let (_, task) = self.initialize(ctx).await?;
-            if let Some(ref mut scroller) = *self.cached.lock().await {
+            if let Some(ref scroller) = self.cached {
                 let items = scroller.visible_elements(&tether).await?;
                 return Ok((items, label.total_conversations(self.unread), task));
             } else {
@@ -407,7 +407,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         // Always sync the cache as there might be new data
         self.sync_scroller(&tether).await?;
 
-        if let Some(ref mut scroller) = *self.cached.lock().await {
+        if let Some(ref mut scroller) = self.cached {
             // This is the only place where cache progresses,
             // There might be a case in which someone will try to fetch more
             // for the label which has no more data.
@@ -416,12 +416,12 @@ impl MailScrollerSource for MailConversationScrollerSource {
             // As this information is provided in a trait. It is up to the implementation
             // To check if there is more data to download before asking for more.
             let items = scroller.fetch_more(&tether).await?;
-            let cp = scroller.data();
+            let cp = scroller.data().clone();
 
             let task = if scroller.has_more_than_a_page(&tether).await? {
                 None
             } else {
-                self.spawn_background_sync(ctx, cp, label.remote_id.clone().unwrap())
+                self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
                     .await?
             };
 
@@ -454,14 +454,13 @@ impl MailConversationScrollerSource {
         Ok(label)
     }
 
-    async fn sync_scroller(&self, tether: &Tether) -> Result<(), MailContextError> {
-        let mut guard = self.cached.lock().await;
-        if let Some(ref mut scroller) = *guard {
+    async fn sync_scroller(&mut self, tether: &Tether) -> Result<(), MailContextError> {
+        if let Some(ref mut scroller) = self.cached {
             if !scroller.has_more_than_a_page(tether).await? {
                 scroller.update(tether).await?;
             }
         } else {
-            *guard = CachedConverstationScrollData::new(
+            self.cached = CachedConverstationScrollData::new(
                 self.local_label_id,
                 self.unread,
                 self.page_size,
@@ -475,7 +474,7 @@ impl MailConversationScrollerSource {
 
     async fn spawn_background_sync(
         &self,
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         scroller: &ConversationScrollData,
         remote_label_id: LabelId,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
@@ -483,15 +482,15 @@ impl MailConversationScrollerSource {
         let label_local_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
-        let ctx_clone = ctx.clone();
         let remote_id = scroller.remote_conversation_id.clone();
         let conversation_time = scroller.conversation_time;
+        let session = ctx.session().clone();
 
         let task = Some(tokio::spawn(async move {
             let tether = stash.connection();
 
             Self::sync_next_page(
-                ctx_clone.session(),
+                &session,
                 tether,
                 label_local_id,
                 remote_label_id,

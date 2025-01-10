@@ -154,9 +154,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let conversations = params.conversations.clone();
     let user_ctx = ctx.mail_user_context().await;
 
-    // Scroller will ask for two pages, in reality second one should be empty
-    // But lets make it trickier and return the same page for the second request
-    ctx.mock_get_conversations(conversations, 2_u64).await;
+    ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
