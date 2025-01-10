@@ -24,15 +24,10 @@ async fn failure_action_observer_remote() {
 
     // check cancelled response.
     queue.cancel(id_cancel).await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = error_observer.next() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), error_observer.next())
+        .await
+        .expect("timed out")
+        .unwrap();
     if let ActionFailureReason::Cancelled(metadata) = result {
         assert_eq!(id_cancel, metadata.id);
     } else {
@@ -41,15 +36,10 @@ async fn failure_action_observer_remote() {
 
     // check delete response.
     queue.delete_action(id_delete).await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = error_observer.next() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), error_observer.next())
+        .await
+        .expect("timed out")
+        .unwrap();
     if let ActionFailureReason::Deleted(id) = result {
         assert_eq!(id_delete, id);
     } else {
@@ -60,27 +50,19 @@ async fn failure_action_observer_remote() {
     queue.execute_one().await.unwrap_err();
     // execute success action.
     queue.execute_one().await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = error_observer.next() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), error_observer.next())
+        .await
+        .expect("timed out")
+        .unwrap();
     if let ActionFailureReason::Error(_, metadata) = result {
         assert_eq!(id_execute, metadata.id);
     } else {
         panic!("Expected execution failure reason");
     }
 
-    tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(1)) => {}
-        _ = success_observer.next() => {
-            panic!("We should never receive anything")
-        }
-    }
+    tokio::time::timeout(Duration::from_secs(1), success_observer.next())
+        .await
+        .expect_err("should time out");
 }
 
 #[tokio::test]
@@ -100,56 +82,37 @@ async fn action_awaiter() {
 
     // check cancelled response.
     queue.cancel(id_cancel).await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = cancel_awaiter.wait() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), cancel_awaiter.wait())
+        .await
+        .expect("timed out")
+        .unwrap();
     assert!(matches!(result, BroadcastMessage::Cancelled(_)));
 
     // check delete response.
     queue.delete_action(id_delete).await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = delete_awaiter.wait() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), delete_awaiter.wait())
+        .await
+        .expect("timed out")
+        .unwrap();
     assert!(matches!(result, BroadcastMessage::Deleted(_, _)));
 
     // check execution failure
     queue.execute_one().await.unwrap_err();
 
     // check failure execution.
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = error_awaiter.wait() => {
-            r
-        }
-    }
-    .unwrap();
+    queue.delete_action(id_delete).await.unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), error_awaiter.wait())
+        .await
+        .expect("timed out")
+        .unwrap();
     assert!(matches!(result, BroadcastMessage::Error(_, _)));
 
     // execute success action.
     queue.execute_one().await.unwrap();
-    let result = tokio::select! {
-        () = tokio::time::sleep(Duration::from_secs(5)) => {
-            panic!("Timeout expired");
-        }
-        r = success_awaiter.wait() => {
-            r
-        }
-    }
-    .unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(5), success_awaiter.wait())
+        .await
+        .expect("timed out")
+        .unwrap();
     assert!(matches!(result, BroadcastMessage::Success(_)));
 }
 
