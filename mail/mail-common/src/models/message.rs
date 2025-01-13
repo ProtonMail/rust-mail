@@ -29,8 +29,9 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
+    LabelColor, LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients,
+    MessageReplyTos, MessageSender, MimeType, MobileActions, ParsedHeaders, SystemLabel,
+    SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -61,7 +62,7 @@ use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSy
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
-use stash::macros::Model;
+use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
@@ -2540,9 +2541,7 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut counters) =
-                MessageCounters::find_by_id(*label_id, bond).await?
-            {
+            if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
                 counters.total -= stats.count;
                 counters.unread -= stats.unread_count;
                 counters.save(bond).await?;
@@ -2559,8 +2558,7 @@ impl Message {
     ) -> Result<HashMap<LocalLabelId, MessageLabelStats>, StashError> {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
-            if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await?
-            {
+            if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
                 counters.total += stats.count;
                 counters.unread += stats.unread_count;
                 counters.save(bond).await?;
@@ -3256,18 +3254,18 @@ impl MessageCounters {
     }
 
     /// Save message counters to the database.
-    /// 
+    ///
     /// It's imperative taht you use this method over [`Model::save()`] to ensure
     /// that if the counter already exists it is updated, and not inserted with a conflict.
-    /// 
+    ///
     /// # Parameters
     /// * `local_label_id` - local id of the label
     /// * `tx` - transaction used to modify DB
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if the query fails.
-    pub async fn save(&mut self, bond: &Bond <'_>) -> Result<(), StashError> {
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if self.row_id.is_none() {
             if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
                 self.row_id = existing.row_id;
@@ -3275,7 +3273,6 @@ impl MessageCounters {
         }
         <Self as Model>::save(self, bond).await
     }
-
 
     /// Get all message counters linked to labels with given kind
     ///
@@ -3310,5 +3307,237 @@ impl MessageCounters {
             total: self.total,
             unread: self.unread,
         })
+    }
+}
+
+/// Helper data structure until we move from Stash to existing, mature ORM.
+///
+/// It loads both [`Label`] and [`MessageCounters`] with a single call. It is not only faster (because of the inner join)
+/// but also easier to work with than separately with [`Label`] and [`MessageCounters`]
+///
+/// Note: It duplicates fields from [`Label`] since Stash does not support nested structures.
+#[derive(DbRecord, PartialEq, Debug, Clone)]
+pub struct LabelWithCounters {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[DbField]
+    pub local_id: Option<LocalLabelId>,
+
+    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
+    /// globally-consistent unique identifier for the record within the set of
+    /// all records of this type, and is important for synchronisation.
+    #[DbField]
+    pub remote_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub local_parent_id: Option<LocalLabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_parent_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub color: LabelColor,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub display: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub expanded: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub initialized_conv: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub initialized_msg: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub label_type: LabelType,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub name: String,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub notify: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub display_order: u32,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub path: Option<String>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub sticky: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub total_conv: u64,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub unread_conv: u64,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[DbField]
+    pub row_id: Option<u64>,
+
+    /// Number of total messages related to one particular label
+    #[DbField]
+    pub total_msg: u64,
+
+    /// Number of unread messages related to one particular label
+    #[DbField]
+    pub unread_msg: u64,
+}
+
+impl LabelWithCounters {
+    /// Performs INNER JOIN to load both resources at the same time.
+    ///
+    /// # Returns
+    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn find_first(
+        query: impl Into<String>,
+        params: Vec<Box<dyn ToSql + Send>>,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let values = tether
+            .query(
+                formatdoc!(
+                    "SELECT
+            {left}.rowid AS row_id, 
+            {left}.*,
+            {right}.total as total_msg,
+            {right}.unread as unread_msg
+        FROM {left}
+        INNER JOIN {right}
+            ON {left}.local_id = {right}.local_label_id
+        {query}
+        LIMIT 1
+        ",
+                    left = Label::table_name(),
+                    right = MessageCounters::table_name(),
+                    query = query.into()
+                ),
+                params,
+            )
+            .await?;
+
+        Ok(values.into_iter().next())
+    }
+
+    /// Performs INNER JOIN to load both resources at the same time.
+    ///
+    /// # Returns
+    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn load(label_id: LocalLabelId, tether: &Tether) -> Result<Option<Self>, StashError> {
+        Self::find_first(
+            formatdoc!("WHERE {}.local_id = ?", Label::table_name()),
+            params![label_id],
+            tether,
+        )
+        .await
+    }
+    /// Performs INNER JOIN to load both resources at the same time.
+    /// Filters by the [`LabelType`].
+    ///
+    /// # Returns
+    /// Return Zero-Or-More values
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
+        let values = tether
+            .query(
+                formatdoc!(
+                    "SELECT
+                {left}.rowid AS row_id, 
+                {left}.*,
+                {right}.total as total_msg,
+                {right}.unread as unread_msg
+            FROM {left}
+            INNER JOIN {right}
+                ON {left}.local_id = {right}.local_label_id
+            WHERE
+                {left}.label_type = ?
+            ORDER BY
+                {left}.display_order ASC
+            ",
+                    left = Label::table_name(),
+                    right = MessageCounters::table_name()
+                ),
+                params![kind],
+            )
+            .await?;
+
+        Ok(values)
+    }
+
+    pub fn label(&self) -> Label {
+        let Self {
+            local_id,
+            remote_id,
+            local_parent_id,
+            remote_parent_id,
+            color,
+            display,
+            expanded,
+            initialized_conv,
+            initialized_msg,
+            label_type,
+            name,
+            notify,
+            display_order,
+            path,
+            sticky,
+            total_conv,
+            unread_conv,
+            row_id,
+            total_msg: _,
+            unread_msg: _,
+        } = self.clone();
+        Label {
+            local_id,
+            remote_id,
+            local_parent_id,
+            remote_parent_id,
+            color,
+            display,
+            expanded,
+            initialized_conv,
+            initialized_msg,
+            label_type,
+            name,
+            notify,
+            display_order,
+            path,
+            sticky,
+            total_conv,
+            unread_conv,
+            row_id,
+        }
     }
 }

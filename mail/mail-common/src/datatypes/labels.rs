@@ -24,8 +24,7 @@ pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64
     match label.view_mode(tether).await? {
         ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
         ViewMode::Messages => {
-            let counters =
-                MessageCounters::find_by_id(label.local_id.unwrap(), tether).await?;
+            let counters = MessageCounters::find_by_id(label.local_id.unwrap(), tether).await?;
             let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
             Ok((unread, total))
         }

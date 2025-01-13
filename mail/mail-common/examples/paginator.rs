@@ -123,7 +123,7 @@ async fn main() {
     .await;
     /*
     if messages {
-        let counter = MessageCounters::load_by_local_label_id_opt(label.local_id, &tether)
+        let counter = MessageCounters::find_by_id(label.local_id, &tether)
             .await
             .unwrap()
             .unwrap();

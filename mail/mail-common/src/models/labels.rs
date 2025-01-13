@@ -293,7 +293,8 @@ impl Label {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
                         label.save(&tx).await?;
                         MessageCounters::new(label.local_id.unwrap())
-                        .save(&tx).await?;
+                            .save(&tx)
+                            .await?;
                     }
                 }
             }

@@ -227,8 +227,7 @@ impl Mailbox {
         Ok(match self.view_mode {
             ViewMode::Conversations => label.unread_conv,
             ViewMode::Messages => {
-                let counters =
-                    MessageCounters::find_by_id(self.label_id, &tether).await?;
+                let counters = MessageCounters::find_by_id(self.label_id, &tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
         })
