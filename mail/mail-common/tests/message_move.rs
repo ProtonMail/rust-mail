@@ -74,9 +74,7 @@ async fn move_between_folders() {
 
     let tx = tether.transaction().await.unwrap();
 
-    let mut source_msg = MessageCounters::create_if_not_exists(source.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut source_msg = MessageCounters::new(source.local_id.expect("Local ID"));
     source_msg.total = 1;
 
     source.save(&tx).await.unwrap();
@@ -367,9 +365,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap();
     spam.total_conv = 1;
     let tx = tether.transaction().await.unwrap();
-    let mut spam_msg = MessageCounters::create_if_not_exists(spam.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut spam_msg = MessageCounters::new(spam.local_id.expect("Local ID"));
     spam_msg.total = 1;
     spam_msg.save(&tx).await.unwrap();
 

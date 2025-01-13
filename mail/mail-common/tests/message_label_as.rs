@@ -11,7 +11,7 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
@@ -108,9 +108,7 @@ async fn label_as_without_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters1 = MessageCounters::create_if_not_exists(label1.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters1 = MessageCounters::new(label1.local_id.expect("Local ID"));
     msg_counters1.total = 2;
     msg_counters1.save(&tx).await.unwrap();
     label1.total_conv = 1;
@@ -119,9 +117,7 @@ async fn label_as_without_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters2 = MessageCounters::create_if_not_exists(label2.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters2 = MessageCounters::new(label2.local_id.expect("Local ID"));
     msg_counters2.total = 2;
     msg_counters2.save(&tx).await.unwrap();
     label2.total_conv = 1;
@@ -130,9 +126,7 @@ async fn label_as_without_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters3 = MessageCounters::create_if_not_exists(label3.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters3 = MessageCounters::new(label3.local_id.expect("Local ID"));
     msg_counters3.total = 3;
     msg_counters3.save(&tx).await.unwrap();
     label3.total_conv = 1;
@@ -277,9 +271,7 @@ async fn label_as_with_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters1 = MessageCounters::create_if_not_exists(label1.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters1 = MessageCounters::new(label1.local_id.expect("Local ID"));
     msg_counters1.total = 1;
     msg_counters1.save(&tx).await.unwrap();
 
@@ -289,9 +281,7 @@ async fn label_as_with_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters2 = MessageCounters::create_if_not_exists(label2.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters2 = MessageCounters::new(label2.local_id.expect("Local ID"));
     msg_counters2.total = 1;
     msg_counters2.save(&tx).await.unwrap();
     label2.total_conv = 1;
@@ -300,9 +290,7 @@ async fn label_as_with_archive() {
         .await
         .unwrap()
         .unwrap();
-    let mut msg_counters3 = MessageCounters::create_if_not_exists(label3.local_id.unwrap(), &tx)
-        .await
-        .unwrap();
+    let mut msg_counters3 = MessageCounters::new(label3.local_id.expect("Local ID"));
     msg_counters3.total = 1;
     msg_counters3.save(&tx).await.unwrap();
     label3.total_conv = 1;
@@ -471,7 +459,7 @@ fn test_mail_settings() -> ApiMailSettings {
 }
 
 async fn msg_counter_for(label: &Label, tx: &Tether) -> MessageCounters {
-    MessageCounters::load_by_local_label_id_opt(label.local_id, tx)
+    MessageCounters::find_by_id(label.local_id.expect("Local ID"), tx)
         .await
         .expect("failed to load")
         .expect("value not found")

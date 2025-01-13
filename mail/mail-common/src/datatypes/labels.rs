@@ -1,6 +1,7 @@
 use crate::datatypes::{LabelColor, ViewMode};
 use crate::models::{Label, MailSettings, MessageCounters, MAIL_SETTINGS_ID};
 use crate::AppError;
+use proton_core_common::models::ModelExtension;
 use stash::orm::Model;
 use stash::stash::Tether;
 
@@ -17,12 +18,14 @@ pub mod system_labels;
 /// * `inteface` - The database interface, i.e. [`Stash`] or [`Tether`], to
 ///                use for finding the records.
 ///
+/// # Panics
+/// If label provided does not have Local ID
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
     match label.view_mode(tether).await? {
         ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
         ViewMode::Messages => {
             let counters =
-                MessageCounters::load_by_local_label_id_opt(label.local_id, tether).await?;
+                MessageCounters::find_by_id(label.local_id.unwrap(), tether).await?;
             let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
             Ok((unread, total))
         }

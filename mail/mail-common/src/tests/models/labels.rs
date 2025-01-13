@@ -189,7 +189,7 @@ async fn label_with_counts() {
     assert_eq!(label.unread_conv, unread_conv);
     assert_eq!(label.total_conv, total_conv);
 
-    let msg_counter = MessageCounters::load_by_local_label_id(local_id, &tether)
+    let msg_counter = MessageCounters::find_by_id(local_id, &tether)
         .await
         .expect("failed to load counter")
         .expect("should have a value");

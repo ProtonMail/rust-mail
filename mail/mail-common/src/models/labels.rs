@@ -292,7 +292,8 @@ impl Label {
                 Ok(labels) => {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
                         label.save(&tx).await?;
-                        MessageCounters::create_if_not_exists(label.local_id.unwrap(), &tx).await?;
+                        MessageCounters::new(label.local_id.unwrap())
+                        .save(&tx).await?;
                     }
                 }
             }

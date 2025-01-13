@@ -250,7 +250,8 @@ mod available_actions {
             for mut label in labels {
                 label.save(&tx).await.expect("failed to create label");
                 let local_id = label.local_id.expect("Local ID");
-                MessageCounters::create_if_not_exists(local_id, &tx)
+                MessageCounters::new(local_id)
+                    .save(&tx)
                     .await
                     .expect("Failed to create counters");
 
@@ -389,7 +390,7 @@ mod available_label_as_actions {
 
         for mut label in labels {
             label.save(&tx).await.expect("failed to create label");
-            MessageCounters::create_if_not_exists(label.local_id.expect("Local ID"), &tx)
+            MessageCounters::new(label.local_id.unwrap()).save(&tx)
                 .await
                 .expect("failed to create message counters");
         }
@@ -413,7 +414,8 @@ mod available_label_as_actions {
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
                 let label_id = label.local_id.unwrap();
-                MessageCounters::create_if_not_exists(label_id, &tx)
+                MessageCounters::new(label_id)
+                    .save(&tx)
                     .await
                     .expect("failed to create message counters");
 
@@ -768,7 +770,7 @@ mod available_move_to_actions {
 
         for mut label in labels {
             label.save(&tx).await.expect("failed to create label");
-            MessageCounters::create_if_not_exists(label.local_id.expect("Local ID"), &tx)
+            MessageCounters::new(label.local_id.expect("Local ID")).save(&tx)
                 .await
                 .expect("failed to create message counters");
         }
@@ -790,7 +792,8 @@ mod available_move_to_actions {
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
                 let label_id = label.local_id.unwrap();
-                MessageCounters::create_if_not_exists(label_id, &tx)
+                MessageCounters::new(label_id)
+                    .save(&tx)
                     .await
                     .expect("failed to create message counters");
 

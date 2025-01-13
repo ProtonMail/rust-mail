@@ -73,7 +73,7 @@ impl Model {
         let label = Label::find_by_id(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
-        let msg_counters = MessageCounters::load_by_local_label_id(mailbox.label_id(), &tether)
+        let msg_counters = MessageCounters::find_by_id(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LocalLabelHasNoCounters(mailbox.label_id()))?;
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();

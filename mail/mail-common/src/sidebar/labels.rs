@@ -3,6 +3,7 @@ use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
 use crate::{AppError, MailContextError};
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::ModelExtension;
 use stash::params;
 use stash::{orm::Model, stash::Tether};
 use tracing::error;
@@ -152,7 +153,7 @@ impl Sidebar {
         tether: &Tether,
     ) -> SidebarResult<(Label, MessageCounters)> {
         let label = self.get_label(label_id.clone(), tether).await?;
-        let msg_counters = MessageCounters::load_by_local_label_id_opt(label.local_id, tether)
+        let msg_counters = MessageCounters::find_by_id(label.local_id.unwrap(), tether)
             .await?
             .ok_or_else(|| {
                 error!("Label counter doesn't exist: {}", label_id);

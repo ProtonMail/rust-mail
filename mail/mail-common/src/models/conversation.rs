@@ -1781,7 +1781,7 @@ impl Conversation {
             // update message label counters
             for (label_id, count) in &mut label_counts {
                 if let Some(mut counters) =
-                    MessageCounters::load_by_local_label_id(*label_id, bond).await?
+                    MessageCounters::find_by_id(*label_id, bond).await?
                 {
                     counters.unread -= *count;
                     counters.save(bond).await?;
@@ -1902,7 +1902,7 @@ impl Conversation {
 
             for label_id in label_ids {
                 if let Some(mut counter) =
-                    MessageCounters::load_by_local_label_id(label_id, bond).await?
+                    MessageCounters::find_by_id(label_id, bond).await?
                 {
                     // Always update the message count
                     counter.unread += 1;
@@ -2010,7 +2010,7 @@ impl Conversation {
                 });
 
                 if let Some(mut counter) =
-                    MessageCounters::load_by_local_label_id(label_id, bond).await?
+                    MessageCounters::find_by_id(label_id, bond).await?
                 {
                     counter.total -= message_ids.len() as u64;
                     counter.unread -= num_unread;
@@ -2733,7 +2733,7 @@ impl Conversation {
         };
 
         let Some(mut msg_counters) =
-            MessageCounters::load_by_local_label_id(local_label_id, bond).await?
+            MessageCounters::find_by_id(local_label_id, bond).await?
         else {
             error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));

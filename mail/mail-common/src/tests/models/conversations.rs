@@ -1606,7 +1606,7 @@ async fn test_conversation_delete_all_mail() {
 
     for count in Label::all(&tether).await.unwrap() {
         tracing::error!("Count {count:?}");
-        let msg_counters = MessageCounters::load_by_local_label_id_opt(count.local_id, &tether)
+        let msg_counters = MessageCounters::find_by_id(count.local_id.unwrap(), &tether)
             .await
             .expect("no error")
             .expect("counter assigned to the label");

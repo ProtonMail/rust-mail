@@ -196,8 +196,7 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE message_counters (
-                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                local_label_id INTEGER NOT NULL UNIQUE,
+                local_label_id INTEGER PRIMARY KEY,
                 total INTEGER NOT NULL DEFAULT 0,
                 unread INTEGER NOT NULL DEFAULT 0,
 
@@ -207,12 +206,6 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                     ON DELETE CASCADE
             )
         "#,
-        vec![],
-    )
-    .await?;
-
-    tx.execute(
-        r#"CREATE UNIQUE INDEX index_message_counters_local_label_id ON message_counters (`local_label_id`)"#,
         vec![],
     )
     .await?;

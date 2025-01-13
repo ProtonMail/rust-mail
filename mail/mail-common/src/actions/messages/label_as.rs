@@ -12,7 +12,7 @@ use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
@@ -263,7 +263,7 @@ impl ActionHandler for Handler {
         }
 
         if let Some(source_label_counters) =
-            MessageCounters::load_by_local_label_id(action.data.source_label_id, &tether).await?
+            MessageCounters::find_by_id(action.data.source_label_id, &tether).await?
         {
             Ok(source_label_counters.total == 0)
         } else {
