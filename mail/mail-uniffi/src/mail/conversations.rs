@@ -609,7 +609,7 @@ pub async fn scroll_conversations_for_label(
     let context = session.ctx();
     uniffi_async(async move {
         let source = MailConversationScrollerSource::new(label_id.into(), filter.into(), 50);
-        let scroller = MailScroller::new(context, source).await.unwrap();
+        let scroller = MailScroller::new(context, source).await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {

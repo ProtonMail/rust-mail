@@ -47,7 +47,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn initialize(
         &mut self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<(u64, MailPaginatorJoinHandle), MailContextError>>;
+    ) -> impl Future<Output = Result<(u64, MailPaginatorJoinHandle), MailContextError>> + Send;
 
     /// Return the items that fall into range of the synced data.
     ///
@@ -59,7 +59,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn visible_items(
         &self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<Vec<Self::Item>, MailContextError>>;
+    ) -> impl Future<Output = Result<Vec<Self::Item>, MailContextError>> + Send;
 
     /// Return the total number of items that fall into range of the synced data.
     ///
@@ -71,7 +71,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn visible_items_total(
         &self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<u64, MailContextError>>;
+    ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
 
     /// Return the total number of items that fall into range of the synced data.
     ///
@@ -83,7 +83,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn all_items_total(
         &self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<u64, MailContextError>>;
+    ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
 
     /// Sync the next section of data from the remote source which should return up to
     /// `element_count` results.
@@ -97,7 +97,9 @@ pub trait MailScrollerSource: Send + Sync {
     fn sync_next(
         &mut self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError>>;
+    ) -> impl Future<
+        Output = Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError>,
+    > + Send;
 
     fn watched_tables(&self) -> Vec<String>;
 }

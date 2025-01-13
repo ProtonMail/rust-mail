@@ -11,10 +11,9 @@ use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTable
 use anyhow::anyhow;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId};
-use proton_mail_common::models::{
-    Conversation, ConversationDataSource, Label, MailSettings, PaginatorFilter,
-};
+use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
+use proton_mail_common::mail_scroller::{MailConversationScrollerSource, MailScroller};
+use proton_mail_common::models::{Conversation, Label, MailSettings};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
@@ -28,7 +27,7 @@ use super::LabelAs;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    paginator: Paginator<Conversation, ConversationDataSource>,
+    paginator: Paginator<MailConversationScrollerSource>,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
@@ -52,28 +51,19 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
+        let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    Ok(Conversation::paginate_in_label(
-                        &ctx,
-                        label_id,
-                        ITEM_LIMIT.try_into().unwrap(),
-                        PaginatorFilter::default(),
-                        true,
-                    )
-                    .await?)
+                    let source =
+                        MailConversationScrollerSource::new(label_id, ReadFilter::All, ITEM_LIMIT);
+
+                    MailScroller::new(context, source).await
                 }
                 .boxed()
             },
             move |result| match result {
-                Ok(conversation) => ConversationMessage::Refreshed(
-                    conversation
-                        .into_iter()
-                        .filter_map(|c| ContextualConversation::new(c, label_id))
-                        .collect(),
-                )
-                .into(),
+                Ok(conversation) => ConversationMessage::Refreshed(conversation).into(),
                 Err(e) => {
                     let e = anyhow!("Conversation Reload Query error: {e}");
                     tracing::error!("{e}");
@@ -83,12 +73,7 @@ impl ConversationsState {
         )
         .await?;
 
-        let conversations = paginator
-            .next_page()
-            .await?
-            .into_iter()
-            .filter_map(|v| ContextualConversation::new(v, label_id))
-            .collect();
+        let conversations = paginator.all_items().await?;
         Ok((
             Self {
                 paginator,
@@ -155,16 +140,8 @@ impl StateHandler for ConversationsState {
                 if self.table_state.selected().unwrap_or_default()
                     == self.conversations.len().saturating_sub(1)
                 {
-                    let label_id = mbox.label_id();
                     return self.paginator.next_page_command(move |v| {
-                        Command::message(
-                            ConversationMessage::NextPage(
-                                v.into_iter()
-                                    .filter_map(|v| ContextualConversation::new(v, label_id))
-                                    .collect(),
-                            )
-                            .into(),
-                        )
+                        Command::message(ConversationMessage::NextPage(v).into())
                     });
                 }
                 Command::None
