@@ -51,6 +51,7 @@
 mod attachment;
 mod available_action;
 pub(crate) mod labels;
+mod mail_scroller;
 mod system_folder;
 mod system_label;
 
@@ -59,6 +60,7 @@ pub use crate::{UniffiEnum, UniffiRecord};
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
+pub use mail_scroller::*;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;

@@ -640,9 +640,7 @@ fn test_init_params_conversation(
             expiration_time: 0,
             size: 12,
             labels: conversation_labels,
-            display_snooze_reminder: false,
-            attachments_metadata: vec![],
-            attachment_info: Default::default(),
+            ..Default::default()
         }],
         conversation_count: vec![ApiConversationCount {
             label_id: LabelId::inbox(),

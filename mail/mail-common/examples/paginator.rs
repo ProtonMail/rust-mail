@@ -4,18 +4,19 @@ use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_core_common::paginator::DataSource;
-use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{
-    Conversation, Label, Message, PaginatorCompat, PaginatorFilter, PaginatorSearchOptions,
+use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
+use proton_mail_common::mail_scroller::{
+    MailConversationScrollerSource, MailScroller, MailScrollerSource,
 };
+use proton_mail_common::models::Label;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
-use stash::orm::Model;
+use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
+use tracing::info;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -57,9 +58,10 @@ async fn main() {
     let Args {
         username,
         password,
-        messages,
+        messages: _,
     } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
+    info!("TEMP_DIR = {tmp_dir:?}");
 
     let keychain = InMemoryKeyChain::default();
     let key = SessionEncryptionKey::random().to_base64();
@@ -98,6 +100,28 @@ async fn main() {
 
     let page_count = 50_u32;
 
+    let filter = ReadFilter::Unread;
+    let mut paginator = MailScroller::new(
+        Arc::clone(&user_ctx),
+        MailConversationScrollerSource::new(label.local_id.unwrap(), filter, page_count as usize),
+    )
+    .await
+    .unwrap();
+
+    paginate_mail(&mut paginator, |v1, v2| {
+        // We can only guarantee this for when no filter is applied.
+        // See notes in [`MailConversationPaginatorSource`].
+        // Messages don't have this issue.
+        if filter != ReadFilter::All {
+            return true;
+        }
+        // Due to a bug where attachment metadata local ids are not updated
+        // during save we can not use Eq to compare both of the data items
+        // as it always fails with the local id of the attachment not being present.
+        v1.local_id == v2.local_id && v1.remote_id == v2.remote_id
+    })
+    .await;
+    /*
     if messages {
         let paginator = Message::paginate_in_label(
             &user_ctx,
@@ -121,20 +145,34 @@ async fn main() {
         .await
         .unwrap();
         paginate(&paginator, label.total_conv).await;
-    }
+    }*/
 }
 
-async fn paginate<T: Model, R: DataSource<Item = T>>(
-    paginator: &PaginatorCompat<T, R>,
-    total_elements: u64,
-) {
+async fn paginate_mail<T: MailScrollerSource>(
+    paginator: &mut MailScroller<T>,
+    is_eq: impl Fn(&T::Item, &T::Item) -> bool,
+) where
+    <T as MailScrollerSource>::Item: PartialEq + Debug,
+{
     let mut element_count = 0_u64;
+    let total_elements = paginator.total();
+    #[allow(clippy::cast_possible_truncation)]
+    let mut all_elements = Vec::with_capacity(total_elements as usize);
 
-    while paginator.has_next_page().await {
-        let page = paginator.next_page().await.unwrap();
-        tracing::info!("Elements {} / {}", element_count, total_elements);
+    while paginator.has_more().await.unwrap() {
+        let page = paginator.fetch_more().await.unwrap();
         element_count += page.len() as u64;
+        all_elements.extend(page);
+        let visible = paginator.all_items().await.unwrap();
+        for i in 0..visible.len() {
+            assert!(
+                is_eq(&all_elements[i], &visible[i]),
+                "Element {i} does not match"
+            );
+        }
+        tracing::info!("Elements {} / {}", element_count, total_elements);
     }
 
     tracing::info!("END {} / {}", element_count, total_elements);
+    assert!(element_count <= total_elements);
 }

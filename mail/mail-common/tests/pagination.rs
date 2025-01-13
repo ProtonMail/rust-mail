@@ -312,9 +312,7 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
                 expiration_time: 0,
                 size: 12,
                 labels: new_conversation_labels(i),
-                display_snooze_reminder: false,
-                attachments_metadata: vec![],
-                attachment_info: Default::default(),
+                ..Default::default()
             })
             .collect(),
         attachments: vec![],

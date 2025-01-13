@@ -166,6 +166,11 @@ impl ModelIdExtension for Conversation {
 }
 
 impl Conversation {
+    pub fn label(&self, local_id: LocalLabelId) -> Option<&ConversationLabel> {
+        self.labels
+            .iter()
+            .find(|&label| label.local_label_id == Some(local_id))
+    }
     /// Label multiple conversations.
     ///
     /// # Parameters
@@ -1669,7 +1674,7 @@ impl Conversation {
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save(bond).await?
+            label.save(bond).await?;
         }
 
         // If exclusive location is not set, we try to calculate it now.

@@ -456,6 +456,15 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     pub subject: String,
+
+    /// Contextual dependent time for the conversation.
+    ///
+    /// Note: This should not be stored as it is not stable.
+    /// Note: Field is not supported in `core/_v5/events` endpoint.
+    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnNull")]
+    #[serde(skip_serializing)]
+    pub context_time: Option<u64>,
 }
 
 #[cfg(any(test, debug_assertions))]
@@ -476,6 +485,7 @@ impl Default for Conversation {
             senders: Vec::default(),
             size: 0,
             subject: String::default(),
+            context_time: None,
         }
     }
 }

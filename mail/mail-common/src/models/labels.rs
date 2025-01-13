@@ -5,7 +5,7 @@ mod labels;
 use std::collections::BTreeSet;
 
 use crate::datatypes::{
-    ConversationCount, LabelColor, LabelType, MessageCount, SystemLabelId, ViewMode,
+    ConversationCount, LabelColor, LabelType, MessageCount, ReadFilter, SystemLabelId, ViewMode,
 };
 use crate::models::*;
 use crate::{AppError, ALL_LABEL_TYPES};
@@ -149,6 +149,14 @@ impl Label {
         }
 
         <Self as Model>::save(self, bond).await
+    }
+
+    pub fn total_conversations(&self, unread: ReadFilter) -> u64 {
+        match unread {
+            ReadFilter::All => self.total_conv,
+            ReadFilter::Unread => self.unread_conv,
+            ReadFilter::Read => self.total_conv.saturating_sub(self.unread_conv),
+        }
     }
 
     /// TODO: Document this function.

@@ -31,7 +31,7 @@ lazy_static! {
 macro_rules! conv_id {
     ($id:expr) => {{
         use proton_api_mail::services::proton::common::ConversationId;
-        Some(ConversationId::from($id).into())
+        Some(ConversationId::from($id.to_string()).into())
     }};
 }
 
@@ -39,7 +39,7 @@ macro_rules! conv_id {
 macro_rules! lbl_id {
     ($id:expr) => {{
         use proton_api_core::services::proton::common::LabelId;
-        Some(LabelId::from($id).into())
+        Some(LabelId::from($id.to_string()).into())
     }};
 }
 
@@ -47,7 +47,7 @@ macro_rules! lbl_id {
 macro_rules! msg_id {
     ($id:expr) => {{
         use proton_api_mail::services::proton::common::MessageId;
-        Some(MessageId::from($id).into())
+        Some(MessageId::from($id.to_string()).into())
     }};
 }
 
@@ -117,6 +117,18 @@ macro_rules! conversation {
         use proton_mail_common::models::Conversation;
 
         Conversation {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! conv_label {
+    ($($field:tt)*) => {{
+        use proton_mail_common::models::ConversationLabel;
+
+        ConversationLabel {
             $($field)*,
             ..Default::default()
         }
@@ -343,5 +355,6 @@ pub fn test_conversation(
         display_snooze_reminder: false,
         attachments_metadata: Vec::from_iter(attachments),
         attachment_info: BTreeMap::default(),
+        context_time: None,
     }
 }

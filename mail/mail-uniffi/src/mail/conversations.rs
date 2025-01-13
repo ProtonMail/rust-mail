@@ -14,7 +14,7 @@ use crate::core::paginator::ConversationPaginator;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, Message, MoveAction,
+    ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
 };
 use crate::mail::{MailUserSession, Mailbox};
 use crate::PaginatorFilter;
@@ -27,11 +27,14 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
+use proton_mail_common::mail_scroller::{MailConversationScrollerSource, MailScroller};
 use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
+use super::datatypes::ConversationScroller;
 use super::messages::WatchedLabelAs;
 
 /// Label the given conversations with the given label id.
@@ -546,6 +549,7 @@ pub async fn move_conversations(
 ///
 /// Returns an error if the database query fails.
 ///
+/// TODO: Outdated, remove when `scroll_conversations_for_label` is utilized.
 #[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
 pub async fn paginate_conversations_for_label(
@@ -570,6 +574,47 @@ pub async fn paginate_conversations_for_label(
             real_paginator,
             handle: watch_channel(handle, callback),
             label_id,
+        }))
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Paginate conversations for the given label.
+///
+/// Gets a paginator for conversations belonging to the specified label, which
+/// allows navigation through the conversations by page/window, and watches for
+/// changes. When the conversations change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `filter`   - The filter options for pagination.
+/// * `callback` - The callback to use for updates. When the specified
+///                conversations change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[proton_uniffi_macros::export_result]
+pub async fn scroll_conversations_for_label(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    filter: ReadFilter,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<Arc<ConversationScroller>, ActionError> {
+    let context = session.ctx();
+    uniffi_async(async move {
+        let source = MailConversationScrollerSource::new(label_id.into(), filter.into(), 50);
+        let scroller = MailScroller::new(context, source).await.unwrap();
+        let handle = scroller.watch()?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
+            scroller: Arc::new(Mutex::new(scroller)),
+            handle: watch_channel(handle, callback),
         }))
     })
     .await
