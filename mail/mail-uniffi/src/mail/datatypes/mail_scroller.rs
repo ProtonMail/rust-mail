@@ -53,7 +53,7 @@ impl From<ReadFilter> for RealReadFilter {
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
     /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Arc<Mutex<RealMailScroller<RealMailConversationScrollerSource>>>,
+    pub(crate) scroller: Mutex<RealMailScroller<RealMailConversationScrollerSource>>,
 
     /// The handle to stop watching the data.
     pub(crate) handle: Arc<WatchHandle>,

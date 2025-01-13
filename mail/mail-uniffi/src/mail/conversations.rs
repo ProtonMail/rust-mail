@@ -613,7 +613,7 @@ pub async fn scroll_conversations_for_label(
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
-            scroller: Arc::new(Mutex::new(scroller)),
+            scroller: Mutex::new(scroller),
             handle: watch_channel(handle, callback),
         }))
     })
