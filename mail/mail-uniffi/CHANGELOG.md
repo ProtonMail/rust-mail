@@ -8,9 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-00-00
 
+### Added
+
+  - function `scroll_conversations_for_label` which utilies new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
+  - function `scroll_messages_for_label` which utilies new paginator `MessageScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
+
 ## [0.32.0] - 2025-01-09
 
-### Changed 
+### Changed
 
   - `DecryptedMessage::body` is now infailable.
   - `TranformOpts` has been changed to contain exclusively `bool` and `Option<bool>`
@@ -41,11 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Significant performance improvements to the body transformation process.
   - Fixed a bug where not all images got proxied in the presence of embedded images.
   - Remote images are properly loaded.
-
-
-### Added
-
-  - function `scroll_conversations_for_label` which utilies new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
 
 ## [0.31.5] - 2024-12-23
 

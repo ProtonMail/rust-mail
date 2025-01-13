@@ -8,12 +8,13 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, Message};
+use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
+use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::{
     spawn_async, uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle,
@@ -31,6 +32,7 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
+use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
@@ -38,6 +40,7 @@ use proton_mail_common::models::{
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
@@ -347,6 +350,47 @@ pub async fn paginate_messages_for_label(
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
+            handle: watch_channel(handle, callback),
+        }))
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Paginate messages for the given label.
+///
+/// Gets a paginator for messages belonging to the specified label, which allows
+/// navigation through the messages by page/window, and watches for changes.
+/// When the messages change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `filter`   - The filter options for pagination.
+/// * `callback` - The callback to use for updates. When the specified messages
+///                change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[proton_uniffi_macros::export_result]
+pub async fn scroll_messages_for_label(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    filter: ReadFilter,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<Arc<MessageScroller>, ActionError> {
+    let context = session.ctx();
+    uniffi_async(async move {
+        let source = MailMessageScrollerSource::new(label_id.into(), filter.into(), 50);
+        let scroller = MailScroller::new(context, source).await.unwrap();
+        let handle = scroller.watch()?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {
+            scroller: Mutex::new(scroller),
             handle: watch_channel(handle, callback),
         }))
     })
