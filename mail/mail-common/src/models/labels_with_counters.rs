@@ -1,0 +1,253 @@
+use indoc::formatdoc;
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
+use stash::{
+    exports::ToSql,
+    macros::DbRecord,
+    orm::Model,
+    params,
+    stash::{StashError, Tether},
+};
+
+use crate::datatypes::{LabelColor, LabelType};
+
+use super::{ConversationCounters, Label, MessageCounters};
+
+/// Helper data structure until we move from Stash to existing, mature ORM.
+///
+/// It loads both [`Label`] and [`MessageCounters`] with a single call. It is not only faster (because of the inner join)
+/// but also easier to work with than separately with [`Label`] and [`MessageCounters`]
+///
+/// Note: It duplicates fields from [`Label`] since Stash does not support nested structures.
+#[derive(DbRecord, PartialEq, Debug, Clone)]
+pub struct LabelWithCounters {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[DbField]
+    pub local_id: Option<LocalLabelId>,
+
+    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
+    /// globally-consistent unique identifier for the record within the set of
+    /// all records of this type, and is important for synchronisation.
+    #[DbField]
+    pub remote_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub local_parent_id: Option<LocalLabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_parent_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub color: LabelColor,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub display: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub expanded: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub initialized_conv: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub initialized_msg: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub label_type: LabelType,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub name: String,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub notify: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub display_order: u32,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub path: Option<String>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub sticky: bool,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[DbField]
+    pub row_id: Option<u64>,
+
+    /// Number of total messages related to one particular label
+    #[DbField]
+    pub total_msg: u64,
+
+    /// Number of unread messages related to one particular label
+    #[DbField]
+    pub unread_msg: u64,
+
+    /// Number of total conversations related to one particular label
+    #[DbField]
+    pub total_conv: u64,
+
+    /// Number of unread conversations related to one particular label
+    #[DbField]
+    pub unread_conv: u64,
+}
+
+impl LabelWithCounters {
+    /// Performs INNER JOIN to load both resources at the same time.
+    ///
+    /// # Returns
+    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn find_first(
+        query: impl Into<String>,
+        params: Vec<Box<dyn ToSql + Send>>,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let values = tether
+            .query(
+                formatdoc!(
+                    "SELECT
+                    {labels}.rowid AS row_id, 
+                    {labels}.*,
+                    {msgs}.total as total_msg,
+                    {msgs}.unread as unread_msg,
+                    {convs}.total as total_conv,
+                    {convs}.unread as unread_conv
+                FROM {labels}
+                INNER JOIN {msgs}
+                    ON {labels}.local_id = {msgs}.local_label_id
+                INNER JOIN {convs}
+                    ON {labels}.local_id = {convs}.local_label_id
+                    {query}
+                    LIMIT 1",
+                    labels = Label::table_name(),
+                    msgs = MessageCounters::table_name(),
+                    convs = ConversationCounters::table_name(),
+                    query = query.into()
+                ),
+                params,
+            )
+            .await?;
+
+        Ok(values.into_iter().next())
+    }
+
+    /// Performs INNER JOIN to load both resources at the same time.
+    ///
+    /// # Returns
+    /// Maximum one row is returned. `Ok(None)` is returned if the database has no entry.
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn load(label_id: LocalLabelId, tether: &Tether) -> Result<Option<Self>, StashError> {
+        Self::find_first(
+            formatdoc!("WHERE {}.local_id = ?", Label::table_name()),
+            params![label_id],
+            tether,
+        )
+        .await
+    }
+    /// Performs INNER JOIN to load both resources at the same time.
+    /// Filters by the [`LabelType`].
+    ///
+    /// # Returns
+    /// Return Zero-Or-More values
+    ///
+    /// # Errors
+    /// It might return an error if the query fail
+    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
+        let values = tether
+            .query(
+                formatdoc!(
+                    "SELECT
+                {labels}.rowid AS row_id, 
+                {labels}.*,
+                {msgs}.total as total_msg,
+                {msgs}.unread as unread_msg,
+                {convs}.total as total_conv,
+                {convs}.unread as unread_conv
+            FROM {labels}
+            INNER JOIN {msgs}
+                ON {labels}.local_id = {msgs}.local_label_id
+            INNER JOIN {convs}
+                ON {labels}.local_id = {convs}.local_label_id
+            WHERE
+                {labels}.label_type = ?
+            ORDER BY
+                {labels}.display_order ASC
+            ",
+                    labels = Label::table_name(),
+                    msgs = MessageCounters::table_name(),
+                    convs = ConversationCounters::table_name(),
+                ),
+                params![kind],
+            )
+            .await?;
+
+        Ok(values)
+    }
+
+    pub fn label(&self) -> Label {
+        let Self {
+            local_id,
+            remote_id,
+            local_parent_id,
+            remote_parent_id,
+            color,
+            display,
+            expanded,
+            initialized_conv,
+            initialized_msg,
+            label_type,
+            name,
+            notify,
+            display_order,
+            path,
+            sticky,
+            row_id,
+            total_msg: _,
+            unread_msg: _,
+            total_conv: _,
+            unread_conv: _,
+        } = self.clone();
+        Label {
+            local_id,
+            remote_id,
+            local_parent_id,
+            remote_parent_id,
+            color,
+            display,
+            expanded,
+            initialized_conv,
+            initialized_msg,
+            label_type,
+            name,
+            notify,
+            display_order,
+            path,
+            sticky,
+            row_id,
+        }
+    }
+}
