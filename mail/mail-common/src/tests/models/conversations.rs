@@ -7,6 +7,7 @@ use crate::datatypes::{
     MessageSender, MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
+use futures::StreamExt;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::LabelId;
@@ -543,6 +544,11 @@ mod available_actions {
                 label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
+                ConversationCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("failed to create conversation counters");
+
                 let ids = vec![conversation.local_id.unwrap()];
 
                 Conversation::apply_label(label_id, ids, &tx).await.unwrap();
@@ -908,6 +914,12 @@ mod available_move_to_actions {
                 label.save(&tx).await.expect("failed to create label");
 
                 let label_id = label.local_id.unwrap();
+
+                ConversationCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("Failed to create counters");
+
                 let ids = vec![conversation.local_id.unwrap()];
 
                 Conversation::apply_label(label_id, ids, &tx).await.unwrap();
@@ -1606,27 +1618,27 @@ async fn test_conversation_delete_all_mail() {
 
     for count in Label::all(&tether).await.unwrap() {
         tracing::error!("Count {count:?}");
-        let msg_counters = MessageCounters::find_by_id(count.local_id.unwrap(), &tether)
+        let counters = LabelWithCounters::load(count.local_id.unwrap(), &tether)
             .await
             .expect("no error")
             .expect("counter assigned to the label");
         assert_eq!(
-            msg_counters.total, 0,
+            counters.total_msg, 0,
             "Label {:?} does not have 0 total count",
             count.local_id
         );
         assert_eq!(
-            msg_counters.unread, 0,
+            counters.unread_msg, 0,
             "Label {:?} does not have 0 unread count",
             count.local_id
         );
         assert_eq!(
-            count.total_conv, 0,
+            counters.total_conv, 0,
             "Label {:?} does not have 0 total count",
             count.local_id
         );
         assert_eq!(
-            count.unread_conv, 0,
+            counters.unread_conv, 0,
             "Label {:?} does not have 0 unread count",
             count.local_id
         );
@@ -1898,14 +1910,20 @@ async fn test_conversation_counts() {
     tx.commit().await.expect("failed to commit");
 
     let db_labels = Label::all(&tether).await.expect("failed to get counters");
-    let db_counters = db_labels
-        .iter()
-        .map(|c| ConversationCount {
-            label_id: c.remote_id.clone().unwrap(),
-            total: c.total_conv,
-            unread: c.unread_conv,
-        })
-        .collect::<Vec<_>>();
+    let db_counters = ConversationCounters::all(&tether)
+        .await
+        .expect("failed to get counters");
+    let db_counters = futures::stream::FuturesOrdered::from_iter(db_counters.iter().map({
+        let tether = &tether;
+        move |c| async move {
+            c.conversation_count(tether)
+                .await
+                .expect("failed to get conversation count")
+        }
+    }))
+    .collect::<Vec<_>>()
+    .await;
+
     assert!(db_counters.contains(&counts[0]));
     assert!(db_counters.contains(&counts[1]));
 
@@ -1914,8 +1932,6 @@ async fn test_conversation_counts() {
 
     assert_eq!(db_labels.len(), 2);
     assert_eq!(db_labels[0].remote_id.as_ref(), Some(&counts[0].label_id));
-    assert_eq!(db_labels[0].total_conv, counts[0].total);
-    assert_eq!(db_labels[0].unread_conv, counts[0].unread);
 }
 
 #[tokio::test]

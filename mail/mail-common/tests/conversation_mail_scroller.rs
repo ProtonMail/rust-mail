@@ -9,7 +9,7 @@ use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter, SystemLabel},
     mail_scroller::{MailConversationScrollerSource, MailScroller},
-    models::{Conversation, ConversationScrollData, Label},
+    models::{Conversation, ConversationCounters, ConversationScrollData, Label},
 };
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
@@ -51,9 +51,12 @@ async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &
     let bond = tether.transaction().await.unwrap();
 
     for (label_rid, conversations) in data.iter_mut() {
-        let mut label =
-            label!(remote_id: lbl_id!(label_rid), total_conv: conversations.len() as u64);
+        let mut label = label!(remote_id: lbl_id!(label_rid));
         label.save(&bond).await.unwrap();
+        let mut counters = ConversationCounters::new(label.local_id.unwrap());
+        counters.total = conversations.len() as u64;
+        counters.save(&bond).await.unwrap();
+
         for conversation in conversations.iter_mut() {
             save_single_conversation(&label, conversation, &bond).await;
         }
@@ -191,10 +194,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     ctx.init_user(user_ctx.clone()).await;
 
     // Update the inbox label to have all conversations
-    let mut label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    label.total_conv = page_size as u64 * 2;
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = page_size as u64 * 2;
     let bond = tether.transaction().await.unwrap();
-    label.save(&bond).await.unwrap();
+    counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
     // Online
@@ -313,10 +316,11 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     ctx.catch_all().await;
 
     // Update the inbox label to have all conversations
-    let mut label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    label.total_conv = page_size as u64 * 2;
+    let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = page_size as u64 * 2;
     let bond = tether.transaction().await.unwrap();
-    label.save(&bond).await.unwrap();
+    counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
     let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);

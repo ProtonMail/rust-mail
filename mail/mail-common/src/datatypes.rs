@@ -990,18 +990,19 @@ impl Serialize for AttachmentSignature {
 
 sql_using_serde!(AttachmentSignature);
 
-/// TODO: Document this struct.
+/// This struct is used to represent how many conversations there are linked to particular label
+/// It's different than [`ConversationCounters`] by containing Remote Label ID instead of the local one.
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationCount {
-    /// TODO: Document this field.
+    /// Remote label ID
     pub label_id: LabelId,
 
-    /// TODO: Document this field.
+    /// Total number of conversations linked to one label
     pub total: u64,
 
-    /// TODO: Document this field.
+    /// Number of unread conversations linked to one label
     pub unread: u64,
 }
 

@@ -3,7 +3,7 @@ mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::{LocalAttachmentId, ViewMode};
-use crate::models::{Conversation, Label, Message, MessageCounters};
+use crate::models::{Conversation, ConversationCounters, Label, Message, MessageCounters};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
@@ -220,12 +220,12 @@ impl Mailbox {
     /// Returns error if the query failed.
     pub async fn unread_count(&self) -> Result<u64, MailboxError> {
         let tether = self.user_ctx.user_stash().connection();
-        let Some(label) = Label::find_by_id(self.label_id, &tether).await? else {
-            return Err(MailboxError::LabelNotFound(self.label_id));
-        };
 
         Ok(match self.view_mode {
-            ViewMode::Conversations => label.unread_conv,
+            ViewMode::Conversations => {
+                let counters = ConversationCounters::find_by_id(self.label_id, &tether).await?;
+                counters.map(|c| c.unread).unwrap_or_default()
+            }
             ViewMode::Messages => {
                 let counters = MessageCounters::find_by_id(self.label_id, &tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()

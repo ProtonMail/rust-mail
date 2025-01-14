@@ -1,6 +1,6 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
 use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType, SystemLabelId};
-use crate::models::{Conversation, ConversationLabel, Label};
+use crate::models::{Conversation, ConversationCounters, ConversationLabel, Label};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
@@ -157,8 +157,10 @@ impl ActionHandler for Handler {
         )
         .await?;
 
-        if let Some(source_label) = Label::load(action.data.source_label_id, tx).await? {
-            Ok(source_label.total_conv == 0)
+        if let Some(source_conv_counter) =
+            ConversationCounters::load(action.data.source_label_id, tx).await?
+        {
+            Ok(source_conv_counter.total == 0)
         } else {
             warn!(
                 "Could not find label with id: {}",

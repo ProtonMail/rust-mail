@@ -42,19 +42,19 @@ impl Sidebar {
         let all_scheduled = self
             .get_label_with_counters(LabelId::all_scheduled(), &tether)
             .await?;
-        if all_scheduled.total_msg != 0 || all_scheduled.label().total_conv != 0 {
+        if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
             labels.push(all_scheduled.label());
         }
         let outbox = self
             .get_label_with_counters(LabelId::outbox(), &tether)
             .await?;
-        if outbox.label().total_conv != 0 || outbox.total_msg != 0 {
+        if outbox.total_conv != 0 || outbox.total_msg != 0 {
             labels.push(outbox.label());
         }
         let snoozed = self
             .get_label_with_counters(LabelId::snoozed(), &tether)
             .await?;
-        if snoozed.label().total_conv != 0 || snoozed.total_msg != 0 {
+        if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
             labels.push(snoozed.label());
         }
         labels.push(self.get_label(LabelId::starred(), &tether).await?);
