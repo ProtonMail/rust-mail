@@ -135,7 +135,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
             );
         }
 
-        let encrypt = Self::determine_encryption(&pinned_keys, contact_type);
+        let encrypt = Self::determine_encryption(pinned_keys.as_ref(), contact_type);
         let sign = pinned_keys.as_ref().and_then(|keys| keys.sign);
         let pgp_scheme = pinned_keys.as_ref().and_then(|keys| keys.scheme);
         let mime_type = pinned_keys.as_ref().and_then(|keys| keys.mime_type);
@@ -262,14 +262,14 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
     }
 
     fn determine_encryption(
-        pinned_keys: &Option<PinnedPublicKeys<Pub>>,
+        pinned_keys: Option<&PinnedPublicKeys<Pub>>,
         contact_type: ContactType,
     ) -> Option<bool> {
         if contact_type == ContactType::ExternalWithApiKeys && pinned_keys.is_none() {
             // Enable encryption for external users with API keys.
             return Some(true);
         }
-        pinned_keys.as_ref().map(|keys| {
+        pinned_keys.map(|keys| {
             (!keys.pinned_keys.is_empty() && keys.encrypt_to_pinned.unwrap_or(true))
                 || (contact_type == ContactType::ExternalWithApiKeys
                     && keys.encrypt_to_untrusted.unwrap_or(true))
