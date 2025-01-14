@@ -4,7 +4,7 @@ use stash::{
     stash::{Bond, StashError},
 };
 
-use super::labels::default_labels;
+use super::default_labels::default_labels;
 
 pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(

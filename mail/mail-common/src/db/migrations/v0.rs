@@ -1,8 +1,8 @@
 //! V0 Initial db creation
 mod attachments;
 mod conversations;
+mod default_labels;
 mod events;
-mod labels;
 mod mailbox_labels;
 mod messages;
 mod rollback_actions;
@@ -20,8 +20,8 @@ impl proton_sqlite3::Migration for MigrationV0 {
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
-        labels::create_labels_tables(tx)
-            .instrument(debug_span!("labels"))
+        default_labels::create_default_labels(tx)
+            .instrument(debug_span!("default_labels"))
             .await?;
 
         mailbox_labels::create_mailbox_labels(tx)

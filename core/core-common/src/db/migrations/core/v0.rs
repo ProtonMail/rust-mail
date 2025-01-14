@@ -4,6 +4,7 @@ use tracing::{debug_span, Instrument};
 
 mod addresses;
 mod contacts;
+mod labels;
 mod sender_image_cache;
 mod user;
 mod user_settings;
@@ -34,6 +35,10 @@ impl Migration for V0 {
 
         sender_image_cache::create_tables(tx)
             .instrument(debug_span!("sender_image_cache"))
+            .await?;
+
+        labels::create_labels_tables(tx)
+            .instrument(debug_span!("labels"))
             .await?;
 
         Ok(())
