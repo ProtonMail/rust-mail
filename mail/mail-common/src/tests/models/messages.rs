@@ -12,7 +12,7 @@ use crate::datatypes::{
 };
 use crate::models::{Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt as _};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
@@ -249,6 +249,11 @@ mod available_actions {
 
             for mut label in labels {
                 label.save(&tx).await.expect("failed to create label");
+                let local_id = label.local_id.expect("Local ID");
+                MessageCounters::new(local_id)
+                    .save(&tx)
+                    .await
+                    .expect("Failed to create counters");
 
                 let label_id = label.local_id.unwrap();
                 let ids = vec![message.local_id.unwrap()];
@@ -385,6 +390,10 @@ mod available_label_as_actions {
 
         for mut label in labels {
             label.save(&tx).await.expect("failed to create label");
+            MessageCounters::new(label.local_id.unwrap())
+                .save(&tx)
+                .await
+                .expect("failed to create message counters");
         }
 
         let mut message_ids = vec![];
@@ -405,8 +414,12 @@ mod available_label_as_actions {
 
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
-
                 let label_id = label.local_id.unwrap();
+                MessageCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("failed to create message counters");
+
                 let ids = vec![message.local_id.unwrap()];
 
                 Message::apply_label(label_id, ids, &tx).await.unwrap();
@@ -758,6 +771,10 @@ mod available_move_to_actions {
 
         for mut label in labels {
             label.save(&tx).await.expect("failed to create label");
+            MessageCounters::new(label.local_id.expect("Local ID"))
+                .save(&tx)
+                .await
+                .expect("failed to create message counters");
         }
 
         for MessageWithLabels {
@@ -776,8 +793,12 @@ mod available_move_to_actions {
 
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
-
                 let label_id = label.local_id.unwrap();
+                MessageCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("failed to create message counters");
+
                 let ids = vec![message.local_id.unwrap()];
 
                 Message::apply_label(label_id, ids, &tx).await.unwrap();
@@ -1120,14 +1141,19 @@ async fn test_message_counts() {
         .expect("failed to creat counters");
     tx.commit().await.unwrap();
     let db_labels = Label::all(&tether).await.expect("failed to get counters");
-    let db_counters = db_labels
-        .iter()
-        .map(|c| MessageCount {
-            label_id: c.remote_id.clone().unwrap(),
-            total: c.total_msg,
-            unread: c.unread_msg,
-        })
-        .collect::<Vec<_>>();
+    let db_counters = MessageCounters::all(&tether)
+        .await
+        .expect("failed to get counters");
+    let db_counters = futures::stream::FuturesOrdered::from_iter(db_counters.iter().map({
+        let tether = &tether;
+        move |c| async move {
+            c.message_count(tether)
+                .await
+                .expect("failed to get message count")
+        }
+    }))
+    .collect::<Vec<_>>()
+    .await;
     assert!(db_counters.contains(&counts[0]));
     assert!(db_counters.contains(&counts[1]));
 
@@ -1136,8 +1162,6 @@ async fn test_message_counts() {
 
     assert_eq!(db_labels.len(), 1);
     assert_eq!(db_labels[0].remote_id, Some(counts[0].label_id.clone()));
-    assert_eq!(db_labels[0].total_msg, counts[0].total);
-    assert_eq!(db_labels[0].unread_msg, counts[0].unread);
 }
 
 #[tokio::test]

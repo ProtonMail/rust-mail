@@ -123,6 +123,10 @@ async fn main() {
     .await;
     /*
     if messages {
+        let counter = MessageCounters::find_by_id(label.local_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
         let paginator = Message::paginate_in_label(
             &user_ctx,
             label.local_id.unwrap(),
@@ -133,7 +137,7 @@ async fn main() {
         )
         .await
         .unwrap();
-        paginate(&paginator, label.total_msg).await;
+        paginate(&paginator, counter.total).await;
     } else {
         let paginator = Conversation::paginate_in_label(
             &user_ctx,

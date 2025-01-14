@@ -5,7 +5,7 @@ use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::actions::LabelAsAction;
 use proton_mail_common::datatypes::{LabelType, ViewMode};
-use proton_mail_common::models::{Conversation, Label};
+use proton_mail_common::models::{Conversation, Label, LabelWithCounters};
 use proton_mail_common::{MailContextResult, MailUserContext};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -221,9 +221,9 @@ impl crate::app_model::Popup for LabelItemPopup {
 }
 
 pub struct LabelSelectPopup {
-    system: Vec<Label>,
-    folders: Vec<Label>,
-    labels: Vec<Label>,
+    system: Vec<LabelWithCounters>,
+    folders: Vec<LabelWithCounters>,
+    labels: Vec<LabelWithCounters>,
     system_list_state: ScrollableListState,
     folder_list_state: ScrollableListState,
     labels_list_state: ScrollableListState,
@@ -238,21 +238,21 @@ impl LabelSelectPopup {
         view_mode: ViewMode,
     ) -> MailContextResult<Self> {
         let tether = ctx.user_stash().connection();
-        let system = Label::find_by_kind(LabelType::System, &tether).await?;
-        let folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
-        let labels = Label::find_by_kind(LabelType::Label, &tether).await?;
+        let system = LabelWithCounters::find_by_kind(LabelType::System, &tether).await?;
+        let folders = LabelWithCounters::find_by_kind(LabelType::Folder, &tether).await?;
+        let labels = LabelWithCounters::find_by_kind(LabelType::Label, &tether).await?;
 
         let system_index = system
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
             .unwrap_or_default();
         let folder_index = folders
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
             .unwrap_or_default();
         let labels_index = labels
             .iter()
-            .position(|label| current_label.local_id.unwrap() == label.local_id.unwrap())
+            .position(|label| current_label.local_id.unwrap() == label.label().local_id.unwrap())
             .unwrap_or_default();
 
         Ok(Self {
@@ -275,7 +275,7 @@ impl LabelSelectPopup {
         }
     }
 
-    fn selected_label_list(&mut self) -> (&[Label], &mut ScrollableListState) {
+    fn selected_label_list(&mut self) -> (&[LabelWithCounters], &mut ScrollableListState) {
         match self.active_label {
             LabelType::Label => (&self.labels, &mut self.labels_list_state),
             LabelType::Folder => (&self.folders, &mut self.folder_list_state),
@@ -340,7 +340,7 @@ impl crate::app_model::Popup for LabelSelectPopup {
                     return Command::None;
                 };
 
-                Command::message(Message::SelectLabel(label.local_id.unwrap()).into())
+                Command::message(Message::SelectLabel(label.label().local_id.unwrap()).into())
             }
 
             _ => Command::None,
@@ -363,11 +363,15 @@ impl crate::app_model::Popup for LabelSelectPopup {
 
         let items = labels
             .iter()
-            .map(|label| {
+            .map(|label_with_counters| {
+                let label = label_with_counters.label();
                 let (unread_count, total_count) = if view_mode == ViewMode::Conversations {
                     (label.unread_conv, label.total_conv)
                 } else {
-                    (label.unread_msg, label.total_msg)
+                    (
+                        label_with_counters.unread_msg,
+                        label_with_counters.total_msg,
+                    )
                 };
                 let name = label.path.as_deref().unwrap_or(label.name.as_str());
                 let text = format!("[{unread_count:04}|{total_count:04}] {name}");

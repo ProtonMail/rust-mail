@@ -1519,22 +1519,22 @@ impl DerefMut for MessageAttachments {
 
 sql_using_serde!(MessageAttachments);
 
-/// TODO: Document this struct.
+/// This struct is used to represent how many messages there are linked to particular label
+/// It's different than [`MessageCounters`] by containing Remote Label ID instead of the local one.
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MessageCount {
-    /// TODO: Document this field.
+    /// Remote label ID
     pub label_id: LabelId,
 
-    /// TODO: Document this field.
+    /// Total number of messages linked to one label
     pub total: u64,
 
-    /// TODO: Document this field.
+    /// Number of unread messages linked to one label
     pub unread: u64,
 }
 
-/// TODO: Document this struct.
 impl From<ApiMessageCount> for MessageCount {
     fn from(value: ApiMessageCount) -> Self {
         Self {

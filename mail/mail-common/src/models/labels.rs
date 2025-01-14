@@ -104,15 +104,7 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub total_msg: u64,
-
-    /// TODO: Document this field.
-    #[DbField]
     pub unread_conv: u64,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub unread_msg: u64,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
@@ -232,16 +224,22 @@ impl Label {
             bond.execute(
                 formatdoc!(
                     r"
-                    UPDATE
-                        labels
-                    SET
-                        total_msg = ?,
-                        unread_msg = ?
-                    WHERE
-                        remote_id = ?
+                    INSERT INTO message_counters(local_label_id, total, unread)
+                    SELECT l.local_id, ?, ?
+                        FROM labels AS l
+                        WHERE l.remote_id = ?
+                    ON CONFLICT(local_label_id) DO UPDATE
+                        SET total = ?,
+                            unread = ?
                     "
                 ),
-                params![count.total, count.unread, count.label_id],
+                params![
+                    count.total,
+                    count.unread,
+                    count.label_id,
+                    count.total,
+                    count.unread
+                ],
             )
             .await?;
         }
@@ -302,6 +300,9 @@ impl Label {
                 Ok(labels) => {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
                         label.save(&tx).await?;
+                        MessageCounters::new(label.local_id.unwrap())
+                            .save(&tx)
+                            .await?;
                     }
                 }
             }
@@ -571,9 +572,7 @@ impl From<ApiLabel> for Label {
             path: value.path,
             sticky: value.sticky,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         }
     }
@@ -598,9 +597,7 @@ impl Default for Label {
             path: Default::default(),
             sticky: Default::default(),
             total_conv: Default::default(),
-            total_msg: Default::default(),
             unread_conv: Default::default(),
-            unread_msg: Default::default(),
             row_id: Default::default(),
         }
     }
