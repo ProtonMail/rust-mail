@@ -9,9 +9,15 @@
 //!
 //! Some of the transformer passes may also available as standalone code unit.
 //!
+//! Note:
+//!
+//! Transformer does not respect any whitespace formatting, HTML nodes won't be beautified.
+//!
 //! # Example
 //!
 //! ```
+//! use proton_mail_html_transformer::Transformer;
+//!
 //! let input = r#"
 //! <html>
 //!     <body>
@@ -21,17 +27,15 @@
 //! "#;
 //!
 //!
-//! let mut transformer = Transformer::new(html);
+//! let mut transformer = Transformer::new(input);
 //! transformer.strip_utm();
 //! let output = transformer.to_string();
 //!
-//! let expected = r#"
-//! <html>
-//!     <body>
+//! let expected = r#"<html><head></head><body>
 //!         <a href="https://ads.com/">bar</a>
-//!     </body>
-//! </html>
-//! "#;
+//!    
+//!
+//! </body></html>"#;
 //! assert_eq!(expected, output);
 //! ```
 //!

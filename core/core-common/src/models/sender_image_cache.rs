@@ -132,7 +132,7 @@ impl SenderImage {
     /// Create a query to request a `SenderImage`
     #[must_use]
     pub fn build_query(&self) -> (String, Vec<Box<dyn ToSql + Send>>) {
-        fn build_field<T>(field: &Option<T>, name: &str) -> String {
+        fn build_field<T>(field: Option<&T>, name: &str) -> String {
             if field.is_some() {
                 format!("{name} = ?")
             } else {
@@ -140,13 +140,13 @@ impl SenderImage {
             }
         }
 
-        let address = build_field(&self.address, "address");
-        let bimi = build_field(&self.bimi_selector, "bimi_selector");
-        let domain = build_field(&self.domain, "domain");
-        let format = build_field(&self.format, "format");
-        let max = build_field(&self.max_scale_up_factor, "max_scale_up_factor");
-        let mode = build_field(&self.mode, "mode");
-        let size = build_field(&self.size, "size");
+        let address = build_field(self.address.as_ref(), "address");
+        let bimi = build_field(self.bimi_selector.as_ref(), "bimi_selector");
+        let domain = build_field(self.domain.as_ref(), "domain");
+        let format = build_field(self.format.as_ref(), "format");
+        let max = build_field(self.max_scale_up_factor.as_ref(), "max_scale_up_factor");
+        let mode = build_field(self.mode.as_ref(), "mode");
+        let size = build_field(self.size.as_ref(), "size");
 
         let mut params: Vec<Box<dyn ToSql + Send>> = Vec::new();
         if self.address.is_some() {

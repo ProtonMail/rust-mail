@@ -257,7 +257,7 @@ impl<'x> InboxMimeBuilder<'x> {
     }
 }
 
-impl<'x> Default for InboxMimeBuilder<'x> {
+impl Default for InboxMimeBuilder<'_> {
     fn default() -> Self {
         Self::new()
     }
