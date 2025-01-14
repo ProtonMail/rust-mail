@@ -1780,9 +1780,9 @@ impl Conversation {
 
             // update message label counters
             for (label_id, count) in &mut label_counts {
-                if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
-                    label.unread_msg -= *count;
-                    label.save(bond).await?
+                if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
+                    counters.unread -= *count;
+                    counters.save(bond).await?;
                 }
             }
         }
@@ -1899,10 +1899,13 @@ impl Conversation {
                 .await?;
 
             for label_id in label_ids {
-                if let Some(mut label) = Label::find_by_id(label_id, bond).await? {
+                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
                     // Always update the message count
-                    label.unread_msg += 1;
-                    // only update conversation unread count if we really marked
+                    counter.unread += 1;
+                    counter.save(bond).await?;
+                }
+                if let Some(mut label) = Label::find_by_id(label_id, bond).await? {
+                    // Only update conversation unread count if we really marked
                     // all messages as unread. If we have mixture, this value
                     // should not be modified
                     if total_conversation_message_count == 1 {
@@ -2002,8 +2005,11 @@ impl Conversation {
                     value
                 });
 
-                label.total_msg -= message_ids.len() as u64;
-                label.unread_msg -= num_unread;
+                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
+                    counter.total -= message_ids.len() as u64;
+                    counter.unread -= num_unread;
+                    counter.save(bond).await?;
+                }
             }
 
             // Remove conversation label
@@ -2720,8 +2726,14 @@ impl Conversation {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
-        label.unread_msg += stats.unread;
-        label.total_msg += stats.count;
+        let Some(mut msg_counters) = MessageCounters::find_by_id(local_label_id, bond).await?
+        else {
+            error!("Could not find label counters");
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
+
+        msg_counters.unread += stats.unread;
+        msg_counters.total += stats.count;
 
         let should_increment_count = !has_label;
         let should_increment_unread = !is_unread && stats.unread != 0;
@@ -2730,6 +2742,7 @@ impl Conversation {
         label.unread_conv += should_increment_unread as u64;
 
         label.save(bond).await?;
+        msg_counters.save(bond).await?;
 
         Ok(())
     }

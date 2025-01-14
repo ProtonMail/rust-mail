@@ -16,7 +16,7 @@ use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
-use proton_mail_common::models::{Label, MailSettings};
+use proton_mail_common::models::{Label, MailSettings, MessageCounters};
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
@@ -59,6 +59,7 @@ pub struct Model {
     mailbox: Mailbox,
     mail_settings: Arc<MailSettings>,
     label: Label,
+    msg_counters: MessageCounters,
     label_watcher: Option<WatchHandle>,
     state: State,
     cancel_token: Option<Sender<()>>,
@@ -72,6 +73,9 @@ impl Model {
         let label = Label::find_by_id(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
+        let msg_counters = MessageCounters::find_by_id(mailbox.label_id(), &tether)
+            .await?
+            .ok_or(AppError::LocalLabelHasNoCounters(mailbox.label_id()))?;
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         Ok(Self {
             ctx,
@@ -79,6 +83,7 @@ impl Model {
             mail_settings: Arc::new(mail_settings),
             state: State::new_syncing(),
             label,
+            msg_counters,
             cancel_token: None,
             label_watcher: None,
             composer: None,
@@ -407,7 +412,7 @@ impl AppStateHandler for Model {
         let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
             (self.label.total_conv, self.label.unread_conv)
         } else {
-            (self.label.total_msg, self.label.unread_msg)
+            (self.msg_counters.total, self.msg_counters.unread)
         };
         let counters = format!("T:{total:4} U:{unread:4}");
         let [label_area, _, count_area, other_area] = Layout::horizontal([

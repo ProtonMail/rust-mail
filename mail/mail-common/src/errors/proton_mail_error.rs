@@ -110,6 +110,8 @@ impl From<AppError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Internal)
             }
             AppError::RemoteLabelDoesNotExist(_label_id) => Self::Unexpected(Unexpected::Internal),
+            AppError::RemoteLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
+            AppError::LocalLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::Cache(cache_error) => Self::from(cache_error),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),

@@ -3,6 +3,30 @@ use proton_api_core::services::proton::common::LabelId;
 use stash::params;
 use stash::stash::{Bond, StashError};
 
+pub(crate) fn default_labels() -> [(LabelId, &'static str); 19] {
+    [
+        (LabelId::inbox(), "Inbox"),
+        (LabelId::starred(), "Starred"),
+        (LabelId::drafts(), "Drafts"),
+        (LabelId::sent(), "Sent"),
+        (LabelId::archive(), "Archive"),
+        (LabelId::spam(), "Spam"),
+        (LabelId::trash(), "Trash"),
+        (LabelId::all_mail(), "All Mail"),
+        (LabelId::almost_all_mail(), "Almost All Mail"),
+        (LabelId::outbox(), "Outbox"),
+        (LabelId::all_drafts(), "All Drafts"),
+        (LabelId::all_sent(), "All Sent"),
+        (LabelId::all_scheduled(), "All Scheduled"),
+        (LabelId::snoozed(), "Snoozed"),
+        (LabelId::category_social(), "Category Social"),
+        (LabelId::category_promotions(), "Category Promotions"),
+        (LabelId::category_updates(), "Category Updates"),
+        (LabelId::category_forums(), "Category Forums"),
+        (LabelId::category_default(), "Category Default"),
+    ]
+}
+
 pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     // Local version for manipulation.
     tx.execute(
@@ -25,9 +49,7 @@ pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                 initialized_conv INTEGER NOT NULL DEFAULT 0,
                 initialized_msg INTEGER NOT NULL DEFAULT 0,
                 total_conv INTEGER NOT NULL DEFAULT 0,
-                total_msg INTEGER NOT NULL DEFAULT 0,
                 unread_conv INTEGER NOT NULL DEFAULT 0,
-                unread_msg INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT constraint_labels_parent_id
                     FOREIGN KEY (local_parent_id)
@@ -52,29 +74,9 @@ pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
 
     // Insert default known system
     let sql = r#"INSERT INTO labels (remote_id, label_type, name, color, display_order) VALUES (?,4,?,'#000000',?)"#;
-    let labels = [
-        (LabelId::inbox(), "Inbox"),
-        (LabelId::starred(), "Starred"),
-        (LabelId::drafts(), "Drafts"),
-        (LabelId::sent(), "Sent"),
-        (LabelId::archive(), "Archive"),
-        (LabelId::spam(), "Spam"),
-        (LabelId::trash(), "Trash"),
-        (LabelId::all_mail(), "All Mail"),
-        (LabelId::almost_all_mail(), "Almost All Mail"),
-        (LabelId::outbox(), "Outbox"),
-        (LabelId::all_drafts(), "All Drafts"),
-        (LabelId::all_sent(), "All Sent"),
-        (LabelId::all_scheduled(), "All Scheduled"),
-        (LabelId::snoozed(), "Snoozed"),
-        (LabelId::category_social(), "Category Social"),
-        (LabelId::category_promotions(), "Category Promotions"),
-        (LabelId::category_updates(), "Category Updates"),
-        (LabelId::category_forums(), "Category Forums"),
-        (LabelId::category_default(), "Category Default"),
-    ];
-    for (index, (id, name)) in labels.into_iter().enumerate() {
+    for (index, (id, name)) in default_labels().into_iter().enumerate() {
         tx.execute(sql, params![id, name, index]).await?;
     }
+
     Ok(())
 }

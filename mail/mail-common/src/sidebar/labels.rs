@@ -12,7 +12,7 @@ use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
-use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{Label, LabelWithCounters, MailSettings, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
 impl Sidebar {
@@ -39,17 +39,23 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(LabelId::drafts(), &tether).await?);
         }
-        let all_scheduled = self.get_label(LabelId::all_scheduled(), &tether).await?;
-        if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
-            labels.push(all_scheduled);
+        let all_scheduled = self
+            .get_label_with_counters(LabelId::all_scheduled(), &tether)
+            .await?;
+        if all_scheduled.total_msg != 0 || all_scheduled.label().total_conv != 0 {
+            labels.push(all_scheduled.label());
         }
-        let outbox = self.get_label(LabelId::outbox(), &tether).await?;
-        if outbox.total_conv != 0 || outbox.total_msg != 0 {
-            labels.push(outbox);
+        let outbox = self
+            .get_label_with_counters(LabelId::outbox(), &tether)
+            .await?;
+        if outbox.label().total_conv != 0 || outbox.total_msg != 0 {
+            labels.push(outbox.label());
         }
-        let snoozed = self.get_label(LabelId::snoozed(), &tether).await?;
-        if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
-            labels.push(snoozed);
+        let snoozed = self
+            .get_label_with_counters(LabelId::snoozed(), &tether)
+            .await?;
+        if snoozed.label().total_conv != 0 || snoozed.total_msg != 0 {
+            labels.push(snoozed.label());
         }
         labels.push(self.get_label(LabelId::starred(), &tether).await?);
         if settings.show_moved == ShowMoved::KeepInSent
@@ -131,6 +137,21 @@ impl Sidebar {
     /// Get a [`Label`] given a [`LabelId`]
     async fn get_label(&self, label_id: LabelId, tether: &Tether) -> SidebarResult<Label> {
         Label::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
+            .await?
+            .ok_or_else(|| {
+                error!("System Label don't exist: {}", label_id);
+                SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
+                    label_id,
+                )))
+            })
+    }
+
+    async fn get_label_with_counters(
+        &self,
+        label_id: LabelId,
+        tether: &Tether,
+    ) -> SidebarResult<LabelWithCounters> {
+        LabelWithCounters::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?
             .ok_or_else(|| {
                 error!("System Label don't exist: {}", label_id);

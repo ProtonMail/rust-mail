@@ -189,8 +189,12 @@ async fn label_with_counts() {
     assert_eq!(label.unread_conv, unread_conv);
     assert_eq!(label.total_conv, total_conv);
 
-    assert_eq!(label.unread_msg, unread_msg);
-    assert_eq!(label.total_msg, total_msg);
+    let msg_counter = MessageCounters::find_by_id(local_id, &tether)
+        .await
+        .expect("failed to load counter")
+        .expect("should have a value");
+    assert_eq!(msg_counter.unread, unread_msg);
+    assert_eq!(msg_counter.total, total_msg);
 }
 
 #[tokio::test]
@@ -220,9 +224,7 @@ async fn create_local_label() {
             path: None,
             sticky: false,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         };
         new_label.save(&tx).await.expect("failed to create label");
@@ -257,9 +259,7 @@ async fn create_local_label_1_char_long_name() {
             path: None,
             sticky: false,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         };
         new_label.save(&tx).await.expect("failed to create label");
@@ -294,9 +294,7 @@ async fn create_local_label_100_char_long_name() {
             path: None,
             sticky: false,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         };
         new_label.save(&tx).await.expect("failed to create label");
@@ -335,9 +333,7 @@ async fn create_local_label_has_ascending_order_per_type() {
             path: None,
             sticky: false,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         };
         new_label1.save(&tx).await.expect("failed to create label");
@@ -358,9 +354,7 @@ async fn create_local_label_has_ascending_order_per_type() {
             path: None,
             sticky: false,
             total_conv: 0,
-            total_msg: 0,
             unread_conv: 0,
-            unread_msg: 0,
             row_id: None,
         };
         new_label2.save(&tx).await.expect("failed to create label");
@@ -395,9 +389,7 @@ async fn update_local_label() {
         path: None,
         sticky: false,
         total_conv: 0,
-        total_msg: 0,
         unread_conv: 0,
-        unread_msg: 0,
         row_id: None,
     };
     new_label.save(&tx).await.expect("failed to create label");
@@ -418,9 +410,7 @@ async fn update_local_label() {
         path: None,
         sticky: false,
         total_conv: 0,
-        total_msg: 0,
         unread_conv: 0,
-        unread_msg: 0,
         row_id: None,
     };
     new_label.save(&tx).await.expect("failed to create label");
@@ -486,9 +476,7 @@ async fn test_mark_labels_as_initialized() {
         path: None,
         sticky: false,
         total_conv: 0,
-        total_msg: 0,
         unread_conv: 0,
-        unread_msg: 0,
         row_id: None,
     };
     new_label.save(&tx).await.expect("failed to create label");

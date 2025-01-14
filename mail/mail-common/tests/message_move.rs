@@ -15,7 +15,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Label, Message};
+use proton_mail_common::models::{Label, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -71,9 +71,14 @@ async fn move_between_folders() {
         .unwrap()
         .unwrap();
     source.total_conv = 1;
-    source.total_msg = 1;
+
     let tx = tether.transaction().await.unwrap();
+
+    let mut source_msg = MessageCounters::new(source.local_id.expect("Local ID"));
+    source_msg.total = 1;
+
     source.save(&tx).await.unwrap();
+    source_msg.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
@@ -359,8 +364,11 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap()
         .unwrap();
     spam.total_conv = 1;
-    spam.total_msg = 1;
     let tx = tether.transaction().await.unwrap();
+    let mut spam_msg = MessageCounters::new(spam.local_id.expect("Local ID"));
+    spam_msg.total = 1;
+    spam_msg.save(&tx).await.unwrap();
+
     spam.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 

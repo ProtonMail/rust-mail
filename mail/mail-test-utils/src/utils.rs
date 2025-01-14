@@ -1,4 +1,5 @@
 use crate::search::MY_ADDRESS_ID;
+use futures::{FutureExt as _, StreamExt};
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_core_common::datatypes::{
@@ -9,7 +10,9 @@ use proton_mail_common::datatypes::{
     ConversationCount, LocalConversationId, LocalMessageId, MessageCount, MessageRecipient,
     MessageRecipients, MessageSender, MessageSenders,
 };
-use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
+use proton_mail_common::models::{
+    Conversation, ConversationLabel, Label, Message, MessageCounters,
+};
 use rand::{distributions::Uniform, Rng};
 use stash::stash::Tether;
 use std::collections::{BTreeMap, HashMap};
@@ -315,16 +318,28 @@ pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Conve
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageCount> {
-    BTreeMap::from_iter(Label::all(tether).await.unwrap().into_iter().map(|c| {
-        (
-            c.local_id.unwrap(),
-            MessageCount {
-                label_id: c.remote_id.clone().unwrap(),
-                total: c.total_msg,
-                unread: c.unread_msg,
-            },
-        )
-    }))
+    let iter = MessageCounters::all(tether)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|counter| {
+            let label_id = Label::resolve_remote_label_id(counter.local_label_id, tether);
+            label_id.map(|id| (counter, id))
+        });
+
+    futures::stream::FuturesUnordered::from_iter(iter)
+        .map(|(c, label_id)| {
+            (
+                c.local_label_id,
+                MessageCount {
+                    label_id: label_id.unwrap(),
+                    total: c.total,
+                    unread: c.unread,
+                },
+            )
+        })
+        .collect()
+        .await
 }
 
 /// # Panics
