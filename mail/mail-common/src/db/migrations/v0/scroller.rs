@@ -14,7 +14,7 @@ pub async fn create_paginator_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                 CONSTRAINT local_label_id_mail_conversation_scroll_data
                     FOREIGN KEY (local_label_id)
                     REFERENCES labels (local_id)
-                    ON DELETE CASCADE ON UPDATE CASCADE
+                    ON DELETE CASCADE
             )
         "#,
         vec![],
@@ -33,7 +33,7 @@ pub async fn create_paginator_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                 CONSTRAINT local_label_id_mail_message_scroll_data
                     FOREIGN KEY (local_label_id)
                     REFERENCES labels (local_id)
-                    ON DELETE CASCADE ON UPDATE CASCADE
+                    ON DELETE CASCADE
             )
         "#,
         vec![],

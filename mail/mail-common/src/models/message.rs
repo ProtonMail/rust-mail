@@ -2695,7 +2695,7 @@ pub struct MessageLabel {
     pub local_label_id: LocalLabelId,
 
     #[DbField]
-    pub local_message_id: Option<LocalMessageId>,
+    pub local_message_id: LocalMessageId,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by

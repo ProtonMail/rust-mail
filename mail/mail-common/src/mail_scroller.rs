@@ -1,7 +1,7 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{
     CachedConversationScrollData, CachedMessageScrollData, Conversation, ConversationLabel,
-    ConversationScrollData, Label, Message, MessageScrollData,
+    ConversationScrollData, Label, Message, MessageLabel, MessageScrollData,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
@@ -929,8 +929,8 @@ impl MailScrollerSource for MailMessageScrollerSource {
 
     fn watched_tables(&self) -> Vec<String> {
         vec![
-            Conversation::table_name().to_string(),
-            ConversationLabel::table_name().to_string(),
+            Message::table_name().to_string(),
+            MessageLabel::table_name().to_string(),
             Label::table_name().to_string(),
         ]
     }
@@ -1113,8 +1113,8 @@ impl MailMessageScrollerSource {
         }
 
         let last = messages.last().unwrap();
-        let context_time = last.time;
-        // Unwrap safety: RemoteId is present as this method is called on conversation
+        let time = last.time;
+        // Unwrap safety: RemoteId is present as this method is called on message
         // downloaded from API
         let remote_id = last.remote_id.clone().unwrap();
         let display_order = last.display_order;
@@ -1123,7 +1123,7 @@ impl MailMessageScrollerSource {
             local_label_id,
             remote_id.clone(),
             unread,
-            context_time,
+            time,
             display_order,
             &tx,
         )
@@ -1131,7 +1131,7 @@ impl MailMessageScrollerSource {
 
         debug!(
             "New last element id={:?}, time={}, order={}",
-            remote_id, context_time, display_order
+            remote_id, time, display_order
         );
 
         tx.commit().await?;
@@ -1143,7 +1143,7 @@ impl MailMessageScrollerSource {
         local_label_id: LocalLabelId,
         remote_msg_id: MessageId,
         unread: ReadFilter,
-        context_time: u64,
+        time: u64,
         display_order: u64,
         bond: &Bond<'_>,
     ) -> Result<MessageScrollData, MailContextError> {
@@ -1151,7 +1151,7 @@ impl MailMessageScrollerSource {
             .local_label_id(local_label_id)
             .unread(unread)
             .remote_message_id(remote_msg_id)
-            .message_time(context_time)
+            .message_time(time)
             .display_order(display_order)
             .build();
 

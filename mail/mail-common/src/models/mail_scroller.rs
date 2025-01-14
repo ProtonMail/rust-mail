@@ -292,6 +292,7 @@ impl MessageScrollData {
     /// Return error if the query failed.
     pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
         let query = self.query(None, false, None);
+
         Message::count(
             query,
             params![self.local_label_id, self.message_time, self.display_order],
@@ -344,7 +345,7 @@ impl MessageScrollData {
             AND (
                     messages.time < ?2
                 OR
-                    (messages.time =?2 AND messages.display_order <= ?3)
+                    (messages.time = ?2 AND messages.display_order <= ?3)
                 )
             "
         );
@@ -736,7 +737,7 @@ impl ConversationScrollData {
             AND (
                     conversation_labels.context_time > ?2
                 OR
-                    (conversation_labels.context_time =?2 AND conversations.display_order >= ?3)
+                    (conversation_labels.context_time = ?2 AND conversations.display_order >= ?3)
                 )
             "
         );
