@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap};
+use std::iter;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
@@ -212,10 +213,14 @@ impl Contact {
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
-        // 2. We calculate how many batches are left
-        // 3. As the batches come we store them in the db efficiently. This is, without
-        //    going through the on_save method which performs too many queries. Previously
-        //    nlogn, now n
+        // 2. We calculate how many batches are left and request them all in parallel.
+        // 3. When all of the batches arrive we store them in the database efficiently. This is, without
+        //    going through the on_save method and calling `[Model::save]` diretly which performs too many
+        //    queries. Previously nlogn, now n.
+        //    This is fine because
+        //    * We empty the database beforehand
+        //    * We don't update any record
+        //    * We manually map the ContactId from the contact to the ContactEmail.
 
         let t0 = Instant::now();
         let (first_contacts, first_emails) = try_join(
@@ -232,20 +237,19 @@ impl Contact {
         )
         .await?;
         debug!("Requested initial batch in {:?}", t0.elapsed());
-        let t = Instant::now();
 
-        let mut cjs = JoinSet::new();
-        let mut ejs = JoinSet::new();
+        let mut contacts_joinset = JoinSet::new();
+        let mut emails_joinset = JoinSet::new();
 
         let page = SYNC_CONTACT_PAGE_SIZE as u64;
         if let Some(rem) = first_contacts.total.checked_sub(page) {
             let rem = rem.div_ceil(page);
             debug!("Requesting {rem} batches for contacts");
-            for _ in 1..=rem {
+            for page in 1..=rem {
                 let api = api.clone();
-                cjs.spawn(async move {
+                contacts_joinset.spawn(async move {
                     api.get_contacts(GetContactsOptions {
-                        page: 1,
+                        page,
                         page_size: SYNC_CONTACT_PAGE_SIZE,
                         ..Default::default()
                     })
@@ -258,11 +262,11 @@ impl Contact {
         if let Some(rem) = first_emails.total.checked_sub(page) {
             let rem = rem.div_ceil(page);
             debug!("Requesting {rem} batches for emails");
-            for _ in 1..=rem {
+            for page in 1..=rem {
                 let api = api.clone();
-                ejs.spawn(async move {
+                emails_joinset.spawn(async move {
                     api.get_contacts_emails(GetContactsEmailsOptions {
-                        page: 1,
+                        page,
                         page_size: SYNC_CONTACT_PAGE_SIZE,
                         ..Default::default()
                     })
@@ -272,7 +276,13 @@ impl Contact {
             }
         }
 
-        // While that's going on let's clear the db
+        let contacts = contacts_joinset.join_all().await;
+        let contacts = iter::once(Ok(first_contacts.contacts)).chain(contacts);
+
+        let emails = emails_joinset.join_all().await;
+        let emails = iter::once(Ok(first_emails.contact_emails)).chain(emails);
+
+        // Let's start with a clean database
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
         tx.execute("DELETE FROM contacts", vec![]).await?;
@@ -281,39 +291,36 @@ impl Contact {
         tx.execute("DELETE FROM contact_email_labels", vec![])
             .await?;
 
-        // We will use this to map the contact emails to the contacts without having to
+        // We will use this to map the contact_emails to the contacts without having to
         // query the db each time we instert one.
+        // We require this to happen since the contact_emails need the local id of its contact.
         let mut id_map = HashMap::new();
-        for contact in first_contacts.contacts {
-            let mut contact = Contact::from(contact);
-            <Contact as Model>::save(&mut contact, &tx).await?;
-            id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
-        }
 
-        while let Some(contacts) = cjs.join_next().await {
-            for contact in contacts?? {
+        let t = Instant::now();
+        for (page, contact_page) in contacts.enumerate() {
+            debug!("storing contacts page {page}");
+            for contact in contact_page? {
                 let mut contact = Contact::from(contact);
                 <Contact as Model>::save(&mut contact, &tx).await?;
                 id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
             }
         }
-
         debug!(
-            "Received and stored {} contacts to the db in {:?}",
+            "Stored {} contacts to the db in {:?}",
             id_map.len(),
             t.elapsed()
         );
+
+        let mut count = 0;
         let t = Instant::now();
-
-        let mut emails = ejs.join_all().await;
-        emails.push(Ok(first_emails.contact_emails));
-
-        for em in emails {
-            for em in em? {
+        for (page, email_page) in emails.enumerate() {
+            debug!("storing contact_emails page {page}");
+            for em in email_page? {
                 let Some(local_id) = id_map.get(&em.contact_id) else {
                     error!("a contact_email has no contact");
                     continue;
                 };
+                count += 1;
                 let mut email = ContactEmail::from(em);
                 email.local_contact_id = Some(*local_id);
                 <ContactEmail as Model>::save(&mut email, &tx).await?;
@@ -321,7 +328,7 @@ impl Contact {
         }
 
         debug!(
-            "Received and stored all contacts_emails to the db in {:?}",
+            "Stored {count} contacts_emails to the db in {:?}",
             t.elapsed()
         );
         tx.commit().await?;
