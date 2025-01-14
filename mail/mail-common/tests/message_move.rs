@@ -15,7 +15,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Label, Message, MessageCounters};
+use proton_mail_common::models::{ConversationCounters, Label, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -66,18 +66,20 @@ async fn move_between_folders() {
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
-    let mut source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
+    let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
         .await
         .unwrap()
         .unwrap();
-    source.total_conv = 1;
 
     let tx = tether.transaction().await.unwrap();
+
+    let mut source_conv = ConversationCounters::new(source.local_id.expect("Local ID"));
+    source_conv.total = 1;
 
     let mut source_msg = MessageCounters::new(source.local_id.expect("Local ID"));
     source_msg.total = 1;
 
-    source.save(&tx).await.unwrap();
+    source_conv.save(&tx).await.unwrap();
     source_msg.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
@@ -359,17 +361,21 @@ async fn move_out_of_spam_set_almost_all_mail() {
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
-    let mut spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
+    let spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
         .await
         .unwrap()
         .unwrap();
-    spam.total_conv = 1;
     let tx = tether.transaction().await.unwrap();
+
+    let mut spam_conv = ConversationCounters::new(spam.local_id.expect("Local ID"));
+    spam_conv.total = 1;
+    spam_conv.save(&tx).await.unwrap();
+
     let mut spam_msg = MessageCounters::new(spam.local_id.expect("Local ID"));
     spam_msg.total = 1;
+    spam_conv.save(&tx).await.unwrap();
     spam_msg.save(&tx).await.unwrap();
 
-    spam.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)

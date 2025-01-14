@@ -3,8 +3,10 @@ use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
+use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::ConversationCounters;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params;
@@ -136,13 +138,17 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
-    inbox.unread_conv = inbox.total_conv;
+    let mut counters = ConversationCounters::find_by_id(inbox.local_id.unwrap(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    counters.unread = counters.total;
     let tx = tether.transaction().await.unwrap();
-    inbox.save(&tx).await.unwrap();
+    counters.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
@@ -204,13 +210,17 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     mailbox.sync(10).await.unwrap();
 
     // Action
-    let mut inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
+    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await
         .unwrap()
         .unwrap();
-    inbox.unread_conv = inbox.total_conv;
+    let mut counters = ConversationCounters::find_by_id(inbox.local_id.unwrap(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    counters.unread = counters.total;
     let tx = tether.transaction().await.unwrap();
-    inbox.save(&tx).await.unwrap();
+    counters.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)

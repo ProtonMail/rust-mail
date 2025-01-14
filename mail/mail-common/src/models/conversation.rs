@@ -12,8 +12,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, SystemLabel,
-    SystemLabelId,
+    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, ReadFilter,
+    SystemLabel, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -682,7 +682,7 @@ impl Conversation {
                 .await?
                 .is_none()
                 {
-                    let Some(mut label) = Label::find_by_id(label_id, bond).await? else {
+                    let Some(label) = Label::find_by_id(label_id, bond).await? else {
                         return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
                     };
 
@@ -728,8 +728,13 @@ impl Conversation {
 
                     new_label.save(bond).await?;
 
-                    label.total_conv += 1;
-                    label.save(bond).await?;
+                    let Some(mut counters) =
+                        ConversationCounters::find_by_id(label_id, bond).await?
+                    else {
+                        return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+                    };
+                    counters.total += 1;
+                    counters.save(bond).await?;
                 }
             }
         }
@@ -911,18 +916,18 @@ impl Conversation {
 
         for mut conv_label in conv_labels {
             let label_id = conv_label.local_label_id.unwrap();
-            let mut label = Label::find_by_id(label_id, bond)
-                .await?
-                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             let stats = all_stats.get(&label_id);
 
-            label.total_conv -= 1;
+            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
+                .await?
+                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
+            conv_counter.total -= 1;
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                label.unread_conv -= 1;
+                conv_counter.unread -= 1;
             }
 
-            label.save(bond).await?;
+            conv_counter.save(bond).await?;
 
             conv_label.deleted = true;
             conv_label.save(bond).await?;
@@ -1020,17 +1025,16 @@ impl Conversation {
         .await?;
 
         if let Some(mut conv_label) = conv_label {
-            let mut label = Label::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
-            label.total_conv -= 1;
+            conv_counter.total -= 1;
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                label.unread_conv -= 1;
+                conv_counter.unread -= 1;
             }
 
-            label.save(bond).await?;
-
+            conv_counter.save(bond).await?;
             conv_label.deleted = true;
             conv_label.save(bond).await?;
         }
@@ -1167,18 +1171,18 @@ impl Conversation {
 
         for mut conv_label in conv_labels {
             let label_id = conv_label.local_label_id.unwrap();
-            let mut label = Label::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
             let stats = all_stats.get(&label_id);
 
-            label.total_conv += 1;
+            conv_counter.total += 1;
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                label.unread_conv += 1;
+                conv_counter.unread += 1;
             }
 
-            label.save(bond).await?;
+            conv_counter.save(bond).await?;
 
             conv_label.deleted = false;
             conv_label.save(bond).await?;
@@ -1274,16 +1278,16 @@ impl Conversation {
         .await?;
 
         if let Some(mut conv_label) = conv_label {
-            let mut label = Label::find_by_id(label_id, bond)
+            let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
-            label.total_conv += 1;
+            conv_counter.total += 1;
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                label.unread_conv += 1;
+                conv_counter.unread += 1;
             }
 
-            label.save(bond).await?;
+            conv_counter.save(bond).await?;
 
             conv_label.deleted = false;
             conv_label.save(bond).await?;
@@ -1743,9 +1747,11 @@ impl Conversation {
             }
 
             for (label_id, count) in &mut label_counts {
-                if let Some(mut label) = Label::find_by_id(*label_id, bond).await? {
-                    label.unread_conv -= *count;
-                    label.save(bond).await?
+                if let Some(mut conv_counter) =
+                    ConversationCounters::find_by_id(*label_id, bond).await?
+                {
+                    conv_counter.unread -= *count;
+                    conv_counter.save(bond).await?;
                 }
 
                 // reset for messages.
@@ -1874,9 +1880,11 @@ impl Conversation {
                     conversation.num_unread += 1;
                     conversation.save(bond).await?;
 
-                    if let Some(mut label) = Label::find_by_id(local_label_id, bond).await? {
-                        label.unread_conv += 1;
-                        label.save(bond).await?;
+                    if let Some(mut counter) =
+                        ConversationCounters::find_by_id(local_label_id, bond).await?
+                    {
+                        counter.unread += 1;
+                        counter.save(bond).await?;
                     }
                 }
                 continue;
@@ -1904,15 +1912,15 @@ impl Conversation {
                     counter.unread += 1;
                     counter.save(bond).await?;
                 }
-                if let Some(mut label) = Label::find_by_id(label_id, bond).await? {
+                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await? {
                     // Only update conversation unread count if we really marked
                     // all messages as unread. If we have mixture, this value
                     // should not be modified
                     if total_conversation_message_count == 1 {
-                        label.unread_conv += 1;
+                        counter.unread += 1;
                     }
 
-                    label.save(bond).await?;
+                    counter.save(bond).await?;
                 }
             }
 
@@ -1964,7 +1972,7 @@ impl Conversation {
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let mut label = Label::find_by_id(label_id, bond)
+        let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
             .await?
             .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
 
@@ -2005,10 +2013,10 @@ impl Conversation {
                     value
                 });
 
-                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
-                    counter.total -= message_ids.len() as u64;
-                    counter.unread -= num_unread;
-                    counter.save(bond).await?;
+                if let Some(mut msg_counter) = MessageCounters::find_by_id(label_id, bond).await? {
+                    msg_counter.total -= message_ids.len() as u64;
+                    msg_counter.unread -= num_unread;
+                    msg_counter.save(bond).await?;
                 }
             }
 
@@ -2026,9 +2034,9 @@ impl Conversation {
             {
                 Ok(num_unread) => {
                     if num_unread > 0 {
-                        label.unread_conv -= 1;
+                        conv_counter.unread -= 1;
                     }
-                    label.total_conv -= 1;
+                    conv_counter.total -= 1;
                 }
                 Err(e) => {
                     if !matches!(
@@ -2041,7 +2049,7 @@ impl Conversation {
             }
         }
 
-        label.save(bond).await?;
+        conv_counter.save(bond).await?;
         Ok(())
     }
 
@@ -2721,8 +2729,10 @@ impl Conversation {
         conversation_label.save(bond).await?;
 
         // Update message label counts.
-        let Some(mut label) = Label::find_by_id(local_label_id, bond).await? else {
-            error!("Could not find label");
+        let Some(mut conv_counters) =
+            ConversationCounters::find_by_id(local_label_id, bond).await?
+        else {
+            error!("Could not find label counters");
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
@@ -2738,10 +2748,10 @@ impl Conversation {
         let should_increment_count = !has_label;
         let should_increment_unread = !is_unread && stats.unread != 0;
 
-        label.total_conv += should_increment_count as u64;
-        label.unread_conv += should_increment_unread as u64;
+        conv_counters.total += should_increment_count as u64;
+        conv_counters.unread += should_increment_unread as u64;
 
-        label.save(bond).await?;
+        conv_counters.save(bond).await?;
         msg_counters.save(bond).await?;
 
         Ok(())
@@ -3518,11 +3528,11 @@ impl DataSource for ConversationDataSource {
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, tether))]
     async fn total(&self, tether: &Tether) -> Result<usize, Self::Error> {
-        let label = Label::find_by_id(self.local_label_id, tether)
+        let counter = ConversationCounters::find_by_id(self.local_label_id, tether)
             .await?
             .ok_or(AppError::LabelNotFound(self.local_label_id))?;
-        debug!("Total conversations: {}", label.total_conv);
-        Ok(label.total_conv.try_into().unwrap_or(0))
+        debug!("Total conversations: {}", counter.total);
+        Ok(counter.total.try_into().unwrap_or(0))
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self))]
@@ -3639,7 +3649,7 @@ impl DataSource for ConversationDataSource {
         vec![
             Conversation::table_name().to_string(),
             ConversationLabel::table_name().to_string(),
-            Label::table_name().to_string(),
+            ConversationCounters::table_name().to_string(),
         ]
     }
 }
@@ -3656,5 +3666,115 @@ impl ConversationDataSource {
         }
         tx.commit().await?;
         Ok(records)
+    }
+}
+
+/// Conversation counters that are related to particular label
+/// Allow the user to see how many conversations there are assigned to the label,
+/// both unread count and total count.
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[TableName("conversation_counters")]
+pub struct ConversationCounters {
+    /// Local id of the label
+    #[IdField]
+    pub local_label_id: LocalLabelId,
+
+    /// Number of total conversations related to one particular label
+    #[DbField]
+    pub total: u64,
+
+    /// Number of unread conversations related to one particular label
+    #[DbField]
+    pub unread: u64,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+}
+
+impl ConversationCounters {
+    /// Constructor - note: [`ConversationCounters`] does not implement [`Default`] trait
+    ///
+    /// # Parameters
+    /// * `local_label_id` - local id of the label
+    pub fn new(local_label_id: LocalLabelId) -> Self {
+        Self {
+            local_label_id,
+            total: Default::default(),
+            unread: Default::default(),
+            row_id: Default::default(),
+        }
+    }
+
+    /// Save conversation counters to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to ensure
+    /// that if the counter already exists it is updated, and not inserted with a conflict.
+    ///
+    /// # Parameters
+    /// * `local_label_id` - local id of the label
+    /// * `tx` - transaction used to modify DB
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails.
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if self.row_id.is_none() {
+            if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
+                self.row_id = existing.row_id;
+            }
+        }
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Get all conversation counters linked to labels with given kind
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - The kind of the label, eg. System, Folder etc.
+    /// * `tether` - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find(
+            "INNER JOIN labels ON labels.local_id = local_label_id WHERE label_type = ? ORDER BY labels.display_order ASC",
+            params![kind],
+            tether
+        ).await
+    }
+
+    /// Returns counters, first unread then total
+    pub fn counters(&self) -> (u64, u64) {
+        (self.unread, self.total)
+    }
+
+    /// Returns number of conversations based on the filter.
+    /// Can be either:
+    /// * Total number
+    /// * Unread number
+    /// * Read number
+    pub fn filtered_counter(&self, unread: ReadFilter) -> u64 {
+        match unread {
+            ReadFilter::All => self.total,
+            ReadFilter::Unread => self.unread,
+            ReadFilter::Read => self.total.saturating_sub(self.unread),
+        }
+    }
+
+    /// Returns [`ConversationCounts`] datastructure that contains label's Remote ID
+    /// instead of the Local ID.
+    pub async fn conversation_count(&self, tether: &Tether) -> Result<ConversationCount, AppError> {
+        let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
+
+        Ok(ConversationCount {
+            label_id: remote_id,
+            total: self.total,
+            unread: self.unread,
+        })
     }
 }

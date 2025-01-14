@@ -2078,13 +2078,13 @@ impl Message {
 
         for label_id in label_ids {
             // Update conversation label counts.
-            if let Some(mut label) = Label::find_by_id(label_id, bond).await? {
+            if let Some(mut counters) = ConversationCounters::find_by_id(label_id, bond).await? {
                 if mark_read {
-                    label.unread_conv -= 1;
+                    counters.unread -= 1;
                 } else {
-                    label.unread_conv += 1;
+                    counters.unread += 1;
                 }
-                label.save(bond).await?;
+                counters.save(bond).await?;
             }
         }
 
@@ -2350,17 +2350,17 @@ impl Message {
                 }
             };
 
-            let mut label = Label::find_by_id(local_label_id, bond)
+            let mut conv_counters = ConversationCounters::find_by_id(local_label_id, bond)
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
 
             // update conversation counters
             if remaining_unread == 0 || remaining_messages == 0 {
                 if remaining_unread == 0 && unread_count != 0 {
-                    label.unread_conv -= 1;
+                    conv_counters.unread -= 1;
                 }
                 if remaining_messages == 0 {
-                    label.total_conv -= 1;
+                    conv_counters.total -= 1;
                 }
             }
 
@@ -2372,7 +2372,7 @@ impl Message {
             msg_counters.unread -= unread_count;
             msg_counters.total -= updated_count;
 
-            label.save(bond).await?;
+            conv_counters.save(bond).await?;
             msg_counters.save(bond).await?;
         }
 
@@ -2890,7 +2890,7 @@ impl DataSource for MessageDataSource {
         vec![
             Message::table_name().to_string(),
             MessageLabel::table_name().to_string(),
-            Label::table_name().to_string(),
+            MessageCounters::table_name().to_string(),
         ]
     }
 }
@@ -3255,7 +3255,7 @@ impl MessageCounters {
 
     /// Save message counters to the database.
     ///
-    /// It's imperative taht you use this method over [`Model::save()`] to ensure
+    /// It's imperative that you use this method over [`Model::save()`] to ensure
     /// that if the counter already exists it is updated, and not inserted with a conflict.
     ///
     /// # Parameters
@@ -3384,14 +3384,6 @@ pub struct LabelWithCounters {
     #[DbField]
     pub sticky: bool,
 
-    /// TODO: Document this field.
-    #[DbField]
-    pub total_conv: u64,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub unread_conv: u64,
-
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -3406,6 +3398,14 @@ pub struct LabelWithCounters {
     /// Number of unread messages related to one particular label
     #[DbField]
     pub unread_msg: u64,
+
+    /// Number of total conversations related to one particular label
+    #[DbField]
+    pub total_conv: u64,
+
+    /// Number of unread conversations related to one particular label
+    #[DbField]
+    pub unread_conv: u64,
 }
 
 impl LabelWithCounters {
@@ -3425,18 +3425,22 @@ impl LabelWithCounters {
             .query(
                 formatdoc!(
                     "SELECT
-            {left}.rowid AS row_id, 
-            {left}.*,
-            {right}.total as total_msg,
-            {right}.unread as unread_msg
-        FROM {left}
-        INNER JOIN {right}
-            ON {left}.local_id = {right}.local_label_id
-        {query}
-        LIMIT 1
-        ",
-                    left = Label::table_name(),
-                    right = MessageCounters::table_name(),
+                    {labels}.rowid AS row_id, 
+                    {labels}.*,
+                    {msgs}.total as total_msg,
+                    {msgs}.unread as unread_msg,
+                    {convs}.total as total_conv,
+                    {convs}.unread as unread_conv
+                FROM {labels}
+                INNER JOIN {msgs}
+                    ON {labels}.local_id = {msgs}.local_label_id
+                INNER JOIN {convs}
+                    ON {labels}.local_id = {convs}.local_label_id
+                    {query}
+                    LIMIT 1",
+                    labels = Label::table_name(),
+                    msgs = MessageCounters::table_name(),
+                    convs = ConversationCounters::table_name(),
                     query = query.into()
                 ),
                 params,
@@ -3474,20 +3478,25 @@ impl LabelWithCounters {
             .query(
                 formatdoc!(
                     "SELECT
-                {left}.rowid AS row_id, 
-                {left}.*,
-                {right}.total as total_msg,
-                {right}.unread as unread_msg
-            FROM {left}
-            INNER JOIN {right}
-                ON {left}.local_id = {right}.local_label_id
+                {labels}.rowid AS row_id, 
+                {labels}.*,
+                {msgs}.total as total_msg,
+                {msgs}.unread as unread_msg,
+                {convs}.total as total_conv,
+                {convs}.unread as unread_conv
+            FROM {labels}
+            INNER JOIN {msgs}
+                ON {labels}.local_id = {msgs}.local_label_id
+            INNER JOIN {convs}
+                ON {labels}.local_id = {convs}.local_label_id
             WHERE
-                {left}.label_type = ?
+                {labels}.label_type = ?
             ORDER BY
-                {left}.display_order ASC
+                {labels}.display_order ASC
             ",
-                    left = Label::table_name(),
-                    right = MessageCounters::table_name()
+                    labels = Label::table_name(),
+                    msgs = MessageCounters::table_name(),
+                    convs = ConversationCounters::table_name(),
                 ),
                 params![kind],
             )
@@ -3513,11 +3522,11 @@ impl LabelWithCounters {
             display_order,
             path,
             sticky,
-            total_conv,
-            unread_conv,
             row_id,
             total_msg: _,
             unread_msg: _,
+            total_conv: _,
+            unread_conv: _,
         } = self.clone();
         Label {
             local_id,
@@ -3535,8 +3544,6 @@ impl LabelWithCounters {
             display_order,
             path,
             sticky,
-            total_conv,
-            unread_conv,
             row_id,
         }
     }

@@ -366,7 +366,10 @@ impl crate::app_model::Popup for LabelSelectPopup {
             .map(|label_with_counters| {
                 let label = label_with_counters.label();
                 let (unread_count, total_count) = if view_mode == ViewMode::Conversations {
-                    (label.unread_conv, label.total_conv)
+                    (
+                        label_with_counters.unread_conv,
+                        label_with_counters.total_conv,
+                    )
                 } else {
                     (
                         label_with_counters.unread_msg,

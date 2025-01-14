@@ -1,4 +1,9 @@
-use stash::stash::{Bond, StashError};
+use stash::{
+    params,
+    stash::{Bond, StashError},
+};
+
+use super::labels::default_labels;
 
 pub async fn create_conversation_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(
@@ -109,5 +114,30 @@ pub async fn create_conversation_tables(tx: &Bond<'_>) -> Result<(), StashError>
         r#"CREATE INDEX index_conversations_attachments_aid ON conversation_attachments (local_attachment_id)"#,
         vec![],
     ).await?;
+
+    // Conversation counters
+    tx.execute(
+        r#"
+        CREATE TABLE conversation_counters (
+            local_label_id INTEGER PRIMARY KEY,
+            total INTEGER NOT NULL DEFAULT 0,
+            unread INTEGER NOT NULL DEFAULT 0,
+            
+            CONSTRAINT create_conversation_counters_label_id
+                FOREIGN KEY (local_label_id)
+                REFERENCES labels (local_id)
+                ON DELETE CASCADE
+        )
+    "#,
+        vec![],
+    )
+    .await?;
+
+    // Insert conversation counters for default labels
+    let sql = r#"INSERT INTO conversation_counters (local_label_id) SELECT l.local_id FROM labels AS l WHERE l.remote_id = ?"#;
+    for (id, _) in default_labels().into_iter() {
+        tx.execute(sql, params![id]).await?;
+    }
+
     Ok(())
 }

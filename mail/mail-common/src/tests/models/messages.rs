@@ -250,6 +250,10 @@ mod available_actions {
             for mut label in labels {
                 label.save(&tx).await.expect("failed to create label");
                 let local_id = label.local_id.expect("Local ID");
+                ConversationCounters::new(local_id)
+                    .save(&tx)
+                    .await
+                    .expect("Failed to create counters");
                 MessageCounters::new(local_id)
                     .save(&tx)
                     .await
@@ -415,6 +419,10 @@ mod available_label_as_actions {
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
                 let label_id = label.local_id.unwrap();
+                ConversationCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("failed to create conversation counters");
                 MessageCounters::new(label_id)
                     .save(&tx)
                     .await
@@ -794,6 +802,10 @@ mod available_move_to_actions {
             for mut label in message_labels {
                 label.save(&tx).await.expect("failed to create label");
                 let label_id = label.local_id.unwrap();
+                ConversationCounters::new(label_id)
+                    .save(&tx)
+                    .await
+                    .expect("failed to create conversation counters");
                 MessageCounters::new(label_id)
                     .save(&tx)
                     .await

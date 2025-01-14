@@ -139,6 +139,10 @@ async fn main() {
         .unwrap();
         paginate(&paginator, counter.total).await;
     } else {
+        let counter = ConversationCounters::find_by_id(label.local_id, &tether)
+            .await
+            .unwrap()
+            .unwrap();
         let paginator = Conversation::paginate_in_label(
             &user_ctx,
             label.local_id.unwrap(),
@@ -148,7 +152,7 @@ async fn main() {
         )
         .await
         .unwrap();
-        paginate(&paginator, label.total_conv).await;
+        paginate(&paginator, counter.total).await;
     }*/
 }
 
