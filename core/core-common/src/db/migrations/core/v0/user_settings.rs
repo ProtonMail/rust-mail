@@ -1,10 +1,8 @@
-use futures::executor::block_on;
 use stash::stash::{Bond, StashError};
 
-pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
-    block_on(async {
-        tx.execute(
-            r"
+pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
+    tx.execute(
+        r"
         CREATE TABLE user_settings (
             remote_id TEXT PRIMARY KEY,
             email TEXT NOT NULL,
@@ -30,10 +28,9 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
             high_security TEXT NOT NULL,
             session_account_recovery INTEGER NOT NULL
         )",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        Ok(())
-    })
+    Ok(())
 }

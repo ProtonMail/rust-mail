@@ -1,10 +1,8 @@
-use futures::executor::block_on;
 use stash::stash::{Bond, StashError};
 
-pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
-    block_on(async {
-        tx.execute(
-            r"
+pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
+    tx.execute(
+        r"
             CREATE TABLE addresses (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT NOT NULL,
@@ -23,18 +21,18 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                 keys TEXT
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            "CREATE UNIQUE INDEX index_addresses_email ON addresses(email)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        "CREATE UNIQUE INDEX index_addresses_email ON addresses(email)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"
+    tx.execute(
+        r"
             CREATE TABLE address_keys (
                 remote_id TEXT PRIMARY KEY,
                 address_id INTEGER NOT NULL,
@@ -58,16 +56,15 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                     ON DELETE SET NULL
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
+        vec![],
+    )
+    .await?;
 
-        Ok(())
-    })
+    Ok(())
 }

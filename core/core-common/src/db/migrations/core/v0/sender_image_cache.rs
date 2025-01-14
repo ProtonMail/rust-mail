@@ -1,10 +1,8 @@
-use futures::executor::block_on;
 use stash::stash::{Bond, StashError};
 
-pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
-    block_on(async {
-        tx.execute(
-            r"
+pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
+    tx.execute(
+        r"
             CREATE TABLE sender_image_cache (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 address TEXT DEFAULT NULL,
@@ -18,10 +16,9 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                 is_empty INTEGER NOT NULL
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        Ok(())
-    })
+    Ok(())
 }
