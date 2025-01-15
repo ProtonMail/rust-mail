@@ -1,3 +1,9 @@
+#![allow(clippy::module_inception)]
+
+#[cfg(test)]
+#[path = "../tests/models/mailbox_labels.rs"]
+mod mailbox_labels;
+
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
 use stash::{

@@ -362,37 +362,6 @@ async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label))
 }
 
 #[tokio::test]
-async fn test_mark_labels_as_initialized() {
-    let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    let mut new_label = Label {
-        local_id: None,
-        remote_id: Some("MyLabel".into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        color: LabelColor::purple(),
-        display: false,
-        display_order: 0,
-        expanded: false,
-        label_type: LabelType::Folder,
-        name: "Label".to_owned(),
-        notify: false,
-        path: None,
-        sticky: false,
-        row_id: None,
-    };
-    new_label.save(&tx).await.expect("failed to create label");
-    new_label
-        .save(&tx)
-        .await
-        .expect("failed to mark label as initialized");
-    new_label
-        .save(&tx)
-        .await
-        .expect("failed to mark label as initialized");
-}
-
-#[tokio::test]
 async fn test_watch_label() {
     let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
