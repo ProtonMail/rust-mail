@@ -1149,7 +1149,7 @@ async fn test_message_counts() {
     ];
 
     let tx = tether.transaction().await.unwrap();
-    Label::create_or_update_message_counts(counts.clone(), &tx)
+    MessageCount::create_or_update_message_counts(counts.clone(), &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.unwrap();

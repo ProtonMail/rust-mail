@@ -159,7 +159,7 @@ async fn label_with_counts() {
     local_label.save(&tx).await.unwrap();
     let local_id = local_label.local_id.unwrap();
 
-    Label::create_or_update_conversation_counts(
+    ConversationCount::create_or_update_conversation_counts(
         vec![ConversationCount {
             label_id: local_label.remote_id.clone().unwrap(),
             total: total_conv,
@@ -170,7 +170,7 @@ async fn label_with_counts() {
     .await
     .unwrap();
 
-    Label::create_or_update_message_counts(
+    MessageCount::create_or_update_message_counts(
         vec![MessageCount {
             label_id: local_label.remote_id.clone().unwrap(),
             total: total_msg,

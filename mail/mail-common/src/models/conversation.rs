@@ -12,8 +12,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation,
-    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, ReadFilter,
-    SystemLabel, SystemLabelId,
+    LocalMessageId, MessageAttachmentInfos, MessageCount, MessageRecipients, MessageSenders,
+    ReadFilter, SystemLabel, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -2188,8 +2188,8 @@ impl Conversation {
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
-        Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
-        Label::create_or_update_message_counts(message_counts, &tx).await?;
+        ConversationCount::create_or_update_conversation_counts(conversation_counts, &tx).await?;
+        MessageCount::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
         Ok(())
     }

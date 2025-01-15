@@ -4,10 +4,9 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{ConversationCount, MessageCount, SystemLabelId, ViewMode};
+use crate::datatypes::{SystemLabelId, ViewMode};
 use crate::models::*;
 use crate::AppError;
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
@@ -157,66 +156,6 @@ impl Label {
             .await?
             .label
             .into())
-    }
-
-    pub async fn create_or_update_conversation_counts(
-        counts: Vec<ConversationCount>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO conversation_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                    FROM labels AS l
-                    WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                    SET total = ?,
-                        unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
-        }
-        Ok(())
-    }
-
-    pub async fn create_or_update_message_counts(
-        counts: Vec<MessageCount>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO message_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                        FROM labels AS l
-                        WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                        SET total = ?,
-                            unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
-        }
-        Ok(())
     }
 
     /// TODO: Document this function.

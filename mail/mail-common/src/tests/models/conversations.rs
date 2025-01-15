@@ -1907,7 +1907,7 @@ async fn test_conversation_counts() {
     ];
     let counts_clone = counts.clone();
     let tx = tether.transaction().await.unwrap();
-    Label::create_or_update_conversation_counts(counts_clone, &tx)
+    ConversationCount::create_or_update_conversation_counts(counts_clone, &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.expect("failed to commit");

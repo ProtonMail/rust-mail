@@ -243,14 +243,14 @@ pub async fn prepare_and_patch_db_state_and_skip(
     }
 
     // create conversation_counts
-    Label::create_or_update_conversation_counts(
+    ConversationCount::create_or_update_conversation_counts(
         result.conversation_counts.values().cloned().collect(),
         &tx,
     )
     .await
     .expect("failed to create conversation counts");
     if !skip_messages {
-        Label::create_or_update_message_counts(
+        MessageCount::create_or_update_message_counts(
             result.message_counts.values().cloned().collect(),
             &tx,
         )

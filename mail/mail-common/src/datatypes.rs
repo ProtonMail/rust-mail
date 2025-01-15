@@ -48,9 +48,10 @@ pub(crate) mod system_label;
 
 pub use contextual_conversation::*;
 pub use exclusive_location::ExclusiveLocation;
+use indoc::formatdoc;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
-use stash::stash::Tether;
+use stash::stash::{Bond, StashError, Tether};
 pub use system_folder::MovableSystemFolder;
 pub use system_label::SystemLabel;
 
@@ -93,7 +94,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
-use stash::sql_using_serde;
+use stash::{params, sql_using_serde};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -948,6 +949,38 @@ impl From<ApiConversationCount> for ConversationCount {
     }
 }
 
+impl ConversationCount {
+    pub async fn create_or_update_conversation_counts(
+        counts: Vec<Self>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        for count in counts {
+            bond.execute(
+                formatdoc!(
+                    r"
+                    INSERT INTO conversation_counters(local_label_id, total, unread)
+                    SELECT l.local_id, ?, ?
+                    FROM labels AS l
+                    WHERE l.remote_id = ?
+                    ON CONFLICT(local_label_id) DO UPDATE
+                    SET total = ?,
+                        unread = ?
+                    "
+                ),
+                params![
+                    count.total,
+                    count.unread,
+                    count.label_id,
+                    count.total,
+                    count.unread
+                ],
+            )
+            .await?;
+        }
+        Ok(())
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EncryptedMessageBody {
@@ -1432,6 +1465,38 @@ impl From<ApiMessageCount> for MessageCount {
             total: value.total,
             unread: value.unread,
         }
+    }
+}
+
+impl MessageCount {
+    pub async fn create_or_update_message_counts(
+        counts: Vec<Self>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        for count in counts {
+            bond.execute(
+                formatdoc!(
+                    r"
+                    INSERT INTO message_counters(local_label_id, total, unread)
+                    SELECT l.local_id, ?, ?
+                        FROM labels AS l
+                        WHERE l.remote_id = ?
+                    ON CONFLICT(local_label_id) DO UPDATE
+                        SET total = ?,
+                            unread = ?
+                    "
+                ),
+                params![
+                    count.total,
+                    count.unread,
+                    count.label_id,
+                    count.total,
+                    count.unread
+                ],
+            )
+            .await?;
+        }
+        Ok(())
     }
 }
 
