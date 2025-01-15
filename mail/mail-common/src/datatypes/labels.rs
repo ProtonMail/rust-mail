@@ -5,6 +5,8 @@ use proton_core_common::models::ModelExtension;
 use stash::orm::Model;
 use stash::stash::Tether;
 
+use super::SystemLabel;
+
 pub mod custom_folder;
 pub mod custom_labels;
 pub mod hierarchy;
@@ -21,7 +23,7 @@ pub mod system_labels;
 /// # Panics
 /// If label provided does not have Local ID
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
-    match label.view_mode(tether).await? {
+    match SystemLabel::view_mode(label, tether).await? {
         ViewMode::Conversations => {
             let counters =
                 ConversationCounters::find_by_id(label.local_id.unwrap(), tether).await?;

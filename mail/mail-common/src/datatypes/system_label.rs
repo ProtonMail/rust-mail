@@ -3,12 +3,17 @@ use std::fmt::Display;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
-use stash::stash::{StashError, Tether};
+use stash::{
+    orm::Model,
+    stash::{StashError, Tether},
+};
 
 use crate::{
     datatypes::{LabelId, LabelType},
-    models::Label,
+    models::{Label, MailSettings, MAIL_SETTINGS_ID},
 };
+
+use super::{SystemLabelId, ViewMode};
 
 /// This enum represents the system labels that are available in ProtonMail.
 /// Their values correspond to the remote ids of the labels in the core API database.
@@ -111,6 +116,51 @@ impl SystemLabel {
 
     pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalLabelId>, StashError> {
         Label::remote_id_counterpart(self.remote_id(), tether).await
+    }
+
+    /// Return the preferred view mode for label.
+    ///
+    /// If this function returns [`None`] we should use the [`ViewMode`] defined
+    /// in the user's [`MailSettings`], otherwise the returned value should be
+    /// used.
+    ///
+    pub async fn view_mode(label: &Label, tether: &Tether) -> Result<ViewMode, StashError> {
+        if let Some(remote_id) = label.remote_id.as_ref() {
+            if *remote_id == LabelId::drafts()
+                || *remote_id == LabelId::sent()
+                || *remote_id == LabelId::all_drafts()
+                || *remote_id == LabelId::all_sent()
+                || *remote_id == LabelId::all_scheduled()
+            {
+                return Ok(ViewMode::Messages);
+            }
+        }
+        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
+            .await?
+            .unwrap_or_default()
+            .view_mode)
+    }
+
+    /// TODO: Document this function.
+    pub fn is_label_applicable(label: &Label) -> bool {
+        label.label_type == LabelType::Label || Self::is_label_starred(label)
+    }
+
+    /// Checks if label is a System label - starred.
+    pub fn is_label_starred(label: &Label) -> bool {
+        label
+            .remote_id
+            .as_ref()
+            .is_some_and(|rid| *rid == LabelId::starred())
+    }
+
+    /// TODO: Document this function.
+    pub fn is_label_movable_folder(label: &Label) -> bool {
+        label.label_type == LabelType::Folder
+            || label
+                .remote_id
+                .as_ref()
+                .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
     }
 }
 

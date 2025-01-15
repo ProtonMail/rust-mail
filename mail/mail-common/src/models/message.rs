@@ -497,7 +497,7 @@ impl Message {
         let Some(source) = Label::load(source_id, bond).await? else {
             return Err(AppError::LabelNotFound(source_id));
         };
-        if source.is_movable_folder() {
+        if SystemLabel::is_label_movable_folder(&source) {
             Message::remove_label(source_id, message_ids.to_vec(), bond)
                 .await
                 .inspect_err(|e| error!("Failed to remove source label from messages: {e}"))?;

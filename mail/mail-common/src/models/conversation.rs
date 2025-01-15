@@ -2350,7 +2350,7 @@ impl Conversation {
         let Some(source) = Label::load(source_id, bond).await? else {
             return Err(AppError::LabelNotFound(source_id));
         };
-        if source.is_movable_folder() {
+        if SystemLabel::is_label_movable_folder(&source) {
             Conversation::remove_label(source_id, conversation_ids.clone(), bond).await?
         }
 

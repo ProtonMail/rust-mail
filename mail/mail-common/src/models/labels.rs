@@ -4,7 +4,6 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{SystemLabelId, ViewMode};
 use crate::models::*;
 use crate::AppError;
 use itertools::Itertools;
@@ -158,26 +157,6 @@ impl Label {
             .into())
     }
 
-    /// TODO: Document this function.
-    pub fn is_applicable_label(&self) -> bool {
-        self.label_type == LabelType::Label || self.is_starred()
-    }
-
-    /// Checks if label is a System label - starred.
-    pub fn is_starred(&self) -> bool {
-        self.remote_id
-            .as_ref()
-            .is_some_and(|rid| *rid == LabelId::starred())
-    }
-
-    /// TODO: Document this function.
-    pub fn is_movable_folder(&self) -> bool {
-        self.label_type == LabelType::Folder
-            || self
-                .remote_id
-                .as_ref()
-                .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
-    }
 
     /// Fetches all labels from the API and stores them in the database.
     ///
@@ -358,29 +337,6 @@ impl Label {
         )
         .await
         .map(|r| r.label.into())
-    }
-
-    /// Return the preferred view mode for this label.
-    ///
-    /// If this function returns [`None`] we should use the [`ViewMode`] defined
-    /// in the user's [`MailSettings`], otherwise the returned value should be
-    /// used.
-    ///
-    pub async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError> {
-        if let Some(remote_id) = self.remote_id.as_ref() {
-            if *remote_id == LabelId::drafts()
-                || *remote_id == LabelId::sent()
-                || *remote_id == LabelId::all_drafts()
-                || *remote_id == LabelId::all_sent()
-                || *remote_id == LabelId::all_scheduled()
-            {
-                return Ok(ViewMode::Messages);
-            }
-        }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
-            .await?
-            .unwrap_or_default()
-            .view_mode)
     }
 
     /// Get all labels with given kind

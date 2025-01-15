@@ -2,7 +2,7 @@ mod attachments;
 
 pub mod decrypted_message;
 
-use crate::datatypes::{LocalAttachmentId, ViewMode};
+use crate::datatypes::{LocalAttachmentId, SystemLabel, ViewMode};
 use crate::models::{
     Conversation, ConversationCounters, Label, MailboxLabels, Message, MessageCounters,
 };
@@ -85,7 +85,7 @@ impl Mailbox {
         let Some(label) = Label::load(label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
-        let view_mode = label.view_mode(&tether).await?;
+        let view_mode = SystemLabel::view_mode(&label, &tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
         Ok(Self {
             label_id,
@@ -100,7 +100,7 @@ impl Mailbox {
     ) -> MailboxResult<Self> {
         let tether = user_ctx.user_stash().connection();
         let label = Label::find_by_remote_id(label_id, &tether).await?.unwrap();
-        let view_mode = label.view_mode(&tether).await?;
+        let view_mode = SystemLabel::view_mode(&label, &tether).await?;
         debug!(
             "Creating Mailbox ({}, view_mode={:?})",
             label.local_id.unwrap(),
