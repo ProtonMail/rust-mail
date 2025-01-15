@@ -30,7 +30,6 @@
 mod attachment;
 mod conversation;
 mod draft;
-mod labels;
 mod labels_with_counters;
 mod mail_scroller;
 mod mail_settings;
@@ -43,7 +42,6 @@ mod rollback_item;
 pub use attachment::*;
 pub use conversation::*;
 pub use draft::*;
-pub use labels::*;
 pub use labels_with_counters::*;
 pub use mail_scroller::*;
 pub use mail_settings::*;

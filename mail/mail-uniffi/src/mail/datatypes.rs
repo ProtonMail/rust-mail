@@ -68,7 +68,7 @@ use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
-use proton_core_common::models::{Address as RealAddress, ModelIdExtension};
+use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -91,8 +91,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
-    Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
-    Message as RealMessage,
+    Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
 };
 use proton_mail_common::AppError;
 use serde_json::to_string as to_json_string;

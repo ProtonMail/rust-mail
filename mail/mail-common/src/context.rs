@@ -10,6 +10,7 @@ use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
@@ -53,6 +54,8 @@ pub enum MailContextError {
     PGPKeyAccess(KeyHandlingError),
     #[error("Failed to select OpenPGP keys for encryption: {0}")]
     PGPKeySelection(#[from] EncryptionPreferencesError),
+    #[error("Label Error: {0}")]
+    Label(#[from] LabelError),
     #[error("App Error: {0}")]
     App(#[from] AppError),
     #[error("Stash Error: {0}")]

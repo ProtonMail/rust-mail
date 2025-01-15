@@ -10,7 +10,7 @@ use crate::datatypes::{
     attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
-use crate::models::{Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata};
+use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use lazy_static::lazy_static;
@@ -25,6 +25,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
 use proton_core_common::datatypes::{LabelColor, LabelType};
+use proton_core_common::models::Label;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{

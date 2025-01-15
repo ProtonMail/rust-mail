@@ -3,9 +3,7 @@ mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::{LocalAttachmentId, SystemLabel, ViewMode};
-use crate::models::{
-    Conversation, ConversationCounters, Label, MailboxLabels, Message, MessageCounters,
-};
+use crate::models::{Conversation, ConversationCounters, MailboxLabels, Message, MessageCounters};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
@@ -14,7 +12,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};

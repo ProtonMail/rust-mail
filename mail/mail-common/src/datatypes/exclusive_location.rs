@@ -2,14 +2,11 @@
 #[path = "../tests/datatypes/exclusive_location.rs"]
 mod tests;
 
-use crate::{
-    datatypes::{LabelColor, LabelType, SystemLabel},
-    models::Label,
-};
+use crate::datatypes::{LabelColor, LabelType, SystemLabel};
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
+use proton_core_common::{datatypes::LocalLabelId, models::Label};
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
 

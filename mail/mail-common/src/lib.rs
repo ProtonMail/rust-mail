@@ -18,6 +18,7 @@ mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
 pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
+use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::{
     cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
@@ -131,6 +132,8 @@ pub enum AppError {
     Stash(#[from] StashError),
     #[error("Could not load user info")]
     UserNotFound,
+    #[error("Label error: {0}")]
+    Label(#[from] LabelError),
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

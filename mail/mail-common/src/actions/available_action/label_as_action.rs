@@ -2,8 +2,10 @@
 #[path = "../../tests/actions/available_actions/label_as_action.rs"]
 mod tests;
 
-use crate::models::Label;
-use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
+use proton_core_common::{
+    datatypes::{LabelColor, LabelType, LocalLabelId},
+    models::Label,
+};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

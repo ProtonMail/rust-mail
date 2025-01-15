@@ -35,7 +35,7 @@
 mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
-use crate::models::{Conversation, Label, MailSettings};
+use crate::models::{Conversation, MailSettings};
 use proton_api_core::services::proton::common::{EventId, LabelId};
 use proton_api_core::services::proton::response_data::LabelEvent as ApiLabelEvent;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
@@ -46,7 +46,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::events::ContactEvent;
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
-use proton_core_common::models::{User, UserSettings};
+use proton_core_common::models::{Label, User, UserSettings};
 use proton_core_common::CoreEvent;
 use proton_event_loop::Event;
 

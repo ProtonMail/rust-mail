@@ -1,8 +1,8 @@
 use crate::datatypes::labels::{color_to_display, messages_counts};
 use crate::datatypes::{LabelColor, LabelDescription};
-use crate::models::Label;
 use crate::AppError;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::Label;
 use stash::stash::Tether;
 
 /// Contextual representation of a `Label` when it is opened for display.

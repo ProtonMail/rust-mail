@@ -9,6 +9,7 @@ use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_api_core::consts::Mail;
 use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
+use proton_core_common::models::LabelError;
 use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
@@ -131,6 +132,7 @@ impl From<AppError> for ProtonMailError {
             AppError::Cache(cache_error) => Self::from(cache_error),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
+            AppError::Label(label_error) => Self::from(label_error),
             AppError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
             AppError::LocalIdNotFound(_string, _remote_id) => {
                 Self::Unexpected(Unexpected::Database)
@@ -198,6 +200,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::DuplicateContext(_remote_id) => {
                 Self::reason(ContextErrorReason::DuplicateContext)
             }
+            MailContextError::Label(label_error) => Self::from(label_error),
         }
     }
 }
@@ -298,6 +301,7 @@ impl From<ActionError> for ProtonMailError {
             ActionError::Stash(stash_error) => Self::from(stash_error),
             ActionError::App(app_error) => Self::from(app_error),
             ActionError::NoInput => Self::Unexpected(Unexpected::Internal),
+            ActionError::Label(label_error) => Self::from(label_error),
             ActionError::Other(anyhow) => Self::from(anyhow),
         }
     }
@@ -360,6 +364,21 @@ impl From<SidebarError> for ProtonMailError {
             SidebarError::MailContext(mail_context_error) => Self::from(mail_context_error),
             SidebarError::Stash(stash_error) => Self::from(stash_error),
             SidebarError::AppError(app_error) => Self::from(app_error),
+        }
+    }
+}
+
+impl From<LabelError> for ProtonMailError {
+    fn from(error: LabelError) -> Self {
+        match error {
+            LabelError::API(api_service_error) => Self::from(api_service_error),
+            LabelError::Stash(stash_error) => Self::from(stash_error),
+            LabelError::CouldNotResolveRemoteLabel(_local_label_id) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            LabelError::CouldNotResolveLocalLabel(_label_id) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
         }
     }
 }

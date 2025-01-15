@@ -36,7 +36,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;

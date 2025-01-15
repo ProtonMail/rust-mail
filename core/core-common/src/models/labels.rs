@@ -1,11 +1,14 @@
+#![allow(clippy::struct_excessive_bools)]
+
 #[cfg(test)]
 #[path = "../tests/models/labels.rs"]
 mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::models::*;
-use crate::AppError;
+use crate::datatypes::{LabelColor, LabelType, LocalLabelId};
+use crate::models::ModelIdExtension;
+use crate::ALL_LABEL_TYPES;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
@@ -14,15 +17,26 @@ use proton_api_core::services::proton::requests::{
 };
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_api_core::services::proton::ProtonCore;
-use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
-use proton_core_common::models::ModelIdExtension;
-use proton_core_common::ALL_LABEL_TYPES;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use thiserror::Error;
 use tracing::{debug, error};
+
+#[derive(Debug, Error)]
+pub enum LabelError {
+    #[error("API error: {0}")]
+    API(#[from] ApiServiceError),
+    #[error("Stash error: {0}")]
+    Stash(#[from] StashError),
+
+    #[error("Could not resolve remote label: {0}")]
+    CouldNotResolveRemoteLabel(LocalLabelId),
+    #[error("Could not resolve local label: {0}")]
+    CouldNotResolveLocalLabel(LabelId),
+}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -108,7 +122,7 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
+    /// `label_id` is not set, the local label can not be found or the query
     /// failed.
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
@@ -157,20 +171,25 @@ impl Label {
             .into())
     }
 
-
     /// Fetches all labels from the API and stores them in the database.
     ///
     /// # Parameters
     ///
     /// * `api`   - The API instance to use.
-    /// * `stash` - The stash to use for the database connection.
+    /// * `tx` - The stash trabsaction to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels<API: ProtonCore>(api: &API, stash: &Stash) -> Result<(), AppError> {
+    /// # Panics
+    /// If labels fetched from database do not contain Local ID.
+    /// Note, this is rather impossible and is just a matter of limitations of Stash API
+    pub async fn sync_labels<API>(api: &API, tx: &Bond<'_>) -> Result<Vec<LocalLabelId>, LabelError>
+    where
+        API: ProtonCore,
+    {
         let label_requests =
             futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
                 debug!("Fetching labels ({:?})", category);
@@ -179,28 +198,24 @@ impl Label {
             .await;
 
         debug!("Storing labels into database");
-        let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
+        let mut label_ids = vec![];
         for labels in label_requests {
             match labels {
                 Err(e) => {
                     error!("Failed to fetch labels: {e}");
-                    tx.commit().await?;
-                    return Err(AppError::from(e));
+                    return Err(LabelError::from(e));
                 }
                 Ok(labels) => {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
-                        label.save(&tx).await?;
+                        label.save(tx).await?;
                         let local_id = label.local_id.unwrap();
-                        ConversationCounters::new(local_id).save(&tx).await?;
-                        MessageCounters::new(local_id).save(&tx).await?;
+                        label_ids.push(local_id);
                     }
                 }
             }
         }
-        tx.commit().await?;
 
-        Ok(())
+        Ok(label_ids)
     }
 
     /// Fetches the given labels from the API and stores them in the database.
@@ -219,7 +234,7 @@ impl Label {
         api: &API,
         tether: &mut Tether,
         ids: Vec<LabelId>,
-    ) -> Result<(), AppError> {
+    ) -> Result<(), LabelError> {
         let labels = api
             .get_labels_by_ids(ids)
             .await?
@@ -380,9 +395,9 @@ impl Label {
     pub async fn resolve_remote_label_id(
         local_id: LocalLabelId,
         tether: &Tether,
-    ) -> Result<LabelId, AppError> {
+    ) -> Result<LabelId, LabelError> {
         let Some(label_id) = Self::local_id_counterpart(local_id, tether).await? else {
-            return Err(AppError::LabelNotFound(local_id));
+            return Err(LabelError::CouldNotResolveRemoteLabel(local_id));
         };
 
         Ok(label_id)
@@ -396,9 +411,9 @@ impl Label {
     pub async fn resolve_local_label_id(
         label_id: LabelId,
         tether: &Tether,
-    ) -> Result<LocalLabelId, AppError> {
+    ) -> Result<LocalLabelId, LabelError> {
         let Some(label_id) = Self::remote_id_counterpart(label_id.clone(), tether).await? else {
-            return Err(AppError::RemoteLabelDoesNotExist(label_id));
+            return Err(LabelError::CouldNotResolveLocalLabel(label_id));
         };
         Ok(label_id)
     }
@@ -446,19 +461,19 @@ impl Default for Label {
     fn default() -> Self {
         Self {
             label_type: LabelType::Label,
-            local_id: Default::default(),
-            remote_id: Default::default(),
-            local_parent_id: Default::default(),
-            remote_parent_id: Default::default(),
-            color: Default::default(),
+            local_id: Option::default(),
+            remote_id: Option::default(),
+            local_parent_id: Option::default(),
+            remote_parent_id: Option::default(),
+            color: LabelColor::default(),
             display: Default::default(),
             expanded: Default::default(),
-            name: Default::default(),
+            name: String::default(),
             notify: Default::default(),
             display_order: Default::default(),
-            path: Default::default(),
+            path: Option::default(),
             sticky: Default::default(),
-            row_id: Default::default(),
+            row_id: Option::default(),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{Label, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::{
     orm::Model,
@@ -10,7 +10,7 @@ use stash::{
 
 use crate::{
     datatypes::{LabelId, LabelType},
-    models::{Label, MailSettings, MAIL_SETTINGS_ID},
+    models::{MailSettings, MAIL_SETTINGS_ID},
 };
 
 use super::{SystemLabelId, ViewMode};

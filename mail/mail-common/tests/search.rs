@@ -1,9 +1,8 @@
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
-use proton_core_common::models::Address;
-use proton_core_common::models::ModelIdExtension;
-use proton_mail_common::models::{Conversation, Label, Message};
+use proton_core_common::models::{Address, Label, ModelIdExtension};
+use proton_mail_common::models::{Conversation, Message};
 use proton_mail_test_utils::test_context::MailTestContext;
 
 #[tokio::test]

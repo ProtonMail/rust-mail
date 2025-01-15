@@ -12,10 +12,10 @@ use proton_api_mail::services::proton::response_data::{
     MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
+use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Label;
 use stash::stash::Tether;
 use std::collections::BTreeMap;
 
@@ -54,7 +54,7 @@ macro_rules! msg_id {
 #[macro_export]
 macro_rules! label {
     ($($field:tt)*) => {{
-        use proton_mail_common::models::Label;
+        use proton_core_common::models::Label;
 
         Label {
             $($field)*,

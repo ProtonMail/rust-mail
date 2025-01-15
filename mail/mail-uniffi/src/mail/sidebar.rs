@@ -12,8 +12,8 @@ use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use proton_core_common::models::Label as RealLabel;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::Label as RealLabel;
 use std::sync::Arc;
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar

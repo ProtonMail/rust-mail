@@ -64,6 +64,7 @@ use proton_core_common::datatypes::{
     TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
+use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
     ContactEmail as RealContactEmail, ModelIdExtension, User as RealUser,
@@ -71,7 +72,6 @@ use proton_core_common::models::{
 };
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
 use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
-use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;

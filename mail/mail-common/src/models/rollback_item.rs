@@ -3,7 +3,7 @@
 mod tests;
 
 use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
+use crate::models::{Conversation, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
@@ -13,6 +13,7 @@ use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::models::Label;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};

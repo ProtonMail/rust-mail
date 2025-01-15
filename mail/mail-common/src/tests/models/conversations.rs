@@ -6,7 +6,7 @@ use crate::datatypes::{
     attachment, ContextualConversation, ConversationCount, MessageFlags, MessageSender,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
-use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
+use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
@@ -17,6 +17,7 @@ use proton_api_mail::services::proton::response_data::{
     Disposition as ApiDisposition,
 };
 use proton_core_common::datatypes::{LabelColor, LabelType};
+use proton_core_common::models::Label;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,

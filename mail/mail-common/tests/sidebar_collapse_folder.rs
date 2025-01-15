@@ -1,7 +1,7 @@
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::LabelType;
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
-use proton_mail_common::models::Label;
+use proton_core_common::models::Label;
 use proton_mail_common::Sidebar;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::init::Params;

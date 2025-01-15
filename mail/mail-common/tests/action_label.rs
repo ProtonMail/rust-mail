@@ -7,9 +7,10 @@ use proton_api_mail::services::proton::response_data::{
     MessageCount as ApiMessageCount,
 };
 use proton_core_common::datatypes::LabelType;
+use proton_core_common::models::Label;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, Label};
+use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;

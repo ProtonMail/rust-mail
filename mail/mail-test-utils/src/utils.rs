@@ -5,15 +5,14 @@ use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
-use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
     ConversationCount, LocalConversationId, LocalMessageId, MessageCount, MessageRecipient,
     MessageRecipients, MessageSender, MessageSenders,
 };
 use proton_mail_common::models::{
-    Conversation, ConversationCounters, ConversationLabel, Label, Message, MessageCounters,
+    Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
 };
-use rand::{distributions::Uniform, Rng};
 use stash::stash::Tether;
 use std::collections::{BTreeMap, HashMap};
 
@@ -392,23 +391,4 @@ pub fn test_address() -> Address {
         },
         row_id: None,
     }
-}
-
-/// Generates a random string of the specified length, including alphanumeric and special characters.
-///
-/// # Parameters
-/// - `length`: The length of the string to generate.
-#[must_use]
-pub fn random_string(length: usize) -> String {
-    let charset: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
-                           abcdefghijklmnopqrstuvwxyz\
-                           0123456789!@#$%^&*()_+-=[]{}|;:'\",.<>?/\\`~";
-
-    let mut rng = rand::thread_rng();
-    (0..length)
-        .map(|_| {
-            let idx = rng.sample(Uniform::new(0, charset.len()));
-            charset[idx] as char
-        })
-        .collect()
 }

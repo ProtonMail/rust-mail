@@ -2,22 +2,21 @@
 #![allow(non_snake_case)]
 
 use super::*;
-use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::Label;
+use crate::models::ModelExtension as _;
+use crate::tests::common::new_core_test_connection;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::LabelType as ApiLabelType;
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::models::ModelExtension as _;
-use proton_mail_test_utils::db::new_test_connection;
-use proton_mail_test_utils::utils::random_string;
+use proton_core_test_utils::utils::random_string;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Tether;
 
 #[tokio::test]
 async fn test_remote_label_add() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let labels = test_labels();
     let tx = tether.transaction().await.unwrap();
     for label in labels.clone() {
@@ -29,7 +28,7 @@ async fn test_remote_label_add() {
 
 #[tokio::test]
 async fn test_remote_label_add_1_char_long_name() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let label = test_label(random_string(1).as_str());
     let tx = tether.transaction().await.unwrap();
     Label::from(label.clone()).save(&tx).await.unwrap();
@@ -39,7 +38,7 @@ async fn test_remote_label_add_1_char_long_name() {
 
 #[tokio::test]
 async fn test_remote_label_add_100_char_long_name() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let label = test_label(random_string(100).as_str());
     let tx = tether.transaction().await.unwrap();
     Label::from(label.clone()).save(&tx).await.unwrap();
@@ -49,7 +48,7 @@ async fn test_remote_label_add_100_char_long_name() {
 
 #[tokio::test]
 async fn test_remote_label_update() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     tether.execute("DELETE FROM labels", vec![]).await.unwrap();
     let mut labels = test_labels()
         .into_iter()
@@ -101,7 +100,7 @@ async fn test_remote_label_update() {
 
 #[tokio::test]
 async fn test_delete_remote() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let mut labels = test_labels();
 
     let tx = tether.transaction().await.unwrap();
@@ -133,68 +132,8 @@ async fn test_delete_remote() {
 }
 
 #[tokio::test]
-async fn label_with_counts() {
-    let mut tether = new_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    let label = ApiLabel {
-        id: LabelId::from("label"),
-        parent_id: None,
-        name: "Label".to_owned(),
-        path: None,
-        color: "00".to_owned(),
-        label_type: ApiLabelType::Label,
-        notify: false,
-        display: false,
-        sticky: false,
-        expanded: false,
-        order: 0,
-    };
-
-    let total_conv = 20_u64;
-    let unread_conv = 40_u64;
-    let total_msg = 200_u64;
-    let unread_msg = 600_u64;
-
-    let mut local_label = Label::from(label.clone());
-    local_label.save(&tx).await.unwrap();
-    let local_id = local_label.local_id.unwrap();
-
-    ConversationCount::create_or_update_conversation_counts(
-        vec![ConversationCount {
-            label_id: local_label.remote_id.clone().unwrap(),
-            total: total_conv,
-            unread: unread_conv,
-        }],
-        &tx,
-    )
-    .await
-    .unwrap();
-
-    MessageCount::create_or_update_message_counts(
-        vec![MessageCount {
-            label_id: local_label.remote_id.clone().unwrap(),
-            total: total_msg,
-            unread: unread_msg,
-        }],
-        &tx,
-    )
-    .await
-    .unwrap();
-    tx.commit().await.unwrap();
-
-    let counters = LabelWithCounters::load(local_id, &tether)
-        .await
-        .expect("failed to load counter")
-        .expect("should have a value");
-    assert_eq!(counters.unread_conv, unread_conv);
-    assert_eq!(counters.total_conv, total_conv);
-    assert_eq!(counters.unread_msg, unread_msg);
-    assert_eq!(counters.total_msg, total_msg);
-}
-
-#[tokio::test]
 async fn create_local_label() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     for t in [
         LabelType::Label,
@@ -204,7 +143,7 @@ async fn create_local_label() {
     ] {
         let mut new_label = Label {
             local_id: None,
-            remote_id: Some(format!("Label-{:?}", t).into()),
+            remote_id: Some(format!("Label-{t:?}").into()),
             local_parent_id: None,
             remote_parent_id: None,
             color: LabelColor::purple(),
@@ -229,13 +168,13 @@ async fn create_local_label() {
 
 #[tokio::test]
 async fn create_local_label_1_char_long_name() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(1);
         let mut new_label = Label {
             local_id: None,
-            remote_id: Some(format!("Label-{:?}", t).into()),
+            remote_id: Some(format!("Label-{t:?}").into()),
             local_parent_id: None,
             remote_parent_id: None,
             color: LabelColor::purple(),
@@ -243,7 +182,7 @@ async fn create_local_label_1_char_long_name() {
             display_order: 0,
             expanded: false,
             label_type: LabelType::Folder,
-            name: label_name.to_owned(),
+            name: label_name.clone(),
             notify: false,
             path: None,
             sticky: false,
@@ -260,13 +199,13 @@ async fn create_local_label_1_char_long_name() {
 
 #[tokio::test]
 async fn create_local_label_100_char_long_name() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     for t in [LabelType::Label, LabelType::Folder] {
         let label_name = random_string(100);
         let mut new_label = Label {
             local_id: None,
-            remote_id: Some(format!("Label-{:?}", t).into()),
+            remote_id: Some(format!("Label-{t:?}").into()),
             local_parent_id: None,
             remote_parent_id: None,
             color: LabelColor::purple(),
@@ -274,7 +213,7 @@ async fn create_local_label_100_char_long_name() {
             display_order: 0,
             expanded: false,
             label_type: LabelType::Folder,
-            name: label_name.to_owned(),
+            name: label_name.clone(),
             notify: false,
             path: None,
             sticky: false,
@@ -291,7 +230,7 @@ async fn create_local_label_100_char_long_name() {
 
 #[tokio::test]
 async fn create_local_label_has_ascending_order_per_type() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     for t in [
         LabelType::Label,
@@ -301,7 +240,7 @@ async fn create_local_label_has_ascending_order_per_type() {
     ] {
         let mut new_label1 = Label {
             local_id: None,
-            remote_id: Some(format!("Label-{:?}-01", t).into()),
+            remote_id: Some(format!("Label-{t:?}-01").into()),
             local_parent_id: None,
             remote_parent_id: None,
             color: LabelColor::purple(),
@@ -318,7 +257,7 @@ async fn create_local_label_has_ascending_order_per_type() {
         new_label1.save(&tx).await.expect("failed to create label");
         let mut new_label2 = Label {
             local_id: None,
-            remote_id: Some(format!("Label-{:?}-02", t).into()),
+            remote_id: Some(format!("Label-{t:?}-02").into()),
             local_parent_id: None,
             remote_parent_id: None,
             color: LabelColor::purple(),
@@ -345,7 +284,7 @@ async fn create_local_label_has_ascending_order_per_type() {
 
 #[tokio::test]
 async fn update_local_label() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
@@ -383,14 +322,6 @@ async fn update_local_label() {
     new_label.save(&tx).await.expect("failed to create label");
     tx.commit().await.expect("failed to commit transaction");
 
-    async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label)) {
-        let db_label = Label::load(id, tx)
-            .await
-            .expect("failed to get label")
-            .expect("must have value");
-        (f)(&db_label);
-    }
-
     new_label.color = LabelColor::black();
     let tx = tether.transaction().await.unwrap();
     new_label.save(&tx).await.expect("failed to save label");
@@ -422,9 +353,17 @@ async fn update_local_label() {
     .await;
 }
 
+async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label)) {
+    let db_label = Label::load(id, tx)
+        .await
+        .expect("failed to get label")
+        .expect("must have value");
+    (f)(&db_label);
+}
+
 #[tokio::test]
 async fn test_mark_labels_as_initialized() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
     let mut new_label = Label {
         local_id: None,
@@ -455,7 +394,7 @@ async fn test_mark_labels_as_initialized() {
 
 #[tokio::test]
 async fn test_watch_label() {
-    let mut tether = new_test_connection().await.connection();
+    let mut tether = new_core_test_connection().await.connection();
     let tx = tether.transaction().await.unwrap();
 
     let mut label: Label = ApiLabel {

@@ -21,6 +21,7 @@ use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
+use proton_core_common::models::Label as RealLabel;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
 };
@@ -28,8 +29,8 @@ use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::mail_scroller::{MailConversationScrollerSource, MailScroller};
+use proton_mail_common::models::Conversation as RealConversation;
 use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
-use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
 use std::sync::Arc;
 use tokio::sync::Mutex;

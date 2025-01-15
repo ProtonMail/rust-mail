@@ -12,10 +12,11 @@ use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
+use proton_core_common::models::Label;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{ConversationCounters, Label, Message, MessageCounters};
+use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;

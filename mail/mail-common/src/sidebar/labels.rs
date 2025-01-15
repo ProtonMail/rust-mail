@@ -3,6 +3,7 @@ use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
 use crate::{AppError, MailContextError};
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
+use proton_core_common::models::Label;
 use stash::params;
 use stash::{orm::Model, stash::Tether};
 use tracing::error;
@@ -12,7 +13,7 @@ use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
-use crate::models::{Label, LabelWithCounters, MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{LabelWithCounters, MailSettings, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
 impl Sidebar {

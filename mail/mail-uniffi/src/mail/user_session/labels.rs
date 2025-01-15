@@ -5,11 +5,11 @@ use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_core_common::datatypes::LabelType as RealLabelType;
+use proton_core_common::models::Label as RealLabel;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::Label as RealLabel;
 
 #[proton_uniffi_macros::export_result]
 impl MailUserSession {
