@@ -109,7 +109,7 @@ pub trait DecryptableVerifiableCard {
                     )
                     .map_err(CardCryptoError::SignatureVerificationError)?;
 
-                return Ok(self.card_data().to_owned());
+                Ok(self.card_data().to_owned())
             }
             ContactCardType::EncryptedAndSigned => {
                 let decrypted_card_result = provider

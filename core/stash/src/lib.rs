@@ -140,7 +140,6 @@
     clippy::shadow_reuse,
     clippy::shadow_same,
     clippy::shadow_unrelated,
-    clippy::std_instead_of_core,
     clippy::string_lit_chars_any,
     clippy::string_slice,
     clippy::suspicious_xor_used_as_pow,

@@ -79,7 +79,7 @@ pub fn export_result(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             for item in impl_block.items.iter().cloned() {
                 if let syn::ImplItem::Fn(method) = item {
-                    let tokens = export_single_method(&impl_type, method);
+                    let tokens = export_single_method(impl_type.as_ref(), method);
                     let new_func = tokens.new_func;
 
                     new_impl_items.push(parse_quote!(#new_func));
@@ -170,7 +170,7 @@ fn export_single_function(mut input: syn::ItemFn) -> GeneratedTokens {
 
 /// Export a single method from an impl block
 ///
-fn export_single_method(impl_type: &Option<String>, mut input: syn::ImplItemFn) -> GeneratedTokens {
+fn export_single_method(impl_type: Option<&String>, mut input: syn::ImplItemFn) -> GeneratedTokens {
     let fn_name = &input.sig.ident;
 
     // Extract the Ok and Error types from the Result

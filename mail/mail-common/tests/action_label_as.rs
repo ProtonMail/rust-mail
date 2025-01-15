@@ -8,7 +8,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::models::ModelIdExtension;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
-use proton_mail_common::models::{Conversation, Label};
+use proton_mail_common::models::{Conversation, ConversationCounters, Label, LabelWithCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;
@@ -84,24 +84,27 @@ async fn action_label_as_without_archive() {
     mailbox.sync(10).await.unwrap();
 
     let tx = tether.transaction().await.unwrap();
-    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
+    let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label1.total_conv = 2;
-    label1.save(&tx).await.unwrap();
-    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
+    let mut counters1 = ConversationCounters::new(label1.local_id.unwrap());
+    counters1.total = 2;
+    counters1.save(&tx).await.unwrap();
+    let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label2.total_conv = 2;
-    label2.save(&tx).await.unwrap();
-    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
+    let mut counters2 = ConversationCounters::new(label2.local_id.unwrap());
+    counters2.total = 2;
+    counters2.save(&tx).await.unwrap();
+    let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label3.total_conv = 3;
-    label3.save(&tx).await.unwrap();
+    let mut counters3 = ConversationCounters::new(label3.local_id.unwrap());
+    counters3.total = 3;
+    counters3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let conversation1 = Conversation::load(1.into(), &tether)
@@ -197,20 +200,21 @@ async fn action_label_as_without_archive() {
         hash_set![label1.local_id.unwrap(), label2.local_id.unwrap(),]
     );
 
-    let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tether)
+    let label1 = LabelWithCounters::find_first("WHERE remote_id = ?", params!["selected"], &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(label1.total_conv, 4);
-    let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tether)
+    let label2 = LabelWithCounters::find_first("WHERE remote_id = ?", params!["partial"], &tether)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(label2.total_conv, 2);
-    let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    let label3 =
+        LabelWithCounters::find_first("WHERE remote_id = ?", params!["unselected"], &tether)
+            .await
+            .unwrap()
+            .unwrap();
     assert_eq!(label3.total_conv, 0);
 }
 
@@ -265,24 +269,27 @@ async fn action_label_as_with_archive() {
     mailbox.sync(10).await.unwrap();
 
     let tx = tether.transaction().await.unwrap();
-    let mut label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
+    let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label1.total_conv = 1;
-    label1.save(&tx).await.unwrap();
-    let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
+    let mut counters1 = ConversationCounters::new(label1.local_id.unwrap());
+    counters1.total = 1;
+    counters1.save(&tx).await.unwrap();
+    let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label2.total_conv = 1;
-    label2.save(&tx).await.unwrap();
-    let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
+    let mut counters2 = ConversationCounters::new(label2.local_id.unwrap());
+    counters2.total = 1;
+    counters2.save(&tx).await.unwrap();
+    let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], &tx)
         .await
         .unwrap()
         .unwrap();
-    label3.total_conv = 1;
-    label3.save(&tx).await.unwrap();
+    let mut counters3 = ConversationCounters::new(label3.local_id.unwrap());
+    counters3.total = 1;
+    counters3.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
 
     let conversation1 = Conversation::load(1.into(), &tether)

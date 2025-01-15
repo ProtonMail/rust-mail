@@ -13,27 +13,21 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{Bond, Notification, Stash, StashError, Tether};
+use crate::stash::{Bond, Stash, StashError, Tether};
 use core::any::Any;
-use core::error::Error;
 use core::fmt::{Debug, Display};
 use core::future::Future;
 use core::iter::once;
-use core::iter::repeat;
-use core::str::FromStr;
 use indoc::formatdoc;
-use rusqlite::hooks::Action;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
+use itertools::Itertools as _;
+use rusqlite::types::FromSql;
 use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
-use serde::{Deserialize, Serialize};
-use serde_json::{from_str as from_json, to_string as to_json};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::iter::repeat;
 use std::vec::IntoIter;
 use thiserror::Error;
-use tracing::{error, warn};
+use tracing::error;
 
 /// Errors for conversion of database row data into record types.
 #[derive(Debug, Error, PartialEq)]
@@ -102,99 +96,6 @@ pub enum ResultsetChange<T: Model, I: ToSql> {
     Updated(T),
 }
 
-/// Wrapper type to represent an array of CSV values.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-pub struct CsvArray<T>(Vec<T>);
-
-impl<T> From<CsvArray<T>> for Vec<T> {
-    fn from(value: CsvArray<T>) -> Self {
-        value.0
-    }
-}
-
-impl<T> From<Vec<T>> for CsvArray<T> {
-    fn from(vec: Vec<T>) -> Self {
-        Self(vec)
-    }
-}
-
-impl<T: FromStr> FromSql for CsvArray<T>
-where
-    T::Err: Debug + Error + Send + Sync + 'static,
-{
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Null => Ok(Self(vec![])),
-            ValueRef::Blob(_) | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Text(_) => {
-                value
-                    .as_str()?
-                    .split(',')
-                    .map(|str| {
-                        str.parse()
-                            .map_err(|err| FromSqlError::Other(Box::new(err)))
-                    })
-                    .collect::<Result<Vec<T>, _>>()
-                    .map(CsvArray)
-            }
-        }
-    }
-}
-
-impl<T: ToString> ToSql for CsvArray<T> {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        if self.0.is_empty() {
-            return Ok(ToSqlOutput::Owned(Value::Null));
-        }
-        Ok(ToSqlOutput::from(
-            self.0
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<String>>()
-                .join(","),
-        ))
-    }
-}
-
-/// Wrapper type to represent an array of JSON values.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-pub struct JsonArray<T>(Vec<T>);
-
-impl<T> From<JsonArray<T>> for Vec<T> {
-    fn from(value: JsonArray<T>) -> Self {
-        value.0
-    }
-}
-
-impl<T> From<Vec<T>> for JsonArray<T> {
-    fn from(vec: Vec<T>) -> Self {
-        Self(vec)
-    }
-}
-
-impl<T: for<'de> Deserialize<'de>> FromSql for JsonArray<T> {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        Ok(Self(match value {
-            ValueRef::Null => vec![],
-            ValueRef::Blob(_) | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Text(_) => {
-                from_json(value.as_str()?).map_err(|err| FromSqlError::Other(Box::new(err)))?
-            }
-        }))
-    }
-}
-
-impl<T: Serialize> ToSql for JsonArray<T> {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        if self.0.is_empty() {
-            return Ok(ToSqlOutput::Owned(Value::Null));
-        }
-        Ok(ToSqlOutput::from(to_json(&self.0).map_err(|err| {
-            SqliteError::ToSqlConversionFailure(Box::new(err))
-        })?))
-    }
-}
-
 /// A trait for simple database records.
 ///
 /// This trait is used to define the interface for simple database records,
@@ -219,17 +120,6 @@ pub trait DbRecord: Clone + Debug + PartialEq + Send + Sized + Sync
 where
     Self: 'static,
 {
-    /// Gets a list of fields with names and associated values for the record.
-    ///
-    /// The field values are returned in a form that is compatible with
-    /// conversion to SQL type, but pre-conversion.
-    ///
-    /// Note: Any fields using an intermediary type (i.e. specified with the
-    /// `via` attribute argument) will be converted to that type before being
-    /// returned.
-    ///
-    fn fields(&self) -> HashMap<&'static str, Box<dyn ToSql + Send>>;
-
     /// Gets a list of field names for the record type.
     fn field_names() -> Vec<&'static str>;
 
@@ -298,18 +188,6 @@ where
     /// database. For an optional ID, this does *not* include the [`Option`] —
     /// for non-optional IDs, it is the same as [`Self::Id`].
     type IdType: Clone + Debug + FromSql + PartialEq + ToSql + Send + Sync;
-
-    /// Gets a list of fields with names and values, excluding the ID field.
-    ///
-    /// The field values are returned in a form that is compatible with
-    /// conversion to SQL type, but pre-conversion. The ID field is excluded
-    /// from the list.
-    ///
-    /// Note: Any fields using an intermediary type (i.e. specified with the
-    /// `via` attribute argument) will be converted to that type before being
-    /// returned.
-    ///
-    fn fields_without_id(&self) -> HashMap<&'static str, Box<dyn ToSql + Send>>;
 
     /// Gets a list of field names for the record type, excluding the ID field.
     fn field_names_without_id() -> Vec<&'static str>;
@@ -499,94 +377,6 @@ where
                     .into_iter()
                     .next(),
             )
-        }
-    }
-
-    /// Handles a change notification for a result set.
-    ///
-    /// This function is used to handle a change notification for a result set,
-    /// in a case where [`find()`](Model::find()) has been asked to listen for
-    /// such changes. It checks the details of the [`Notification`] received,
-    /// and returns a [`ResultsetChange`] to be sent to the listener's queue if
-    /// relevant.
-    ///
-    /// # Parameters
-    ///
-    /// * `notification` - The change [`Notification`] to handle.
-    /// * `ids`          - A map of row IDs to record IDs, used to track which
-    ///                    records are in the result set. These are updated as
-    ///                    records are added, updated, or removed, and are used
-    ///                    to determine relevance.
-    /// * `stash`        - The [`Stash`] instance to use for loading records.
-    /// * `query`        - The query used to find the records.
-    ///
-    /// # Errors
-    ///
-    /// At present this function does not return any errors, because there is
-    /// nothing that can be done with them. Therefore they are just logged.
-    ///
-    /// # See also
-    ///
-    /// * [`Model::find()`]
-    ///
-    fn handle_notification<Q: AsRef<str> + Send + Sync>(
-        notification: Notification,
-        ids: &mut HashMap<u64, Self::IdType>,
-        stash: &Stash,
-        query: &Q,
-    ) -> impl Future<Output = Option<ResultsetChange<Self, Self::IdType>>> + Send {
-        async move {
-            #[allow(clippy::wildcard_enum_match_arm)]
-            match notification.action {
-                Action::SQLITE_DELETE => {
-                    if let Entry::Occupied(entry) = ids.entry(notification.row) {
-                        return Some(ResultsetChange::Deleted(entry.remove()));
-                    }
-                }
-                Action::SQLITE_INSERT => {
-                    match stash
-                        .query::<_, Self>(query.as_ref(), vec![Box::new(notification.row)])
-                        .await
-                    {
-                        Ok(records) => {
-                            if let Some(record) = records.into_iter().next() {
-                                if let Ok(id) = record.id_value() {
-                                    drop(ids.insert(notification.row, id));
-                                } else {
-                                    // This could happen, in which case we log it and carry on
-                                    warn!("No ID set for the record said to have changed");
-                                }
-                                return Some(ResultsetChange::Inserted(record));
-                            }
-                        }
-                        Err(error) => {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Failed to execute changes query: {error:?}");
-                        }
-                    }
-                }
-                Action::SQLITE_UPDATE => {
-                    match stash
-                        .query(query.as_ref(), vec![Box::new(notification.row)])
-                        .await
-                    {
-                        Ok(records) => {
-                            if let Some(record) = records.into_iter().next() {
-                                return Some(ResultsetChange::Updated(record));
-                            }
-                        }
-                        Err(error) => {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Failed to execute changes query: {error:?}");
-                        }
-                    }
-                }
-                _ => {
-                    // In theory this should never happen, but we also can't do anything with it
-                    warn!("Received unknown change notification");
-                }
-            }
-            None
         }
     }
 
@@ -1053,11 +843,7 @@ pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<()
         }
         // The row ID and the ID field are both set - perform an update.
         (Some(_), Ok(id)) => {
-            let update_fields = fields
-                .iter()
-                .map(|field| format!("{field} = ?"))
-                .collect::<Vec<_>>()
-                .join(", ");
+            let update_fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
             let query = formatdoc!(
                 "
                 UPDATE
@@ -1097,10 +883,7 @@ pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<()
                 // and needs to be set before saving.
                 return Err(StashError::IdNotSet);
             }
-            let placeholders = repeat("?")
-                .take(fields.len())
-                .collect::<Vec<_>>()
-                .join(", ");
+            let placeholders = repeat('?').take(fields.len()).join(",");
             let query = formatdoc!(
                 "
                 INSERT INTO
