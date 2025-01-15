@@ -1,11 +1,14 @@
 use crate as proton_mail_common;
+#[allow(unused_imports)]
+use proton_api_core::services::proton::{
+    requests::GetLabelsByIdsOptions, responses::GetLabelsResponse,
+};
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
 use proton_api_mail::services::proton::common::ConversationId;
-#[allow(unused_imports)]
 use proton_api_mail::{
     services::proton::{
-        requests::{GetConversationsOptions, GetLabelsByIdsOptions},
-        responses::{GetConversationsResponse, GetLabelsResponse, GetMessageResponse},
+        requests::GetConversationsOptions,
+        responses::{GetConversationsResponse, GetMessageResponse},
     },
     MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
 };

@@ -4,9 +4,8 @@ use proton_api_core::service::{ApiServiceError, ApiServiceResult};
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::muon::serde_to_query;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
-use proton_api_core::services::proton::muon::{DELETE, GET, PATCH, POST, PUT};
+use proton_api_core::services::proton::muon::{GET, POST, PUT};
 use proton_api_core::services::proton::Proton;
-use proton_api_core::services::proton::CORE_V4;
 
 use crate::services::proton::prelude::*;
 use crate::services::proton::{Package, PostSendRequest, MAIL_V4};
@@ -14,15 +13,6 @@ use crate::services::proton::{PostSendMessageResponse, ProtonMail};
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 
 impl ProtonMail for Proton {
-    async fn delete_label(&self, label_id: LabelId) -> ApiServiceResult<()> {
-        DELETE!("{CORE_V4}/labels/{label_id}")
-            .send_with(self)
-            .await?
-            .ok()?;
-
-        Ok(())
-    }
-
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}")
             .send_with(self)
@@ -77,27 +67,6 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
-    async fn get_labels(&self, label_type: LabelType) -> ApiServiceResult<GetLabelsResponse> {
-        Ok(GET!("{CORE_V4}/labels")
-            .query(serde_to_query(GetLabelsOptions { label_type })?)
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn get_labels_by_ids(
-        &self,
-        label_ids: Vec<LabelId>,
-    ) -> ApiServiceResult<GetLabelsResponse> {
-        Ok(POST!("{CORE_V4}/labels/by-ids")
-            .body_json(GetLabelsByIdsOptions { label_ids })?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse> {
         Ok(GET!("{MAIL_V4}/messages/{message_id}")
             .send_with(self)
@@ -136,15 +105,6 @@ impl ProtonMail for Proton {
 
     async fn get_mail_settings(&self) -> ApiServiceResult<GetMailSettingsResponse> {
         Ok(GET!("{MAIL_V4}/settings")
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn post_labels(&self, body: PostLabelsRequest) -> ApiServiceResult<PostLabelsResponse> {
-        Ok(POST!("{CORE_V4}/labels")
-            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?
@@ -214,19 +174,6 @@ impl ProtonMail for Proton {
     ) -> ApiServiceResult<PutConversationsUnreadResponse> {
         Ok(PUT!("{MAIL_V4}/conversations/unread")
             .body_json(PutConversationsUnreadRequest { ids })?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn put_label(
-        &self,
-        label_id: LabelId,
-        body: PutLabelRequest,
-    ) -> ApiServiceResult<PutLabelResponse> {
-        Ok(PUT!("{CORE_V4}/labels/{label_id}")
-            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?
@@ -309,19 +256,6 @@ impl ProtonMail for Proton {
     ) -> ApiServiceResult<PostMessagesRelabelResponse> {
         Ok(POST!("{MAIL_V4}/messages/{message_id}/relabel")
             .body_json(PostMessagesRelabelRequest { label_ids })?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn patch_label(
-        &self,
-        label_id: LabelId,
-        body: PatchLabelRequest,
-    ) -> ApiServiceResult<PatchLabelResponse> {
-        Ok(PATCH!("{CORE_V4}/labels/{label_id}")
-            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?

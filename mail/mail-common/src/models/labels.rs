@@ -13,11 +13,11 @@ use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::requests::{
+use proton_api_core::services::proton::requests::{
     PatchLabelRequest, PostLabelsRequest, PutLabelRequest,
 };
-use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::ProtonCore;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use sqlite_watcher::watcher::TableObserver;
@@ -141,12 +141,12 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn create<PM: ProtonMail>(
+    pub async fn create<API: ProtonCore>(
         name: String,
         color: String,
         label_type: LabelType,
         parent_id: Option<LabelId>,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .post_labels(PostLabelsRequest {
@@ -253,7 +253,7 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels<PM: ProtonMail>(api: &PM, stash: &Stash) -> Result<(), AppError> {
+    pub async fn sync_labels<API: ProtonCore>(api: &API, stash: &Stash) -> Result<(), AppError> {
         let label_requests =
             futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
                 debug!("Fetching labels ({:?})", category);
@@ -298,8 +298,8 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels_by_ids<PM: ProtonMail>(
-        api: &PM,
+    pub async fn sync_labels_by_ids<API: ProtonCore>(
+        api: &API,
         tether: &mut Tether,
         ids: Vec<LabelId>,
     ) -> Result<(), AppError> {
@@ -373,12 +373,12 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn update<PM: ProtonMail>(
+    pub async fn update<API: ProtonCore>(
         id: LabelId,
         name: String,
         color: String,
         parent_id: Option<LabelId>,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .put_label(
@@ -406,10 +406,10 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn patch_expanded<PM: ProtonMail>(
+    pub async fn patch_expanded<API: ProtonCore>(
         id: LabelId,
         expanded: bool,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         api.patch_label(
             id,

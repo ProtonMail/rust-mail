@@ -3,7 +3,7 @@ use stash::stash::{Bond, StashError};
 pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     // Local version for manipulation.
     tx.execute(
-        r#"
+        r"
             CREATE TABLE labels (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
@@ -25,18 +25,18 @@ pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                     REFERENCES labels (local_id)
                     ON DELETE SET NULL
             )
-        "#,
+        ",
         vec![],
     )
     .await?;
 
     tx.execute(
-        r#"CREATE UNIQUE INDEX index_labels_rid ON labels (`remote_id`)"#,
+        r"CREATE UNIQUE INDEX index_labels_rid ON labels (`remote_id`)",
         vec![],
     )
     .await?;
     tx.execute(
-        r#"CREATE INDEX index_labels_order ON labels (`display_order`)"#,
+        r"CREATE INDEX index_labels_order ON labels (`display_order`)",
         vec![],
     )
     .await?;

@@ -294,4 +294,107 @@ pub trait ProtonCore {
         &self,
         ids: Vec<ContactId>,
     ) -> ApiServiceResult<PutDeleteContactsResponse>;
+
+    /// Method requests to delete label
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id` - The ID of the label to delete.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn delete_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
+
+    /// Method requests all labels with given label type
+    ///
+    /// # Parameters
+    ///
+    /// * `label_type` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn get_labels(&self, label_type: LabelType) -> ApiServiceResult<GetLabelsResponse>;
+
+    /// Method to get labels by their IDs.
+    /// Makes a POST request to the `/labels/by-ids` endpoint.
+    /// Names refer to the fact labels are acquired by their IDs.
+    /// HTTP `GET` method is not suppose to have a body,
+    /// so POST method is used instead.
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// * `label_ids` - List of label IDs to get.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn get_labels_by_ids(
+        &self,
+        label_ids: Vec<LabelId>,
+    ) -> ApiServiceResult<GetLabelsResponse>;
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `body` - The body to use for the request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn post_labels(&self, body: PostLabelsRequest) -> ApiServiceResult<PostLabelsResponse>;
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id` - The ID of the label to update.
+    /// * `body`     - The body to use for the request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_label(
+        &self,
+        label_id: LabelId,
+        body: PutLabelRequest,
+    ) -> ApiServiceResult<PutLabelResponse>;
+
+    /// This method is used to patch an existing label.
+    /// The `label_id` is used to identify the label to patch.
+    /// Body contains expanded and notify fields.
+    /// Expanded is a boolean that indicates if the label is expanded.
+    /// For example if the folder is expanded in the UI.
+    /// Notify is a boolean that indicates if the user should be notified
+    /// about new messages in the label. By default both of them are disabled.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id` - The ID of the label to patch.
+    /// * `body` - Json body to use in the patch request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn patch_label(
+        &self,
+        label_id: LabelId,
+        body: PatchLabelRequest,
+    ) -> ApiServiceResult<PatchLabelResponse>;
 }
+
+// delete_label
+// get_labels
+// get_labels_by_ids
+// post_labels
+// put label
+// patch label

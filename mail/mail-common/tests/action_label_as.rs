@@ -1,8 +1,8 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::response_data::Address as ApiAddress;
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_core::services::proton::common::LabelType as ApiLabelType;
+use proton_api_core::services::proton::response_data::{Address as ApiAddress, Label as ApiLabel};
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationCount as ApiConversationCount, Label as ApiLabel,
+    Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
 };
 use proton_core_common::models::ModelIdExtension;

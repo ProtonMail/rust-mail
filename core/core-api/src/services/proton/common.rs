@@ -9,6 +9,7 @@
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -53,6 +54,23 @@ pub enum LightOrDarkMode {
 
     /// Dark mode
     Dark,
+}
+
+/// Represents which kind of label we are dealing with
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq, Serialize_repr)]
+#[repr(u8)]
+pub enum LabelType {
+    /// TODO: Document this variant.
+    Label = 1,
+
+    /// TODO: Document this variant.
+    ContactGroup = 2,
+
+    /// TODO: Document this variant.
+    Folder = 3,
+
+    /// TODO: Document this variant.
+    System = 4,
 }
 
 //  STRUCTS

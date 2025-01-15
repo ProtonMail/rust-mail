@@ -20,7 +20,7 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::{ConversationId, LabelType, MessageId};
+use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
@@ -113,29 +113,6 @@ pub struct GetConversationsOptions {
     /// `false`, only return conversations which have all messages read.
     #[serde_as(as = "Option<BoolFromInt>")]
     pub unread: Option<bool>,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct GetLabelsOptions {
-    /// TODO: Document this field.
-    #[serde(rename = "Type")]
-    pub label_type: LabelType,
-}
-
-/// Represents `POST /labels/by-ids` request body.
-///
-/// Name refers to the fact it actually gets labels by their IDs.
-/// But due to the fact GET requests are not supposed to have a body
-/// The struct is used with the POST method instead.
-///
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct GetLabelsByIdsOptions {
-    /// Label IDs to get.
-    #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<LabelId>,
 }
 
 /// Parameters to filter/search messages with a given criteria.
@@ -239,25 +216,6 @@ pub struct GetMessagesOptions {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct PostLabelsRequest {
-    /// TODO: Document this field.
-    #[serde(rename = "ParentID")]
-    pub parent_id: Option<LabelId>,
-
-    /// TODO: Document this field.
-    pub color: String,
-
-    /// TODO: Document this field.
-    #[serde(rename = "Type")]
-    pub label_type: LabelType,
-
-    /// TODO: Document this field.
-    pub name: String,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
 pub struct PutConversationsDeleteRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
@@ -318,21 +276,6 @@ pub struct PutConversationsUnreadRequest {
     /// TODO: Document this field.
     #[serde(rename = "IDs")]
     pub ids: Vec<ConversationId>,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PutLabelRequest {
-    /// TODO: Document this field.
-    #[serde(rename = "ParentID")]
-    pub parent_id: Option<LabelId>,
-
-    /// TODO: Document this field.
-    pub color: String,
-
-    /// TODO: Document this field.
-    pub name: String,
 }
 
 /// TODO: Document this struct.
@@ -406,16 +349,6 @@ pub struct PutMessagesUnreadRequest {
 pub struct PostMessagesRelabelRequest {
     #[serde(rename = "LabelIDs")]
     pub label_ids: Vec<LabelId>,
-}
-
-#[serde_as]
-#[derive(Clone, Debug, Default, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PatchLabelRequest {
-    #[serde_as(as = "Option<BoolFromInt>")]
-    pub expanded: Option<bool>,
-    #[serde_as(as = "Option<BoolFromInt>")]
-    pub notify: Option<bool>,
 }
 
 /// Create a new message/draft.

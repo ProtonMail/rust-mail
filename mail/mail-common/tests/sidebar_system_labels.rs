@@ -1,8 +1,8 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
+use proton_api_core::services::proton::common::LabelType;
+use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::response_data::{
-    AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
-    MessageCount as ApiMessageCount, ShowMoved,
+    AlmostAllMail, MailSettings as ApiMailSettings, MessageCount as ApiMessageCount, ShowMoved,
 };
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::datatypes::SystemLabelId;
@@ -121,7 +121,7 @@ fn sidebar_test_params(
 
     TestParams {
         mail_settings: Some(sidebar_test_mail_settings(almost_all_mail, show_moved)),
-        labels: hash_map! { ApiLabelType::System: vec![
+        labels: hash_map! { LabelType::System: vec![
             create_label(LabelId::all_drafts()),
             create_label(LabelId::all_mail()),
             create_label(LabelId::all_scheduled()),
