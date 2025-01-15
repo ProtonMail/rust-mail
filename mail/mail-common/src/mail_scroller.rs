@@ -1,7 +1,8 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{
-    CachedConversationScrollData, CachedMessageScrollData, Conversation, ConversationLabel,
-    ConversationScrollData, Label, Message, MessageLabel, MessageScrollData,
+    CachedConversationScrollData, CachedMessageScrollData, Conversation, ConversationCounters,
+    ConversationLabel, ConversationScrollData, Label, Message, MessageCounters, MessageLabel,
+    MessageScrollData,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
@@ -282,7 +283,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             debug!("We have paginated here before, create cached scroller");
             let cp = scroller.data().clone();
             let task = if scroller.has_more_than_a_page(&tether).await?
-                || counters.filtered_counter(self.unread) < self.page_size as u64
+                || counters.total(self.unread) < self.page_size as u64
             {
                 None
             } else {
@@ -293,7 +294,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             self.cached = Some(scroller);
             self.initialized = true;
 
-            return Ok((counters.filtered_counter(self.unread), task));
+            return Ok((counters.total(self.unread), task));
         }
 
         // No entry exist, which means we have not synced this label yet.
@@ -319,7 +320,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         if let Some(ref scroller) = self.cached {
             // And spawn a background task to fetch the next page
             let cp = scroller.data();
-            let task = if counters.filtered_counter(self.unread) < self.page_size as u64 {
+            let task = if counters.total(self.unread) < self.page_size as u64 {
                 None
             } else {
                 self.spawn_background_sync(ctx, cp, label.remote_id.clone().unwrap())
@@ -328,8 +329,8 @@ impl MailScrollerSource for MailConversationScrollerSource {
 
             self.initialized = true;
 
-            Ok((counters.filtered_counter(self.unread), task))
-        } else if counters.filtered_counter(self.unread) == 0 {
+            Ok((counters.total(self.unread), task))
+        } else if counters.total(self.unread) == 0 {
             debug!("Empty label, no need to initialize scroller");
             // Do not initialize scroller as there might be an update to the label in the future.
             // But as there is nothing to paginate over, simply return an empty list.
@@ -381,7 +382,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
         let tether = ctx.user_stash().connection();
         let counters = self.get_conv_counters(&tether).await?;
 
-        Ok(counters.filtered_counter(self.unread))
+        Ok(counters.total(self.unread))
     }
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
@@ -399,7 +400,7 @@ impl MailScrollerSource for MailConversationScrollerSource {
             let (_, task) = self.initialize(ctx).await?;
             if let Some(ref scroller) = self.cached {
                 let items = scroller.visible_elements(&tether).await?;
-                return Ok((items, counters.filtered_counter(self.unread), task));
+                return Ok((items, counters.total(self.unread), task));
             } else {
                 // In practice this branch should never happen
                 // as the initialization will fail on empty cache.
@@ -430,10 +431,10 @@ impl MailScrollerSource for MailConversationScrollerSource {
                     .await?
             };
 
-            Ok((items, counters.filtered_counter(self.unread), task))
+            Ok((items, counters.total(self.unread), task))
         } else {
             // This is fallback for empty labels
-            Ok((vec![], counters.filtered_counter(self.unread), None))
+            Ok((vec![], counters.total(self.unread), None))
         }
     }
 
@@ -441,7 +442,6 @@ impl MailScrollerSource for MailConversationScrollerSource {
         vec![
             Conversation::table_name().to_string(),
             ConversationLabel::table_name().to_string(),
-            Label::table_name().to_string(),
             ConversationCounters::table_name().to_string(),
         ]
     }
@@ -777,6 +777,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
         let mut tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
+        let counters = self.get_msg_counters(&tether).await?;
         let session = ctx.session().clone();
         let unread = self.unread;
 
@@ -788,7 +789,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
             debug!("We have paginated here before, create cached scroller");
             let cp = scroller.data().clone();
             let task = if scroller.has_more_than_a_page(&tether).await?
-                || label.total_messages(self.unread) < self.page_size as u64
+                || counters.total(self.unread) < self.page_size as u64
             {
                 None
             } else {
@@ -799,7 +800,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
             self.cached = Some(scroller);
             self.initialized = true;
 
-            return Ok((label.total_messages(self.unread), task));
+            return Ok((counters.total(self.unread), task));
         }
 
         // No entry exist, which means we have not synced this label yet.
@@ -825,7 +826,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
         if let Some(ref scroller) = self.cached {
             // And spawn a background task to fetch the next page
             let cp = scroller.data();
-            let task = if label.total_messages(self.unread) < self.page_size as u64 {
+            let task = if counters.total(self.unread) < self.page_size as u64 {
                 None
             } else {
                 self.spawn_background_sync(ctx, cp, label.remote_id.clone().unwrap())
@@ -834,8 +835,8 @@ impl MailScrollerSource for MailMessageScrollerSource {
 
             self.initialized = true;
 
-            Ok((label.total_messages(self.unread), task))
-        } else if label.total_messages(self.unread) == 0 {
+            Ok((counters.total(self.unread), task))
+        } else if counters.total(self.unread) == 0 {
             debug!("Empty label, no need to initialize scroller");
             // Do not initialize scroller as there might be an update to the label in the future.
             // But as there is nothing to paginate over, simply return an empty list.
@@ -885,9 +886,9 @@ impl MailScrollerSource for MailMessageScrollerSource {
 
     async fn all_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection();
-        let label = self.get_label(&tether).await?;
+        let counters = self.get_msg_counters(&tether).await?;
 
-        Ok(label.total_messages(self.unread))
+        Ok(counters.total(self.unread))
     }
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
@@ -897,6 +898,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
     ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
+        let counters = self.get_msg_counters(&tether).await?;
 
         // Fallback for failing to initialize the scroller
         if !self.initialized {
@@ -904,7 +906,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
             let (_, task) = self.initialize(ctx).await?;
             if let Some(ref scroller) = self.cached {
                 let items = scroller.visible_elements(&tether).await?;
-                return Ok((items, label.total_messages(self.unread), task));
+                return Ok((items, counters.total(self.unread), task));
             } else {
                 // In practice this branch should never happen
                 // as the initialization will fail on empty cache.
@@ -935,10 +937,10 @@ impl MailScrollerSource for MailMessageScrollerSource {
                     .await?
             };
 
-            Ok((items, label.total_messages(self.unread), task))
+            Ok((items, counters.total(self.unread), task))
         } else {
             // This is fallback for empty labels
-            Ok((vec![], label.total_messages(self.unread), None))
+            Ok((vec![], counters.total(self.unread), None))
         }
     }
 
@@ -946,7 +948,7 @@ impl MailScrollerSource for MailMessageScrollerSource {
         vec![
             Message::table_name().to_string(),
             MessageLabel::table_name().to_string(),
-            Label::table_name().to_string(),
+            MessageCounters::table_name().to_string(),
         ]
     }
 }
@@ -962,6 +964,14 @@ impl MailMessageScrollerSource {
         };
 
         Ok(label)
+    }
+
+    async fn get_msg_counters(&self, tether: &Tether) -> Result<MessageCounters, MailContextError> {
+        let Some(counters) = MessageCounters::find_by_id(self.local_label_id, tether).await? else {
+            return Err(AppError::LocalLabelHasNoCounters(self.local_label_id).into());
+        };
+
+        Ok(counters)
     }
 
     async fn sync_scroller(&mut self, tether: &Tether) -> Result<(), MailContextError> {

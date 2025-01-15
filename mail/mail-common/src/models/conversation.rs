@@ -3758,7 +3758,7 @@ impl ConversationCounters {
     /// * Total number
     /// * Unread number
     /// * Read number
-    pub fn filtered_counter(&self, unread: ReadFilter) -> u64 {
+    pub fn total(&self, unread: ReadFilter) -> u64 {
         match unread {
             ReadFilter::All => self.total,
             ReadFilter::Unread => self.unread,

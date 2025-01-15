@@ -30,7 +30,7 @@ use crate::actions::{
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, SystemLabel, SystemLabelId,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -3284,6 +3284,14 @@ impl MessageCounters {
     /// Returns counters, first unread then total
     pub fn counters(&self) -> (u64, u64) {
         (self.unread, self.total)
+    }
+
+    pub fn total(&self, unread: ReadFilter) -> u64 {
+        match unread {
+            ReadFilter::All => self.total,
+            ReadFilter::Unread => self.unread,
+            ReadFilter::Read => self.total.saturating_sub(self.unread),
+        }
     }
 
     /// Returns [`MessageCounts`] datastructure that contains label's Remote ID

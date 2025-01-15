@@ -343,9 +343,9 @@ impl MessageScrollData {
             WHERE
                 message_labels.local_label_id = ?1
             AND (
-                    messages.time < ?2
+                    messages.time > ?2
                 OR
-                    (messages.time = ?2 AND messages.display_order <= ?3)
+                    (messages.time = ?2 AND messages.display_order >= ?3)
                 )
             "
         );
@@ -364,8 +364,8 @@ impl MessageScrollData {
         }
 
         query += " ORDER BY
-            messages.time ASC,
-            messages.display_order ASC
+            messages.time DESC,
+            messages.display_order DESC
         ";
 
         if let Some(limit) = limit {

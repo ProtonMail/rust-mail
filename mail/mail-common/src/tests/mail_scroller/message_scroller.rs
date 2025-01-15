@@ -55,7 +55,7 @@ fn expected_messages(
     data: &BTreeMap<&str, Vec<Message>>,
 ) -> Option<Vec<Message>> {
     let convs = data.get(label_id)?;
-    Some(convs.iter().take(n).cloned().collect())
+    Some(convs.iter().rev().take(n).cloned().collect())
 }
 
 #[tokio::test]
@@ -95,7 +95,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     bond.commit().await.unwrap();
 
     // Test if the scroller can read visible elements
-    let expected_count = 51_usize;
+    let expected_count = 50_usize;
     let count = scroller.visible_element_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
 
@@ -125,9 +125,9 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let mut message = data.get(REMOTE_LABEL_ID).unwrap().first().cloned().unwrap();
     message.local_id = None;
     message.row_id = None;
-    message.remote_id = msg_id!(300);
-    message.display_order = 300;
-    message.time = 300;
+    message.remote_id = msg_id!(51);
+    message.display_order = 0;
+    message.time = 0;
     save_single_message(&local_label, &mut message, &bond).await;
 
     bond.commit().await.unwrap();
@@ -145,9 +145,9 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let mut message = data.get(REMOTE_LABEL_ID).unwrap().first().cloned().unwrap();
     message.local_id = None;
     message.row_id = None;
-    message.remote_id = msg_id!(51);
-    message.display_order = 0;
-    message.time = 0;
+    message.remote_id = msg_id!(300);
+    message.display_order = 300;
+    message.time = 300;
     save_single_message(&local_label, &mut message, &bond).await;
 
     bond.commit().await.unwrap();
@@ -212,7 +212,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     scroller.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
-    let all_count = 51;
+    let all_count = 50;
     let page_size = 5;
     let mut cached_scroller =
         CachedMessageScrollData::new(local_label_id, unread, page_size, &tether)
@@ -241,9 +241,9 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let mut message = data.get(REMOTE_LABEL_ID).unwrap().first().cloned().unwrap();
     message.local_id = None;
     message.row_id = None;
-    message.remote_id = msg_id!(300);
-    message.display_order = 300;
-    message.time = 300;
+    message.remote_id = msg_id!(51);
+    message.display_order = 0;
+    message.time = 0;
     save_single_message(&local_label, &mut message, &bond).await;
 
     bond.commit().await.unwrap();
@@ -261,9 +261,9 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let mut message = data.get(REMOTE_LABEL_ID).unwrap().first().cloned().unwrap();
     message.local_id = None;
     message.row_id = None;
-    message.remote_id = msg_id!(51);
-    message.display_order = 0;
-    message.time = 0;
+    message.remote_id = msg_id!(300);
+    message.display_order = 300;
+    message.time = 300;
     save_single_message(&local_label, &mut message, &bond).await;
 
     bond.commit().await.unwrap();
@@ -333,14 +333,14 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
     assert_eq!(
         actual.first().unwrap().local_id,
-        Some(LocalMessageId::from(1))
+        Some(LocalMessageId::from(100))
     );
 
     // Delete whole first page
     let messages = data.get(REMOTE_LABEL_ID).unwrap();
     let bond = tether.transaction().await.unwrap();
 
-    for msg_to_delete in messages.iter().take(page_size).cloned() {
+    for msg_to_delete in messages.iter().rev().take(page_size).cloned() {
         msg_to_delete.delete(&bond).await.unwrap();
     }
 
@@ -365,7 +365,13 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     // Delete next 3 pages and prove we can progress to the next page
     let bond = tether.transaction().await.unwrap();
 
-    for msg_to_delete in messages.iter().skip(page_size).take(page_size * 3).cloned() {
+    for msg_to_delete in messages
+        .iter()
+        .rev()
+        .skip(page_size)
+        .take(page_size * 3)
+        .cloned()
+    {
         msg_to_delete.delete(&bond).await.unwrap();
     }
 
@@ -390,7 +396,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     let msgs = data.get_mut(REMOTE_LABEL_ID).unwrap();
     let bond = tether.transaction().await.unwrap();
 
-    for msg in msgs.iter_mut().take(page_size * 4) {
+    for msg in msgs.iter_mut().rev().take(page_size * 4) {
         msg.local_id = None;
         msg.row_id = None;
 
@@ -425,7 +431,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
         .await
         .unwrap();
     let unread = ReadFilter::All;
-    let last_message = data.get(REMOTE_LABEL_ID).unwrap().last().unwrap();
+    let last_message = data.get(REMOTE_LABEL_ID).unwrap().first().unwrap();
 
     let mut scroller = MessageScrollData::builder()
         .local_label_id(local_label_id)

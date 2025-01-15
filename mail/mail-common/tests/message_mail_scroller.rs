@@ -9,7 +9,7 @@ use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::{
     datatypes::{ReadFilter, SystemLabel},
     mail_scroller::{MailMessageScrollerSource, MailScroller},
-    models::{Conversation, Label, Message, MessageScrollData},
+    models::{Conversation, Label, Message, MessageCounters, MessageScrollData},
 };
 use proton_mail_test_utils::{api_message_meta, utils::create_address};
 use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
@@ -46,8 +46,12 @@ async fn save_to_database(data: &mut BTreeMap<&str, Vec<Message>>, tether: &mut 
     let mut conv = conversation!(remote_id: conv_id!("convid_1"));
     conv.save(&bond).await.unwrap();
     for (label_rid, messages) in data.iter_mut() {
-        let mut label = label!(remote_id: lbl_id!(label_rid), total_msg: messages.len() as u64);
+        let mut label = label!(remote_id: lbl_id!(label_rid));
         label.save(&bond).await.unwrap();
+        let mut counters = MessageCounters::new(label.local_id.unwrap());
+        counters.total = messages.len() as u64;
+        counters.save(&bond).await.unwrap();
+
         for message in messages.iter_mut() {
             message.local_address_id = address.local_id.unwrap();
             message.remote_address_id = address.remote_id.clone().unwrap();
@@ -65,7 +69,7 @@ fn expected_messages(
     data: &BTreeMap<&str, Vec<Message>>,
 ) -> Option<Vec<Message>> {
     let convs = data.get(label_id)?;
-    Some(convs.iter().take(n).cloned().collect())
+    Some(convs.iter().rev().take(n).cloned().collect())
 }
 
 #[tokio::test]
@@ -176,11 +180,13 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Update the inbox label to have all messages
-    let mut label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    label.total_conv = 1;
-    label.total_msg = page_size as u64 * 2;
+    let mut counters = MessageCounters::load(local_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    counters.total = page_size as u64 * 2;
     let bond = tether.transaction().await.unwrap();
-    label.save(&bond).await.unwrap();
+    counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
     // Online
@@ -194,11 +200,11 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
+            msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
         ]
     );
     assert!(scroller.has_more().await.unwrap());
@@ -216,16 +222,16 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_8"),
             msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
+            msg_id!("mymsg_4"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_0"),
         ]
     );
     assert!(!scroller.has_more().await.unwrap());
@@ -246,11 +252,11 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
+            msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
         ]
     );
     assert!(scroller.has_more().await.unwrap());
@@ -265,16 +271,16 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_8"),
             msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
+            msg_id!("mymsg_4"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_0"),
         ]
     );
     assert!(!scroller.has_more().await.unwrap());
@@ -296,11 +302,13 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     ctx.catch_all().await;
 
     // Update the inbox label to have all messages
-    let mut label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    label.total_conv = 1;
-    label.total_msg = page_size as u64 * 2;
+    let mut counters = MessageCounters::load(local_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    counters.total = page_size as u64 * 2;
     let bond = tether.transaction().await.unwrap();
-    label.save(&bond).await.unwrap();
+    counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
     let source = MailMessageScrollerSource::new(local_label_id, unread, page_size);
@@ -323,11 +331,11 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
+            msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
         ]
     );
 
@@ -346,16 +354,16 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_8"),
             msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
+            msg_id!("mymsg_4"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_0"),
         ]
     );
 
@@ -371,17 +379,18 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .unwrap()
         .unwrap();
     let test_message = message!(
-        remote_id: msg_id!("mymsg_new"),
+        remote_id: msg_id!("mymsg_100"),
         local_conversation_id: conversation.local_id,
         remote_conversation_id: conversation.remote_id,
         local_address_id: address.local_id.unwrap(),
         remote_address_id: address.remote_id.unwrap(),
         label_ids: vec![SystemLabel::Inbox.remote_id()],
-        display_order: 0,
-        time: 0
+        display_order: 100,
+        time: 100
     );
 
     let bond = tether.transaction().await.unwrap();
+    let label = Label::load(local_label_id, &bond).await.unwrap().unwrap();
     save_single_message(&label, &mut test_message.clone(), &bond).await;
     bond.commit().await.unwrap();
     // Getting an update will trigger a notification
@@ -401,17 +410,17 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     assert_eq!(
         actual_rids,
         vec![
-            msg_id!("mymsg_0"),
-            msg_id!("mymsg_new"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_8"),
+            msg_id!("mymsg_100"),
             msg_id!("mymsg_9"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_5"),
+            msg_id!("mymsg_4"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_0"),
         ]
     );
 }
@@ -431,8 +440,9 @@ async fn setup_api_message_pages(
         label_ids: vec![SystemLabel::Inbox.remote_id()]
     );
 
-    // Messages are returned and displayed in ASC order, older at the top
-    let first_page = (0..page_size)
+    // Messages are returned and displayed in DESC order, newer at the top
+    let second_page = (0..page_size)
+        .rev()
         .map(|i| {
             let mut new = test_message.clone();
             new.id = format!("{}_{}", new.id, i).into();
@@ -440,7 +450,8 @@ async fn setup_api_message_pages(
             new
         })
         .collect_vec();
-    let second_page = (page_size..(page_size * 2))
+    let first_page = (page_size..(page_size * 2))
+        .rev()
         .map(|i| {
             let mut new = test_message.clone();
             new.id = format!("{}_{}", new.id, i).into();
