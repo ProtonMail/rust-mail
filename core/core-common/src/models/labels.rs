@@ -176,7 +176,7 @@ impl Label {
     /// # Parameters
     ///
     /// * `api`   - The API instance to use.
-    /// * `tx` - The stash trabsaction to use for the database connection.
+    /// * `tx` - The stash transaction to use for the database connection.
     ///
     /// # Errors
     ///

@@ -391,10 +391,3 @@ pub trait ProtonCore {
         body: PatchLabelRequest,
     ) -> ApiServiceResult<PatchLabelResponse>;
 }
-
-// delete_label
-// get_labels
-// get_labels_by_ids
-// post_labels
-// put label
-// patch label
