@@ -3,20 +3,19 @@ use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use futures::future::BoxFuture;
 use futures::FutureExt;
-use proton_core_common::paginator::DataSource;
-use proton_mail_common::models::PaginatorCompat;
+use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
 use proton_mail_common::MailContextError;
-use stash::orm::Model;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Paginator adapter.
-pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
-    paginator: Arc<PaginatorCompat<T, R>>,
+pub struct Paginator<T: MailScrollerSource + 'static> {
+    paginator: Arc<Mutex<MailScroller<T>>>,
     _watch_handle: WatchHandle,
 }
 
-impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
+impl<T: MailScrollerSource> Paginator<T> {
     /// Create a new paginator instance.
     ///
     /// * `create_paginator` is a closure
@@ -26,23 +25,22 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
     ///
     /// Creates a paginator and watcher.
     pub async fn new(
-        creat_paginator: impl FnOnce() -> BoxFuture<
-            'static,
-            Result<PaginatorCompat<T, R>, MailContextError>,
-        >,
-        to_message: impl Fn(Result<Vec<T>, R::Error>) -> Messages + Send + Sync + 'static,
+        creat_paginator: impl FnOnce() -> BoxFuture<'static, Result<MailScroller<T>, MailContextError>>,
+        to_message: impl Fn(Result<Vec<T::Item>, MailContextError>) -> Messages + Send + Sync + 'static,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let to_message = Arc::new(to_message);
-        let paginator = Arc::new(creat_paginator().await?);
+        let paginator = Arc::new(Mutex::new(creat_paginator().await?));
+        let guard = paginator.lock().await;
         let WatcherHandle {
             handle, receiver, ..
-        } = paginator.watch()?;
+        } = guard.watch()?;
+        drop(guard);
         let paginator_cloned = Arc::clone(&paginator);
         let (watcher, background_command) =
             WatchHandle::new_dampened(receiver, handle, move || {
                 let paginator = Arc::clone(&paginator_cloned);
                 let to_message = Arc::clone(&to_message);
-                async move { Some(to_message(paginator.reload().await)) }.boxed()
+                async move { Some(to_message(paginator.lock().await.all_items().await)) }.boxed()
             });
         Ok((
             Self {
@@ -53,9 +51,8 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
         ))
     }
 
-    /// Get the next pagination page.
-    pub async fn next_page(&self) -> Result<Vec<T>, R::Error> {
-        self.paginator.next_page().await
+    pub async fn all_items(&self) -> Result<Vec<T::Item>, MailContextError> {
+        self.paginator.lock().await.all_items().await
     }
 
     /// Get the next pagination page as series of background tasks which will
@@ -64,7 +61,7 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
     /// `to_command` should convert the output of [`next_page()`] to a command.
     pub fn next_page_command(
         &self,
-        to_command: impl FnOnce(Vec<T>) -> Command<Messages> + Send + Sync + 'static,
+        to_command: impl FnOnce(Vec<T::Item>) -> Command<Messages> + Send + Sync + 'static,
     ) -> Command<Messages> {
         let paginator = Arc::clone(&self.paginator);
         Command::batch([
@@ -73,7 +70,7 @@ impl<T: Model, R: DataSource<Item = T> + 'static> Paginator<T, R> {
             )),
             Command::task(async move {
                 Command::batch([
-                    match paginator.next_page().await {
+                    match paginator.lock().await.fetch_more().await {
                         Ok(v) => to_command(v),
                         Err(e) => Command::message(Messages::DisplayError(
                             Some("Paginator Next Page Failed".to_owned()),

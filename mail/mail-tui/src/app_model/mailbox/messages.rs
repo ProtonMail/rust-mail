@@ -16,13 +16,13 @@ use crate::widgets::{
 use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
+use proton_mail_common::datatypes::{
+    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter,
+};
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::models::{
-    Label, MailSettings, Message as MailMessage, MessageDataSource, PaginatorFilter,
-    PaginatorSearchOptions,
-};
+use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
+use proton_mail_common::models::{Label, MailSettings, Message as MailMessage};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -47,7 +47,7 @@ pub struct MessagesState {
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
 enum Mode {
-    Label(Paginator<MailMessage, MessageDataSource>),
+    Label(Paginator<MailMessageScrollerSource>),
     Conversation(WatchHandle),
 }
 
@@ -71,18 +71,13 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
     ) -> MailboxResult<(Self, Command<Messages>)> {
+        let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    Ok(MailMessage::paginate_in_label(
-                        &ctx,
-                        label_id,
-                        ITEM_LIMIT.try_into().unwrap(),
-                        PaginatorFilter::default(),
-                        PaginatorSearchOptions::default(),
-                        true,
-                    )
-                    .await?)
+                    let source =
+                        MailMessageScrollerSource::new(label_id, ReadFilter::All, ITEM_LIMIT);
+                    MailScroller::new(context, source).await
                 }
                 .boxed()
             },
@@ -97,7 +92,7 @@ impl MessagesState {
         )
         .await?;
 
-        let messages = paginator.next_page().await?;
+        let messages = paginator.all_items().await?;
 
         Ok((
             Self {
