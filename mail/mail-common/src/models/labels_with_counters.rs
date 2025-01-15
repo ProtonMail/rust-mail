@@ -1,6 +1,6 @@
 use indoc::formatdoc;
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -8,8 +8,6 @@ use stash::{
     params,
     stash::{StashError, Tether},
 };
-
-use crate::datatypes::{LabelColor, LabelType};
 
 use super::{ConversationCounters, Label, MessageCounters};
 

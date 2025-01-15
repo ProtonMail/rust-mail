@@ -1,7 +1,5 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::{
-    ExclusiveLocation, LabelType, LocalMessageId, RollbackItemType, SystemLabelId,
-};
+use crate::datatypes::{ExclusiveLocation, LocalMessageId, RollbackItemType, SystemLabelId};
 use crate::models::{Label, Message, MessageCounters};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
@@ -11,7 +9,7 @@ use proton_action_queue::action::{
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;

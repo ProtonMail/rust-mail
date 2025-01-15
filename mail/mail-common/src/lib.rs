@@ -24,7 +24,7 @@ pub use user_context::{
 };
 
 // re-exports
-use crate::datatypes::{LabelType, LocalAttachmentId, LocalMessageId};
+use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
@@ -45,13 +45,6 @@ use thiserror::Error;
 // (fixed with search and replace but something we need to coordinate.)
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
-
-pub const ALL_LABEL_TYPES: [LabelType; 4] = [
-    LabelType::Label,
-    LabelType::ContactGroup,
-    LabelType::Folder,
-    LabelType::System,
-];
 
 #[macro_export]
 macro_rules! find_in_query {

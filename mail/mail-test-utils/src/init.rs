@@ -34,6 +34,7 @@ use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
+use proton_core_common::ALL_LABEL_TYPES;
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
@@ -44,7 +45,7 @@ use proton_core_test_utils::addresses_public::{
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage, ALL_LABEL_TYPES,
+    MailUserContextLoadingStage,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;

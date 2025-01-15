@@ -5,13 +5,7 @@ use proton_api_core::services::proton::{
 };
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
 use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::{
-    services::proton::{
-        requests::GetConversationsOptions,
-        responses::{GetConversationsResponse, GetMessageResponse},
-    },
-    MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
-};
+use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_test_utils::test_context::MockApiEnv;

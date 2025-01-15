@@ -3,13 +3,13 @@ use crate::datatypes::{MovableSystemFolder, SystemLabelId};
 use crate::{
     datatypes::{
         labels::hierarchy::{self, Hierarchy},
-        LabelColor, LabelType, SystemLabel,
+        SystemLabel,
     },
     models::Label,
     AppError,
 };
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::ModelIdExtension;
 use stash::orm::Model;
 use stash::stash::Tether;

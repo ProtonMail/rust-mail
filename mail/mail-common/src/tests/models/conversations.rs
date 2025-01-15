@@ -3,8 +3,8 @@
 use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
-    attachment, ContextualConversation, ConversationCount, LabelColor, LabelType, MessageFlags,
-    MessageSender, MovableSystemFolder, SystemLabel, SystemLabelId,
+    attachment, ContextualConversation, ConversationCount, MessageFlags, MessageSender,
+    MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
 use futures::StreamExt;
@@ -16,6 +16,7 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
+use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
@@ -306,6 +307,7 @@ mod available_actions {
     use crate::actions::MovableSystemFolderAction;
     use crate::datatypes::MovableSystemFolder;
     use pretty_assertions::assert_eq;
+    use proton_core_common::datatypes::{LabelColor, LabelType};
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conv_id, conversation};
     use test_case::test_case;
@@ -588,6 +590,7 @@ mod available_move_to_actions {
     use crate::datatypes::SystemLabel;
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
+    use proton_core_common::datatypes::{LabelColor, LabelType};
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conv_id, conversation, label, lbl_id};
     use stash::stash::Tether;

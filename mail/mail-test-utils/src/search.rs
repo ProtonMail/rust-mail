@@ -11,10 +11,10 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
-use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use stash::stash::Tether;
 use std::collections::BTreeMap;

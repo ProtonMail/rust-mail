@@ -46,7 +46,8 @@ pub use self::contact_list::*;
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use proton_api_core::services::proton::common::{
-    AddressId, ContactEmailId, ContactId, LabelId, LightOrDarkMode as ApiLightOrDarkMode,
+    AddressId, ContactEmailId, ContactId, LabelId, LabelType as ApiLabelType,
+    LightOrDarkMode as ApiLightOrDarkMode,
 };
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
@@ -68,7 +69,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::utils::sql_using_serde;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::Deref;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
@@ -676,6 +677,74 @@ impl FromSql for WeekStart {
 }
 
 impl ToSql for WeekStart {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(u8)]
+pub enum LabelType {
+    /// TODO: Document this field.
+    Label = 1,
+
+    /// TODO: Document this field.
+    ContactGroup = 2,
+
+    /// TODO: Document this field.
+    Folder = 3,
+
+    /// TODO: Document this field.
+    System = 4,
+}
+
+impl Display for LabelType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Label => write!(f, "Label"),
+            Self::ContactGroup => write!(f, "Contact Group"),
+            Self::Folder => write!(f, "Folder"),
+            Self::System => write!(f, "System"),
+        }
+    }
+}
+
+impl From<ApiLabelType> for LabelType {
+    fn from(value: ApiLabelType) -> Self {
+        match value {
+            ApiLabelType::Label => Self::Label,
+            ApiLabelType::ContactGroup => Self::ContactGroup,
+            ApiLabelType::Folder => Self::Folder,
+            ApiLabelType::System => Self::System,
+        }
+    }
+}
+
+impl From<LabelType> for ApiLabelType {
+    fn from(value: LabelType) -> Self {
+        match value {
+            LabelType::Label => Self::Label,
+            LabelType::ContactGroup => Self::ContactGroup,
+            LabelType::Folder => Self::Folder,
+            LabelType::System => Self::System,
+        }
+    }
+}
+
+impl FromSql for LabelType {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            1 => Ok(Self::Label),
+            2 => Ok(Self::ContactGroup),
+            3 => Ok(Self::Folder),
+            4 => Ok(Self::System),
+            v => Err(FromSqlError::OutOfRange(i64::from(v))),
+        }
+    }
+}
+
+impl ToSql for LabelType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
@@ -1375,5 +1444,49 @@ impl FromSql for Timestamp {
 impl ToSql for Timestamp {
     fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
         u64::to_sql(&self.0)
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct LabelColor(String);
+
+impl LabelColor {
+    #[must_use]
+    pub fn purple() -> Self {
+        Self("#8080FF".into())
+    }
+    #[must_use]
+    pub fn black() -> Self {
+        Self("#000000".into())
+    }
+}
+
+impl Display for LabelColor {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for LabelColor {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for LabelColor {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl FromSql for LabelColor {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        value.as_str().map(|s| LabelColor(s.to_string()))
+    }
+}
+
+impl ToSql for LabelColor {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::from(self.0.clone()))
     }
 }

@@ -7,7 +7,7 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    attachment, ContextualConversation, ExclusiveLocation, LabelColor, MessageCount, MessageFlags,
+    attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata};
@@ -24,6 +24,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
+use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{

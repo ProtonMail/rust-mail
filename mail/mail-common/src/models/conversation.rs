@@ -11,7 +11,7 @@ use crate::actions::{
     GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
-    AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
+    AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation,
     LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, ReadFilter,
     SystemLabel, SystemLabelId,
 };
@@ -35,7 +35,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_mail_ids::LocalConversationId;

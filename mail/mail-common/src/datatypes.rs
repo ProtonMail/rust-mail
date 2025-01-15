@@ -59,7 +59,7 @@ use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
-use proton_api_core::services::proton::common::{LabelId, LabelType as ApiLabelType};
+use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -76,7 +76,7 @@ use proton_api_mail::services::proton::response_data::{
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{AvatarInformation, LocalLabelId};
+use proton_core_common::datatypes::{AvatarInformation, LabelColor, LabelType, LocalLabelId};
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };
@@ -245,74 +245,6 @@ impl FromSql for Disposition {
 }
 
 impl ToSql for Disposition {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
-    }
-}
-
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[repr(u8)]
-pub enum LabelType {
-    /// TODO: Document this field.
-    Label = 1,
-
-    /// TODO: Document this field.
-    ContactGroup = 2,
-
-    /// TODO: Document this field.
-    Folder = 3,
-
-    /// TODO: Document this field.
-    System = 4,
-}
-
-impl Display for LabelType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Label => write!(f, "Label"),
-            Self::ContactGroup => write!(f, "Contact Group"),
-            Self::Folder => write!(f, "Folder"),
-            Self::System => write!(f, "System"),
-        }
-    }
-}
-
-impl From<ApiLabelType> for LabelType {
-    fn from(value: ApiLabelType) -> Self {
-        match value {
-            ApiLabelType::Label => Self::Label,
-            ApiLabelType::ContactGroup => Self::ContactGroup,
-            ApiLabelType::Folder => Self::Folder,
-            ApiLabelType::System => Self::System,
-        }
-    }
-}
-
-impl From<LabelType> for ApiLabelType {
-    fn from(value: LabelType) -> Self {
-        match value {
-            LabelType::Label => Self::Label,
-            LabelType::ContactGroup => Self::ContactGroup,
-            LabelType::Folder => Self::Folder,
-            LabelType::System => Self::System,
-        }
-    }
-}
-
-impl FromSql for LabelType {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Label),
-            2 => Ok(Self::ContactGroup),
-            3 => Ok(Self::Folder),
-            4 => Ok(Self::System),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
-    }
-}
-
-impl ToSql for LabelType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
@@ -1135,49 +1067,6 @@ impl Serialize for KeyPackets {
 }
 
 sql_using_serde!(KeyPackets);
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct LabelColor(String);
-
-impl LabelColor {
-    pub fn purple() -> Self {
-        Self("#8080FF".into())
-    }
-
-    pub fn black() -> Self {
-        Self("#000000".into())
-    }
-}
-
-impl Display for LabelColor {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<String> for LabelColor {
-    fn from(value: String) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for LabelColor {
-    fn from(value: &str) -> Self {
-        Self(value.into())
-    }
-}
-
-impl FromSql for LabelColor {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        value.as_str().map(|s| LabelColor(s.to_string()))
-    }
-}
-
-impl ToSql for LabelColor {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::from(self.0.clone()))
-    }
-}
 
 /// Sender details of message
 #[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]

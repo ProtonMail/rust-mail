@@ -65,15 +65,15 @@ use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as 
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_core_common::datatypes::{
-    AvatarInformation as RealAvatarInformation, LocalAddressId, LocalLabelId,
+    AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
+    LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
 use proton_core_common::models::{Address as RealAddress, ModelIdExtension};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
-    Disposition as RealDisposition, LabelColor as RealLabelColor,
-    LabelDescription as RealLabelDescription, LabelType as RealLabelType, LocalConversationId,
+    Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
     LocalMessageId, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,

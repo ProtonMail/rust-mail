@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 
 use super::*;
-use crate::datatypes::{ConversationCount, LabelColor, LabelType, MessageCount};
+use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::Label;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::LabelId;

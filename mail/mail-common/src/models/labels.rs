@@ -4,11 +4,9 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{
-    ConversationCount, LabelColor, LabelType, MessageCount, SystemLabelId, ViewMode,
-};
+use crate::datatypes::{ConversationCount, MessageCount, SystemLabelId, ViewMode};
 use crate::models::*;
-use crate::{AppError, ALL_LABEL_TYPES};
+use crate::AppError;
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
@@ -18,8 +16,9 @@ use proton_api_core::services::proton::requests::{
 };
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_api_core::services::proton::ProtonCore;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::ModelIdExtension;
+use proton_core_common::ALL_LABEL_TYPES;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
