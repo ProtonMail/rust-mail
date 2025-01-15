@@ -297,6 +297,16 @@ impl ToSql for Id {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
 pub struct Resources(Vec<Vec<u8>>);
 
+impl Resources {
+    /// Get and decode a resource at the given `index`
+    pub fn get<'de, T: Deserialize<'de>>(
+        &'de self,
+        index: usize,
+    ) -> Result<T, rmp_serde::decode::Error> {
+        rmp_serde::decode::from_slice(&self.0[index])
+    }
+}
+
 impl Deref for Resources {
     type Target = Vec<Vec<u8>>;
 

@@ -6,9 +6,8 @@ use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use parking_lot::RwLock;
-use proton_mail_common::actions::draft;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
-use proton_mail_common::draft::{Draft as RealDraft, ReplyMode};
+use proton_mail_common::draft::{Draft as RealDraft, DraftSaveActionQueuer, ReplyMode};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContextError, MailUserContext};
@@ -227,7 +226,7 @@ impl Draft {
         };
         let ctx = Arc::clone(&self.ctx);
         uniffi_async(async move {
-            ctx.with_queue(|queue| queue.queue_action(action))
+            ctx.with_queue(|queue| action.queue(queue))
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -245,15 +244,15 @@ impl Draft {
     ///
     /// Returns error if the query failed.
     pub async fn send(&self) -> VoidDraftResult {
-        let (save_action, send_action) = {
+        let send_queuer = {
             let draft = self.instance.read();
-            (draft.to_save_action(), draft.to_send_action())
+            draft.to_send_action()
         };
         let ctx = Arc::clone(&self.ctx);
 
         uniffi_async(async move {
-            let send_action = send_action?;
-            ctx.with_queue(|queue| RealDraft::send(queue, save_action, send_action))
+            let send_action = send_queuer?;
+            ctx.with_queue(|queue| send_action.queue(queue))
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -265,8 +264,11 @@ impl Draft {
     }
 }
 
-async fn save_draft(ctx: &MailUserContext, action: draft::Save) -> Result<(), MailContextError> {
-    ctx.with_queue(|queue| queue.queue_action(action))
+async fn save_draft(
+    ctx: &MailUserContext,
+    action: DraftSaveActionQueuer,
+) -> Result<(), MailContextError> {
+    ctx.with_queue(|queue| action.queue(queue))
         .await
         .map_err(MailContextError::from)?;
     Ok(())

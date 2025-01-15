@@ -9,7 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.32.1] - 2025-01-15
 
 ### Added
-
   - function `scroll_conversations_for_label` which utilies new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
   - function `scroll_messages_for_label` which utilies new paginator `MessageScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
 
