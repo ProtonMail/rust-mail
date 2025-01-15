@@ -3,6 +3,7 @@ mod attachments;
 mod conversations;
 mod events;
 mod labels;
+mod mailbox_labels;
 mod messages;
 mod rollback_actions;
 mod scroller;
@@ -21,6 +22,10 @@ impl proton_sqlite3::Migration for MigrationV0 {
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
         labels::create_labels_tables(tx)
             .instrument(debug_span!("labels"))
+            .await?;
+
+        mailbox_labels::create_mailbox_labels(tx)
+            .instrument(debug_span!("mailbox_labels"))
             .await?;
 
         attachments::create_attachment_tables(tx)

@@ -57,14 +57,6 @@ pub struct LabelWithCounters {
 
     /// TODO: Document this field.
     #[DbField]
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_msg: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
     pub label_type: LabelType,
 
     /// TODO: Document this field.
@@ -217,8 +209,6 @@ impl LabelWithCounters {
             color,
             display,
             expanded,
-            initialized_conv,
-            initialized_msg,
             label_type,
             name,
             notify,
@@ -239,8 +229,6 @@ impl LabelWithCounters {
             color,
             display,
             expanded,
-            initialized_conv,
-            initialized_msg,
             label_type,
             name,
             notify,

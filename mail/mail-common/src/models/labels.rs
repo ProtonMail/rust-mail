@@ -68,14 +68,6 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_msg: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
     pub label_type: LabelType,
 
     /// TODO: Document this field.
@@ -546,8 +538,6 @@ impl From<ApiLabel> for Label {
             display_order: value.order,
             display: value.display,
             expanded: value.expanded,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: value.label_type.into(),
             name: value.name,
             notify: value.notify,
@@ -569,8 +559,6 @@ impl Default for Label {
             color: Default::default(),
             display: Default::default(),
             expanded: Default::default(),
-            initialized_conv: Default::default(),
-            initialized_msg: Default::default(),
             name: Default::default(),
             notify: Default::default(),
             display_order: Default::default(),

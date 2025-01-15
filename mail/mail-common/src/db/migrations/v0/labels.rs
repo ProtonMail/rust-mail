@@ -46,8 +46,6 @@ pub async fn create_labels_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                 notify INTEGER NOT NULL DEFAULT 0,
                 expanded INTEGER NOT NULL DEFAULT 0,
                 sticky INTEGER NOT NULL DEFAULT 0,
-                initialized_conv INTEGER NOT NULL DEFAULT 0,
-                initialized_msg INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT constraint_labels_parent_id
                     FOREIGN KEY (local_parent_id)

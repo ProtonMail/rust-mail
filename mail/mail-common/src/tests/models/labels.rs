@@ -211,8 +211,6 @@ async fn create_local_label() {
             display: false,
             display_order: 0,
             expanded: false,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: LabelType::Folder,
             name: "Label".to_owned(),
             notify: false,
@@ -244,8 +242,6 @@ async fn create_local_label_1_char_long_name() {
             display: false,
             display_order: 0,
             expanded: false,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: LabelType::Folder,
             name: label_name.to_owned(),
             notify: false,
@@ -277,8 +273,6 @@ async fn create_local_label_100_char_long_name() {
             display: false,
             display_order: 0,
             expanded: false,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: LabelType::Folder,
             name: label_name.to_owned(),
             notify: false,
@@ -314,8 +308,6 @@ async fn create_local_label_has_ascending_order_per_type() {
             display: false,
             display_order: 0,
             expanded: false,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: LabelType::Folder,
             name: "Label".to_owned(),
             notify: false,
@@ -333,8 +325,6 @@ async fn create_local_label_has_ascending_order_per_type() {
             display: false,
             display_order: 0,
             expanded: false,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: LabelType::Folder,
             name: "Label".to_owned(),
             notify: false,
@@ -366,8 +356,6 @@ async fn update_local_label() {
         display: false,
         display_order: 0,
         expanded: false,
-        initialized_conv: false,
-        initialized_msg: false,
         label_type: LabelType::Folder,
         name: "Label".to_owned(),
         notify: false,
@@ -385,8 +373,6 @@ async fn update_local_label() {
         display: false,
         display_order: 0,
         expanded: false,
-        initialized_conv: false,
-        initialized_msg: false,
         label_type: LabelType::Folder,
         name: "Label".to_owned(),
         notify: false,
@@ -449,8 +435,6 @@ async fn test_mark_labels_as_initialized() {
         display: false,
         display_order: 0,
         expanded: false,
-        initialized_conv: false,
-        initialized_msg: false,
         label_type: LabelType::Folder,
         name: "Label".to_owned(),
         notify: false,
@@ -459,20 +443,14 @@ async fn test_mark_labels_as_initialized() {
         row_id: None,
     };
     new_label.save(&tx).await.expect("failed to create label");
-    assert!(!new_label.initialized_conv);
-    new_label.initialized_conv = true;
     new_label
         .save(&tx)
         .await
         .expect("failed to mark label as initialized");
-    assert!(new_label.initialized_conv);
-    assert!(!new_label.initialized_msg);
-    new_label.initialized_msg = true;
     new_label
         .save(&tx)
         .await
         .expect("failed to mark label as initialized");
-    assert!(new_label.initialized_msg);
 }
 
 #[tokio::test]
