@@ -113,7 +113,6 @@
     clippy::wildcard_enum_match_arm
 )]
 #![warn(
-    clippy::absolute_paths,
     clippy::arithmetic_side_effects,
     clippy::as_underscore,
     clippy::decimal_literal_representation,

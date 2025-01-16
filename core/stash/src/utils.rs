@@ -123,9 +123,17 @@ pub fn placeholders(n: usize) -> Cow<'static, str> {
         #[allow(clippy::arithmetic_side_effects)]
         Cow::Borrowed(&PLACEHOLDERS[..(n * 2).saturating_sub(1)])
     } else {
-        warn!("Too many placeholders! please increase the static placeholder.");
-        let mut res = "?,".repeat(n);
-        _ = res.pop();
-        Cow::Owned(res)
+        /// This has much better codegen.
+        /// We mark this branch as unlikely and move the logic into a different
+        /// function that can't get inlined for better icache.
+        #[cold]
+        #[inline(never)]
+        fn cold(n: usize) -> Cow<'static, str> {
+            warn!("Too many placeholders! please increase the static placeholder.");
+            let mut res = "?,".repeat(n);
+            _ = res.pop();
+            Cow::Owned(res)
+        }
+        cold(n)
     }
 }
