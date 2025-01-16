@@ -1,5 +1,6 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
-use crate::models::{Conversation, Message};
+use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
+use crate::AppError;
 use indoc::formatdoc;
 use proton_api_mail::services::proton::prelude::{ConversationId, MessageId};
 use proton_core_common::datatypes::LocalLabelId;
@@ -8,208 +9,60 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use std::future::Future;
 use std::ops::Deref;
-use std::sync::LazyLock;
 use typed_builder::TypedBuilder;
 
-static DEFAULT_CONV_REMOTE_ID: LazyLock<ConversationId> =
-    LazyLock::new(|| ConversationId::new("NULL".to_string()));
-static DEFAULT_MESS_REMOTE_ID: LazyLock<MessageId> =
-    LazyLock::new(|| MessageId::new("NULL".to_string()));
+use super::{ConversationCounters, MessageCounters};
 
-/// In memory Message scroll data.
+/// Trait defining the scroll data.
 ///
-/// This is a cache for the message scroll data. It is used to store the
-/// cursor for the message scroll data. This is used to buffer data fetch
-/// over the switch between views in order to not load all available items everytime.
-/// This is useful for offline mode and for performance reasons.
-#[derive(Debug)]
-pub struct CachedMessageScrollData {
-    local_label_id: LocalLabelId,
-    unread: ReadFilter,
-    page_size: usize,
-    data: MessageScrollData,
-    cursor: MessageScrollData,
-}
+/// Extends Model and requires conversion to ScrollCursor.
+pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
+    /// Model of the Data
+    type Model: ModelExtension;
+    /// Item type returned by the Data
+    type Item: Send;
 
-impl CachedMessageScrollData {
-    /// Create a new cache for the message scroll data.
+    /// Find the first record with matching:
+    /// * label_id,
+    /// * read_filter
     ///
-    /// This will load the data from the database and create a cursor for the
-    /// message scroll data in the place where first page should end.
-    ///
-    /// # Returns
-    ///
-    /// A cursor when the data is found, otherwise `None` as the view was displayed before.
-    ///
-    /// # Arguments
-    ///
-    /// `local_label_id` - The local label id of the label in which the scroll is performed.
-    /// `unread` - The read filter used in the scroll.
-    /// `page_size` - The size of the page to load.
-    /// `tether` - The tether to use for the database access.
-    ///
-    /// # Errors
-    ///
-    /// Specific to database access.
-    ///
-    pub async fn new(
+    fn find_with_key(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
-        page_size: usize,
         tether: &Tether,
-    ) -> Result<Option<Self>, StashError> {
-        let data = MessageScrollData::find_with_key(local_label_id, unread, tether).await?;
-
-        Ok(match data {
-            Some(data) => {
-                let data_count = data.visible_element_count(tether).await?;
-                let cursor = if data_count > page_size as u64 {
-                    // Load first page, could be improved to load only last element but
-                    // there is tiny risk that background task could be invoked between
-                    // count & page_load which would invalidate the cursor.
-                    // so safer option is to load more items to make sure we have reference point
-                    let mut items = data
-                        .visible_elements_limit(Some(page_size), None, tether)
-                        .await?;
-
-                    match items.pop() {
-                        Some(last) => MessageScrollData::builder()
-                            .local_label_id(local_label_id)
-                            .unread(unread)
-                            .remote_message_id(
-                                last.remote_id
-                                    .clone()
-                                    .unwrap_or(DEFAULT_MESS_REMOTE_ID.clone()),
-                            )
-                            .message_time(last.time)
-                            .display_order(last.display_order)
-                            .build(),
-                        None => data.clone(),
-                    }
-                } else {
-                    data.clone()
-                };
-
-                Some(Self {
-                    local_label_id,
-                    unread,
-                    page_size,
-                    data,
-                    cursor,
-                })
-            }
-            None => None,
-        })
-    }
-
-    /// Fetch more items from the database.
-    ///
-    /// This will load the next page of items from the database and update the cursor.
-    /// If there are no more items to load, an empty vector is returned.
-    /// In case the cursor is at the one before the last page.
-    /// It will load two pages instead of one if the last page is not complete.
-    ///
-    pub async fn fetch_more(&mut self, tether: &Tether) -> Result<Vec<Message>, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
-
-        if cursor_count < all {
-            let offset = Some(cursor_count);
-            let remaining = all - cursor_count;
-            let double_page = self.page_size as u64 * 2;
-            let limit = if remaining < double_page {
-                // Progress two pages at a time if there are less than two pages left.
-                usize::try_from(all - cursor_count)
-                    .ok()
-                    .or(Some(self.page_size))
-            } else {
-                Some(self.page_size)
-            };
-            let items = self
-                .data
-                .visible_elements_limit(limit, offset, tether)
-                .await?;
-            let cursor = match items.last() {
-                Some(last) => MessageScrollData::builder()
-                    .local_label_id(self.local_label_id)
-                    .unread(self.unread)
-                    .remote_message_id(
-                        last.remote_id
-                            .clone()
-                            .unwrap_or(DEFAULT_MESS_REMOTE_ID.clone()),
-                    )
-                    .message_time(last.time)
-                    .display_order(last.display_order)
-                    .build(),
-                None => self.data.clone(),
-            };
-
-            self.cursor = cursor;
-
-            Ok(items)
-        } else {
-            Ok(vec![])
+    ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
+        async move {
+            Self::find_first(
+                "WHERE local_label_id=? AND unread=?",
+                params![local_label_id, unread],
+                tether,
+            )
+            .await
         }
     }
 
-    /// Check if there are more items to fetch for in memory cursor.
-    ///
-    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
+    fn total(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        tether: &Tether,
+    ) -> impl Future<Output = Result<u64, AppError>> + Send;
 
-        Ok(cursor_count < all)
-    }
-
-    /// Check if there are more than a page worth of items to fetch for in memory cursor.
-    ///
-    pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
-
-        if all > cursor_count {
-            Ok(all - cursor_count > self.page_size as u64)
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Update the cache with the latest data from the database.
-    ///
-    pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.data = MessageScrollData::find_with_key(self.local_label_id, self.unread, tether)
-            .await?
-            .ok_or_else(|| {
-                StashError::Custom(format!(
-                    "MessageScrollData not found for label_id: {}, unread: {:?}",
-                    self.local_label_id, self.unread
-                ))
-            })?;
-
-        Ok(())
-    }
-
-    /// Get the data from the cache.
-    ///
-    pub fn data(&self) -> &MessageScrollData {
-        &self.data
-    }
-}
-
-/// Important note: CachedMessageScrollData is a wrapper around two instances of MessageScrollData
-/// One of them being in memory `cursor` and the other one being the actual `data`.
-/// This is done to avoid unnecessary database queries and to keep memory usage low.
-/// The `cursor` is used to keep track of the last loaded items and to load more items when needed.
-/// It should NEVER be stored in the database. With `Deref` implementation we guarantee that
-/// the cursor cannot be access in mutation context which disallows storing it in the database
-/// as save method requires mutable reference to the model.
-impl Deref for CachedMessageScrollData {
-    type Target = MessageScrollData;
-
-    fn deref(&self) -> &Self::Target {
-        &self.cursor
-    }
+    /// Query to get the data of associated type Model from the database.
+    fn query(
+        filter: ReadFilter,
+        limit: Option<usize>,
+        require_remote_id: bool,
+        offset: Option<u64>,
+    ) -> String;
+    /// Conversion between associated types of Model and Item.
+    fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
+    /// Get the time of the item.
+    fn time(item: &Self::Item) -> u64;
+    /// Get the display order of the item.
+    fn display_order(item: &Self::Item) -> u64;
+    fn watched_tables() -> Vec<String>;
 }
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
@@ -241,23 +94,6 @@ pub struct MessageScrollData {
 }
 
 impl MessageScrollData {
-    /// Find the first record with matching:
-    /// * label_id,
-    /// * read_filter
-    ///
-    pub async fn find_with_key(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        tether: &Tether,
-    ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
-            "WHERE local_label_id=? AND unread=?",
-            params![local_label_id, unread],
-            tether,
-        )
-        .await
-    }
-
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         // NOTE: save should always update existing records.
         if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
@@ -265,75 +101,42 @@ impl MessageScrollData {
         }
         <Self as Model>::save(self, tx).await
     }
+}
 
-    /// Returns the newest element in the synced data.
-    pub async fn newest_element(&self, tether: &Tether) -> Result<Option<Message>, StashError> {
-        // NOTE: this is currently unused but can later be used to query
-        // the server for new elements before the latest elements.
-        let query = self.query(Some(1), true, None);
-        let Some(message) = Message::find_first(
-            query,
-            params![self.local_label_id, self.message_time, self.display_order],
-            tether,
-        )
-        .await?
-        else {
-            return Ok(None);
+impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
+    fn from(data: MessageScrollData) -> Self {
+        Self {
+            local_label_id: data.local_label_id,
+            unread: data.unread,
+            time: data.message_time,
+            display_order: data.display_order,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl ScrollData for MessageScrollData {
+    type Model = Message;
+    type Item = Message;
+
+    async fn total(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        tether: &Tether,
+    ) -> Result<u64, AppError> {
+        let Some(counters) = MessageCounters::find_by_id(local_label_id, tether).await? else {
+            return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
 
-        assert!(message.remote_id.is_some());
-        Ok(Some(message))
+        Ok(counters.total(unread))
     }
 
-    /// Same as [`visible_elements`] but returns only the number of items that match.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
-    pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = self.query(None, false, None);
-
-        Message::count(
-            query,
-            params![self.local_label_id, self.message_time, self.display_order],
-            tether,
-        )
-        .await
-    }
-
-    /// Return all elements that are in the range of data we have synced from the server.
-    ///
-    /// This means all elements that a newer than the time and display order of the
-    /// last synced element from the server. Elements that are older should not be
-    /// displayed.
-    ///
-    /// It is possible those old elements become available due to interactions of actions
-    /// and the event loop, but those should not be displayed until the user scrolls
-    /// far enough.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
-    pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
-        self.visible_elements_limit(None, None, tether).await
-    }
-
-    async fn visible_elements_limit(
-        &self,
+    fn query(
+        filter: ReadFilter,
         limit: Option<usize>,
+        require_remote_id: bool,
         offset: Option<u64>,
-        tether: &Tether,
-    ) -> Result<Vec<Message>, StashError> {
-        let query = self.query(limit, false, offset);
-        Message::find(
-            query,
-            params![self.local_label_id, self.message_time, self.display_order],
-            tether,
-        )
-        .await
-    }
-
-    fn query(&self, limit: Option<usize>, require_remote_id: bool, offset: Option<u64>) -> String {
+    ) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
         let mut query = formatdoc!(
@@ -342,6 +145,8 @@ impl MessageScrollData {
                 ON messages.local_id = message_labels.local_message_id
             WHERE
                 message_labels.local_label_id = ?1
+            AND
+                messages.deleted = 0
             AND (
                     messages.time > ?2
                 OR
@@ -353,7 +158,7 @@ impl MessageScrollData {
             query += " AND messages.remote_id IS NOT NULL"
         }
 
-        match self.unread {
+        match filter {
             ReadFilter::All => {}
             ReadFilter::Unread => {
                 query += " AND messages.unread = 0 ";
@@ -378,203 +183,25 @@ impl MessageScrollData {
 
         query
     }
-}
 
-/// In memory Conversation scroll data.
-///
-/// This is a cache for the conversation scroll data. It is used to store the
-/// cursor for the conversation scroll data. This is used to buffer data fetch
-/// over the switch between views in order to not load all available items everytime.
-/// This is useful for offline mode and for performance reasons.
-#[derive(Debug)]
-pub struct CachedConversationScrollData {
-    local_label_id: LocalLabelId,
-    unread: ReadFilter,
-    page_size: usize,
-    data: ConversationScrollData,
-    cursor: ConversationScrollData,
-}
-
-impl CachedConversationScrollData {
-    /// Create a new cache for the conversation scroll data.
-    ///
-    /// This will load the data from the database and create a cursor for the
-    /// conversation scroll data in the place where first page should end.
-    ///
-    /// # Returns
-    ///
-    /// A cursor when the data is found, otherwise `None` as the view was displayed before.
-    ///
-    /// # Arguments
-    ///
-    /// `local_label_id` - The local label id of the label in which the scroll is performed.
-    /// `unread` - The read filter used in the scroll.
-    /// `page_size` - The size of the page to load.
-    /// `tether` - The tether to use for the database access.
-    ///
-    /// # Errors
-    ///
-    /// Specific to database access.
-    ///
-    pub async fn new(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        page_size: usize,
-        tether: &Tether,
-    ) -> Result<Option<Self>, StashError> {
-        let data = ConversationScrollData::find_with_key(local_label_id, unread, tether).await?;
-
-        Ok(match data {
-            Some(data) => {
-                let data_count = data.visible_element_count(tether).await?;
-                let cursor = if data_count > page_size as u64 {
-                    // Load first page, could be improved to load only last element but
-                    // there is tiny risk that background task could be invoked between
-                    // count & page_load which would invalidate the cursor.
-                    // so safer option is to load more items to make sure we have reference point
-                    let mut items = data
-                        .visible_elements_limit(Some(page_size), None, tether)
-                        .await?;
-
-                    match items.pop() {
-                        Some(last) => ConversationScrollData::builder()
-                            .local_label_id(local_label_id)
-                            .unread(unread)
-                            .remote_conversation_id(
-                                last.remote_id
-                                    .clone()
-                                    .unwrap_or(DEFAULT_CONV_REMOTE_ID.clone()),
-                            )
-                            .conversation_time(last.time)
-                            .display_order(last.display_order)
-                            .build(),
-                        None => data.clone(),
-                    }
-                } else {
-                    data.clone()
-                };
-
-                Some(Self {
-                    local_label_id,
-                    unread,
-                    page_size,
-                    data,
-                    cursor,
-                })
-            }
-            None => None,
-        })
+    fn convert(_: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item> {
+        items
     }
 
-    /// Fetch more items from the database.
-    ///
-    /// This will load the next page of items from the database and update the cursor.
-    /// If there are no more items to load, an empty vector is returned.
-    /// In case the cursor is at the one before the last page.
-    /// It will load two pages instead of one if the last page is not complete.
-    ///
-    pub async fn fetch_more(
-        &mut self,
-        tether: &Tether,
-    ) -> Result<Vec<ContextualConversation>, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
-
-        if cursor_count < all {
-            let offset = Some(cursor_count);
-            let remaining = all - cursor_count;
-            let double_page = self.page_size as u64 * 2;
-            let limit = if remaining < double_page {
-                // Progress two pages at a time if there are less than two pages left.
-                usize::try_from(all - cursor_count)
-                    .ok()
-                    .or(Some(self.page_size))
-            } else {
-                Some(self.page_size)
-            };
-            let items = self
-                .data
-                .visible_elements_limit(limit, offset, tether)
-                .await?;
-            let cursor = match items.last() {
-                Some(last) => ConversationScrollData::builder()
-                    .local_label_id(self.local_label_id)
-                    .unread(self.unread)
-                    .remote_conversation_id(
-                        last.remote_id
-                            .clone()
-                            .unwrap_or(DEFAULT_CONV_REMOTE_ID.clone()),
-                    )
-                    .conversation_time(last.time)
-                    .display_order(last.display_order)
-                    .build(),
-                None => self.data.clone(),
-            };
-
-            self.cursor = cursor;
-
-            Ok(items)
-        } else {
-            Ok(vec![])
-        }
+    fn time(item: &Self::Item) -> u64 {
+        item.time
     }
 
-    /// Check if there are more items to fetch for in memory cursor.
-    ///
-    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
-
-        Ok(cursor_count < all)
+    fn display_order(item: &Self::Item) -> u64 {
+        item.display_order
     }
 
-    /// Check if there are more than a page worth of items to fetch for in memory cursor.
-    ///
-    pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.data.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
-
-        if all > cursor_count {
-            Ok(all - cursor_count > self.page_size as u64)
-        } else {
-            Ok(false)
-        }
-    }
-
-    /// Update the cache with the latest data from the database.
-    ///
-    pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.data = ConversationScrollData::find_with_key(self.local_label_id, self.unread, tether)
-            .await?
-            .ok_or_else(|| {
-                StashError::Custom(format!(
-                    "ConversationScrollData not found for label_id: {}, unread: {:?}",
-                    self.local_label_id, self.unread
-                ))
-            })?;
-
-        Ok(())
-    }
-
-    /// Get the data from the cache.
-    ///
-    pub fn data(&self) -> &ConversationScrollData {
-        &self.data
-    }
-}
-
-/// Important note: CachedConverstationScrollData is a wrapper around two instances of ConversationScrollData
-/// One of them being in memory `cursor` and the other one being the actual `data`.
-/// This is done to avoid unnecessary database queries and to keep memory usage low.
-/// The `cursor` is used to keep track of the last loaded items and to load more items when needed.
-/// It should NEVER be stored in the database. With `Deref` implementation we guarantee that
-/// the cursor cannot be access in mutation context which disallows storing it in the database
-/// as save method requires mutable reference to the model.
-impl Deref for CachedConversationScrollData {
-    type Target = ConversationScrollData;
-
-    fn deref(&self) -> &Self::Target {
-        &self.cursor
+    fn watched_tables() -> Vec<String> {
+        vec![
+            Message::table_name().to_owned(),
+            MessageLabel::table_name().to_owned(),
+            MessageCounters::table_name().to_owned(),
+        ]
     }
 }
 
@@ -611,23 +238,6 @@ pub struct ConversationScrollData {
 }
 
 impl ConversationScrollData {
-    /// Find the first record with matching:
-    /// * label_id,
-    /// * read_filter
-    ///
-    pub async fn find_with_key(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        tether: &Tether,
-    ) -> Result<Option<Self>, StashError> {
-        Self::find_first(
-            "WHERE local_label_id=? AND unread=?",
-            params![local_label_id, unread],
-            tether,
-        )
-        .await
-    }
-
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         // NOTE: save should always update existing records.
         if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
@@ -635,103 +245,50 @@ impl ConversationScrollData {
         }
         <Self as Model>::save(self, tx).await
     }
+}
 
-    /// Returns the newest element in the synced data.
-    pub async fn newest_element(
-        &self,
+impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
+    fn from(data: ConversationScrollData) -> Self {
+        Self {
+            local_label_id: data.local_label_id,
+            unread: data.unread,
+            time: data.conversation_time,
+            display_order: data.display_order,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+}
+
+impl ScrollData for ConversationScrollData {
+    type Model = Conversation;
+    type Item = ContextualConversation;
+
+    async fn total(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
         tether: &Tether,
-    ) -> Result<Option<ContextualConversation>, StashError> {
-        // NOTE: this is currently unused but can later be used to query
-        // the server for new elements before the latest elements.
-        let query = self.query(Some(1), true, None);
-        let Some(conv) = Conversation::find_first(
-            query,
-            params![
-                self.local_label_id,
-                self.conversation_time,
-                self.display_order
-            ],
-            tether,
-        )
-        .await?
-        else {
-            return Ok(None);
+    ) -> Result<u64, AppError> {
+        let Some(counters) = ConversationCounters::find_by_id(local_label_id, tether).await? else {
+            return Err(AppError::LocalLabelHasNoCounters(local_label_id));
         };
 
-        assert!(conv.remote_id.is_some());
-        Ok(ContextualConversation::new(conv, self.local_label_id))
+        Ok(counters.total(unread))
     }
 
-    /// Same as [`visible_elements`] but returns only the number of items that match.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
-    pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = self.query(None, false, None);
-        Conversation::count(
-            query,
-            params![
-                self.local_label_id,
-                self.conversation_time,
-                self.display_order
-            ],
-            tether,
-        )
-        .await
-    }
-
-    /// Return all elements that are in the range of data we have synced from the server.
-    ///
-    /// This means all elements that a newer than the time and display order of the
-    /// last synced element from the server. Elements that are older should not be
-    /// displayed.
-    ///
-    /// It is possible those old elements become available due to interactions of actions
-    /// and the event loop, but those should not be displayed until the user scrolls
-    /// far enough.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the query failed.
-    pub async fn visible_elements(
-        &self,
-        tether: &Tether,
-    ) -> Result<Vec<ContextualConversation>, StashError> {
-        self.visible_elements_limit(None, None, tether).await
-    }
-
-    async fn visible_elements_limit(
-        &self,
+    fn query(
+        filter: ReadFilter,
         limit: Option<usize>,
+        require_remote_id: bool,
         offset: Option<u64>,
-        tether: &Tether,
-    ) -> Result<Vec<ContextualConversation>, StashError> {
-        let query = self.query(limit, false, offset);
-        Ok(Conversation::find(
-            query,
-            params![
-                self.local_label_id,
-                self.conversation_time,
-                self.display_order
-            ],
-            tether,
-        )
-        .await?
-        .into_iter()
-        .filter_map(|c| ContextualConversation::new(c, self.local_label_id))
-        .collect())
-    }
-
-    fn query(&self, limit: Option<usize>, require_remote_id: bool, offset: Option<u64>) -> String {
-        //NOTE: we only check the display order for elements with matching time
-        // or we will get incorrect query results.
+    ) -> String {
         let mut query = formatdoc!(
             "
             JOIN conversation_labels
                 ON conversations.local_id = conversation_labels.local_conversation_id
             WHERE
                 conversation_labels.local_label_id = ?1
+            AND
+                conversations.deleted = 0
             AND
                 conversation_labels.deleted = 0
             AND (
@@ -745,7 +302,7 @@ impl ConversationScrollData {
             query += " AND conversations.remote_id IS NOT NULL"
         }
 
-        match self.unread {
+        match filter {
             ReadFilter::All => {}
             ReadFilter::Unread => {
                 query += " AND conversation_labels.context_num_unread > 0 ";
@@ -769,5 +326,288 @@ impl ConversationScrollData {
         }
 
         query
+    }
+
+    fn convert(local_label_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item> {
+        items
+            .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, local_label_id))
+            .collect()
+    }
+
+    fn time(item: &Self::Item) -> u64 {
+        item.time
+    }
+
+    fn display_order(item: &Self::Item) -> u64 {
+        item.display_order
+    }
+
+    fn watched_tables() -> Vec<String> {
+        vec![
+            Conversation::table_name().to_owned(),
+            ConversationLabel::table_name().to_owned(),
+            ConversationCounters::table_name().to_owned(),
+        ]
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, TypedBuilder)]
+pub struct ScrollCursor<T: ScrollData> {
+    /// Label id used in the sync.
+    pub local_label_id: LocalLabelId,
+
+    /// Read filter used in the sync.
+    pub unread: ReadFilter,
+
+    /// Last synced item time.
+    pub time: u64,
+
+    /// Last synced message display order.
+    pub display_order: u64,
+
+    #[builder(default)]
+    pub _phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: ScrollData> ScrollCursor<T> {
+    /// Same as [`visible_elements`] but returns only the number of items that match.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    ///
+    pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        let query = T::query(self.unread, None, false, None);
+        T::Model::count(
+            query,
+            params![self.local_label_id, self.time, self.display_order],
+            tether,
+        )
+        .await
+    }
+
+    /// Return all elements that are in the range of data we have synced from the server.
+    ///
+    /// This means all elements that a newer than the time and display order of the
+    /// last synced element from the server. Elements that are older should not be
+    /// displayed.
+    ///
+    /// It is possible those old elements become available due to interactions of actions
+    /// and the event loop, but those should not be displayed until the user scrolls
+    /// far enough.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    ///
+    pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
+        self.visible_elements_limit(None, None, tether).await
+    }
+
+    /// Internal function to get the visible elements with limit and offset.
+    ///
+    async fn visible_elements_limit(
+        &self,
+        limit: Option<usize>,
+        offset: Option<u64>,
+        tether: &Tether,
+    ) -> Result<Vec<T::Item>, StashError> {
+        let query = T::query(self.unread, limit, false, offset);
+        Ok(T::convert(
+            self.local_label_id,
+            T::Model::find(
+                query,
+                params![self.local_label_id, self.time, self.display_order],
+                tether,
+            )
+            .await?,
+        ))
+    }
+}
+
+/// In memory cache for buffered read of the ScrollData.
+///
+/// This is useful for offline mode and for performance reasons as it buffers loading
+/// of data from the database. This comes crucial whene switching between views
+/// and in order to not load all available items everytime we do utilize this cache.
+///
+#[derive(Debug)]
+pub struct CachedScrollData<T: ScrollData> {
+    page_size: usize,
+    end: ScrollCursor<T>,
+    cursor: ScrollCursor<T>,
+}
+
+impl<T: ScrollData> CachedScrollData<T> {
+    /// Create a new cache for generic ScrollData.
+    ///
+    /// This will load the data from the database and create a cursor for the
+    /// generic ScrollData in the place where first page should end.
+    ///
+    /// # Returns
+    ///
+    /// A cursor when the data is found, otherwise `None` as the view was never displayed before.
+    ///
+    /// # Arguments
+    ///
+    /// `local_label_id` - The local label id of the label in which the scroll is performed.
+    /// `unread` - The read filter used in the scroll.
+    /// `page_size` - The size of the page to load.
+    /// `tether` - The tether to use for the database access.
+    ///
+    /// # Errors
+    ///
+    /// Specific to database access.
+    ///
+    pub async fn new(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let data = T::find_with_key(local_label_id, unread, tether).await?;
+
+        Ok(match data {
+            Some(data) => {
+                let end = data.into();
+                let data_count = end.visible_element_count(tether).await?;
+                let cursor = if data_count > page_size as u64 {
+                    // Load first page, could be improved to load only last element but
+                    // there is tiny risk that background task could be invoked between
+                    // count & page_load which would invalidate the cursor.
+                    // so safer option is to load more items to make sure we have reference point
+                    let mut items = end
+                        .visible_elements_limit(Some(page_size), None, tether)
+                        .await?;
+
+                    match items.pop() {
+                        Some(last) => ScrollCursor::builder()
+                            .local_label_id(local_label_id)
+                            .unread(unread)
+                            .time(T::time(&last))
+                            .display_order(T::display_order(&last))
+                            .build(),
+                        None => end.clone(),
+                    }
+                } else {
+                    end.clone()
+                };
+
+                Some(Self {
+                    page_size,
+                    end,
+                    cursor,
+                })
+            }
+            None => None,
+        })
+    }
+
+    /// Fetch more items from the database.
+    ///
+    /// This will load the next page of items from the database and update the cursor.
+    /// If there are no more items to load, an empty vector is returned.
+    /// In case the cursor is at the one before the last page.
+    /// It will load two pages instead of one if the last page is not completly filled.
+    ///
+    pub async fn fetch_more(&mut self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
+        let all = self.end.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if cursor_count < all {
+            let offset = Some(cursor_count);
+            let remaining = all - cursor_count;
+            let double_page = self.page_size as u64 * 2;
+            let limit = if remaining < double_page {
+                // Progress two pages at a time if there are less than two pages left.
+                usize::try_from(all - cursor_count)
+                    .ok()
+                    .or(Some(self.page_size))
+            } else {
+                Some(self.page_size)
+            };
+            let items = self
+                .end
+                .visible_elements_limit(limit, offset, tether)
+                .await?;
+            let cursor = match items.last() {
+                Some(last) => ScrollCursor::builder()
+                    .local_label_id(self.local_label_id)
+                    .unread(self.unread)
+                    .time(T::time(last))
+                    .display_order(T::display_order(last))
+                    .build(),
+                None => self.end.clone(),
+            };
+
+            self.cursor = cursor;
+
+            Ok(items)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    /// Check if there are more items to fetch for in memory cursor.
+    ///
+    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
+        let all = self.end.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        Ok(cursor_count < all)
+    }
+
+    /// Check if there are more than a page worth of items to fetch for in memory cursor.
+    ///
+    pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
+        let all = self.end.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if all > cursor_count {
+            Ok(all - cursor_count > self.page_size as u64)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Update the cache with the latest data from the database.
+    ///
+    /// It is very handy for ever-changing environment where the data in the database
+    /// is downloaded in another thread. We may want to move the "end_cursor" - `data`
+    /// further to the end of the downloaded list of elements.
+    ///
+    pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
+        self.end = self.data(tether).await?.into();
+
+        Ok(())
+    }
+
+    /// Get the underlying "data" to which the end cursor points to.
+    ///
+    pub async fn data(&self, tether: &Tether) -> Result<T, StashError> {
+        // Due to nature of primary key of the underlying table
+        // It does not really matter if we take end or cursor as
+        // they should be the same however `end` var is just shorter.
+        let end = &self.end;
+
+        T::find_with_key(end.local_label_id, end.unread, tether)
+            .await
+            .and_then(|op| {
+                op.ok_or_else(|| {
+                    StashError::Custom(format!(
+                        "Non-generic ScrollData not found for label_id: {}, unread: {:?}. This is serious issue.",
+                        end.local_label_id, end.unread
+                    ))
+                })
+            })
+    }
+}
+
+impl<T: ScrollData> Deref for CachedScrollData<T> {
+    type Target = ScrollCursor<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.cursor
     }
 }

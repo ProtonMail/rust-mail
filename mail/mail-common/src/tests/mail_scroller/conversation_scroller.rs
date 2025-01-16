@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
 use crate::datatypes::{ContextualConversation, ReadFilter};
-use crate::models::Conversation;
-use crate::models::{CachedConversationScrollData, ConversationScrollData, Label};
+use crate::models::{CachedScrollData, ConversationScrollData, Label, ScrollData};
+use crate::models::{Conversation, ScrollCursor};
 use maplit::btreemap;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
@@ -110,6 +110,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     let bond = tether.transaction().await.unwrap();
     scroller.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
+    let scroller = ScrollCursor::from(scroller);
 
     // Test if the scroller can read visible elements
     let expected_count = 50_usize;
@@ -123,10 +124,12 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Test if new scroller read from database returns exactly the same data.
-    let new_scroller = ConversationScrollData::find_with_key(local_label_id, unread, &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    let new_scroller: ScrollCursor<_> =
+        ConversationScrollData::find_with_key(local_label_id, unread, &tether)
+            .await
+            .unwrap()
+            .unwrap()
+            .into();
 
     let count = new_scroller.visible_element_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
@@ -221,10 +224,11 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     scroller.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
+    let scroller = ScrollCursor::from(scroller);
     let all_count = 50;
     let page_size = 5;
     let mut cached_scroller =
-        CachedConversationScrollData::new(local_label_id, unread, page_size, &tether)
+        CachedScrollData::<ConversationScrollData>::new(local_label_id, unread, page_size, &tether)
             .await
             .unwrap()
             .unwrap();
@@ -317,7 +321,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Create a new cached scroller and assert it starts from the beggining
     let mut cached_scroller =
-        CachedConversationScrollData::new(local_label_id, unread, page_size, &tether)
+        CachedScrollData::<ConversationScrollData>::new(local_label_id, unread, page_size, &tether)
             .await
             .unwrap()
             .unwrap();
@@ -458,7 +462,7 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 
     let page_size = 2;
     let mut cached_scroller =
-        CachedConversationScrollData::new(local_label_id, unread, page_size, &tether)
+        CachedScrollData::<ConversationScrollData>::new(local_label_id, unread, page_size, &tether)
             .await
             .unwrap()
             .unwrap();

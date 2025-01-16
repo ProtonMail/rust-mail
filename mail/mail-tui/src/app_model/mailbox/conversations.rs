@@ -12,8 +12,8 @@ use anyhow::anyhow;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
-use proton_mail_common::mail_scroller::{MailConversationScrollerSource, MailScroller};
-use proton_mail_common::models::{Conversation, Label, MailSettings};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
+use proton_mail_common::models::{Conversation, ConversationScrollData, Label, MailSettings};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
@@ -27,7 +27,7 @@ use super::LabelAs;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    paginator: Paginator<MailConversationScrollerSource>,
+    paginator: Paginator<DataScrollerSource<ConversationScrollData>>,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
@@ -55,10 +55,8 @@ impl ConversationsState {
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    let source =
-                        MailConversationScrollerSource::new(label_id, ReadFilter::All, ITEM_LIMIT);
-
-                    MailScroller::new(context, source).await
+                    MailScroller::conversations(context, label_id, ReadFilter::All, ITEM_LIMIT)
+                        .await
                 }
                 .boxed()
             },

@@ -43,6 +43,7 @@ pub(crate) mod exclusive_location;
 pub mod labels;
 mod read_filter;
 mod rollback_item_type;
+mod search_options;
 mod system_folder;
 pub(crate) mod system_label;
 
@@ -50,6 +51,7 @@ pub use contextual_conversation::*;
 pub use exclusive_location::ExclusiveLocation;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
+pub use search_options::SearchOptions;
 use stash::stash::Tether;
 pub use system_folder::MovableSystemFolder;
 pub use system_label::SystemLabel;

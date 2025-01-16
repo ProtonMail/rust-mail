@@ -9,10 +9,8 @@ use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ReadFilter as RealReadFilter;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::mail_scroller::{
-    MailConversationScrollerSource as RealMailConversationScrollerSource,
-    MailMessageScrollerSource as RealMailMessageScrollerSource, MailScroller as RealMailScroller,
-};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller as RealMailScroller};
+use proton_mail_common::models::{ConversationScrollData, MessageScrollData};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -55,7 +53,7 @@ impl From<ReadFilter> for RealReadFilter {
 #[derive(uniffi::Object)]
 pub struct ConversationScroller {
     /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Mutex<RealMailScroller<RealMailConversationScrollerSource>>,
+    pub(crate) scroller: Mutex<RealMailScroller<DataScrollerSource<ConversationScrollData>>>,
 
     /// The handle to stop watching the data.
     pub(crate) handle: Arc<WatchHandle>,
@@ -144,7 +142,7 @@ impl ConversationScroller {
 #[derive(uniffi::Object)]
 pub struct MessageScroller {
     /// The "real" paginator that does the heavy lifting.
-    pub(crate) scroller: Mutex<RealMailScroller<RealMailMessageScrollerSource>>,
+    pub(crate) scroller: Mutex<RealMailScroller<DataScrollerSource<MessageScrollData>>>,
 
     /// The handle to stop watching the data.
     pub(crate) handle: Arc<WatchHandle>,

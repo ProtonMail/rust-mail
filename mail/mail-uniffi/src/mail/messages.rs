@@ -32,7 +32,7 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
+use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
@@ -385,8 +385,7 @@ pub async fn scroll_messages_for_label(
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx();
     uniffi_async(async move {
-        let source = MailMessageScrollerSource::new(label_id.into(), filter.into(), 50);
-        let scroller = MailScroller::new(context, source).await?;
+        let scroller = MailScroller::messages(context, label_id.into(), filter.into(), 50).await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {

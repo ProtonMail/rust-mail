@@ -21,8 +21,8 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
-use proton_mail_common::models::{Label, MailSettings, Message as MailMessage};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
+use proton_mail_common::models::{Label, MailSettings, Message as MailMessage, MessageScrollData};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -47,7 +47,7 @@ pub struct MessagesState {
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
 enum Mode {
-    Label(Paginator<MailMessageScrollerSource>),
+    Label(Paginator<DataScrollerSource<MessageScrollData>>),
     Conversation(WatchHandle),
 }
 
@@ -75,9 +75,7 @@ impl MessagesState {
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    let source =
-                        MailMessageScrollerSource::new(label_id, ReadFilter::All, ITEM_LIMIT);
-                    MailScroller::new(context, source).await
+                    MailScroller::messages(context, label_id, ReadFilter::All, ITEM_LIMIT).await
                 }
                 .boxed()
             },

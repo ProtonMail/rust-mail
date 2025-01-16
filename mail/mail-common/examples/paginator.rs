@@ -5,9 +5,7 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
-use proton_mail_common::mail_scroller::{
-    MailConversationScrollerSource, MailScroller, MailScrollerSource,
-};
+use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
 use proton_mail_common::models::Label;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -101,9 +99,11 @@ async fn main() {
     let page_count = 50_u32;
 
     let filter = ReadFilter::Unread;
-    let mut paginator = MailScroller::new(
+    let mut paginator = MailScroller::conversations(
         Arc::clone(&user_ctx),
-        MailConversationScrollerSource::new(label.local_id.unwrap(), filter, page_count as usize),
+        label.local_id.unwrap(),
+        filter,
+        page_count as usize,
     )
     .await
     .unwrap();

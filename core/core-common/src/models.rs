@@ -36,6 +36,8 @@ pub mod contact_card;
 pub mod contact_email;
 pub mod sender_image_cache;
 
+use std::future::Future;
+
 pub use self::contact::*;
 pub use self::contact_card::*;
 pub use self::contact_email::*;
@@ -192,24 +194,26 @@ pub trait ModelExtension: Model {
     ///
     /// When querying the database fails.
     ///
-    async fn count<Q>(
+    fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
-    ) -> Result<u64, StashError>
+    ) -> impl Future<Output = Result<u64, StashError>> + Send
     where
         Q: Into<String> + Send,
     {
-        tether
-            .query_value::<_, u64>(
-                formatdoc!(
-                    "SELECT COUNT(*) AS value FROM {} {}",
-                    Self::table_name(),
-                    query_logic.into(),
-                ),
-                params,
-            )
-            .await
+        async move {
+            tether
+                .query_value::<_, u64>(
+                    formatdoc!(
+                        "SELECT COUNT(*) AS value FROM {} {}",
+                        Self::table_name(),
+                        query_logic.into(),
+                    ),
+                    params,
+                )
+                .await
+        }
     }
 
     /// Saves the model by value, returning the updated model.
