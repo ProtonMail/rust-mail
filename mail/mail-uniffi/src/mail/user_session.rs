@@ -7,7 +7,7 @@ mod labels;
 use crate::errors::{ActionError, UserSessionError, VoidSessionResult};
 use crate::MapIntoResult;
 use crate::{
-    core::datatypes::{Id, User},
+    core::datatypes::{AccountDetails, Id, User},
     uniffi_async,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -113,6 +113,16 @@ impl MailUserSession {
         })
         .await
         .map_err(UserSessionError::from)
+    }
+
+    pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
+        let context = self.ctx.clone();
+        uniffi_async(async move {
+            let account_details = context.account_details().await?;
+            Result::<_, RealProtonMailError>::Ok(account_details.into())
+        })
+            .await
+            .map_err(UserSessionError::from)
     }
 
     /// Loads the metadata and file path for the given local [`attachment_id`]
