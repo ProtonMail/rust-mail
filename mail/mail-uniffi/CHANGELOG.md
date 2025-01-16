@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
   - `open_draft` now returns `OpenDraft` type which includes whether the body is synced or cached.
 
+### Fixed
+
+  - [ET-1869] Unable to open drafts in certain conditions
+
 
 ## [0.32.1] - 2025-01-15
 

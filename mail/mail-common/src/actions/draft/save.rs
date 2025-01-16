@@ -1,10 +1,9 @@
-use crate::actions::draft::{load_message_body, local_draft_label_id};
-use crate::cache::{CacheMessageConfig, CacheMessageKey};
+use crate::actions::draft::local_draft_label_id;
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
     MessageSenders, MimeType,
 };
-use crate::decrypted_message::StorableMessageBody;
+use crate::decrypted_message::StorableMessageBodyRef;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, Error, ReplyMode};
 use crate::models::{
@@ -15,7 +14,6 @@ use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::DraftAction;
-use proton_core_common::cache::ProtonCache;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
@@ -248,9 +246,16 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Store body in cache.
-        store_body_in_cache(ctx.messages_cache(), &message, &action.body).inspect_err(|e| {
-            error!("Failed to store draft body in cache :{e}");
-        })?;
+        let raw_body = StorableMessageBodyRef {
+            body: &action.body,
+            ..Default::default()
+        };
+
+        Message::store_raw_message_in_cache(ctx, message.local_id.unwrap(), raw_body).inspect_err(
+            |e| {
+                error!("Failed to store draft body in cache :{e}");
+            },
+        )?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
         metadata.save(tether).await.inspect_err(|e| {
@@ -324,7 +329,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         // Load body.
-        let stored = load_message_body(ctx, &message)?;
+        let Some(message_body) =
+            Message::load_decrypted_message_body_from_cache(ctx, message.local_id.unwrap())?
+        else {
+            return Err(AppError::MessageBodyMissing(message.local_id.unwrap()).into());
+        };
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -335,7 +344,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 action.reply_mode.map_or(DraftAction::Reply, Into::into),
                 &message,
                 &message_body_metadata,
-                &stored.body,
+                &message_body.body,
                 remote_parent_id,
             )
             .await
@@ -349,7 +358,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 action.address_id.clone(),
                 &message,
                 &message_body_metadata,
-                &stored.body,
+                &message_body.body,
             )
             .await
             .inspect_err(|e| {
@@ -540,25 +549,6 @@ impl Save {
             .map(|attachment| AttachmentMetadata::from(attachment.clone()))
             .collect()
     }
-}
-
-/// Store the message body in the cache.
-fn store_body_in_cache(
-    cache: &ProtonCache<CacheMessageConfig>,
-    message: &Message,
-    body: &str,
-) -> Result<(), AppError> {
-    let key = CacheMessageKey::from(message);
-
-    let storable = StorableMessageBody {
-        body: body.to_owned(),
-        ..Default::default()
-    };
-    cache.add_item(key, &storable.serialize()?).map_err(|e| {
-        error!("Failed to store draft body in cache: {e}");
-        AppError::Cache(e)
-    })?;
-    Ok(())
 }
 
 /// Wraps the execution of the default draft [`SaveHandler`] to record
