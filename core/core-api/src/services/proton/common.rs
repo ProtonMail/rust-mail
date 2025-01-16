@@ -68,7 +68,7 @@ pub trait ProtonIdSqlMarker {}
 
 /// Marker trait assigned to each id that was declared with [`declare_proton_id`].
 pub trait ProtonIdMarker:
-    AsRef<str>
+    std::ops::Deref<Target = str>
     + Clone
     + Debug
     + DeserializeOwned
@@ -149,9 +149,11 @@ macro_rules! declare_proton_id {
             }
         }
 
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                self.as_str()
+        impl ::std::ops::Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                self.0.as_str()
             }
         }
 

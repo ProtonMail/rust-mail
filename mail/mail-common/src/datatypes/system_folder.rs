@@ -24,7 +24,7 @@ impl MovableSystemFolder {
     }
 
     fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
-        let remote_id: u8 = label_id?.as_ref().parse().ok()?;
+        let remote_id: u8 = label_id?.parse().ok()?;
 
         match remote_id {
             x if x == Self::Inbox as u8 => Some(Self::Inbox),

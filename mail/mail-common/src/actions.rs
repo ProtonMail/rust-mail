@@ -155,7 +155,7 @@ where
         tx: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
-            RollbackItem::new(remote_id.as_ref().to_owned(), item_type)
+            RollbackItem::new(remote_id.to_string(), item_type)
                 .save(tx)
                 .await?;
         }
@@ -311,7 +311,7 @@ where
         bond: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
-            RollbackItem::new(remote_id.as_ref().to_owned(), kind)
+            RollbackItem::new(remote_id.to_string(), kind)
                 .save(bond)
                 .await?;
         }
