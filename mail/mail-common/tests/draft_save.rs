@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use proton_api_core::consts::CoreBundle;
 use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -23,7 +24,10 @@ use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
 use proton_mail_common::draft::{Draft, Error, ReplyMode};
-use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
+use proton_mail_common::models::{
+    Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    Message,
+};
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
@@ -437,6 +441,57 @@ async fn create_draft_reply_inherits_only_inline_attachments() {
     let attachment = draft_body.metadata.attachments.first().unwrap();
     let inline_attachment = gen_inline_attachment();
     compare_inline_attachment(attachment, inline_attachment);
+}
+
+#[tokio::test]
+async fn draft_save_failure_creates_send_result_with_correct_origin() {
+    // Create a new draft, save once to create, save again to trigger
+    // update on server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft_failure(
+        expected_draft_params,
+        DraftAction::Reply,
+        None,
+        DraftAttachmentKeyPackets::new(),
+        CoreBundle::AppVersionInvalid as u32,
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap_err();
+    let tether = user_ctx.user_stash().connection();
+
+    let send_result =
+        DraftSendResult::find_by_id(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    assert!(!send_result.is_success());
+    assert_eq!(send_result.origin, DraftSendResultOrigin::Save);
 }
 
 #[tokio::test]

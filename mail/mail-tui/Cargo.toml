@@ -32,6 +32,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-error = "0.2"
 tracing-subscriber = { workspace = true }
+tokio-util = { workspace = true }
 tui-input = "0.10.1"
 tui-logger = { version = "0.12.1", features = ["tracing-support"] }
 tui-textarea = { version = "0.6.1", features = ["ratatui"] }

@@ -1,3 +1,4 @@
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
 
 /// Specific Reason for error occurrence
@@ -92,7 +93,26 @@ pub enum LoginErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum DraftErrorReason {
-    UnknownMimeType,
+    /// Message has no recipients
+    NoRecipients,
+    /// Address does not have a primary key
+    AddressDoesNotHavePrimaryKey(AddressId),
+    /// Recipient email is invalid
+    RecipientEmailInvalid(String),
+    /// This Proton recipient does not exist.
+    ProtonRecipientDoesNotExist(String),
+    /// Some other validation error occurred for this recipient
+    UnknownRecipientValidationError(String),
+    /// This address is disabled and can't be used for sending
+    AddressDisabled(String),
+    /// Message was already sent.
+    MessageAlreadySent,
+    /// A packaging error occurred
+    PackageError(String),
+    /// Updating a message that is not draft.
+    MessageUpdateIsNotDraft,
+    /// This message no longer exists.
+    MessageDoesNotExist,
 }
 
 /// Specific Reason for error occurrence within Event Loop.
