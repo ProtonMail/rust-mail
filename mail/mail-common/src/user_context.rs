@@ -166,6 +166,12 @@ impl MailUserContext {
         Ok(real_user)
     }
 
+    /// Fetches the account details of the primary account.
+    ///
+    /// Returns the primary account's details or an error if primary account does not exist.
+    ///
+    /// # Errors
+    /// - Returns `MailContextError::Other` if the primary account is missing.
     pub async fn account_details(&self) -> MailContextResult<AccountDetails> {
         let Some(account) = self.mail_context.get_primary_account().await? else {
             return Err(MailContextError::Other(anyhow!("Missing PrimaryAccount")));

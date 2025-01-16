@@ -2,10 +2,17 @@ use crate::core::datatypes::AvatarInformation;
 use crate::UniffiRecord;
 use proton_core_common::datatypes::AccountDetails as RealAccountDetails;
 
+/// Represents detailed information about a user account.
+///
+/// This struct contains the name, email, and avatar information
+/// associated with an account.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AccountDetails {
+    /// The user's display name.
     pub name: String,
+    /// The user's email address.
     pub email: String,
+    /// Information about the user's avatar.
     pub avatar_information: AvatarInformation,
 }
 

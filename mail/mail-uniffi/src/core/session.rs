@@ -51,7 +51,14 @@ impl StoredAccount {
         self.account.remote_id.to_string()
     }
 
-    /// Get the user facing account details: name, email and avatar information.
+    /// Retrieves account details including the name, email, and avatar information.
+    ///
+    /// This method constructs the account details using the available fields. If the display name
+    /// or username is not set, it falls back to `name_or_addr`. Similarly, the email defaults to
+    /// `name_or_addr` if the primary address is unavailable.
+    ///
+    /// # Returns
+    /// - `AccountDetails`: A struct containing the account's name, email, and avatar information.
     #[must_use]
     pub fn details(&self) -> AccountDetails {
         self.account.account_details().into()

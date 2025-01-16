@@ -115,6 +115,12 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Retrieves the account details for the current user session.
+    ///
+    /// Returns the user's account details (name, email and avatar information) or an error if the operation fails.
+    ///
+    /// # Errors
+    /// - Returns `UserSessionError` if the account details cannot be retrieved.
     pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
         let context = self.ctx.clone();
         uniffi_async(async move {
