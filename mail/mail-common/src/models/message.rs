@@ -1234,7 +1234,7 @@ impl Message {
                         SELECT local_id FROM labels WHERE remote_id IN ({})
                     )
                 ",
-                    vec!["?"; self.label_ids.len()].join(",")
+                    stash::utils::placeholders(self.label_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1323,7 +1323,7 @@ impl Message {
                     local_message_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                    vec!["?"; local_ids.len()].join(",")
+                    stash::utils::placeholders(local_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()

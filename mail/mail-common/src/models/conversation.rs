@@ -1517,7 +1517,7 @@ impl Conversation {
         let labels = Label::find(
             format!(
                 "WHERE local_id IN ({}) ORDER BY display_order ASC",
-                vec!["?"; ids.len()].join(",")
+                stash::utils::placeholders(ids.len()),
             ),
             ids,
             tehter,
@@ -1580,7 +1580,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND remote_label_id NOT IN ({})
                 ",
-                    vec!["?"; self.labels.len()].join(",")
+                    stash::utils::placeholders(self.labels.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1649,7 +1649,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                    vec!["?"; local_ids.len()].join(",")
+                    stash::utils::placeholders(local_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1996,7 +1996,7 @@ impl Conversation {
                 let num_unread = Message::find(
                     format!(
                         "WHERE local_id IN ({})",
-                        vec!["?"; message_ids.len()].join(",")
+                        stash::utils::placeholders(message_ids.len()),
                     ),
                     message_ids
                         .iter()
@@ -3381,10 +3381,14 @@ impl ConversationMessageLabelStats {
             .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
-        let messages = Message::find(format!(indoc! {"
+        let query = format!(
+            indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
+            "},
+            stash::utils::placeholders(message_ids.len())
+        );
+        let messages = Message::find(query, params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3407,10 +3411,14 @@ impl ConversationMessageLabelStats {
             .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
-        let messages = Message::find(format!(indoc! {"
+        let query = format!(
+            indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
+            "},
+            stash::utils::placeholders(message_ids.len())
+        );
+        let messages = Message::find(query, params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));

@@ -6,6 +6,7 @@ use crate::models::*;
 use crate::AppError;
 use bytes::Bytes;
 use indoc::indoc;
+use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
@@ -405,12 +406,15 @@ impl Attachment {
         attachment_ids: impl IntoIterator<Item = LocalAttachmentId>,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        let params: Vec<Box<dyn ToSql + Send>> = attachment_ids
+        let params = attachment_ids
             .into_iter()
-            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
-            .collect();
+            .map(|v| Box::new(v) as Box<dyn ToSql + Send>)
+            .collect_vec();
         Attachment::find(
-            format!("WHERE local_id IN ({})", vec!["?"; params.len()].join(","),),
+            format!(
+                "WHERE local_id IN ({})",
+                stash::utils::placeholders(params.len())
+            ),
             params,
             tether,
         )

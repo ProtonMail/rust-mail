@@ -1,5 +1,4 @@
 //! Utility functions for working with SQLite.
-//!
 //! This module provides utility functions for working with SQLite, including
 //! functions for converting values to and from SQLite values using `serde`.
 //!
@@ -9,6 +8,8 @@ use rusqlite::types::{FromSqlError, ToSqlOutput, ValueRef};
 use rusqlite::Error as SqliteError;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
+use std::borrow::Cow;
+use tracing::warn;
 
 /// Boxes up a list of types, making them suitable for use as query parameters.
 ///
@@ -108,5 +109,23 @@ pub fn from_sql_using_deserialize<T: for<'de> Deserialize<'de>>(
         ValueRef::Blob(_) | ValueRef::Integer(_) | ValueRef::Null | ValueRef::Real(_) => {
             Err(FromSqlError::InvalidType)
         }
+    }
+}
+
+/// Use this when you need to create a string with a known number of placeholders in the form
+/// "?,?,?,?"
+#[must_use]
+pub fn placeholders(n: usize) -> Cow<'static, str> {
+    /// This has 100 placeholders
+    static PLACEHOLDERS: &str = "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?";
+    if n < 100 {
+        #[allow(clippy::string_slice)]
+        #[allow(clippy::arithmetic_side_effects)]
+        Cow::Borrowed(&PLACEHOLDERS[..(n * 2).saturating_sub(1)])
+    } else {
+        warn!("Too many placeholders! please increase the static placeholder.");
+        let mut res = "?,".repeat(n);
+        _ = res.pop();
+        Cow::Owned(res)
     }
 }

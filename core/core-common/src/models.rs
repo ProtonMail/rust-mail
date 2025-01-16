@@ -47,6 +47,7 @@ use crate::datatypes::{
 };
 use crate::CoreContextResult;
 use indoc::formatdoc;
+use itertools::Itertools as _;
 use proton_api_core::services::proton::common::{AddressId, ProtonIdMarker, UserId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
@@ -163,10 +164,10 @@ pub trait ModelExtension: Model {
             return Ok(vec![]);
         };
         #[allow(trivial_casts)]
-        let (placeholders, parameters): (Vec<_>, Vec<_>) = ids
-            .map(|i| ("?", Box::new(i) as Box<dyn ToSql + Send>))
-            .unzip();
-        let placeholders = placeholders.join(", ");
+        let parameters = ids
+            .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
+            .collect_vec();
+        let placeholders = stash::utils::placeholders(parameters.len());
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
@@ -420,10 +421,10 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
             return Ok(vec![]);
         };
         #[allow(trivial_casts)]
-        let (placeholders, parameters): (Vec<_>, Vec<_>) = ids
-            .map(|i| ("?", Box::new(i) as Box<dyn ToSql + Send>))
-            .unzip();
-        let placeholders = placeholders.join(", ");
+        let parameters = ids
+            .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
+            .collect_vec();
+        let placeholders = stash::utils::placeholders(parameters.len());
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
@@ -506,10 +507,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         remote_ids: Vec<Self::RemoteId>,
         tether: &Tether,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        let placeholders = std::iter::repeat("?")
-            .take(remote_ids.len())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let placeholders = stash::utils::placeholders(remote_ids.len());
         #[allow(trivial_casts)]
         let values = remote_ids
             .into_iter()
@@ -589,10 +587,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         local_ids: Vec<Self::IdType>,
         tether: &Tether,
     ) -> Result<Vec<Self::RemoteId>, StashError> {
-        let placeholders = std::iter::repeat("?")
-            .take(local_ids.len())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let placeholders = stash::utils::placeholders(local_ids.len());
         #[allow(trivial_casts)]
         let values = local_ids
             .into_iter()
