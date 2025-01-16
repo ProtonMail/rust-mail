@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `draft_send_result_unseen` - check all unseen send results.
   - `draft_send_result_mark_read`
   - `draft_send_result_delete`
+  - `Draft::send_result` - Loads associated send result with `open_draft` if any is available.
+
+### Changed
+  - `open_draft` now returns `OpenDraft` type which includes whether the body is synced or cached.
 
 
 ## [0.32.1] - 2025-01-15
