@@ -113,7 +113,7 @@ impl proton_action_queue::action::Handler for Handler {
         self.apply_local(ctx, action, tx).await?;
 
         if let Some(remote_id) = action.remote_id.clone() {
-            RollbackItem::new(remote_id.as_ref().to_owned(), RollbackItemType::Label)
+            RollbackItem::new(remote_id.to_string(), RollbackItemType::Label)
                 .save(tx)
                 .await?;
         }

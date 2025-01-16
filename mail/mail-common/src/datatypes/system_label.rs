@@ -45,7 +45,7 @@ impl SystemLabel {
     }
 
     pub fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
-        let remote_id = label_id?.as_ref().parse::<u8>().ok()?;
+        let remote_id = label_id?.parse::<u8>().ok()?;
 
         match remote_id {
             x if x == Self::Inbox as u8 => Some(Self::Inbox),
