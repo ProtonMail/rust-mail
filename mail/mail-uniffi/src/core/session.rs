@@ -1,7 +1,6 @@
-use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
 use std::{borrow::Borrow, sync::Arc};
 
-use crate::core::datatypes::AvatarInformation;
+use crate::core::datatypes::AccountDetails;
 use proton_api_core::services::proton::common::AuthId;
 use proton_core_common::{
     datatypes::{PasswordMode, TfaStatus},
@@ -52,10 +51,10 @@ impl StoredAccount {
         self.account.remote_id.to_string()
     }
 
-    /// Get the username or email address of the account (whatever was used to log in).
+    /// Get the user facing account details: name, email and avatar information.
     #[must_use]
-    pub fn name_or_address(&self) -> String {
-        self.account.name_or_addr.clone()
+    pub fn details(&self) -> AccountDetails {
+        self.account.account_details().into()
     }
 
     /// Returns whether the account has 2FA enabled.
@@ -70,24 +69,6 @@ impl StoredAccount {
         self.account.password_mode.map(Into::into)
     }
 
-    /// The account's username (once known).
-    #[must_use]
-    pub fn username(&self) -> Option<String> {
-        self.account.username.clone()
-    }
-
-    /// The account's display name (once known).
-    #[must_use]
-    pub fn display_name(&self) -> Option<String> {
-        self.account.display_name.clone()
-    }
-
-    /// The account's primary email address (once known).
-    #[must_use]
-    pub fn primary_addr(&self) -> Option<String> {
-        self.account.primary_addr.clone()
-    }
-
     /// Timestamp of when the account was last set as the primary account.
     #[must_use]
     pub fn primary_at(&self) -> Option<u64> {
@@ -98,15 +79,6 @@ impl StoredAccount {
     #[must_use]
     pub fn state(&self) -> StoredAccountState {
         self.state.borrow().into()
-    }
-
-    /// Get the avatar information for the account, if available.
-    #[must_use]
-    pub fn avatar_information(&self) -> Option<AvatarInformation> {
-        let name = self.account.display_name.as_ref()?;
-        let addr = self.account.primary_addr.as_ref()?;
-
-        Some(RealAvatarInformation::from(name).or_else(addr).into())
     }
 }
 

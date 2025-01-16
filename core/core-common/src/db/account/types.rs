@@ -207,7 +207,7 @@ impl CoreAccount {
         stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
     }
 
-    /// Returns user facing account details: name, email and avatar information.
+    /// Get the user facing account details: name, email and avatar information.
     #[must_use]
     pub fn account_details(&self) -> AccountDetails {
         let name = self
