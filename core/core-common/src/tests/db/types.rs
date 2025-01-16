@@ -3,6 +3,7 @@
 use crate::datatypes::{AccountDetails, AvatarInformation};
 use crate::db::account::CoreAccount;
 use proton_api_core::services::proton::common::UserId;
+use std::default::Default;
 
 #[cfg(test)]
 mod core_account_account_details_tests {
@@ -10,12 +11,13 @@ mod core_account_account_details_tests {
 
     #[test]
     fn test_all_fields_present() {
-        let sut = test_account(TestCoreAccountParams {
+        let sut = CoreAccount {
             name_or_addr: "frank.moon@pm.me".to_string(),
             display_name: Some("Frankie".to_string()),
             username: Some("Frank Moon".to_string()),
             primary_addr: Some("frank@proton.me".to_string()),
-        });
+            ..Default::default()
+        };
 
         let result = sut.account_details();
 
@@ -24,12 +26,13 @@ mod core_account_account_details_tests {
 
     #[test]
     fn test_no_display_name_fallback_to_username() {
-        let sut = test_account(TestCoreAccountParams {
+        let sut = CoreAccount {
             name_or_addr: "Max Johnson".to_string(),
             display_name: None,
             username: Some("Max".to_string()),
             primary_addr: Some("max@pm.me".to_string()),
-        });
+            ..Default::default()
+        };
 
         let result = sut.account_details();
 
@@ -38,12 +41,13 @@ mod core_account_account_details_tests {
 
     #[test]
     fn test_no_display_name_or_username_fallback_to_name_or_addr() {
-        let sut = test_account(TestCoreAccountParams {
+        let sut = CoreAccount {
             name_or_addr: "John Doe".to_string(),
             display_name: None,
             username: None,
             primary_addr: Some("john@gmail.com".to_string()),
-        });
+            ..Default::default()
+        };
 
         let result = sut.account_details();
 
@@ -52,12 +56,13 @@ mod core_account_account_details_tests {
 
     #[test]
     fn test_no_primary_addr_fallback_to_name_or_addr() {
-        let sut = test_account(TestCoreAccountParams {
+        let sut = CoreAccount {
             name_or_addr: "dricus@proton.me".to_string(),
             display_name: Some("Dricus".to_string()),
             username: Some("Dricus Du Plessis".to_string()),
             primary_addr: None,
-        });
+            ..Default::default()
+        };
 
         let result = sut.account_details();
 
@@ -73,25 +78,19 @@ mod core_account_account_details_tests {
         );
     }
 }
-
-struct TestCoreAccountParams {
-    name_or_addr: String,
-    display_name: Option<String>,
-    username: Option<String>,
-    primary_addr: Option<String>,
-}
-
-fn test_account(params: TestCoreAccountParams) -> CoreAccount {
-    CoreAccount {
-        remote_id: UserId::new("__NOT_USED__".to_string()),
-        name_or_addr: params.name_or_addr,
-        display_name: params.display_name,
-        username: params.username,
-        primary_addr: params.primary_addr,
-        second_factor_mode: None,
-        password_mode: None,
-        primary_at: None,
-        is_ready: false,
-        row_id: None,
+impl Default for CoreAccount {
+    fn default() -> Self {
+        CoreAccount {
+            remote_id: UserId::new("__NOT_USED__".to_string()),
+            name_or_addr: Default::default(),
+            display_name: Default::default(),
+            username: Default::default(),
+            primary_addr: Default::default(),
+            second_factor_mode: None,
+            password_mode: None,
+            primary_at: None,
+            is_ready: false,
+            row_id: None,
+        }
     }
 }
