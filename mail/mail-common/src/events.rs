@@ -231,9 +231,12 @@ impl From<ApiMailEvent> for MailEvent {
                 .labels
                 .map(|labels| labels.into_iter().map(LabelEvent::from).collect()),
             mail_settings: value.mail_settings.map(MailSettings::from),
-            message_counts: value
-                .message_counts
-                .map(|message_counts| message_counts.into_iter().map(MessageLabelsCount::from).collect()),
+            message_counts: value.message_counts.map(|message_counts| {
+                message_counts
+                    .into_iter()
+                    .map(MessageLabelsCount::from)
+                    .collect()
+            }),
             messages: value
                 .messages
                 .map(|messages| messages.into_iter().map(MessageEvent::from).collect()),

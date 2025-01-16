@@ -7,8 +7,8 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
-    ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount, MessageRecipient,
-    MessageRecipients, MessageSender, MessageSenders,
+    ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount,
+    MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
 };
 use proton_mail_common::models::{
     Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
@@ -301,7 +301,9 @@ pub fn message_counts_for_conversation(
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, ConversationLabelsCount> {
+pub async fn conv_counts_as_map(
+    tether: &Tether,
+) -> BTreeMap<LocalLabelId, ConversationLabelsCount> {
     let iter = ConversationCounters::all(tether)
         .await
         .unwrap()

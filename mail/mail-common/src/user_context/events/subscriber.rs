@@ -70,8 +70,11 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                 if let Some(message_counts) = &event.message_counts {
                     debug!("Handling message counts");
-                    MessageLabelsCount::create_or_update_message_counts(message_counts.clone(), &tx)
-                        .await?;
+                    MessageLabelsCount::create_or_update_message_counts(
+                        message_counts.clone(),
+                        &tx,
+                    )
+                    .await?;
                 }
 
                 if let Some(mail_settings) = event.mail_settings.as_mut() {

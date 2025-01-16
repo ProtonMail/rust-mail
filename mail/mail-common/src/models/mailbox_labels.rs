@@ -1,16 +1,24 @@
+#![allow(async_fn_in_trait)]
 #![allow(clippy::module_inception)]
 
 #[cfg(test)]
 #[path = "../tests/models/mailbox_labels.rs"]
 mod mailbox_labels;
 
-use proton_core_common::datatypes::LocalLabelId;
+use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::datatypes::LabelType;
 use proton_core_common::models::ModelExtension;
+use proton_core_common::{datatypes::LocalLabelId, models::Label};
+use stash::stash::Tether;
 use stash::{
     macros::Model,
     orm::Model,
     stash::{Bond, StashError},
 };
+
+use crate::datatypes::{SystemLabelId, ViewMode};
+
+use super::{MailSettings, MAIL_SETTINGS_ID};
 
 /// Mailbox labels is an extension over labels, specific for mailbox only.
 /// That allows us to keep labels in core-common
@@ -65,5 +73,61 @@ impl MailboxLabels {
             }
         }
         <Self as Model>::save(self, bond).await
+    }
+}
+
+pub trait MailLabel {
+    /// Return the preferred view mode for label.
+    ///
+    /// If this function returns [`None`] we should use the [`ViewMode`] defined
+    /// in the user's [`MailSettings`], otherwise the returned value should be
+    /// used.
+    ///
+    async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError>;
+
+    /// TODO: Document this function.
+    fn is_applicable(&self) -> bool;
+
+    /// Checks if label is a System label - starred.
+    fn is_starred(&self) -> bool;
+
+    /// TODO: Document this function.
+    fn is_movable_folder(&self) -> bool;
+}
+
+impl MailLabel for Label {
+    async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError> {
+        if let Some(remote_id) = self.remote_id.as_ref() {
+            if *remote_id == LabelId::drafts()
+                || *remote_id == LabelId::sent()
+                || *remote_id == LabelId::all_drafts()
+                || *remote_id == LabelId::all_sent()
+                || *remote_id == LabelId::all_scheduled()
+            {
+                return Ok(ViewMode::Messages);
+            }
+        }
+        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
+            .await?
+            .unwrap_or_default()
+            .view_mode)
+    }
+
+    fn is_applicable(&self) -> bool {
+        self.label_type == LabelType::Label || self.is_starred()
+    }
+
+    fn is_starred(&self) -> bool {
+        self.remote_id
+            .as_ref()
+            .is_some_and(|rid| *rid == LabelId::starred())
+    }
+
+    fn is_movable_folder(&self) -> bool {
+        self.label_type == LabelType::Folder
+            || self
+                .remote_id
+                .as_ref()
+                .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
     }
 }

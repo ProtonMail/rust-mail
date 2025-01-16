@@ -2188,7 +2188,8 @@ impl Conversation {
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
-        ConversationLabelsCount::create_or_update_conversation_counts(conversation_counts, &tx).await?;
+        ConversationLabelsCount::create_or_update_conversation_counts(conversation_counts, &tx)
+            .await?;
         MessageLabelsCount::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
         Ok(())
@@ -2350,7 +2351,7 @@ impl Conversation {
         let Some(source) = Label::load(source_id, bond).await? else {
             return Err(AppError::LabelNotFound(source_id));
         };
-        if SystemLabel::is_label_movable_folder(&source) {
+        if source.is_movable_folder() {
             Conversation::remove_label(source_id, conversation_ids.clone(), bond).await?
         }
 
@@ -3768,7 +3769,10 @@ impl ConversationCounters {
 
     /// Returns [`ConversationCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn conversation_count(&self, tether: &Tether) -> Result<ConversationLabelsCount, AppError> {
+    pub async fn conversation_count(
+        &self,
+        tether: &Tether,
+    ) -> Result<ConversationLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
         Ok(ConversationLabelsCount {

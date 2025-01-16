@@ -7,7 +7,7 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    attachment, ContextualConversation, ExclusiveLocation, MessageLabelsCount, MessageFlags,
+    attachment, ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};

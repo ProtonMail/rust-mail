@@ -29,8 +29,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageLabelsCount, MessageFlags, MessageRecipients, MessageReplyTos, MessageSender,
-    MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -497,7 +497,7 @@ impl Message {
         let Some(source) = Label::load(source_id, bond).await? else {
             return Err(AppError::LabelNotFound(source_id));
         };
-        if SystemLabel::is_label_movable_folder(&source) {
+        if source.is_movable_folder() {
             Message::remove_label(source_id, message_ids.to_vec(), bond)
                 .await
                 .inspect_err(|e| error!("Failed to remove source label from messages: {e}"))?;

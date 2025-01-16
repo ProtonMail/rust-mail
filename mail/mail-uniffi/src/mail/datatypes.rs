@@ -77,7 +77,7 @@ use proton_mail_common::datatypes::{
     LocalMessageId, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
-    MessageLabelsCount as RealMessageCount, MessageFlags as RealMessageFlags,
+    MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
     MessageRecipient as RealMessageRecipient, MessageReplyTo as RealMessageReplyTo,
     MessageSender as RealMessageSender, MimeType as RealMimeType,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,

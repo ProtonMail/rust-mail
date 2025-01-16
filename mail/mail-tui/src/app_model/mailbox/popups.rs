@@ -5,8 +5,8 @@ use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::Label;
 use proton_mail_common::actions::LabelAsAction;
-use proton_mail_common::datatypes::{SystemLabel, ViewMode};
-use proton_mail_common::models::{Conversation, LabelWithCounters};
+use proton_mail_common::datatypes::ViewMode;
+use proton_mail_common::models::{Conversation, LabelWithCounters, MailLabel};
 use proton_mail_common::{MailContextResult, MailUserContext};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
@@ -28,9 +28,9 @@ impl MoveItemPopup {
         //TODO: improve
         let tether = ctx.user_stash().connection();
         let mut folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
-        folders.retain(SystemLabel::is_label_movable_folder);
+        folders.retain(MailLabel::is_movable_folder);
         let mut system = Label::find_by_kind(LabelType::System, &tether).await?;
-        system.retain(SystemLabel::is_label_movable_folder);
+        system.retain(MailLabel::is_movable_folder);
         folders.extend(system);
         Ok(Self {
             folders,
