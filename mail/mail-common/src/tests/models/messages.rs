@@ -8,7 +8,7 @@ use crate::actions::{
 };
 use crate::datatypes::{
     attachment, ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
-    MovableSystemFolder, SystemLabel, SystemLabelId,
+    MovableSystemFolder, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;

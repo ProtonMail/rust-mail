@@ -44,7 +44,6 @@ pub mod labels;
 mod read_filter;
 mod rollback_item_type;
 mod system_folder;
-pub(crate) mod system_label;
 
 pub use contextual_conversation::*;
 pub use exclusive_location::ExclusiveLocation;
@@ -54,7 +53,6 @@ pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
 use stash::stash::{Bond, StashError, Tether};
 pub use system_folder::MovableSystemFolder;
-pub use system_label::SystemLabel;
 
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
@@ -78,7 +76,9 @@ use proton_api_mail::services::proton::response_data::{
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
     ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{AvatarInformation, LabelColor, LabelType, LocalLabelId};
+use proton_core_common::datatypes::{
+    AvatarInformation, LabelColor, LabelType, LocalLabelId, SystemLabel,
+};
 use proton_crypto_account::keys::{
     EmailMimeType as CryptoMimeType, PGPScheme as CryptoPgpScheme, UnlockedAddressKeys,
 };

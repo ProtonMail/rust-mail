@@ -39,9 +39,11 @@
 
 mod avatar;
 mod contact_list;
+mod system_label;
 
 pub use self::avatar::AvatarInformation;
 pub use self::contact_list::*;
+pub use self::system_label::*;
 
 use itertools::Itertools;
 use num_enum::{IntoPrimitive, TryFromPrimitive};

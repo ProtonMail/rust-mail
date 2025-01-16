@@ -4,7 +4,7 @@ use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
     attachment, ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
-    MovableSystemFolder, SystemLabel, SystemLabelId,
+    MovableSystemFolder, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
 use futures::StreamExt;
@@ -588,10 +588,9 @@ mod available_actions {
 
 mod available_move_to_actions {
     use super::*;
-    use crate::datatypes::SystemLabel;
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
-    use proton_core_common::datatypes::{LabelColor, LabelType};
+    use proton_core_common::datatypes::{LabelColor, LabelType, SystemLabel};
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conv_id, conversation, label, lbl_id};
     use stash::stash::Tether;

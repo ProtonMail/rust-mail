@@ -1,5 +1,5 @@
+use proton_core_common::datatypes::SystemLabel as RealSystemLabel;
 use proton_core_common::models::Label as RealLabel;
-use proton_mail_common::datatypes::SystemLabel as RealSystemLabel;
 use uniffi::Enum as UniffiEnum;
 
 /// This enum represents the system labels that are available in ProtonMail.

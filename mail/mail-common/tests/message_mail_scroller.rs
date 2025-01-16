@@ -5,9 +5,12 @@ use proton_api_mail::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
+use proton_core_common::{
+    datatypes::SystemLabel,
+    models::{Address, Label, ModelExtension, ModelIdExtension},
+};
 use proton_mail_common::{
-    datatypes::{ReadFilter, SystemLabel},
+    datatypes::ReadFilter,
     mail_scroller::{MailMessageScrollerSource, MailScroller},
     models::{Conversation, Message, MessageCounters, MessageScrollData},
 };

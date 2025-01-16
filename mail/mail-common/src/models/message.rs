@@ -30,7 +30,7 @@ use crate::actions::{
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -53,7 +53,7 @@ use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId};
+use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
