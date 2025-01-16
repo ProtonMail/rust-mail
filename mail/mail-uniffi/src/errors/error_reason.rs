@@ -81,13 +81,47 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
 /// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum DraftErrorReason {
-    UnknownMimeType,
+    /// Message has no recipients
+    NoRecipients,
+    /// Address does not have a primary key
+    AddressDoesNotHavePrimaryKey(String),
+    /// Recipient email is invalid
+    RecipientEmailInvalid(String),
+    /// This Proton recipient does not exist.
+    ProtonRecipientDoesNotExist(String),
+    /// Some other validation error occurred for this recipient
+    UnknownRecipientValidationError(String),
+    /// This address is disabled and can't be used for sending
+    AddressDisabled(String),
+    /// Message was already sent.
+    MessageAlreadySent,
+    /// A packaging error occurred
+    PackageError(String),
+    /// Updating a message that is not draft.
+    MessageUpdateIsNotDraft,
+    /// This message no longer exists.
+    MessageDoesNotExist,
 }
 
 impl From<RealDraftErrorReason> for DraftErrorReason {
     fn from(reason: RealDraftErrorReason) -> Self {
         match reason {
-            RealDraftErrorReason::UnknownMimeType => DraftErrorReason::UnknownMimeType,
+            RealDraftErrorReason::NoRecipients => Self::NoRecipients,
+            RealDraftErrorReason::AddressDoesNotHavePrimaryKey(v) => {
+                Self::AddressDoesNotHavePrimaryKey(v.into_inner())
+            }
+            RealDraftErrorReason::RecipientEmailInvalid(v) => Self::RecipientEmailInvalid(v),
+            RealDraftErrorReason::ProtonRecipientDoesNotExist(v) => {
+                Self::ProtonRecipientDoesNotExist(v)
+            }
+            RealDraftErrorReason::UnknownRecipientValidationError(v) => {
+                Self::UnknownRecipientValidationError(v)
+            }
+            RealDraftErrorReason::AddressDisabled(v) => Self::AddressDisabled(v),
+            RealDraftErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+            RealDraftErrorReason::PackageError(v) => Self::PackageError(v),
+            RealDraftErrorReason::MessageUpdateIsNotDraft => Self::MessageUpdateIsNotDraft,
+            RealDraftErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
         }
     }
 }

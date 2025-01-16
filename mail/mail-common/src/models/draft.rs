@@ -1,17 +1,26 @@
 use crate::datatypes::LocalMessageId;
-use crate::draft::ReplyMode;
+use crate::draft::{Error, PackageError, ReplyMode};
+use crate::errors::api_service_error::UserApiServiceError;
+use crate::errors::unexpected::Unexpected;
+use crate::errors::{DraftErrorReason, MailErrorReason, ProtonMailError};
 use crate::models::Message;
+use crate::MailContextError;
+use chrono::Utc;
+use proton_api_core::consts::Mail;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
-use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
-use proton_sqlite3::rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
+use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
+use stash::exports::*;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::{params, sql_using_serde};
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
 /// Identifier for draft [`DraftMetadata`]
@@ -201,5 +210,367 @@ impl DraftMetadata {
             return Ok(false);
         };
         Ok(Self::find_by_message_id(local_id, tether).await?.is_some())
+    }
+}
+
+/// Due to architectural differences on some of the platforms we need to store the
+/// result of the send action in the database rather than relying on the queue observers.
+#[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
+#[TableName("draft_send_result")]
+pub struct DraftSendResult {
+    /// Id of the draft message.
+    #[IdField]
+    pub local_message_id: LocalMessageId,
+    #[DbField]
+    /// Only set when the message was sent successfully.
+    pub remote_message_id: Option<MessageId>,
+    /// Timestamp at which this entry was produced.
+    #[DbField]
+    pub timestamp: i64,
+    /// Whether an error occurred while sending the message.
+    #[DbField]
+    pub error: Option<DraftSendFailure>,
+    /// Whether this result was seen at least once.
+    #[DbField]
+    pub seen: bool,
+    #[DbField]
+    /// Where this error originated from
+    pub origin: DraftSendResultOrigin,
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    pub row_id: Option<u64>,
+}
+
+impl DraftSendResult {
+    /// Create a new draft send success result for message with `local_message_id` and
+    /// the server returned `undo_token`.
+    pub fn success(local_message_id: LocalMessageId, remote_message_id: MessageId) -> Self {
+        Self {
+            local_message_id,
+            remote_message_id: Some(remote_message_id),
+            timestamp: Utc::now().timestamp(),
+            error: None,
+            seen: false,
+            origin: DraftSendResultOrigin::Send,
+            row_id: None,
+        }
+    }
+
+    /// Create a new draft send fail result for message with `local_message_id` and
+    /// the given `error`.
+    pub fn failure(
+        local_message_id: LocalMessageId,
+        origin: DraftSendResultOrigin,
+        error: DraftSendFailure,
+    ) -> Self {
+        Self {
+            local_message_id,
+            remote_message_id: None,
+            timestamp: Utc::now().timestamp(),
+            seen: false,
+            error: Some(error),
+            row_id: None,
+            origin,
+        }
+    }
+
+    /// Overwrite `Model::Save` for create or update.
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(existing) = Self::find_by_id(self.local_message_id, bond).await? {
+            self.row_id = existing.row_id;
+        }
+
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Returns all unseen send results.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn unseen(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find("WHERE seen=0 ORDER BY timestamp DESC", vec![], tether).await
+    }
+
+    /// Returns all unseen send results message ids.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn unseen_ids(tether: &Tether) -> Result<Vec<LocalMessageId>, StashError> {
+        tether
+            .query_values::<_, LocalMessageId>(
+                format!(
+                    "SELECT local_message_id AS value FROM `{}` WHERE seen=0",
+                    Self::table_name()
+                ),
+                vec![],
+            )
+            .await
+    }
+
+    /// Whether the operation was successful
+    pub fn is_success(&self) -> bool {
+        self.error.is_none()
+    }
+
+    /// Subscribe to changes made to this database table.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the subscription failed.
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(DraftSendResultTableObserver { sender }))
+    }
+
+    /// Set the send results for the messages with `ids` as seen.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn mark_seen(
+        ids: impl IntoIterator<Item = LocalMessageId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let params = ids
+            .into_iter()
+            .map(|id| -> Box<dyn ToSql + Send> { Box::new(id) })
+            .collect::<Vec<_>>();
+
+        if params.is_empty() {
+            return Ok(());
+        }
+
+        bond.execute(
+            format!(
+                "UPDATE {} SET seen=1 WHERE local_message_id IN ({})",
+                Self::table_name(),
+                vec!["?"; params.len()].join(",")
+            ),
+            params,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Delete the send results for the messages with `ids`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn delete(
+        ids: impl IntoIterator<Item = LocalMessageId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let params = ids
+            .into_iter()
+            .map(|id| -> Box<dyn ToSql + Send> { Box::new(id) })
+            .collect::<Vec<_>>();
+
+        if params.is_empty() {
+            return Ok(());
+        }
+
+        bond.execute(
+            format!(
+                "DELETE FROM {} WHERE local_message_id IN ({})",
+                Self::table_name(),
+                vec!["?"; params.len()].join(",")
+            ),
+            params,
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+/// Represents the reason why a draft failed to send.
+///
+/// Unfortunately we can not re-use [`DraftErrorReason`] as we can not take ownership of
+/// the error so we have to do our own conversion.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+pub enum DraftSendFailure {
+    NoRecipients,
+    AddressDoesNotHavePrimaryKey(AddressId),
+    RecipientEmailInvalid(String),
+    ProtonRecipientDoesNotExist(String),
+    UnknownRecipientValidationError(String),
+    AddressDisabled(String),
+    MessageAlreadySent,
+    PackageError(String),
+    MessageUpdateIsNotDraft,
+    MessageDoesNotExist,
+    NoConnection,
+    Server(String),
+    Internal,
+}
+
+sql_using_serde!(DraftSendFailure);
+
+/// Track the origin/context of this draft status
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Hash)]
+#[repr(u8)]
+pub enum DraftSendResultOrigin {
+    /// We failed to update a draft body without sending the message
+    Save = 0,
+    /// We failed to update a draft body before sending the message
+    SaveBeforeSend = 1,
+    /// We failed while sending the message
+    Send = 2,
+}
+
+impl ToSql for DraftSendResultOrigin {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::from(*self as u8)))
+    }
+}
+
+impl FromSql for DraftSendResultOrigin {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let v = value.as_i64()?;
+        match v {
+            0 => Ok(Self::Save),
+            1 => Ok(Self::SaveBeforeSend),
+            2 => Ok(Self::Send),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}
+
+impl DraftSendFailure {
+    /// Returns true if this an error which can be skipped and should not be presented/handled.
+    pub fn is_skippable(&self) -> bool {
+        // No connection is handled by external queue code
+        // Already sent is an error that is expected to occur
+        matches!(self, Self::NoConnection | Self::MessageAlreadySent)
+    }
+
+    /// Convert from a draft [`Error`]
+    #[must_use]
+    pub fn from_draft_error(error: &Error) -> Self {
+        match error {
+            Error::AddressWithoutPrimaryKey(remote_id) => {
+                Self::AddressDoesNotHavePrimaryKey(remote_id.clone())
+            }
+            Error::SendMessage(package_error) => Self::from_draft_package_error(package_error),
+            Error::NoRecipients => Self::NoRecipients,
+            _ => Self::Internal,
+        }
+    }
+
+    /// Convert from a draft [`PackageError`]
+    #[must_use]
+    pub fn from_draft_package_error(value: &PackageError) -> Self {
+        match value {
+            PackageError::RecipientEmailInvalid(e) => Self::RecipientEmailInvalid(e.clone()),
+            PackageError::ProtonRecipientDoesNotExist(e) => {
+                Self::ProtonRecipientDoesNotExist(e.clone())
+            }
+            PackageError::UnknownRecipientValidationError(e) => {
+                Self::UnknownRecipientValidationError(e.clone())
+            }
+            v => Self::PackageError(v.to_string()),
+        }
+    }
+
+    /// Convert from an [`ApiServiceError`]
+    #[must_use]
+    pub fn from_api_service_error(error: &ApiServiceError) -> Self {
+        if error.is_network_failure() {
+            return Self::NoConnection;
+        }
+
+        if let Some(proton_error) = error.to_proton_error() {
+            //TODO(ET-1407) - attachment error codes
+            if proton_error.code == Mail::MessageAlreadySent as u32 {
+                return Self::MessageAlreadySent;
+            } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
+                return Self::MessageUpdateIsNotDraft;
+            } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
+                return Self::MessageDoesNotExist;
+            }
+        }
+
+        Self::Server(error.to_string())
+    }
+
+    /// Convert from a [`MailContextError`]
+    #[must_use]
+    pub fn from_mail_context_error(value: &MailContextError) -> Self {
+        match value {
+            MailContextError::Api(error) => Self::from_api_service_error(error),
+            MailContextError::Draft(error) => Self::from_draft_error(error),
+            _ => Self::Internal,
+        }
+    }
+}
+
+impl From<DraftSendFailure> for ProtonMailError {
+    fn from(value: DraftSendFailure) -> Self {
+        match value {
+            DraftSendFailure::NoRecipients => {
+                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::NoRecipients))
+            }
+            DraftSendFailure::AddressDoesNotHavePrimaryKey(v) => Self::Reason(
+                MailErrorReason::DraftReason(DraftErrorReason::AddressDoesNotHavePrimaryKey(v)),
+            ),
+            DraftSendFailure::RecipientEmailInvalid(v) => Self::Reason(
+                MailErrorReason::DraftReason(DraftErrorReason::RecipientEmailInvalid(v)),
+            ),
+            DraftSendFailure::ProtonRecipientDoesNotExist(v) => Self::Reason(
+                MailErrorReason::DraftReason(DraftErrorReason::ProtonRecipientDoesNotExist(v)),
+            ),
+            DraftSendFailure::UnknownRecipientValidationError(v) => Self::Reason(
+                MailErrorReason::DraftReason(DraftErrorReason::UnknownRecipientValidationError(v)),
+            ),
+            DraftSendFailure::AddressDisabled(v) => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::AddressDisabled(v),
+            )),
+            DraftSendFailure::MessageAlreadySent => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::MessageAlreadySent,
+            )),
+            DraftSendFailure::PackageError(v) => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::PackageError(v),
+            )),
+            DraftSendFailure::MessageUpdateIsNotDraft => Self::Reason(
+                MailErrorReason::DraftReason(DraftErrorReason::MessageUpdateIsNotDraft),
+            ),
+            DraftSendFailure::MessageDoesNotExist => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::MessageDoesNotExist,
+            )),
+            DraftSendFailure::NoConnection => Self::Network,
+            DraftSendFailure::Server(v) => {
+                // While there is no good conversion to be performed here, it should be very rare
+                // that any error we are interested in handling should slip past here.
+                // In those cases the error is still logged completely in the action execution
+                // code.
+                Self::ServerError(UserApiServiceError::OtherHttpError(0, v))
+            }
+            DraftSendFailure::Internal => Self::Unexpected(Unexpected::Internal),
+        }
+    }
+}
+
+struct DraftSendResultTableObserver {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for DraftSendResultTableObserver {
+    fn tables(&self) -> Vec<String> {
+        vec![DraftSendResult::table_name().to_owned()]
+    }
+
+    fn on_tables_changed(&self, _: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!(
+                    "Failed to send notification for DraftSendResultTableObserver: {}",
+                    e
+                )
+            })
+            .ok();
     }
 }

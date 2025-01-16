@@ -200,6 +200,8 @@ pub enum Mail {
     ImportMessageTooLarge = 36022,
     ///  Hide the create filter modal
     FilterCreateTooManyActive = 50016,
+    /// This message was already sent
+    MessageAlreadySent = 2500,
 }
 
 pub enum Payments {

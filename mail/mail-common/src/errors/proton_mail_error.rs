@@ -1,16 +1,17 @@
+use super::mail_error_reason::*;
 use crate::actions::ActionError;
+use crate::draft::PackageError;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{draft::Error as DraftError, AppError, MailContextError, MailboxError, SidebarError};
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
+use proton_api_core::consts::Mail;
 use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
-
-use super::mail_error_reason::*;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -52,6 +53,23 @@ impl From<ApiServiceError> for ProtonMailError {
     fn from(error: ApiServiceError) -> Self {
         if error.is_network_failure() {
             return Self::Network;
+        }
+
+        if let Some(proton_error) = error.to_proton_error() {
+            //TODO(ET-1407) - attachment error codes
+            if proton_error.code == Mail::MessageAlreadySent as u32 {
+                return Self::Reason(MailErrorReason::DraftReason(
+                    DraftErrorReason::MessageAlreadySent,
+                ));
+            } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
+                return Self::Reason(MailErrorReason::DraftReason(
+                    DraftErrorReason::MessageUpdateIsNotDraft,
+                ));
+            } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
+                return Self::Reason(MailErrorReason::DraftReason(
+                    DraftErrorReason::MessageDoesNotExist,
+                ));
+            }
         }
 
         match UserApiServiceError::try_from(error) {
@@ -103,9 +121,7 @@ impl From<AppError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Internal)
             }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::InvalidMimeType(_string) => {
-                Self::Reason(DraftErrorReason::UnknownMimeType.into())
-            }
+            AppError::InvalidMimeType(_string) => Self::Unexpected(Unexpected::InvalidArgument),
             AppError::MessageBodyMetadataMissing(_local_massage_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
@@ -203,12 +219,34 @@ impl From<DraftError> for ProtonMailError {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
             DraftError::MetadataNotFound(_metadata_id) => Self::Unexpected(Unexpected::Database),
-            // TODO: Check if there is need to provide real reson here:
-            DraftError::AddressWithoutPrimaryKey(_remote_id) => Self::Unexpected(Unexpected::Draft),
+            DraftError::AddressWithoutPrimaryKey(remote_id) => {
+                Self::Reason(MailErrorReason::DraftReason(
+                    DraftErrorReason::AddressDoesNotHavePrimaryKey(remote_id),
+                ))
+            }
             DraftError::DraftWithoutMessage => Self::Unexpected(Unexpected::Draft),
-            DraftError::SendMessage(_package_error) => Self::Unexpected(Unexpected::Draft),
-            DraftError::NoRecipients => Self::Unexpected(Unexpected::Draft),
+            DraftError::SendMessage(package_error) => Self::from(package_error),
+            DraftError::NoRecipients => {
+                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::NoRecipients))
+            }
         }
+    }
+}
+
+impl From<PackageError> for ProtonMailError {
+    fn from(value: PackageError) -> Self {
+        let draft_reason = match value {
+            PackageError::RecipientEmailInvalid(e) => DraftErrorReason::RecipientEmailInvalid(e),
+            PackageError::ProtonRecipientDoesNotExist(e) => {
+                DraftErrorReason::ProtonRecipientDoesNotExist(e)
+            }
+            PackageError::UnknownRecipientValidationError(e) => {
+                DraftErrorReason::UnknownRecipientValidationError(e)
+            }
+            v => DraftErrorReason::PackageError(v.to_string()),
+        };
+
+        Self::Reason(MailErrorReason::DraftReason(draft_reason))
     }
 }
 

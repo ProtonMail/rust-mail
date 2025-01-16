@@ -1,3 +1,4 @@
+mod observer;
 mod recipients;
 
 use crate::core::datatypes::Id;

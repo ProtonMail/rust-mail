@@ -8,7 +8,8 @@ use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, Error, ReplyMode};
 use crate::models::{
-    Attachment, Conversation, DraftMetadata, Message, MessageBodyMetadata, MetadataId,
+    Attachment, Conversation, DraftMetadata, DraftSendFailure, DraftSendResult,
+    DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
@@ -19,7 +20,6 @@ use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, Stash, StashError};
 use tracing::{debug, error};
 
@@ -60,15 +60,13 @@ pub struct Save {
     parent_id: Option<LocalMessageId>,
     /// Reply mode used.
     reply_mode: Option<ReplyMode>,
-    /// Whether to create or update the message.
-    created_message: bool,
-    /// Whether the conversation was created - used for cleanup
-    conversation_created: bool,
+    /// For error reporting when action fails
+    save_origin: DraftSendResultOrigin,
 }
 
 impl Save {
     /// Create a new empty draft.
-    pub fn new(draft: &Draft) -> Self {
+    pub fn new(draft: &Draft, save_origin: DraftSendResultOrigin) -> Self {
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
@@ -91,8 +89,7 @@ impl Save {
             mime_type: draft.mime_type,
             parent_id: None,
             reply_mode: None,
-            created_message: false,
-            conversation_created: false,
+            save_origin,
         }
     }
 }
@@ -101,7 +98,7 @@ impl Action for Save {
     const TYPE: Type = Type("save_draft");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = SaveHandler;
+    type Handler = WrappedSaveHandler;
     type RemoteOutput = ();
 
     type LocalOutput = ();
@@ -145,9 +142,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
             return Err(Error::AddressNotFound(action.address_id.clone()).into());
         };
 
-        let mut created_conversation = false;
-        let mut created_message = false;
-
         let attachments = action
             .attachments(tether)
             .await
@@ -173,7 +167,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
-            created_conversation = true;
             conversation.local_id.unwrap()
         };
 
@@ -251,7 +244,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 error!("Failed to apply draft label to new message: {e}");
             })?;
 
-            created_message = true;
             message
         };
 
@@ -269,8 +261,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
         action.conversation_id = metadata.local_conversation_id;
         action.reply_mode = metadata.reply_mode;
         action.parent_id = metadata.local_parent_id;
-        action.created_message = created_message;
-        action.conversation_created = created_conversation;
 
         Ok(())
     }
@@ -278,32 +268,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn revert_local(
         &self,
         _: &MailUserContext,
-        action: &mut Self::Action,
-        tether: &Bond<'_>,
+        _: &mut Self::Action,
+        _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // If create failed we need to wipe all new local resources so
-        // they don't show up. Maybe keep them deleted until the remote
-        // side finished.
-        // If update failed we don't do anything.
-        if action.conversation_created {
-            // The conversation may not have been created.
-            if let Some(id) = action.conversation_id {
-                tether
-                    .execute("DELETE FROM conversations WHERE local_id=?", params![id])
-                    .await
-                    .inspect_err(|e| error!("Failed to delete draft conversation: {e}"))?;
-            }
-        }
-
-        if action.created_message {
-            // The message may not have been created.
-            if let Some(id) = action.message_id {
-                tether
-                    .execute("DELETE FROM messages WHERE local_id=?", params![id])
-                    .await
-                    .inspect_err(|e| error!("Failed to delete new draft message: {e}"))?;
-            }
-        }
+        // Don't remove resources if draft failed to create.
+        // These items will be removed via a discard action.
         Ok(())
     }
 
@@ -590,4 +559,68 @@ fn store_body_in_cache(
         AppError::Cache(e)
     })?;
     Ok(())
+}
+
+/// Wraps the execution of the default draft [`SaveHandler`] to record
+/// remote execution failure.
+#[derive(Default)]
+pub struct WrappedSaveHandler(SaveHandler);
+
+impl proton_action_queue::action::Handler for WrappedSaveHandler {
+    type Action = <SaveHandler as proton_action_queue::action::Handler>::Action;
+    type Context = <SaveHandler as proton_action_queue::action::Handler>::Context;
+
+    async fn apply_local(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        self.0.apply_local(context, action, tx).await
+    }
+
+    async fn revert_local(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        self.0.revert_local(context, action, tx).await
+    }
+
+    async fn apply_remote(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let r = self.0.apply_remote(context, action, stash).await;
+        if let Err(e) = &r {
+            if let Err(e) = save_send_error(action, stash, e).await {
+                error!("Failed to save draft send result: {e}");
+            }
+        }
+        r
+    }
+}
+
+// Simple wrapper function to catch errors
+async fn save_send_error(
+    action: &Save,
+    stash: &Stash,
+    error: &MailContextError,
+) -> Result<(), StashError> {
+    let error = DraftSendFailure::from_mail_context_error(error);
+    if error.is_skippable() {
+        return Ok(());
+    }
+    let mut send_result = DraftSendResult::failure(
+        action.message_id.expect("Should be set by now"),
+        action.save_origin,
+        error,
+    );
+    let mut conn = stash.connection();
+    let tx = conn.transaction().await?;
+    send_result.save(&tx).await?;
+    tx.commit().await
 }

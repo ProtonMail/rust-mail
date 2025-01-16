@@ -11,7 +11,8 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Attachment, DraftMetadata, DraftSendResultOrigin, MailSettings, Message, MessageBodyMetadata,
+    MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
@@ -668,7 +669,10 @@ impl Draft {
     ///
     ///
     pub fn to_save_action(&self) -> DraftSaveActionQueuer {
-        DraftSaveActionQueuer::new(self.metadata_id, Save::new(self))
+        DraftSaveActionQueuer::new(
+            self.metadata_id,
+            Save::new(self, DraftSendResultOrigin::Save),
+        )
     }
 
     /// Create a save action for the current state of the draft.
@@ -683,7 +687,7 @@ impl Draft {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(Error::NoRecipients);
         }
-        let save_action = Save::new(self);
+        let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
         let send_action = draft::Send::new(self.metadata_id);
         let metadata_id = self.metadata_id;
         Ok(DraftSendActionQueuer::new(
