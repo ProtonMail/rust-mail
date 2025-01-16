@@ -34,7 +34,7 @@
 #[path = "tests/events.rs"]
 mod tests;
 
-use crate::datatypes::{ConversationCount, MessageCount};
+use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, MailSettings};
 use proton_api_core::services::proton::common::{EventId, LabelId};
 use proton_api_core::services::proton::response_data::LabelEvent as ApiLabelEvent;
@@ -106,7 +106,7 @@ pub struct MailEvent {
     pub addresses: Option<Vec<AddressEvent>>,
 
     /// TODO: Document this field.
-    pub conversation_counts: Option<Vec<ConversationCount>>,
+    pub conversation_counts: Option<Vec<ConversationLabelsCount>>,
 
     /// TODO: Document this field.
     pub conversations: Option<Vec<ConversationEvent>>,
@@ -121,7 +121,7 @@ pub struct MailEvent {
     pub mail_settings: Option<MailSettings>,
 
     /// TODO: Document this field.
-    pub message_counts: Option<Vec<MessageCount>>,
+    pub message_counts: Option<Vec<MessageLabelsCount>>,
 
     /// TODO: Document this field.
     pub messages: Option<Vec<MessageEvent>>,
@@ -217,7 +217,7 @@ impl From<ApiMailEvent> for MailEvent {
             conversation_counts: value.conversation_counts.map(|conversation_counts| {
                 conversation_counts
                     .into_iter()
-                    .map(ConversationCount::from)
+                    .map(ConversationLabelsCount::from)
                     .collect()
             }),
             conversations: value.conversations.map(|conversations| {
@@ -233,7 +233,7 @@ impl From<ApiMailEvent> for MailEvent {
             mail_settings: value.mail_settings.map(MailSettings::from),
             message_counts: value
                 .message_counts
-                .map(|message_counts| message_counts.into_iter().map(MessageCount::from).collect()),
+                .map(|message_counts| message_counts.into_iter().map(MessageLabelsCount::from).collect()),
             messages: value
                 .messages
                 .map(|messages| messages.into_iter().map(MessageEvent::from).collect()),

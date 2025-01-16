@@ -3,7 +3,7 @@
 use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
-    attachment, ContextualConversation, ConversationCount, MessageFlags, MessageSender,
+    attachment, ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
@@ -1895,12 +1895,12 @@ async fn test_conversation_counts() {
     create_address(&mut tether).await;
     let labels = create_labels(&mut tether).await;
     let counts = vec![
-        ConversationCount {
+        ConversationLabelsCount {
             label_id: MY_LABEL_ID1.clone(),
             total: 20,
             unread: 4,
         },
-        ConversationCount {
+        ConversationLabelsCount {
             label_id: MY_LABEL_ID2.clone(),
             total: 400,
             unread: 124,
@@ -1908,7 +1908,7 @@ async fn test_conversation_counts() {
     ];
     let counts_clone = counts.clone();
     let tx = tether.transaction().await.unwrap();
-    ConversationCount::create_or_update_conversation_counts(counts_clone, &tx)
+    ConversationLabelsCount::create_or_update_conversation_counts(counts_clone, &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.expect("failed to commit");

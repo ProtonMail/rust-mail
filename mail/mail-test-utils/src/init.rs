@@ -34,7 +34,7 @@ use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
-use proton_core_common::ALL_LABEL_TYPES;
+use proton_core_common::datatypes::ALL_LABEL_TYPES;
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,

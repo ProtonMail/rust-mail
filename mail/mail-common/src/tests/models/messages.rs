@@ -7,7 +7,7 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags,
+    attachment, ContextualConversation, ExclusiveLocation, MessageLabelsCount, MessageFlags,
     MovableSystemFolder, SystemLabel, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
@@ -1137,12 +1137,12 @@ async fn test_message_counts() {
     create_address(&mut tether).await;
     let labels = create_labels(&mut tether).await;
     let counts = vec![
-        MessageCount {
+        MessageLabelsCount {
             label_id: MY_LABEL_ID1.clone(),
             total: 20,
             unread: 4,
         },
-        MessageCount {
+        MessageLabelsCount {
             label_id: MY_LABEL_ID2.clone(),
             total: 400,
             unread: 124,
@@ -1150,7 +1150,7 @@ async fn test_message_counts() {
     ];
 
     let tx = tether.transaction().await.unwrap();
-    MessageCount::create_or_update_message_counts(counts.clone(), &tx)
+    MessageLabelsCount::create_or_update_message_counts(counts.clone(), &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.unwrap();

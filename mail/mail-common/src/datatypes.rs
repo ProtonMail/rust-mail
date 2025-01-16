@@ -929,7 +929,7 @@ sql_using_serde!(AttachmentSignature);
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ConversationCount {
+pub struct ConversationLabelsCount {
     /// Remote label ID
     pub label_id: LabelId,
 
@@ -940,7 +940,7 @@ pub struct ConversationCount {
     pub unread: u64,
 }
 
-impl From<ApiConversationCount> for ConversationCount {
+impl From<ApiConversationCount> for ConversationLabelsCount {
     fn from(value: ApiConversationCount) -> Self {
         Self {
             label_id: value.label_id,
@@ -950,7 +950,7 @@ impl From<ApiConversationCount> for ConversationCount {
     }
 }
 
-impl ConversationCount {
+impl ConversationLabelsCount {
     pub async fn create_or_update_conversation_counts(
         counts: Vec<Self>,
         bond: &Bond<'_>,
@@ -1448,7 +1448,7 @@ sql_using_serde!(MessageAttachments);
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MessageCount {
+pub struct MessageLabelsCount {
     /// Remote label ID
     pub label_id: LabelId,
 
@@ -1459,7 +1459,7 @@ pub struct MessageCount {
     pub unread: u64,
 }
 
-impl From<ApiMessageCount> for MessageCount {
+impl From<ApiMessageCount> for MessageLabelsCount {
     fn from(value: ApiMessageCount) -> Self {
         Self {
             label_id: value.label_id,
@@ -1469,7 +1469,7 @@ impl From<ApiMessageCount> for MessageCount {
     }
 }
 
-impl MessageCount {
+impl MessageLabelsCount {
     pub async fn create_or_update_message_counts(
         counts: Vec<Self>,
         bond: &Bond<'_>,

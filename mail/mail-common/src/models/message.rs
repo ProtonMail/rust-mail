@@ -29,7 +29,7 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos, MessageSender,
+    LocalMessageId, MessageLabelsCount, MessageFlags, MessageRecipients, MessageReplyTos, MessageSender,
     MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
@@ -1135,7 +1135,7 @@ impl Message {
     ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<Vec<MessageCount>, ApiServiceError> {
+    ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
         api.get_messages_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
@@ -3296,10 +3296,10 @@ impl MessageCounters {
 
     /// Returns [`MessageCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn message_count(&self, tether: &Tether) -> Result<MessageCount, AppError> {
+    pub async fn message_count(&self, tether: &Tether) -> Result<MessageLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
-        Ok(MessageCount {
+        Ok(MessageLabelsCount {
             label_id: remote_id,
             total: self.total,
             unread: self.unread,

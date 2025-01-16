@@ -750,6 +750,13 @@ impl ToSql for LabelType {
     }
 }
 
+pub const ALL_LABEL_TYPES: [LabelType; 4] = [
+    LabelType::Label,
+    LabelType::ContactGroup,
+    LabelType::Folder,
+    LabelType::System,
+];
+
 //  STRUCTS
 //==============================================================================
 

@@ -7,7 +7,7 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{
-    ConversationCount, LocalConversationId, LocalMessageId, MessageCount, MessageRecipient,
+    ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount, MessageRecipient,
     MessageRecipients, MessageSender, MessageSenders,
 };
 use proton_mail_common::models::{
@@ -29,8 +29,8 @@ pub struct TestDBStateMap {
     pub labels: HashMap<LabelId, LocalLabelId>,
     pub conversations: HashMap<ConversationId, LocalConversationId>,
     pub messages: HashMap<MessageId, LocalMessageId>,
-    pub conversation_counts: HashMap<LabelId, ConversationCount>,
-    pub message_counts: HashMap<LabelId, MessageCount>,
+    pub conversation_counts: HashMap<LabelId, ConversationLabelsCount>,
+    pub message_counts: HashMap<LabelId, MessageLabelsCount>,
 }
 
 /// # Panics
@@ -83,7 +83,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         );
         result.conversation_counts.insert(
             env.labels[idx].clone().remote_id.unwrap(),
-            ConversationCount {
+            ConversationLabelsCount {
                 label_id: env.labels[idx].clone().remote_id.unwrap(),
                 total: 0,
                 unread: 0,
@@ -91,7 +91,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         );
         result.message_counts.insert(
             env.labels[idx].clone().remote_id.unwrap(),
-            MessageCount {
+            MessageLabelsCount {
                 label_id: env.labels[idx].clone().remote_id.unwrap(),
                 total: 0,
                 unread: 0,
@@ -242,14 +242,14 @@ pub async fn prepare_and_patch_db_state_and_skip(
     }
 
     // create conversation_counts
-    ConversationCount::create_or_update_conversation_counts(
+    ConversationLabelsCount::create_or_update_conversation_counts(
         result.conversation_counts.values().cloned().collect(),
         &tx,
     )
     .await
     .expect("failed to create conversation counts");
     if !skip_messages {
-        MessageCount::create_or_update_message_counts(
+        MessageLabelsCount::create_or_update_message_counts(
             result.message_counts.values().cloned().collect(),
             &tx,
         )
@@ -301,7 +301,7 @@ pub fn message_counts_for_conversation(
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, ConversationCount> {
+pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, ConversationLabelsCount> {
     let iter = ConversationCounters::all(tether)
         .await
         .unwrap()
@@ -315,7 +315,7 @@ pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Conve
         .map(|(c, label_id)| {
             (
                 c.local_label_id,
-                ConversationCount {
+                ConversationLabelsCount {
                     label_id: label_id.unwrap(),
                     total: c.total,
                     unread: c.unread,
@@ -328,7 +328,7 @@ pub async fn conv_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Conve
 
 /// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
-pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageCount> {
+pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageLabelsCount> {
     let iter = MessageCounters::all(tether)
         .await
         .unwrap()
@@ -342,7 +342,7 @@ pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Messag
         .map(|(c, label_id)| {
             (
                 c.local_label_id,
-                MessageCount {
+                MessageLabelsCount {
                     label_id: label_id.unwrap(),
                     total: c.total,
                     unread: c.unread,

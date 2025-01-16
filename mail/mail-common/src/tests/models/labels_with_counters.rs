@@ -8,8 +8,8 @@ use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::models::Label;
 use proton_mail_test_utils::db::new_test_connection;
 
-use crate::datatypes::ConversationCount;
-use crate::datatypes::MessageCount;
+use crate::datatypes::ConversationLabelsCount;
+use crate::datatypes::MessageLabelsCount;
 use crate::models::LabelWithCounters;
 
 #[tokio::test]
@@ -39,8 +39,8 @@ async fn label_with_counts() {
     local_label.save(&tx).await.unwrap();
     let local_id = local_label.local_id.unwrap();
 
-    ConversationCount::create_or_update_conversation_counts(
-        vec![ConversationCount {
+    ConversationLabelsCount::create_or_update_conversation_counts(
+        vec![ConversationLabelsCount {
             label_id: local_label.remote_id.clone().unwrap(),
             total: total_conv,
             unread: unread_conv,
@@ -50,8 +50,8 @@ async fn label_with_counts() {
     .await
     .unwrap();
 
-    MessageCount::create_or_update_message_counts(
-        vec![MessageCount {
+    MessageLabelsCount::create_or_update_message_counts(
+        vec![MessageLabelsCount {
             label_id: local_label.remote_id.clone().unwrap(),
             total: total_msg,
             unread: unread_msg,

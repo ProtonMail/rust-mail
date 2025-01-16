@@ -6,9 +6,8 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{LabelColor, LabelType, LocalLabelId};
+use crate::datatypes::{LabelColor, LabelType, LocalLabelId, ALL_LABEL_TYPES};
 use crate::models::ModelIdExtension;
-use crate::ALL_LABEL_TYPES;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;

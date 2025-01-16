@@ -20,13 +20,5 @@ pub mod watch_handle;
 mod tests;
 
 pub use context::*;
-use datatypes::LabelType;
 pub use event_subscriber::*;
 pub use user_context::*;
-
-pub const ALL_LABEL_TYPES: [LabelType; 4] = [
-    LabelType::Label,
-    LabelType::ContactGroup,
-    LabelType::Folder,
-    LabelType::System,
-];
