@@ -5,10 +5,11 @@ use crate::utils::{test_address, TestDBState};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
+use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
 };
-use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
+use proton_mail_common::models::{Conversation, ConversationLabel, Message};
 
 // ------- TEST DATA -------
 

@@ -28,7 +28,7 @@
 
 use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::response_data::{
-    Attachment, Conversation, ConversationCount, Label, MailSettings, Message, MessageCount,
+    Attachment, Conversation, ConversationCount, MailSettings, Message, MessageCount,
     MessageMetadata, OperationResult, UndoToken,
 };
 use serde::Deserialize;
@@ -131,24 +131,6 @@ pub struct GetMailSettingsResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-pub struct GetLabelsResponse {
-    /// TODO: Document this field.
-    pub labels: Vec<Label>,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostLabelsResponse {
-    /// TODO: Document this field.
-    pub label: Label,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
 pub struct PutConversationsDeleteResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
@@ -199,15 +181,6 @@ pub struct PutConversationsUnreadResponse {
     /// TODO: Document this field.
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<ConversationId>>,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PutLabelResponse {
-    /// TODO: Document this field.
-    pub label: Label,
 }
 
 /// TODO: Document this struct.
@@ -272,13 +245,6 @@ pub struct PutMessagesUnreadResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PostMessagesRelabelResponse {
     pub message: MessageMetadata,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PatchLabelResponse {
-    pub label: Label,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

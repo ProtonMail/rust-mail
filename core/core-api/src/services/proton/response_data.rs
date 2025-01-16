@@ -38,7 +38,9 @@ use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt, FromInto};
+use serde_with::{serde_as, BoolFromInt, DefaultOnNull, FromInto};
+
+use super::LabelType;
 //  ENUMS
 //==============================================================================
 
@@ -977,3 +979,90 @@ pub struct UserSettings {
     #[serde_as(as = "BoolFromInt")]
     pub welcome: bool,
 }
+
+/// TODO: Document this struct.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Label {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: LabelId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "ParentID")]
+    pub parent_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    pub color: String,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub display: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub expanded: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "Type")]
+    pub label_type: LabelType,
+
+    /// TODO: Document this field.
+    pub name: String,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub notify: bool,
+
+    /// TODO: Document this field.
+    #[serde(default)]
+    pub order: u32,
+
+    /// TODO: Document this field.
+    pub path: Option<String>,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub sticky: bool,
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for Label {
+    fn default() -> Self {
+        Self {
+            id: LabelId::from(""),
+            parent_id: None,
+            color: String::default(),
+            display: false,
+            expanded: false,
+            label_type: LabelType::Label,
+            name: String::default(),
+            notify: false,
+            order: 0,
+            path: None,
+            sticky: false,
+        }
+    }
+}
+
+/// Data for an event related to a [`LabelEvent`] record.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct LabelEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: LabelId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub label: Option<Label>,
+}
+
+impl GetEventResponse for LabelEvent {}

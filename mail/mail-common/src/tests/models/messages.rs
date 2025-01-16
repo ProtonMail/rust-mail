@@ -7,10 +7,10 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    attachment, ContextualConversation, ExclusiveLocation, LabelColor, MessageCount, MessageFlags,
-    MovableSystemFolder, SystemLabel, SystemLabelId,
+    attachment, ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
+    MovableSystemFolder, SystemLabelId,
 };
-use crate::models::{Attachment, Conversation, Label, MailSettings, Message, MessageBodyMetadata};
+use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use lazy_static::lazy_static;
@@ -24,6 +24,8 @@ use proton_api_mail::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
+use proton_core_common::datatypes::{LabelColor, LabelType};
+use proton_core_common::models::Label;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
@@ -1135,12 +1137,12 @@ async fn test_message_counts() {
     create_address(&mut tether).await;
     let labels = create_labels(&mut tether).await;
     let counts = vec![
-        MessageCount {
+        MessageLabelsCount {
             label_id: MY_LABEL_ID1.clone(),
             total: 20,
             unread: 4,
         },
-        MessageCount {
+        MessageLabelsCount {
             label_id: MY_LABEL_ID2.clone(),
             total: 400,
             unread: 124,
@@ -1148,7 +1150,7 @@ async fn test_message_counts() {
     ];
 
     let tx = tether.transaction().await.unwrap();
-    Label::create_or_update_message_counts(counts.clone(), &tx)
+    MessageLabelsCount::create_or_update_message_counts(counts.clone(), &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.unwrap();

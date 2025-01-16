@@ -1,17 +1,25 @@
 use std::fmt::Display;
 
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use crate::datatypes::LocalLabelId;
+use crate::models::{Label, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::stash::{StashError, Tether};
 
-use crate::{
-    datatypes::{LabelId, LabelType},
-    models::Label,
-};
+use crate::datatypes::{LabelId, LabelType};
 
-/// This enum represents the system labels that are available in ProtonMail.
+/// This enum represents the system labels that are available in `ProtonMail`.
 /// Their values correspond to the remote ids of the labels in the core API database.
+///
+/// # Agnostic nature
+///
+/// Note, that even though the [`SystemLabel`] is in `core_common` crate, it is not fully
+/// agnostic. `Spam`, `AllSent` or `AlmostAllMail` are not usable outside of the Mail context.
+///
+/// However, the main reason why this enum exist, is to ensure that all default system labels are present in
+/// local database. In that case we are less interested into the purpose of those labels and more in
+/// knowing that are built-in, predefined labels.
+///
+/// In the future this enum might be extended by labels from other contexts
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(u8)]
 pub enum SystemLabel {
@@ -37,6 +45,7 @@ pub enum SystemLabel {
 }
 
 impl SystemLabel {
+    #[must_use]
     pub fn new(label: &Label) -> Option<Self> {
         match label.label_type {
             LabelType::Label | LabelType::ContactGroup | LabelType::Folder => None,
@@ -44,6 +53,7 @@ impl SystemLabel {
         }
     }
 
+    #[must_use]
     pub fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
         let remote_id = label_id?.parse::<u8>().ok()?;
 
@@ -71,10 +81,12 @@ impl SystemLabel {
         }
     }
 
+    #[must_use]
     pub fn is_exclusive_location(&self) -> bool {
         Self::exclusive_locations().contains(self)
     }
 
+    #[must_use]
     pub fn exclusive_locations() -> [Self; 9] {
         [
             Self::Inbox,
@@ -89,22 +101,27 @@ impl SystemLabel {
         ]
     }
 
+    #[must_use]
     pub fn is_movable_folder(&self) -> bool {
         matches!(self, Self::Inbox | Self::Trash | Self::Archive | Self::Spam)
     }
 
+    #[must_use]
     pub fn movable_folders() -> [Self; 4] {
         [Self::Inbox, Self::Trash, Self::Archive, Self::Spam]
     }
 
+    #[must_use]
     pub fn is_starred(&self) -> bool {
         *self == Self::Starred
     }
 
+    #[must_use]
     pub fn label_id(&self) -> LabelId {
         LabelId::from(self.to_string())
     }
 
+    #[must_use]
     pub fn remote_id(&self) -> LabelId {
         self.label_id()
     }

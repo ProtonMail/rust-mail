@@ -1,37 +1,40 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{AddressId, EventId, LabelId, UserId};
+use proton_api_core::services::proton::common::{
+    AddressId, EventId, LabelId, LabelType as ApiLabelType, UserId,
+};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
     ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, Density as ApiDensity,
-    Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth,
-    Password as ApiPassword, Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace,
-    SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
-    TwoFa as ApiTwoFa, User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus,
-    UserSettings as ApiUserSettings, UserType as ApiUserType, WeekStart as ApiWeekStart,
+    Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity, Label as ApiLabel,
+    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
+    ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
+    TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
+    UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
+    UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
 use proton_api_core::services::proton::responses::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
-    GetKeysAllResponse, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
+    GetKeysAllResponse, GetLabelsResponse, GetSettingsResponse as GetCoreSettingsResponse,
+    GetUsersResponse,
 };
-use proton_api_mail::services::proton::common::{
-    ConversationId, LabelType as ApiLabelType, MessageId,
-};
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
-    ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
-    MessageButtons, MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
+    ConversationLabel as ApiConversationLabel, MailSettings as ApiMailSettings, MessageButtons,
+    MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
     MessageSender as ApiMessageSender, MimeType, PgpScheme, PmSignature, ShowImages, ShowMoved,
     SwipeAction, ViewLayout, ViewMode,
 };
 
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
-    GetLabelsResponse, GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
+    GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
+use proton_core_common::datatypes::ALL_LABEL_TYPES;
 use proton_core_test_utils::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
@@ -42,7 +45,7 @@ use proton_core_test_utils::addresses_public::{
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage, ALL_LABEL_TYPES,
+    MailUserContextLoadingStage,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;

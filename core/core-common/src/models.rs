@@ -34,11 +34,13 @@ mod tests;
 pub mod contact;
 pub mod contact_card;
 pub mod contact_email;
+pub mod labels;
 pub mod sender_image_cache;
 
 pub use self::contact::*;
 pub use self::contact_card::*;
 pub use self::contact_email::*;
+pub use self::labels::*;
 
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, DateFormat, Density, Email,

@@ -1,21 +1,22 @@
-use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
+use proton_api_core::services::proton::common::{
+    AddressId, LabelId, LabelType as ApiLabelType, UserId,
+};
 use proton_api_core::services::proton::response_data::{
-    Address as ApiAddress, Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace,
-    User as ApiUser, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
+    Address as ApiAddress, Flags as ApiFlags, Label as ApiLabel,
+    ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
+    UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_mail::services::proton::common::{
-    ConversationId, LabelType as ApiLabelType, MessageId,
-};
-use proton_api_mail::services::proton::response_data::Label as ApiLabel;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
+use proton_core_common::models::Label;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{ConversationCounters, Label, Message, MessageCounters};
+use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;

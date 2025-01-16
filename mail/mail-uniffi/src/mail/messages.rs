@@ -24,7 +24,7 @@ use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{Label as RealLabel, ModelIdExtension};
 use proton_mail_common::datatypes::{LocalConversationId, SystemLabelId};
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
@@ -33,7 +33,7 @@ use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
-use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
+use proton_mail_common::models::{self, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };

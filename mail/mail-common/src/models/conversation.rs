@@ -11,9 +11,9 @@ use crate::actions::{
     GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
-    AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, ReadFilter,
-    SystemLabel, SystemLabelId,
+    AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
+    LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
+    ReadFilter, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -35,8 +35,8 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
@@ -1402,7 +1402,7 @@ impl Conversation {
     ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<Vec<ConversationCount>, ApiServiceError> {
+    ) -> Result<Vec<ConversationLabelsCount>, ApiServiceError> {
         api.get_conversations_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
@@ -2188,8 +2188,9 @@ impl Conversation {
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
-        Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
-        Label::create_or_update_message_counts(message_counts, &tx).await?;
+        ConversationLabelsCount::create_or_update_conversation_counts(conversation_counts, &tx)
+            .await?;
+        MessageLabelsCount::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -3768,10 +3769,13 @@ impl ConversationCounters {
 
     /// Returns [`ConversationCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn conversation_count(&self, tether: &Tether) -> Result<ConversationCount, AppError> {
+    pub async fn conversation_count(
+        &self,
+        tether: &Tether,
+    ) -> Result<ConversationLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
-        Ok(ConversationCount {
+        Ok(ConversationLabelsCount {
             label_id: remote_id,
             total: self.total,
             unread: self.unread,

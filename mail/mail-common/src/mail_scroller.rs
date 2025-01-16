@@ -1,7 +1,7 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{
     CachedConversationScrollData, CachedMessageScrollData, Conversation, ConversationCounters,
-    ConversationLabel, ConversationScrollData, Label, Message, MessageCounters, MessageLabel,
+    ConversationLabel, ConversationScrollData, Message, MessageCounters, MessageLabel,
     MessageScrollData,
 };
 use crate::{AppError, MailContextError, MailUserContext};
@@ -14,7 +14,7 @@ use proton_api_mail::services::proton::prelude::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether, WatcherHandle};

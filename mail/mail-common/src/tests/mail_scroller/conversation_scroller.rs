@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
 use crate::datatypes::{ContextualConversation, ReadFilter};
-use crate::models::Conversation;
-use crate::models::{CachedConversationScrollData, ConversationScrollData, Label};
+use crate::models::ConversationScrollData;
+use crate::models::{CachedConversationScrollData, Conversation};
 use maplit::btreemap;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::{conv_id, conv_label, conversation, label, lbl_id};

@@ -1,11 +1,12 @@
-use proton_api_core::services::proton::common::{AddressId, LabelId};
+use proton_api_core::services::proton::common::{AddressId, LabelId, LabelType as ApiLabelType};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    Label as ApiLabel,
 };
-use proton_api_mail::services::proton::common::{ConversationId, LabelType as ApiLabelType};
+use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
-    ConversationLabel as ApiConversationLabel, Label as ApiLabel, MessageCount as ApiMessageCount,
+    ConversationLabel as ApiConversationLabel, MessageCount as ApiMessageCount,
 };
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::actions::conversations;

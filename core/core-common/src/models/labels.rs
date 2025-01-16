@@ -1,31 +1,41 @@
+#![allow(clippy::struct_excessive_bools)]
+
 #[cfg(test)]
 #[path = "../tests/models/labels.rs"]
 mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{
-    ConversationCount, LabelColor, LabelType, MessageCount, SystemLabelId, ViewMode,
-};
-use crate::models::*;
-use crate::{AppError, ALL_LABEL_TYPES};
-use indoc::formatdoc;
+use crate::datatypes::{LabelColor, LabelType, LocalLabelId, ALL_LABEL_TYPES};
+use crate::models::ModelIdExtension;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::requests::{
+use proton_api_core::services::proton::requests::{
     PatchLabelRequest, PostLabelsRequest, PutLabelRequest,
 };
-use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::ProtonCore;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use thiserror::Error;
 use tracing::{debug, error};
+
+#[derive(Debug, Error)]
+pub enum LabelError {
+    #[error("API error: {0}")]
+    API(#[from] ApiServiceError),
+    #[error("Stash error: {0}")]
+    Stash(#[from] StashError),
+
+    #[error("Could not resolve remote label: {0}")]
+    CouldNotResolveRemoteLabel(LocalLabelId),
+    #[error("Could not resolve local label: {0}")]
+    CouldNotResolveLocalLabel(LabelId),
+}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -65,14 +75,6 @@ pub struct Label {
     /// TODO: Document this field.
     #[DbField]
     pub expanded: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_msg: bool,
 
     /// TODO: Document this field.
     #[DbField]
@@ -119,7 +121,7 @@ impl Label {
     /// # Errors
     ///
     /// Returns error if the local conversation id is not set, the remote
-    /// label_id is not set, the local label can not be found or the query
+    /// `label_id` is not set, the local label can not be found or the query
     /// failed.
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
@@ -149,12 +151,12 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn create<PM: ProtonMail>(
+    pub async fn create<API: ProtonCore>(
         name: String,
         color: String,
         label_type: LabelType,
         parent_id: Option<LabelId>,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .post_labels(PostLabelsRequest {
@@ -168,100 +170,25 @@ impl Label {
             .into())
     }
 
-    pub async fn create_or_update_conversation_counts(
-        counts: Vec<ConversationCount>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO conversation_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                    FROM labels AS l
-                    WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                    SET total = ?,
-                        unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
-        }
-        Ok(())
-    }
-
-    pub async fn create_or_update_message_counts(
-        counts: Vec<MessageCount>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for count in counts {
-            bond.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO message_counters(local_label_id, total, unread)
-                    SELECT l.local_id, ?, ?
-                        FROM labels AS l
-                        WHERE l.remote_id = ?
-                    ON CONFLICT(local_label_id) DO UPDATE
-                        SET total = ?,
-                            unread = ?
-                    "
-                ),
-                params![
-                    count.total,
-                    count.unread,
-                    count.label_id,
-                    count.total,
-                    count.unread
-                ],
-            )
-            .await?;
-        }
-        Ok(())
-    }
-
-    /// TODO: Document this function.
-    pub fn is_applicable_label(&self) -> bool {
-        self.label_type == LabelType::Label || self.is_starred()
-    }
-
-    /// Checks if label is a System label - starred.
-    pub fn is_starred(&self) -> bool {
-        self.remote_id
-            .as_ref()
-            .is_some_and(|rid| *rid == LabelId::starred())
-    }
-
-    /// TODO: Document this function.
-    pub fn is_movable_folder(&self) -> bool {
-        self.label_type == LabelType::Folder
-            || self
-                .remote_id
-                .as_ref()
-                .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
-    }
-
     /// Fetches all labels from the API and stores them in the database.
     ///
     /// # Parameters
     ///
     /// * `api`   - The API instance to use.
-    /// * `stash` - The stash to use for the database connection.
+    /// * `tx` - The stash transaction to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels<PM: ProtonMail>(api: &PM, stash: &Stash) -> Result<(), AppError> {
+    /// # Panics
+    /// If labels fetched from database do not contain Local ID.
+    /// Note, this is rather impossible and is just a matter of limitations of Stash API
+    pub async fn sync_labels<API>(api: &API, tx: &Bond<'_>) -> Result<Vec<LocalLabelId>, LabelError>
+    where
+        API: ProtonCore,
+    {
         let label_requests =
             futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
                 debug!("Fetching labels ({:?})", category);
@@ -270,28 +197,24 @@ impl Label {
             .await;
 
         debug!("Storing labels into database");
-        let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
+        let mut label_ids = vec![];
         for labels in label_requests {
             match labels {
                 Err(e) => {
                     error!("Failed to fetch labels: {e}");
-                    tx.commit().await?;
-                    return Err(AppError::from(e));
+                    return Err(LabelError::from(e));
                 }
                 Ok(labels) => {
                     for mut label in labels.labels.into_iter().map_into::<Self>() {
-                        label.save(&tx).await?;
+                        label.save(tx).await?;
                         let local_id = label.local_id.unwrap();
-                        ConversationCounters::new(local_id).save(&tx).await?;
-                        MessageCounters::new(local_id).save(&tx).await?;
+                        label_ids.push(local_id);
                     }
                 }
             }
         }
-        tx.commit().await?;
 
-        Ok(())
+        Ok(label_ids)
     }
 
     /// Fetches the given labels from the API and stores them in the database.
@@ -306,11 +229,11 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels_by_ids<PM: ProtonMail>(
-        api: &PM,
+    pub async fn sync_labels_by_ids<API: ProtonCore>(
+        api: &API,
         tether: &mut Tether,
         ids: Vec<LabelId>,
-    ) -> Result<(), AppError> {
+    ) -> Result<(), LabelError> {
         let labels = api
             .get_labels_by_ids(ids)
             .await?
@@ -381,12 +304,12 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn update<PM: ProtonMail>(
+    pub async fn update<API: ProtonCore>(
         id: LabelId,
         name: String,
         color: String,
         parent_id: Option<LabelId>,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         Ok(api
             .put_label(
@@ -414,10 +337,10 @@ impl Label {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn patch_expanded<PM: ProtonMail>(
+    pub async fn patch_expanded<API: ProtonCore>(
         id: LabelId,
         expanded: bool,
-        api: &PM,
+        api: &API,
     ) -> Result<Label, ApiServiceError> {
         api.patch_label(
             id,
@@ -428,29 +351,6 @@ impl Label {
         )
         .await
         .map(|r| r.label.into())
-    }
-
-    /// Return the preferred view mode for this label.
-    ///
-    /// If this function returns [`None`] we should use the [`ViewMode`] defined
-    /// in the user's [`MailSettings`], otherwise the returned value should be
-    /// used.
-    ///
-    pub async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError> {
-        if let Some(remote_id) = self.remote_id.as_ref() {
-            if *remote_id == LabelId::drafts()
-                || *remote_id == LabelId::sent()
-                || *remote_id == LabelId::all_drafts()
-                || *remote_id == LabelId::all_sent()
-                || *remote_id == LabelId::all_scheduled()
-            {
-                return Ok(ViewMode::Messages);
-            }
-        }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
-            .await?
-            .unwrap_or_default()
-            .view_mode)
     }
 
     /// Get all labels with given kind
@@ -494,9 +394,9 @@ impl Label {
     pub async fn resolve_remote_label_id(
         local_id: LocalLabelId,
         tether: &Tether,
-    ) -> Result<LabelId, AppError> {
+    ) -> Result<LabelId, LabelError> {
         let Some(label_id) = Self::local_id_counterpart(local_id, tether).await? else {
-            return Err(AppError::LabelNotFound(local_id));
+            return Err(LabelError::CouldNotResolveRemoteLabel(local_id));
         };
 
         Ok(label_id)
@@ -510,9 +410,9 @@ impl Label {
     pub async fn resolve_local_label_id(
         label_id: LabelId,
         tether: &Tether,
-    ) -> Result<LocalLabelId, AppError> {
+    ) -> Result<LocalLabelId, LabelError> {
         let Some(label_id) = Self::remote_id_counterpart(label_id.clone(), tether).await? else {
-            return Err(AppError::RemoteLabelDoesNotExist(label_id));
+            return Err(LabelError::CouldNotResolveLocalLabel(label_id));
         };
         Ok(label_id)
     }
@@ -546,8 +446,6 @@ impl From<ApiLabel> for Label {
             display_order: value.order,
             display: value.display,
             expanded: value.expanded,
-            initialized_conv: false,
-            initialized_msg: false,
             label_type: value.label_type.into(),
             name: value.name,
             notify: value.notify,
@@ -562,21 +460,19 @@ impl Default for Label {
     fn default() -> Self {
         Self {
             label_type: LabelType::Label,
-            local_id: Default::default(),
-            remote_id: Default::default(),
-            local_parent_id: Default::default(),
-            remote_parent_id: Default::default(),
-            color: Default::default(),
+            local_id: Option::default(),
+            remote_id: Option::default(),
+            local_parent_id: Option::default(),
+            remote_parent_id: Option::default(),
+            color: LabelColor::default(),
             display: Default::default(),
             expanded: Default::default(),
-            initialized_conv: Default::default(),
-            initialized_msg: Default::default(),
-            name: Default::default(),
+            name: String::default(),
             notify: Default::default(),
             display_order: Default::default(),
-            path: Default::default(),
+            path: Option::default(),
             sticky: Default::default(),
-            row_id: Default::default(),
+            row_id: Option::default(),
         }
     }
 }

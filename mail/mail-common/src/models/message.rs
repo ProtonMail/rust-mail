@@ -29,8 +29,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBody;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -53,8 +53,8 @@ use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
-use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
+use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
@@ -1135,7 +1135,7 @@ impl Message {
     ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<Vec<MessageCount>, ApiServiceError> {
+    ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
         api.get_messages_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
@@ -3296,10 +3296,10 @@ impl MessageCounters {
 
     /// Returns [`MessageCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn message_count(&self, tether: &Tether) -> Result<MessageCount, AppError> {
+    pub async fn message_count(&self, tether: &Tether) -> Result<MessageLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
-        Ok(MessageCount {
+        Ok(MessageLabelsCount {
             label_id: remote_id,
             total: self.total,
             unread: self.unread,

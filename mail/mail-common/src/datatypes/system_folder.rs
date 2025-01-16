@@ -1,6 +1,6 @@
 use crate::datatypes::LabelType;
-use crate::models::Label;
 use proton_api_core::services::proton::common::LabelId;
+use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 
 /// This enum represents the system labels that are valid target for Move actions.

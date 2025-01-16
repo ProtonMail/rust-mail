@@ -2,13 +2,13 @@ use clap::Parser;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{
     MailConversationScrollerSource, MailScroller, MailScrollerSource,
 };
-use proton_mail_common::models::Label;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,

@@ -1,9 +1,9 @@
-use crate::events::MailEvent;
-use crate::models::Label;
+use crate::datatypes::MessageLabelsCount;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::MailUserContext;
+use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
@@ -61,13 +61,20 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                 if let Some(conversation_counts) = &event.conversation_counts {
                     debug!("Handling conversation counts");
-                    Label::create_or_update_conversation_counts(conversation_counts.clone(), &tx)
-                        .await?;
+                    ConversationLabelsCount::create_or_update_conversation_counts(
+                        conversation_counts.clone(),
+                        &tx,
+                    )
+                    .await?;
                 }
 
                 if let Some(message_counts) = &event.message_counts {
                     debug!("Handling message counts");
-                    Label::create_or_update_message_counts(message_counts.clone(), &tx).await?;
+                    MessageLabelsCount::create_or_update_message_counts(
+                        message_counts.clone(),
+                        &tx,
+                    )
+                    .await?;
                 }
 
                 if let Some(mail_settings) = event.mail_settings.as_mut() {

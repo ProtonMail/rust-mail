@@ -14,12 +14,12 @@ use flume::Sender;
 use futures::FutureExt;
 
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::models::{
-    ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Label,
-    MailSettings, MessageCounters,
+    ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    MessageCounters,
 };
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
 use proton_mail_common::{

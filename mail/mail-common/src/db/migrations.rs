@@ -16,8 +16,15 @@ pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
         .await
 }
 
-#[tokio::test]
-async fn test_migration_on_empty_data_set() {
-    let stash = Stash::new(None).expect("Failed to create Stash");
-    migrate_db(&stash).await.expect("failed to migrate");
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_core_common::db::migrations::migrate_core_db;
+
+    #[tokio::test]
+    async fn test_migration_on_empty_data_set() {
+        let stash = Stash::new(None).expect("Failed to create Stash");
+        migrate_core_db(&stash).await.expect("failed to migrate");
+        migrate_db(&stash).await.expect("failed to migrate");
+    }
 }

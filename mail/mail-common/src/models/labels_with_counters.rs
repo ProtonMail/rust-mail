@@ -1,6 +1,11 @@
+#[cfg(test)]
+#[path = "../tests/models/labels_with_counters.rs"]
+mod labels_with_counters;
+
 use indoc::formatdoc;
 use proton_api_core::services::proton::common::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
+use proton_core_common::models::Label;
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -9,9 +14,7 @@ use stash::{
     stash::{StashError, Tether},
 };
 
-use crate::datatypes::{LabelColor, LabelType};
-
-use super::{ConversationCounters, Label, MessageCounters};
+use super::{ConversationCounters, MessageCounters};
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
 ///
@@ -54,14 +57,6 @@ pub struct LabelWithCounters {
     /// TODO: Document this field.
     #[DbField]
     pub expanded: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub initialized_msg: bool,
 
     /// TODO: Document this field.
     #[DbField]
@@ -217,8 +212,6 @@ impl LabelWithCounters {
             color,
             display,
             expanded,
-            initialized_conv,
-            initialized_msg,
             label_type,
             name,
             notify,
@@ -239,8 +232,6 @@ impl LabelWithCounters {
             color,
             display,
             expanded,
-            initialized_conv,
-            initialized_msg,
             label_type,
             name,
             notify,

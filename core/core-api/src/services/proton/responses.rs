@@ -181,6 +181,41 @@ pub struct PutDeleteContactResponse {
     pub response: ApiErrorInfo,
 }
 
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetLabelsResponse {
+    /// TODO: Document this field.
+    pub labels: Vec<Label>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostLabelsResponse {
+    /// TODO: Document this field.
+    pub label: Label,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutLabelResponse {
+    /// TODO: Document this field.
+    pub label: Label,
+}
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PatchLabelResponse {
+    /// TODO: Document this struct.
+    pub label: Label,
+}
+
 //  TRAITS
 //==============================================================================
 
