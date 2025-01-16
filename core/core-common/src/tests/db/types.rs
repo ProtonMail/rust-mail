@@ -21,6 +21,7 @@ impl Default for CoreAccount {
         }
     }
 }
+
 #[cfg(test)]
 mod core_account_account_details_tests {
     use super::*;

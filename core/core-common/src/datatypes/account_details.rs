@@ -4,5 +4,5 @@ use super::avatar::AvatarInformation;
 pub struct AccountDetails {
     pub name: String,
     pub email: String,
-    pub avatar_information: AvatarInformation
+    pub avatar_information: AvatarInformation,
 }

@@ -121,8 +121,8 @@ impl MailUserSession {
             let account_details = context.account_details().await?;
             Result::<_, RealProtonMailError>::Ok(account_details.into())
         })
-            .await
-            .map_err(UserSessionError::from)
+        .await
+        .map_err(UserSessionError::from)
     }
 
     /// Loads the metadata and file path for the given local [`attachment_id`]
