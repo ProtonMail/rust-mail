@@ -27,6 +27,19 @@ use wiremock::{Mock, ResponseTemplate};
 
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
+    pub async fn mock_get_message_failure(
+        &self,
+        message_id: &MessageId,
+        http_error: u16,
+        error: ApiErrorInfo,
+    ) {
+        Mock::given(method("GET"))
+            .and(path(format!("/api/mail/v4/messages/{message_id}")))
+            .respond_with(ResponseTemplate::new(http_error).set_body_json(error))
+            .mount(self.mock_server())
+            .await;
+    }
+    /// Generate new mock expectations for message fetch request for `message_id`.
     pub async fn mock_get_message(&self, message_id: &MessageId, message: ApiMessage) {
         self.mock_get_message_with_expected(message_id, message, 1)
             .await;
