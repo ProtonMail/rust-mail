@@ -208,6 +208,7 @@ impl CoreAccount {
     }
 
     /// Returns user facing account details: name, email and avatar information.
+    #[must_use]
     pub fn account_details(&self) -> AccountDetails {
         let name = self
             .display_name
@@ -218,7 +219,7 @@ impl CoreAccount {
             .primary_addr
             .clone()
             .unwrap_or_else(|| self.name_or_addr.clone());
-        let avatar_information = AvatarInformation::from(name.clone()).into();
+        let avatar_information = AvatarInformation::from(name.clone());
 
         AccountDetails {
             name,

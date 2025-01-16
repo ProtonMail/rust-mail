@@ -5,6 +5,22 @@ use crate::db::account::CoreAccount;
 use proton_api_core::services::proton::common::UserId;
 use std::default::Default;
 
+impl Default for CoreAccount {
+    fn default() -> Self {
+        CoreAccount {
+            remote_id: UserId::new("__NOT_USED__".to_string()),
+            name_or_addr: String::default(),
+            display_name: Option::default(),
+            username: Option::default(),
+            primary_addr: Option::default(),
+            second_factor_mode: None,
+            password_mode: None,
+            primary_at: None,
+            is_ready: false,
+            row_id: None,
+        }
+    }
+}
 #[cfg(test)]
 mod core_account_account_details_tests {
     use super::*;
@@ -21,7 +37,7 @@ mod core_account_account_details_tests {
 
         let result = sut.account_details();
 
-        assert_account_details(result, "Frankie", "frank@proton.me");
+        assert_account_details(&result, "Frankie", "frank@proton.me");
     }
 
     #[test]
@@ -36,7 +52,7 @@ mod core_account_account_details_tests {
 
         let result = sut.account_details();
 
-        assert_account_details(result, "Max", "max@pm.me");
+        assert_account_details(&result, "Max", "max@pm.me");
     }
 
     #[test]
@@ -51,7 +67,7 @@ mod core_account_account_details_tests {
 
         let result = sut.account_details();
 
-        assert_account_details(result, "John Doe", "john@gmail.com");
+        assert_account_details(&result, "John Doe", "john@gmail.com");
     }
 
     #[test]
@@ -66,31 +82,15 @@ mod core_account_account_details_tests {
 
         let result = sut.account_details();
 
-        assert_account_details(result, "Dricus", "dricus@proton.me");
+        assert_account_details(&result, "Dricus", "dricus@proton.me");
     }
 
-    fn assert_account_details(result: AccountDetails, expected_name: &str, expected_email: &str) {
+    fn assert_account_details(result: &AccountDetails, expected_name: &str, expected_email: &str) {
         assert_eq!(result.name, expected_name);
         assert_eq!(result.email, expected_email);
         assert_eq!(
             result.avatar_information,
-            AvatarInformation::from(expected_name).into()
+            AvatarInformation::from(expected_name)
         );
-    }
-}
-impl Default for CoreAccount {
-    fn default() -> Self {
-        CoreAccount {
-            remote_id: UserId::new("__NOT_USED__".to_string()),
-            name_or_addr: Default::default(),
-            display_name: Default::default(),
-            username: Default::default(),
-            primary_addr: Default::default(),
-            second_factor_mode: None,
-            password_mode: None,
-            primary_at: None,
-            is_ready: false,
-            row_id: None,
-        }
     }
 }
