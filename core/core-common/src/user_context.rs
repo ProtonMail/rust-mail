@@ -1,10 +1,10 @@
 pub use self::keys::*;
-use crate::{CoreContextError, CoreContextResult};
 use crate::cache::ProtonCache;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
+use crate::{CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
@@ -134,7 +134,9 @@ impl UserContext {
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?
-            .ok_or_else(|| CoreContextError::Other(anyhow::anyhow!("Missing core account in DB")))?;
+            .ok_or_else(|| {
+                CoreContextError::Other(anyhow::anyhow!("Missing core account in DB"))
+            })?;
 
         Ok(account.details())
     }
