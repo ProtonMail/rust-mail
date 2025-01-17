@@ -170,22 +170,16 @@ impl Label {
             .into())
     }
 
-    /// Fetches all labels from the API and stores them in the database.
+    /// Fetches all labels from the API.
     ///
     /// # Parameters
-    ///
-    /// * `api`   - The API instance to use.
-    /// * `tx` - The stash transaction to use for the database connection.
+    /// * `api` - The API instance to use.
     ///
     /// # Errors
     ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
+    /// Returns an error if the API request failed
     ///
-    /// # Panics
-    /// If labels fetched from database do not contain Local ID.
-    /// Note, this is rather impossible and is just a matter of limitations of Stash API
-    pub async fn sync_labels<API>(api: &API, tx: &Bond<'_>) -> Result<Vec<LocalLabelId>, LabelError>
+    pub async fn all_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
     {
@@ -196,59 +190,72 @@ impl Label {
             }))
             .await;
 
-        debug!("Storing labels into database");
-        let mut label_ids = vec![];
-        for labels in label_requests {
-            match labels {
-                Err(e) => {
-                    error!("Failed to fetch labels: {e}");
-                    return Err(LabelError::from(e));
-                }
-                Ok(labels) => {
-                    for mut label in labels.labels.into_iter().map_into::<Self>() {
-                        label.save(tx).await?;
-                        let local_id = label.local_id.unwrap();
-                        label_ids.push(local_id);
-                    }
-                }
-            }
-        }
-
-        Ok(label_ids)
+        Ok(label_requests
+            .into_iter()
+            .map(|res| {
+                res.inspect_err(|err| error!("Failed to fetch labels: {err}"))
+                    .map_err(LabelError::from)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flat_map(|res| res.labels)
+            .map_into::<Self>()
+            .collect())
     }
 
-    /// Fetches the given labels from the API and stores them in the database.
+    /// Fetches the given labels from the API.
     ///
     /// # Parameters
     ///
     /// * `api`   - The API instance to use.
-    /// * `stash` - The stash to use for the database connection.
     ///
     /// # Errors
     ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
+    /// Returns an error if the API request failed.
     ///
-    pub async fn sync_labels_by_ids<API: ProtonCore>(
+    pub async fn get_labels_by_ids<API>(
         api: &API,
-        tether: &mut Tether,
         ids: Vec<LabelId>,
-    ) -> Result<(), LabelError> {
-        let labels = api
+    ) -> Result<Vec<Label>, LabelError>
+    where
+        API: ProtonCore,
+    {
+        Ok(api
             .get_labels_by_ids(ids)
             .await?
             .labels
             .into_iter()
-            .map_into::<Self>();
+            .map_into::<Self>()
+            .collect())
+    }
 
+    /// Stores given labels in the database.
+    ///
+    /// # Parameters
+    ///
+    /// * `tx` - The stash transaction to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    /// # Panics
+    /// If labels fetched from database do not contain Local ID.
+    /// Note, this is rather impossible and is just a matter of limitations of Stash API
+    ///
+    pub async fn sync_labels(
+        tx: &Bond<'_>,
+        labels: Vec<Label>,
+    ) -> Result<Vec<LocalLabelId>, LabelError> {
         debug!("Storing labels into database");
-        let tx = tether.transaction().await?;
+        let mut label_ids = Vec::with_capacity(labels.len());
         for mut label in labels {
-            Self::save(&mut label, &tx).await?;
+            label.save(tx).await?;
+            let local_id = label.local_id.unwrap();
+            label_ids.push(local_id);
         }
-        tx.commit().await?;
 
-        Ok(())
+        Ok(label_ids)
     }
 
     async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {

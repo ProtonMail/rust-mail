@@ -68,9 +68,10 @@ impl MailUserContext {
         let ctx_clone = ctx.clone();
         let labels_handle = tokio::spawn(async move {
             debug!("Syncing labels");
+            let labels = Label::all_labels(ctx_clone.session().api()).await?;
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
-            let label_ids = Label::sync_labels(ctx_clone.session().api(), &tx).await?;
+            let label_ids = Label::sync_labels(&tx, labels).await?;
 
             for local_id in label_ids {
                 ConversationCounters::new(local_id).save(&tx).await?;
