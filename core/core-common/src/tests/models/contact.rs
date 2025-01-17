@@ -16,7 +16,7 @@ mod contact_list {
     #[test_case(vec![contact!(local_id: lid!(123), name: "Barbara Lox".to_string())], vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
-            item: vec![
+            items: vec![
                 ContactItemType::Contact(
                     ContactItem {
                         local_id: 123.into(),
@@ -37,7 +37,7 @@ mod contact_list {
     ], vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
-            item: vec![
+            items: vec![
                 ContactItemType::Contact(
                     ContactItem {
                         local_id: 123.into(),
@@ -69,7 +69,7 @@ mod contact_list {
     ], vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
-            item: vec![
+            items: vec![
                 ContactItemType::Contact(
                     ContactItem {
                         local_id: 123.into(),
@@ -102,7 +102,7 @@ mod contact_list {
     ], vec![
         GroupedContacts {
             grouped_by: "#".to_string(),
-            item: vec![
+            items: vec![
                 ContactItemType::Contact(
                     ContactItem {
                         local_id:  123.into(),
@@ -118,7 +118,7 @@ mod contact_list {
         },
         GroupedContacts {
             grouped_by: "B".to_string(),
-            item: vec![
+            items: vec![
                 ContactItemType::Contact(
                     ContactItem {
                         local_id: 123.into(),
@@ -152,11 +152,11 @@ mod contact_list {
     #[test_case(vec![
         contact_email!(remote_id: ceid!("3"), email: "barbara1984@yahoo.com".to_string(), display_order: 3),
         contact_email!(remote_id: ceid!("1"), email: "barbara@fox.us".to_string(), display_order: 2),
-        contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".to_string(), display_order: 1),
+        contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".to_string(), display_order: 1, is_proton: true),
     ], vec![
     GroupedContacts {
         grouped_by: "B".to_string(),
-        item: vec![
+        items: vec![
             ContactItemType::Contact(
                 ContactItem {
                     local_id: 1.into(),
@@ -169,14 +169,20 @@ mod contact_list {
                         ContactEmailItem {
                             local_id: 3.into(),
                             email: "bfox@proton.me".to_string(),
+                            is_proton: true,
+                            last_used_time: 0,
                         },
                         ContactEmailItem {
                             local_id: 2.into(),
                             email: "barbara@fox.us".to_string(),
+                            is_proton: false,
+                            last_used_time: 0,
                         },
                         ContactEmailItem {
                             local_id: 1.into(),
                             email: "barbara1984@yahoo.com".to_string(),
+                            is_proton: false,
+                            last_used_time: 0,
                         },
                     ],
                 },
