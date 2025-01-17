@@ -1,5 +1,4 @@
 use proton_api_core::services::proton::common::{LabelId, UserId};
-use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::StorableMessageBody;
@@ -51,21 +50,10 @@ async fn mailbox_message_body_simple() {
     assert!(cache.is_empty());
 
     // Decrypt the message body.
-    let pgp_provider = new_pgp_provider();
     let _local_id = saved_message.local_id.unwrap();
-    let address_id = saved_message.remote_address_id.clone();
-    let address_keys = user_ctx
-        .unlocked_address_keys(&pgp_provider, &tether, &address_id)
-        .await
-        .unwrap();
 
     let decrypted_body = saved_message
-        .fetch_message_body(
-            address_keys.clone(),
-            pgp_provider,
-            user_ctx.clone(),
-            &mut tether,
-        )
+        .fetch_message_body(user_ctx.clone(), &mut tether)
         .await
         .unwrap();
 
@@ -80,10 +68,9 @@ async fn mailbox_message_body_simple() {
         .map(|f| StorableMessageBody::from_reader(f).unwrap().body);
     assert_eq!(item, Some(TEST_MESSAGE_BODY_DECRYPTED.to_owned()));
 
-    let pgp_provider = new_pgp_provider();
     // Only one call to API is done
     saved_message
-        .fetch_message_body(address_keys, pgp_provider, user_ctx.clone(), &mut tether)
+        .fetch_message_body(user_ctx.clone(), &mut tether)
         .await
         .unwrap();
     assert_eq!(cache.len(), 1);
@@ -127,24 +114,12 @@ async fn mailbox_message_body_mime() {
     let cache = user_ctx.messages_cache();
     assert!(cache.is_empty());
 
-    let pgp_provider = new_pgp_provider();
     let _local_id = saved_message.local_id.unwrap();
-    let address_id = saved_message.remote_address_id.clone();
-
-    let address_keys = user_ctx
-        .unlocked_address_keys(&pgp_provider, &tether, &address_id)
-        .await
-        .unwrap();
 
     // Action:
     //   * Get message body and PGP attachments
     let decrypted_message = saved_message
-        .fetch_message_body(
-            address_keys.clone(),
-            pgp_provider,
-            user_ctx.clone(),
-            &mut tether,
-        )
+        .fetch_message_body(user_ctx.clone(), &mut tether)
         .await
         .unwrap();
 

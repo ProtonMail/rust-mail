@@ -1,4 +1,4 @@
-use crate::actions::draft::{load_message_body, local_draft_label_id};
+use crate::actions::draft::local_draft_label_id;
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
@@ -181,7 +181,13 @@ impl proton_action_queue::action::Handler for SendHandler {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let stored_message_body = load_message_body(context, &message_metadata)?;
+        let Some(stored_message_body) = Message::load_decrypted_message_body_from_cache(
+            context,
+            message_metadata.local_id.unwrap(),
+        )?
+        else {
+            return Err(AppError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
+        };
 
         // Get recipient emails.
         let recipient_emails = load_all_recipients(&message_metadata);

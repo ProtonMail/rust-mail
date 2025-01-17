@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use proton_core_common::cache::{
     CacheConfig, CacheError, CacheKey, CacheResult, ProtonCache, WeightingStrategy,
 };
+use proton_mail_ids::LocalMessageId;
 use std::ffi::OsString;
 use std::fs::{read_dir, remove_file, DirEntry};
 use std::hash::{Hash, Hasher};
@@ -241,6 +242,14 @@ impl From<&Message> for CacheMessageKey {
     fn from(message: &Message) -> Self {
         Self {
             message_id: message.local_id.expect("Should be set").as_u64(),
+        }
+    }
+}
+
+impl From<LocalMessageId> for CacheMessageKey {
+    fn from(value: LocalMessageId) -> Self {
+        Self {
+            message_id: value.as_u64(),
         }
     }
 }
