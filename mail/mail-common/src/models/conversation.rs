@@ -2101,22 +2101,25 @@ impl Conversation {
         api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), AppError> {
-        let mut missing_labels = vec![];
+        let mut missing_labels_ids = vec![];
         for conv in conversations {
             for label in &conv.labels {
                 let rid = label.id.clone();
                 if (Label::find_by_remote_id(rid, tether)).await?.is_none() {
-                    missing_labels.push(label.id.clone());
+                    missing_labels_ids.push(label.id.clone());
                 }
             }
         }
 
-        if !missing_labels.is_empty() {
+        if !missing_labels_ids.is_empty() {
             info!(
                 "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
+                missing_labels_ids.len()
             );
-            Label::sync_labels_by_ids(api, tether, missing_labels).await?;
+            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
+            let tx = tether.transaction().await?;
+            Label::sync_labels(&tx, missing_labels).await?;
+            tx.commit().await?;
         }
         Ok(())
     }

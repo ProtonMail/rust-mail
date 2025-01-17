@@ -1422,24 +1422,27 @@ impl Message {
         }
         tx.commit().await?;
 
-        let mut missing_labels = vec![];
+        let mut missing_labels_ids = vec![];
         for msg in messages {
             for rid in &msg.label_ids {
                 if (Label::find_by_remote_id(rid.clone(), tether))
                     .await?
                     .is_none()
                 {
-                    missing_labels.push(rid.clone());
+                    missing_labels_ids.push(rid.clone());
                 }
             }
         }
 
-        if !missing_labels.is_empty() {
+        if !missing_labels_ids.is_empty() {
             info!(
                 "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
+                missing_labels_ids.len()
             );
-            Label::sync_labels_by_ids(api, tether, missing_labels).await?;
+            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
+            let tx = tether.transaction().await?;
+            Label::sync_labels(&tx, missing_labels).await?;
+            tx.commit().await?;
         }
 
         Ok(())
