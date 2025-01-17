@@ -1,7 +1,6 @@
 use crate::datatypes::{ContextualConversation, ReadFilter, SearchOptions};
 use crate::models::{
-    CachedScrollData, Conversation, ConversationScrollData, Label, Message, MessageScrollData,
-    ScrollData,
+    CachedScrollData, Conversation, ConversationScrollData, Message, MessageScrollData, ScrollData,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;

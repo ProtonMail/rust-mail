@@ -10,7 +10,7 @@ use proton_core_common::{
     models::{Address, Label, ModelExtension, ModelIdExtension},
 };
 use proton_mail_common::{
-    datatypes::{ReadFilter, SystemLabel},
+    datatypes::ReadFilter,
     mail_scroller::MailScroller,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
 };

@@ -10,7 +10,7 @@ use proton_core_common::{
     models::{Label, ModelExtension, ModelIdExtension},
 };
 use proton_mail_common::{
-    datatypes::{ContextualConversation, ReadFilter, SystemLabel},
+    datatypes::{ContextualConversation, ReadFilter},
     mail_scroller::MailScroller,
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
