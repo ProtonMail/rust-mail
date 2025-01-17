@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.33.0] - 2025-01-17
+
 ### Added
 
   - `DraftSendResultWatcher` - Observe new send results as they are created.
