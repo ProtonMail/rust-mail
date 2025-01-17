@@ -1,11 +1,14 @@
 pub use self::keys::*;
+use crate::{CoreContextError, CoreContextResult};
 use crate::cache::ProtonCache;
+use crate::datatypes::AccountDetails;
+use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
-use crate::CoreContextResult;
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
+use stash::orm::Model;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
@@ -115,6 +118,25 @@ impl UserContext {
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
+    }
+
+    /// Asynchronously retrieves the current user's account details.
+    ///
+    /// # Returns
+    /// - `Ok(AccountDetails)` if the account is successfully retrieved.
+    /// - `Err(CoreContextError)` if the account is missing or a database error occurs.
+    ///
+    /// # Errors
+    /// Returns `CoreContextError` if the account does not exist or if an error occurs
+    /// during the database query.
+    pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
+        let tether = self.user_stash.connection();
+        let user_id = self.user_id();
+        let account = CoreAccount::load(user_id.clone(), &tether)
+            .await?
+            .ok_or_else(|| CoreContextError::Other(anyhow::anyhow!("Missing core account in DB")))?;
+
+        Ok(account.details())
     }
 
     /// Get the session id of this context.

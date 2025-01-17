@@ -23,7 +23,7 @@ impl Default for CoreAccount {
 }
 
 #[cfg(test)]
-mod core_account_account_details_tests {
+mod core_account_details_tests {
     use super::*;
 
     #[test]
@@ -36,7 +36,7 @@ mod core_account_account_details_tests {
             ..Default::default()
         };
 
-        let result = sut.account_details();
+        let result = sut.details();
 
         assert_account_details(&result, "Frankie", "frank@proton.me");
     }
@@ -51,7 +51,7 @@ mod core_account_account_details_tests {
             ..Default::default()
         };
 
-        let result = sut.account_details();
+        let result = sut.details();
 
         assert_account_details(&result, "Max", "max@pm.me");
     }
@@ -66,7 +66,7 @@ mod core_account_account_details_tests {
             ..Default::default()
         };
 
-        let result = sut.account_details();
+        let result = sut.details();
 
         assert_account_details(&result, "John Doe", "john@gmail.com");
     }
@@ -81,7 +81,7 @@ mod core_account_account_details_tests {
             ..Default::default()
         };
 
-        let result = sut.account_details();
+        let result = sut.details();
 
         assert_account_details(&result, "Dricus", "dricus@proton.me");
     }

@@ -61,7 +61,7 @@ impl StoredAccount {
     /// - `AccountDetails`: A struct containing the account's name, email, and avatar information.
     #[must_use]
     pub fn details(&self) -> AccountDetails {
-        self.account.account_details().into()
+        self.account.details().into()
     }
 
     /// Returns whether the account has 2FA enabled.

@@ -121,9 +121,9 @@ impl MailUserSession {
     ///
     /// # Errors
     /// - Returns `UserSessionError` if the account details cannot be retrieved.
-    pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
-        let context = self.ctx.clone();
+    pub async fn account_details(self:Arc<Self>) -> Result<AccountDetails, UserSessionError> {
         uniffi_async(async move {
+            let context = self.ctx.clone();
             let account_details = context.account_details().await?;
             Result::<_, RealProtonMailError>::Ok(account_details.into())
         })

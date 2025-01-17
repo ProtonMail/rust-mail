@@ -216,7 +216,7 @@ impl CoreAccount {
     /// # Returns
     /// - `AccountDetails`: A struct containing the account's name, email, and avatar information.
     #[must_use]
-    pub fn account_details(&self) -> AccountDetails {
+    pub fn details(&self) -> AccountDetails {
         let name = self
             .display_name
             .clone()
