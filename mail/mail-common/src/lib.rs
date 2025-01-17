@@ -55,7 +55,7 @@ macro_rules! find_in_query {
             .into_iter()
             .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
             .collect::<Vec<_>>();
-        let query = format!($query, vec!["?"; params.len()].join(","),);
+        let query = format!($query, ::stash::utils::placeholders(params.len()),);
         (query, params)
     }};
 }
