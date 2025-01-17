@@ -232,6 +232,7 @@ impl From<DraftError> for ProtonMailError {
             DraftError::NoRecipients => {
                 Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::NoRecipients))
             }
+            DraftError::DeleteFailed => Self::Unexpected(Unexpected::Api),
         }
     }
 }

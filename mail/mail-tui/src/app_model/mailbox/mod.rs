@@ -93,6 +93,7 @@ impl From<MessageMessage> for Messages {
 pub enum ComposerMessage {
     Save,
     Send,
+    Discard,
 }
 
 impl From<ComposerMessage> for Messages {
