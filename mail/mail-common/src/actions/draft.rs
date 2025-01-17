@@ -21,9 +21,20 @@ async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailConte
     Ok(local_draft_label_id)
 }
 
-/// Resolve the Sent folder  local label id.
+/// Resolve the Sent folder local label id.
 async fn local_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) = Label::remote_id_counterpart(LabelId::sent(), tether).await?
+    else {
+        return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
+    };
+
+    Ok(local_draft_label_id)
+}
+
+/// Resolve the Outbox folder local label id.
+async fn local_outbox_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
+    let Some(local_draft_label_id) =
+        Label::remote_id_counterpart(LabelId::outbox(), tether).await?
     else {
         return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
     };

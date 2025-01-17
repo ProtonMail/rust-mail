@@ -1,4 +1,4 @@
-use crate::actions::draft::local_draft_label_id;
+use crate::actions::draft::{local_draft_label_id, local_outbox_label_id, local_sent_label_id};
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
@@ -58,7 +58,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_label_id = local_draft_label_id(tx).await?;
-        let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
+        let local_outbox_label_id = local_outbox_label_id(tx).await?;
 
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
@@ -88,14 +88,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             error!("Failed to update message sent flag: {e}");
         })?;
 
-        Message::move_messages(
-            local_draft_label_id,
-            local_sent_label_id,
-            vec![local_message_id],
-            tx,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to move draft into sent folder: {e}"))?;
+        Message::remove_label(local_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+        Message::apply_label(local_outbox_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply outbox label: {e}"))?;
 
         action.local_message_id = Some(local_message_id);
 
@@ -110,7 +108,7 @@ impl proton_action_queue::action::Handler for SendHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
-        let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
+        let local_outbox_label_id = local_outbox_label_id(tx).await?;
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
@@ -125,14 +123,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             error!("Failed to update message sent flag (revert): {e}");
         })?;
 
-        Message::move_messages(
-            local_sent_label_id,
-            local_draft_label_id,
-            vec![local_message_id],
-            tx,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to move draft from sent folder: {e}"))?;
+        Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+        Message::apply_label(local_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
 
         Ok(())
     }
@@ -145,6 +141,9 @@ impl proton_action_queue::action::Handler for SendHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let mut tether = stash.connection();
+        let local_outbox_label_id = local_outbox_label_id(&tether).await?;
+        let local_sent_label_id = local_sent_label_id(&tether).await?;
+
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, &tether)
             .await
             .inspect_err(|e| {
@@ -290,6 +289,14 @@ impl proton_action_queue::action::Handler for SendHandler {
                 error!("Could not find parent message {parent_id}, perhaps it was deleted?");
             };
         }
+
+        // Move message to sent folder
+        Message::remove_label(local_outbox_label_id, [local_message_id], &tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+        Message::apply_label(local_sent_label_id, [local_message_id], &tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply sent label: {e}"))?;
 
         // Delete draft metadata
         DraftMetadata::delete(action.metadata_id, &tx)

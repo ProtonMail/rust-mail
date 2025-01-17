@@ -153,6 +153,15 @@ async fn basic_send_check() {
         .await
         .unwrap();
 
+    // Check draft is in outbox.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert!(draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
     let tether = user_ctx.user_stash().connection();
@@ -160,6 +169,11 @@ async fn basic_send_check() {
         .await
         .unwrap()
         .expect("failed to load message");
+
+    // Check message is in the sent folder
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::sent()));
 
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
     assert!(draft_message.flags.contains(MessageFlags::SENT.into()));
@@ -232,6 +246,26 @@ async fn send_fail_recorded_to_db() {
     assert!(!send_result.seen);
     assert!(matches! { send_result.error, Some(DraftSendFailure::RecipientEmailInvalid(_))});
     assert_eq!(send_result.origin, DraftSendResultOrigin::Send);
+}
+
+#[tokio::test]
+async fn send_fail_puts_message_back_in_drafts() {
+    let (_, local_id, ctx) =
+        send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
+
+    let send_result = DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let draft_message =
+        Message::find_by_id(send_result.local_message_id, &ctx.user_stash().connection())
+            .await
+            .unwrap()
+            .unwrap();
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::sent()));
 }
 
 #[tokio::test]
