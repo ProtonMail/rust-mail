@@ -3,10 +3,11 @@ use std::iter;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{GroupedContacts, Labels, LocalContactId};
+use crate::datatypes::{GroupedContacts, LabelType, Labels, LocalContactId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use futures::future::try_join;
+use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
@@ -25,6 +26,8 @@ use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
+
+use super::Label;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -396,13 +399,19 @@ impl Contact {
     /// when querying the database fails.
     ///
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
-        let mut contacts = Contact::find("WHERE deleted = 0", vec![], tether).await?;
+        let (mut contacts, contact_groups) = try_join!(
+            Contact::find("WHERE deleted = 0", vec![], tether),
+            Label::find_by_kind(LabelType::ContactGroup, tether)
+        )?;
 
         for contact in &mut contacts {
             contact.emails(tether).await?;
         }
 
-        Ok(GroupedContacts::from_contacts(contacts))
+        Ok(GroupedContacts::from_contacts_and_groups(
+            contacts,
+            contact_groups,
+        ))
     }
 
     pub async fn action_delete(
