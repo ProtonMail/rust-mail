@@ -6,7 +6,9 @@ use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
 use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
 use proton_mail_common::draft::recipients::MaybeEmptyString;
-use proton_mail_common::draft::{recipients, Draft, DraftSaveActionQueuer, ReplyMode};
+use proton_mail_common::draft::{
+    recipients, Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode,
+};
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
@@ -30,6 +32,7 @@ pub struct Composer {
     bcc_input_state: TextInputState,
     subject_input_state: TextInputState,
     attachment_infos: Vec<AttachmentInfo>,
+    draft_sync_status: Option<DraftSyncStatus>,
 }
 
 impl Composer {
@@ -43,9 +46,9 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match Draft::empty(ctx.user_stash()).await {
-                        Ok(draft) => {
-                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
-                        }
+                        Ok(draft) => Command::message(
+                            Message::OpenComposer(Composer::new(draft, None)).into(),
+                        ),
                         Err(e) => {
                             error!("Failed to create new draft:{e}");
                             Command::Message(Messages::DisplayError(None, e.into()))
@@ -72,9 +75,9 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match Draft::reply(&context, message_id, reply_mode, false).await {
-                        Ok(draft) => {
-                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
-                        }
+                        Ok(draft) => Command::message(
+                            Message::OpenComposer(Composer::new(draft, None)).into(),
+                        ),
                         Err(e) => {
                             error!("Failed to open message in composer: {e}");
                             Command::batch([
@@ -100,9 +103,9 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match Draft::open(context, message_id).await {
-                        Ok(draft) => {
-                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
-                        }
+                        Ok((draft, sync_status)) => Command::message(
+                            Message::OpenComposer(Composer::new(draft, Some(sync_status))).into(),
+                        ),
                         Err(e) => {
                             error!("Failed to open message in composer: {e}");
                             Command::batch([
@@ -192,7 +195,7 @@ impl Composer {
         }
     }
 
-    fn new(draft: Draft) -> Self {
+    fn new(draft: Draft, sync_status: Option<DraftSyncStatus>) -> Self {
         let sender = draft.sender.clone();
         let to_list = recipient_list_to_display_value(&draft.to_list);
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
@@ -228,6 +231,7 @@ impl Composer {
             bcc_input_state: TextInputState::with_value(bcc_list),
             subject_input_state: TextInputState::with_value(subject),
             attachment_infos,
+            draft_sync_status: sync_status,
         }
     }
 }
@@ -237,6 +241,7 @@ struct AttachmentInfo {
     filename: String,
 }
 impl StateHandler for Composer {
+    #[allow(clippy::too_many_lines)]
     fn view(&mut self, frame: &mut Frame, area: Rect) {
         let area = area.inner(Margin {
             horizontal: 4,
@@ -250,6 +255,35 @@ impl StateHandler for Composer {
             horizontal: 1,
             vertical: 1,
         });
+
+        let area = if let Some(DraftSyncStatus::Cached) = self.draft_sync_status {
+            let [error_area, area] =
+                Layout::vertical([Constraint::Length(3), Constraint::Min(1)]).areas(area);
+
+            frame.render_widget(
+                Block::new()
+                    .borders(Borders::ALL)
+                    .bg(Color::Red)
+                    .fg(Color::White),
+                error_area,
+            );
+            let error_area = error_area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            });
+            frame.render_widget(
+                Line::from("You are editing a cached version of this draft")
+                    .bold()
+                    .centered()
+                    .bg(Color::Red)
+                    .fg(Color::White),
+                error_area,
+            );
+
+            area
+        } else {
+            area
+        };
 
         let [sender_area, to_area, cc_area, bcc_area, subject_area, _, message_area, footer] =
             Layout::vertical([

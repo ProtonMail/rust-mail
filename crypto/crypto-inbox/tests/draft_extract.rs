@@ -79,7 +79,7 @@ fn test_extract_keys_and_data_from_draft() {
     assert_eq!(
         String::from_utf8(
             BASE_64
-                .decode(session_key.expose_secret().as_ref())
+                .decode(session_key.expose_secret().as_bytes())
                 .unwrap()
         )
         .expect("string conversion should not fail"),

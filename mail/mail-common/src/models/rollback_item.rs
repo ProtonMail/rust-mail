@@ -3,15 +3,17 @@
 mod tests;
 
 use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
+use crate::models::{Conversation, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::models::Label;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
@@ -204,10 +206,10 @@ impl RollbackItem {
     /// been synced, so double syncing should never happen.
     ///
     ///
-    pub async fn sync_all<I, PM>(api: &PM, stash: &Stash, batch: I) -> Result<(), AppError>
+    pub async fn sync_all<I, API>(api: &API, stash: &Stash, batch: I) -> Result<(), AppError>
     where
         I: Into<Option<usize>> + Copy,
-        PM: ProtonMail,
+        API: ProtonMail + ProtonCore,
     {
         let tether = stash.connection();
         Self::sync_labels(api, &tether, batch).await?;
@@ -223,12 +225,12 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_labels<I, PM>(api: &PM, tether: &Tether, batch: I) -> Result<(), AppError>
+    pub async fn sync_labels<I, API>(api: &API, tether: &Tether, batch: I) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
-        PM: ProtonMail,
+        API: ProtonCore,
     {
-        use proton_api_mail::services::proton::responses::GetLabelsResponse;
+        use proton_api_core::services::proton::responses::GetLabelsResponse;
 
         sync_any!(Label, Label, tether, batch => |remote_id| async {
             api.get_labels_by_ids(vec![LabelId::from(remote_id)]).await

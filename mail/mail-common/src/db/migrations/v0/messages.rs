@@ -4,7 +4,7 @@ use stash::{
     stash::{Bond, StashError},
 };
 
-use super::labels::default_labels;
+use super::default_labels::default_labels;
 
 pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     tx.execute(
@@ -215,6 +215,27 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     for (id, _) in default_labels().into_iter() {
         tx.execute(sql, params![id]).await?;
     }
+
+    // Draft Send Error.
+    tx.execute(
+        indoc! {"
+        CREATE TABLE draft_send_result (
+            local_message_id INTEGER PRIMARY KEY,
+            remote_message_id TEXT DEFAULT NULL,
+            timestamp INTEGER NOT NULL DEFAULT (now()),
+            error TEXT DEFAULT NULL,
+            seen INTEGER NOT NULL DEFAULT 0,
+            origin INTEGER NOT NULL,
+
+            CONSTRAINT draft_send_result_message_id
+                FOREIGN KEY (local_message_id)
+                REFERENCES messages (local_id)
+                ON DELETE CASCADE
+        )"
+        },
+        vec![],
+    )
+    .await?;
 
     Ok(())
 }

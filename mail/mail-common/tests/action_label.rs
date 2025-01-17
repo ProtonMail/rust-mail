@@ -1,14 +1,16 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::response_data::Address as ApiAddress;
+use proton_api_core::services::proton::common::LabelType as ApiLabelType;
+use proton_api_core::services::proton::response_data::{Address as ApiAddress, Label as ApiLabel};
 use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationCount as ApiConversationCount, Label as ApiLabel,
+    Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
 };
+use proton_core_common::datatypes::LabelType;
+use proton_core_common::models::Label;
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
-use proton_mail_common::datatypes::{LabelType, SystemLabelId};
-use proton_mail_common::models::{Conversation, Label};
+use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;

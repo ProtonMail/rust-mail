@@ -5,14 +5,14 @@ use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
 };
-use crate::models::{Conversation, ConversationLabel, Label, Message};
+use crate::models::{Conversation, ConversationLabel, Message};
 use crate::AppError;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;

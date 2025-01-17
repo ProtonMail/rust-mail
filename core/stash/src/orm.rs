@@ -24,7 +24,6 @@ use rusqlite::types::FromSql;
 use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
-use std::iter::repeat;
 use std::vec::IntoIter;
 use thiserror::Error;
 use tracing::error;
@@ -883,7 +882,7 @@ pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<()
                 // and needs to be set before saving.
                 return Err(StashError::IdNotSet);
             }
-            let placeholders = repeat('?').take(fields.len()).join(",");
+            let placeholders = crate::utils::placeholders(fields.len());
             let query = formatdoc!(
                 "
                 INSERT INTO

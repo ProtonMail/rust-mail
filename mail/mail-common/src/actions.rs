@@ -6,7 +6,7 @@ pub mod messages;
 
 pub use self::available_action::*;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType};
-use crate::models::{Label, RollbackItem};
+use crate::models::RollbackItem;
 use crate::AppError;
 use itertools::Itertools;
 use proton_action_queue::action::Factory;
@@ -15,7 +15,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashError};
@@ -32,6 +32,8 @@ pub enum ActionError {
     Stash(#[from] StashError),
     #[error("App: {0}")]
     App(#[from] AppError),
+    #[error("Label: {0}")]
+    Label(#[from] LabelError),
     #[error("No input provided")]
     NoInput,
     #[error("Other: {0}")]
@@ -155,7 +157,7 @@ where
         tx: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in self.remote_target_ids.iter() {
-            RollbackItem::new(remote_id.as_ref().to_owned(), item_type)
+            RollbackItem::new(remote_id.to_string(), item_type)
                 .save(tx)
                 .await?;
         }
@@ -311,7 +313,7 @@ where
         bond: &Bond<'_>,
     ) -> Result<(), ActionError> {
         for remote_id in &self.remote_ids {
-            RollbackItem::new(remote_id.as_ref().to_owned(), kind)
+            RollbackItem::new(remote_id.to_string(), kind)
                 .save(bond)
                 .await?;
         }

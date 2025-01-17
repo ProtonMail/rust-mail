@@ -11,7 +11,8 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Attachment, DraftMetadata, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
+    MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
@@ -36,7 +37,7 @@ use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 pub mod compose;
 pub mod observers;
@@ -178,6 +179,20 @@ pub struct Draft {
     pub attachments: Vec<Attachment>,
     /// Draft's mime type
     pub mime_type: MimeType,
+    /// `None` if there is no associated send result.
+    pub send_result: Option<DraftSendResult>,
+}
+
+/// Indicates the status of syncing a draft.
+///
+/// By default we always sync the draft bodies from the server, but if there is no network
+/// we will serve the local cached version.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum DraftSyncStatus {
+    /// We managed to sync the draft body from the server
+    Synced,
+    /// We only have a cached version available.
+    Cached,
 }
 
 impl Draft {
@@ -191,7 +206,7 @@ impl Draft {
     pub async fn open(
         context: Arc<MailUserContext>,
         message_id: LocalMessageId,
-    ) -> Result<Self, MailContextError> {
+    ) -> Result<(Self, DraftSyncStatus), MailContextError> {
         let tether = &mut context.user_stash().connection();
 
         let Some(mut message) = Message::find_by_id(message_id, tether).await? else {
@@ -206,21 +221,21 @@ impl Draft {
 
         // First let's try to sync the body and metadata. If we can't we will fill it
         // ourselves.
-        let (body, body_metadata) = if let Some(remote_id) = message.remote_id.clone() {
+        let (body, body_metadata, sync_status) = if let Some(remote_id) = message.remote_id.clone()
+        {
             match Message::force_sync_message_and_body(context.clone(), remote_id).await {
                 Ok((message_new, body_metadata, body)) => {
                     message = message_new;
-                    (Some(body), Some(body_metadata))
+                    (Some(body), Some(body_metadata), DraftSyncStatus::Synced)
                 }
                 // Handle network failure
                 Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
-                    warn!("Api error syncing message");
-                    (None, None)
+                    (None, None, DraftSyncStatus::Cached)
                 }
                 Err(e) => return Err(e),
             }
         } else {
-            (None, None)
+            (None, None, DraftSyncStatus::Cached)
         };
 
         // Load body metadata if not re-synced.
@@ -279,6 +294,10 @@ impl Draft {
             metadata.id.unwrap()
         };
 
+        let send_result = DraftSendResult::find_by_id(message.local_id.unwrap(), tether)
+            .await
+            .inspect_err(|e| error!("Failed to load send result: {e}"))?;
+
         let context = &*context;
         let (to_list, cc_list, bcc_list) = join3(
             RecipientList::from_message_recipients(context, message.to_list.value),
@@ -286,18 +305,22 @@ impl Draft {
             RecipientList::from_message_recipients(context, message.bcc_list.value),
         )
         .await;
-        Ok(Self {
-            metadata_id,
-            sender: message.sender.address,
-            to_list,
-            cc_list,
-            bcc_list,
-            address_id: message.remote_address_id,
-            subject: message.subject,
-            body,
-            attachments: body_metadata.attachments,
-            mime_type: body_metadata.mime_type,
-        })
+        Ok((
+            Self {
+                metadata_id,
+                sender: message.sender.address,
+                to_list,
+                cc_list,
+                bcc_list,
+                address_id: message.remote_address_id,
+                subject: message.subject,
+                body,
+                attachments: body_metadata.attachments,
+                mime_type: body_metadata.mime_type,
+                send_result,
+            },
+            sync_status,
+        ))
     }
 
     /// Create a new empty draft.
@@ -356,6 +379,7 @@ impl Draft {
             body,
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
+            send_result: None,
         }
     }
 
@@ -514,6 +538,7 @@ impl Draft {
                     .collect()
             },
             mime_type: mail_settings.draft_mime_type,
+            send_result: None,
         };
 
         patch_draft_with_reply_mode(
@@ -668,7 +693,10 @@ impl Draft {
     ///
     ///
     pub fn to_save_action(&self) -> DraftSaveActionQueuer {
-        DraftSaveActionQueuer::new(self.metadata_id, Save::new(self))
+        DraftSaveActionQueuer::new(
+            self.metadata_id,
+            Save::new(self, DraftSendResultOrigin::Save),
+        )
     }
 
     /// Create a save action for the current state of the draft.
@@ -683,7 +711,7 @@ impl Draft {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(Error::NoRecipients);
         }
-        let save_action = Save::new(self);
+        let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
         let send_action = draft::Send::new(self.metadata_id);
         let metadata_id = self.metadata_id;
         Ok(DraftSendActionQueuer::new(

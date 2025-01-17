@@ -29,10 +29,10 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LabelType, LocalMessageId, MessageCount, MessageFlags, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabel, SystemLabelId,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
+    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
 };
-use crate::decrypted_message::StorableMessageBody;
+use crate::decrypted_message::{StorableMessageBody, StorableMessageBodyRef};
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::user_context::cache::CacheMessageKey;
 use crate::MailContextResult;
@@ -52,13 +52,10 @@ use proton_api_mail::services::proton::response_data::{
 use proton_api_mail::services::proton::responses::GetMessagesResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::cache::{CacheError, CacheResult};
-use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
-use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
+use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::proton_crypto;
-use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
-use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::Model;
@@ -68,7 +65,6 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs::File;
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -1135,7 +1131,7 @@ impl Message {
     ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<Vec<MessageCount>, ApiServiceError> {
+    ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
         api.get_messages_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
@@ -1234,7 +1230,7 @@ impl Message {
                         SELECT local_id FROM labels WHERE remote_id IN ({})
                     )
                 ",
-                    vec!["?"; self.label_ids.len()].join(",")
+                    stash::utils::placeholders(self.label_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1285,7 +1281,7 @@ impl Message {
                 // address id are updated.
                 // If no record exists we create a new one.
                 let mut result = Vec::with_capacity(self.attachments_metadata.len());
-                for metadata in &self.attachments_metadata {
+                for metadata in &mut self.attachments_metadata {
                     let mut attachment = Attachment::find_first(
                         "WHERE remote_id = ?",
                         params![metadata.remote_id.clone()],
@@ -1299,8 +1295,8 @@ impl Message {
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
                     attachment.save(bond).await?;
-
                     let local_id = attachment.local_id.expect("Should be set");
+                    metadata.local_id = Some(local_id);
 
                     bond.execute(
                         "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
@@ -1323,7 +1319,7 @@ impl Message {
                     local_message_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                    vec!["?"; local_ids.len()].join(",")
+                    stash::utils::placeholders(local_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1366,22 +1362,6 @@ impl Message {
         self.label_ids.iter().any(|l| *l == LabelId::starred())
     }
 
-    /// Get message from remote and decrypt it
-    pub async fn decrypt_from_remote<P: PgpProviderSync>(
-        &self,
-        address_keys: UnlockedAddressKeys<P>,
-        pgp_provider: P,
-        ctx: Arc<MailUserContext>,
-        tether: &mut Tether,
-    ) -> Result<DecryptedMessageBody, AppError> {
-        // Fetch metadata first to sync contents and cache.
-        let encrypted_msg = self.sync_message_body(ctx.api(), tether).await?;
-
-        encrypted_msg
-            .into_decrypted_message(ctx, address_keys, pgp_provider)
-            .map_err(|e| AppError::Other(anyhow::Error::new(e)))
-    }
-
     /// Given a list of message metadata check if there are any missing dependencies like
     /// undownloaded labels or addresses.
     ///
@@ -1422,24 +1402,27 @@ impl Message {
         }
         tx.commit().await?;
 
-        let mut missing_labels = vec![];
+        let mut missing_labels_ids = vec![];
         for msg in messages {
             for rid in &msg.label_ids {
                 if (Label::find_by_remote_id(rid.clone(), tether))
                     .await?
                     .is_none()
                 {
-                    missing_labels.push(rid.clone());
+                    missing_labels_ids.push(rid.clone());
                 }
             }
         }
 
-        if !missing_labels.is_empty() {
+        if !missing_labels_ids.is_empty() {
             info!(
                 "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
+                missing_labels_ids.len()
             );
-            Label::sync_labels_by_ids(api, tether, missing_labels).await?;
+            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
+            let tx = tether.transaction().await?;
+            Label::sync_labels(&tx, missing_labels).await?;
+            tx.commit().await?;
         }
 
         Ok(())
@@ -1533,111 +1516,6 @@ impl Message {
         Self::create_or_update_messages_from_metadata(response.messages, &tx).await?;
         tx.commit().await?;
         Ok(())
-    }
-
-    /// Synchronize the message body.
-    ///
-    /// # Parameters
-    ///
-    /// * `cache_path` - TODO: Document this parameter.
-    /// * `api`        - The API instance to use.
-    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                  to use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the API request failed or the data could not be written
-    /// to the database.
-    ///
-    pub async fn sync_message_body<PM: ProtonMail>(
-        &self,
-        api: &PM,
-        tether: &mut Tether,
-    ) -> Result<EncryptedMessageBody, AppError> {
-        let (metadata, body) = self.sync_message_metadata(api, tether).await?;
-        let encrypted_body = if let Some(body) = body {
-            body
-        } else {
-            self.get_api_message(api).await?.body.body
-        };
-        Ok(EncryptedMessageBody {
-            encrypted_body,
-            metadata,
-        })
-    }
-
-    /// Sync message metadata
-    ///
-    /// # Parameters
-    ///
-    /// * `api`       - The API instance to use.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the API request failed or the data could not be written
-    /// to the database.
-    ///
-    async fn sync_message_metadata<PM: ProtonMail>(
-        &self,
-        api: &PM,
-        tether: &mut Tether,
-    ) -> Result<(MessageBodyMetadata, Option<String>), AppError> {
-        let mdata = if let Some(metadata) = self.get_message_body_metadata(tether).await? {
-            (metadata, None)
-        } else {
-            let message = self.get_api_message(api).await?;
-
-            let (mut message, mut body_metadata, body) = Message::from_api_data(message, tether)
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to convert message from api: {e}");
-                })?;
-
-            let tx = tether.transaction().await?;
-            message.save(&tx).await.inspect_err(|e| {
-                error!("Failed to save message metadata: {e}");
-            })?;
-
-            body_metadata.save(&tx).await.inspect_err(|e| {
-                error!("Failed to save message body metadata: {e}");
-            })?;
-            tx.commit().await?;
-
-            (body_metadata, Some(body))
-        };
-        Ok(mdata)
-    }
-
-    /// Get message body metadata from DB.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the database request fail.
-    ///
-    async fn get_message_body_metadata(
-        &self,
-        tether: &Tether,
-    ) -> Result<Option<MessageBodyMetadata>, AppError> {
-        Ok(
-            MessageBodyMetadata::for_message(self.local_id.unwrap(), tether)
-                .await
-                .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?,
-        )
-    }
-
-    /// Get message from remote
-    async fn get_api_message(&self, api: &impl ProtonMail) -> Result<ApiMessage, AppError> {
-        // metadata is not there it is either missing or the message does not exist.
-        let remote_id = self
-            .remote_id
-            .clone()
-            .ok_or(AppError::MessageHasNoRemoteId(
-                self.local_id.unwrap_or(LocalMessageId::from(0)),
-            ))?;
-        // sync the message body
-        Ok(api.get_message(remote_id).await.map(|v| v.message)?)
     }
 
     /// Get the available actions for messages excluding move to the current view.
@@ -1841,16 +1719,7 @@ impl Message {
             .await?
             .ok_or(AppError::MessageMissing(id))?;
 
-        let pgp_provider = proton_crypto::new_pgp_provider();
-        let address_id = saved_message.remote_address_id.clone();
-
-        let address_keys = user_context
-            .unlocked_address_keys(&pgp_provider, tether, &address_id)
-            .await?;
-
-        Ok(saved_message
-            .fetch_message_body(address_keys, pgp_provider, user_context.clone(), tether)
-            .await?)
+        saved_message.fetch_message_body(user_context, tether).await
     }
 
     /// Get the message's body.
@@ -1872,50 +1741,38 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    pub async fn fetch_message_body<P: PgpProviderSync>(
+    pub async fn fetch_message_body(
         &self,
-        address_keys: UnlockedAddressKeys<P>,
-        pgp_provider: P,
         ctx: Arc<MailUserContext>,
         tether: &mut Tether,
-    ) -> Result<DecryptedMessageBody, AppError> {
-        let key = CacheMessageKey::from(self);
-        let cache = ctx.messages_cache();
+    ) -> Result<DecryptedMessageBody, MailContextError> {
+        if let Some(decrypted) = Self::load_decrypted_message_from_cache(
+            Arc::clone(&ctx),
+            self.local_id.unwrap(),
+            tether,
+        )
+        .await?
+        {
+            return Ok(decrypted);
+        }
 
-        // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
-        // Recover from cache issues by requesting the data again.
-        // TODO: Use get_path_or_insert_data instead
-        let file_path: PathBuf = cache
-            .get_path_or_insert(
-                &key,
-                self.store_message_body(address_keys, pgp_provider, ctx.clone(), tether),
-            )
-            .await?;
+        let Some(remote_id) = self.remote_id.clone() else {
+            return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
+        };
 
-        let file = File::open(file_path)?;
-        let message = StorableMessageBody::from_reader(file)?;
-        let metadata = self.get_message_body_metadata(tether).await?.ok_or(
-            AppError::MessageBodyMetadataMissing(self.local_id.expect("Should be set")),
-        )?;
-        Ok(DecryptedMessageBody::from_storable(message, metadata, ctx))
-    }
+        let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
 
-    /// Fetch, decrypt and store message body in cache.
-    async fn store_message_body<P: PgpProviderSync>(
-        &self,
-        address_keys: UnlockedAddressKeys<P>,
-        pgp_provider: P,
-        ctx: Arc<MailUserContext>,
-        tether: &mut Tether,
-    ) -> CacheResult<Vec<u8>> {
-        let decrypted_message_body = self
-            .decrypt_from_remote(address_keys, pgp_provider, ctx, tether)
-            .await
-            .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
+        let decrypted = Self::decrypt_message_body(
+            Arc::clone(&ctx),
+            &self.remote_address_id,
+            encrypted_body,
+            tether,
+        )
+        .await?;
 
-        StorableMessageBody::from(decrypted_message_body)
-            .serialize()
-            .map_err(|e| CacheError::Callback(anyhow!("Can't serialize as Cbor: {e}")))
+        Self::store_decrypted_message_body(&ctx, self.local_id.unwrap(), &decrypted)?;
+
+        Ok(decrypted)
     }
 
     /// Finds all messages that have expired and deletes them.
@@ -2612,53 +2469,179 @@ impl Message {
         ctx: Arc<MailUserContext>,
         message_id: MessageId,
     ) -> MailContextResult<(Message, MessageBodyMetadata, String)> {
-        //TODO(ET-1763): Cleanup sync code for messages to use this method.
-        let response = ctx
-            .api()
-            .get_message(message_id)
-            .await
-            .inspect_err(|e| error!("Failed to fetch messages: {e}"))?;
-
         let mut tether = ctx.user_stash().connection();
-        let (mut metadata, mut body_metadata, body) =
-            Message::from_api_data(response.message, &tether)
-                .await
-                .inspect_err(|e| error!("Failed to convert to local types: {e}"))?;
 
-        let pgp_provider = proton_crypto::new_pgp_provider();
-        let tx = tether.transaction().await?;
+        let (message, encrypted) =
+            Self::sync_message_and_body(message_id, ctx.api(), &mut tether).await?;
 
-        let address_keys = ctx
-            .unlocked_address_keys(&pgp_provider, &tx, &metadata.remote_address_id)
+        let decrypted = Self::decrypt_message_body(
+            Arc::clone(&ctx),
+            &message.remote_address_id,
+            encrypted,
+            &tether,
+        )
+        .await?;
+
+        tokio::task::spawn_blocking(move || {
+            Self::store_decrypted_message_body(&ctx, message.local_id.unwrap(), &decrypted)?;
+            Ok((message, decrypted.metadata, decrypted.body))
+        })
+        .await?
+    }
+
+    /// Sync message and body for mesasge with `message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message failed to fetch from the server or update the
+    /// metadata on the server.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tether))]
+    async fn sync_message_and_body(
+        message_id: MessageId,
+        api: &Proton,
+        tether: &mut Tether,
+    ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
+        let message = api.get_message(message_id).await.map(|v| v.message)?;
+
+        let (mut message, mut body_metadata, body) = Message::from_api_data(message, tether)
             .await
-            .inspect_err(|e| error!("Failed to retreive address keys: {e}"))?;
-
-        metadata.save(&tx).await?;
-
-        body_metadata.save(&tx).await?;
-
-        // decrypt body - unfortunately we can't decrypt before the body metadata is
-        // saved to the database otherwise the attachments local ids are not available.
-        let encrypted_message = EncryptedMessageBody {
-            encrypted_body: body,
-            metadata: body_metadata,
-        };
-
-        let decrypted = encrypted_message
-            .into_decrypted_message(Arc::clone(&ctx), address_keys, pgp_provider)
-            .map_err(|_| MailContextError::Crypto)?;
-
-        let cache_key = CacheMessageKey::from(&metadata);
-
-        ctx.messages_cache()
-            .add_item(cache_key, decrypted.body.as_bytes())
             .inspect_err(|e| {
-                error!("Failed to store message body in cache: {e}");
+                error!("Failed to convert message from api: {e}");
             })?;
 
+        let tx = tether.transaction().await?;
+        message.save(&tx).await.inspect_err(|e| {
+            error!("Failed to save message metadata: {e}");
+        })?;
+
+        body_metadata.save(&tx).await.inspect_err(|e| {
+            error!("Failed to save message body metadata: {e}");
+        })?;
         tx.commit().await?;
 
-        Ok((metadata, decrypted.metadata, decrypted.body))
+        Ok((
+            message,
+            EncryptedMessageBody {
+                encrypted_body: body,
+                metadata: body_metadata,
+            },
+        ))
+    }
+
+    /// Decrypt an `encrypted_message_body` with a given `address_id` keys.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the decryption or loading addresses fails.
+    async fn decrypt_message_body(
+        ctx: Arc<MailUserContext>,
+        address_id: &AddressId,
+        encrypted_message_body: EncryptedMessageBody,
+        tether: &Tether,
+    ) -> Result<DecryptedMessageBody, MailContextError> {
+        let pgp_provider = proton_crypto::new_pgp_provider();
+
+        let address_keys = ctx
+            .unlocked_address_keys(&pgp_provider, tether, address_id)
+            .await?;
+        encrypted_message_body
+            .into_decrypted_message(ctx, address_keys, pgp_provider)
+            .map_err(|e| {
+                error!("Failed to decrypt message body: {e}");
+                MailContextError::Crypto
+            })
+    }
+
+    /// Store decrypted message body for message with `local_id` into cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the db query or cache load fails.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, decrypted_message_body))]
+    pub(crate) fn store_decrypted_message_body(
+        ctx: &MailUserContext,
+        local_id: LocalMessageId,
+        decrypted_message_body: &DecryptedMessageBody,
+    ) -> Result<PathBuf, MailContextError> {
+        let storable_message =
+            StorableMessageBodyRef::from_decrypted_message_body(decrypted_message_body);
+        Self::store_raw_message_in_cache(ctx, local_id, storable_message)
+    }
+
+    /// Store raw data for message with `local_id` into cache.
+    ///
+    /// It's recommend the data be constructed from a [`DecryptedMessageBody`].
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the db query or cache load fails.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, message))]
+    pub(crate) fn store_raw_message_in_cache(
+        ctx: &MailUserContext,
+        local_id: LocalMessageId,
+        message: StorableMessageBodyRef,
+    ) -> Result<PathBuf, MailContextError> {
+        let storable_message = &message
+            .serialize()
+            .inspect_err(|e| error!("Failed to serialize decrypted message body: {e}"))?;
+
+        let cache_key = CacheMessageKey::from(local_id);
+
+        Ok(ctx
+            .messages_cache()
+            .add_item(cache_key, storable_message)
+            .inspect_err(|e| {
+                error!("Failed to store message body in cache: {e}");
+            })?)
+    }
+
+    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the db query or cache load fails.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    pub(crate) async fn load_decrypted_message_from_cache(
+        ctx: Arc<MailUserContext>,
+        local_id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
+        let cache_key = CacheMessageKey::from(local_id);
+
+        let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
+            .await
+            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+        else {
+            return Ok(None);
+        };
+
+        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
+            return Ok(None);
+        };
+
+        let message = StorableMessageBody::from_reader(reader)?;
+        Ok(Some(DecryptedMessageBody::from_storable(
+            message, metadata, ctx,
+        )))
+    }
+
+    /// Load the decrypted message body from the cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message failed to load.
+    pub(crate) fn load_decrypted_message_body_from_cache(
+        ctx: &MailUserContext,
+        local_id: LocalMessageId,
+    ) -> Result<Option<StorableMessageBody>, MailContextError> {
+        let cache_key = CacheMessageKey::from(local_id);
+
+        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
+            return Ok(None);
+        };
+
+        let message = StorableMessageBody::from_reader(reader)?;
+        Ok(Some(message))
     }
 }
 
@@ -3296,10 +3279,10 @@ impl MessageCounters {
 
     /// Returns [`MessageCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn message_count(&self, tether: &Tether) -> Result<MessageCount, AppError> {
+    pub async fn message_count(&self, tether: &Tether) -> Result<MessageLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
-        Ok(MessageCount {
+        Ok(MessageLabelsCount {
             label_id: remote_id,
             total: self.total,
             unread: self.unread,

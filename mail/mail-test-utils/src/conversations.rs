@@ -1,13 +1,13 @@
 use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_core::services::proton::response_data::{ApiErrorInfo, Label as ApiLabel};
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, Label as ApiLabel,
-    MessageMetadata, OperationResult,
+    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, MessageMetadata,
+    OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,

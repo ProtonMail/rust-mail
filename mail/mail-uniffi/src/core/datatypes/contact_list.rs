@@ -13,14 +13,14 @@ pub struct GroupedContacts {
     pub grouped_by: String,
 
     // The field represent the list of contacts or groups for the given grapheme
-    pub item: Vec<ContactItemType>,
+    pub items: Vec<ContactItemType>,
 }
 
 impl From<RealGroupedContacts> for GroupedContacts {
     fn from(value: RealGroupedContacts) -> Self {
         Self {
             grouped_by: value.grouped_by,
-            item: value.item.into_iter().map(Into::into).collect(),
+            items: value.items.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -82,14 +82,14 @@ pub struct ContactGroupItem {
     pub avatar_color: String,
 
     /// The field represent the list of emails of the contact group
-    pub emails: Vec<ContactEmailItem>,
+    pub contacts: Vec<ContactItem>,
 }
 
 impl From<RealContactGroupItem> for ContactGroupItem {
     fn from(value: RealContactGroupItem) -> Self {
         Self {
             id: value.local_id.into(),
-            emails: value.emails.into_iter().map(Into::into).collect(),
+            contacts: value.contacts.into_iter().map(Into::into).collect(),
             avatar_color: value.avatar_color,
             name: value.name,
         }
@@ -104,6 +104,12 @@ pub struct ContactEmailItem {
 
     /// The field represent the email of the contact
     pub email: String,
+
+    /// The field represent if the email is a proton email
+    pub is_proton: bool,
+
+    /// The field represent the last used time of the email
+    pub last_used_time: u64,
 }
 
 impl From<RealContactEmailItem> for ContactEmailItem {
@@ -111,6 +117,8 @@ impl From<RealContactEmailItem> for ContactEmailItem {
         Self {
             id: value.local_id.into(),
             email: value.email,
+            is_proton: value.is_proton,
+            last_used_time: value.last_used_time,
         }
     }
 }

@@ -1,11 +1,9 @@
-use futures::executor::block_on;
 use stash::stash::{Bond, StashError};
 
 #[allow(clippy::too_many_lines)]
-pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
-    block_on(async {
-        tx.execute(
-            r"
+pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
+    tx.execute(
+        r"
             CREATE TABLE contacts (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE,
@@ -18,18 +16,18 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                 label_ids TEXT NOT NULL
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"CREATE UNIQUE INDEX index_contact_remote_id ON contacts (remote_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        r"CREATE UNIQUE INDEX index_contact_remote_id ON contacts (remote_id)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"
+    tx.execute(
+        r"
             CREATE TABLE contact_emails (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE,
@@ -56,30 +54,30 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                     ON DELETE CASCADE
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"CREATE INDEX index_contact_emails_email ON contact_emails (email)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        r"CREATE INDEX index_contact_emails_email ON contact_emails (email)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"CREATE INDEX index_contact_emails_contact_local_id ON contact_emails (local_contact_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        r"CREATE INDEX index_contact_emails_contact_local_id ON contact_emails (local_contact_id)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
+    tx.execute(
             r"CREATE INDEX index_contact_emails_contact_remote_id ON contact_emails (remote_contact_id)",
             vec![],
         )
         .await?;
 
-        tx.execute(
-            r"
+    tx.execute(
+        r"
             CREATE TABLE contact_cards (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 local_contact_id INTEGER NOT NULL,
@@ -99,24 +97,24 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                    ON DELETE CASCADE
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"CREATE INDEX index_contact_cards_local_id ON contact_cards (local_contact_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        r"CREATE INDEX index_contact_cards_local_id ON contact_cards (local_contact_id)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"CREATE INDEX index_contact_cards_remote_id ON contact_cards (remote_contact_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        r"CREATE INDEX index_contact_cards_remote_id ON contact_cards (remote_contact_id)",
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"
+    tx.execute(
+        r"
             CREATE TABLE contact_email_labels (
                 contact_emails_id INTEGER NOT NULL,
                 value TEXT NOT NULL,
@@ -129,16 +127,15 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                     ON DELETE CASCADE
             )
         ",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
+    tx.execute(
         r"CREATE INDEX index_contact_email_label_id ON contact_email_labels (contact_emails_id)",
         vec![],
     )
     .await?;
 
-        Ok(())
-    })
+    Ok(())
 }

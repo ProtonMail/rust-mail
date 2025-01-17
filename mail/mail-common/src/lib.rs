@@ -18,13 +18,14 @@ mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
 pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
+use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::{
     cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
 };
 
 // re-exports
-use crate::datatypes::{LabelType, LocalAttachmentId, LocalMessageId};
+use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 pub use proton_api_mail;
@@ -46,13 +47,6 @@ use thiserror::Error;
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
 
-pub const ALL_LABEL_TYPES: [LabelType; 4] = [
-    LabelType::Label,
-    LabelType::ContactGroup,
-    LabelType::Folder,
-    LabelType::System,
-];
-
 #[macro_export]
 macro_rules! find_in_query {
     ($query:expr, $params:expr) => {{
@@ -61,7 +55,7 @@ macro_rules! find_in_query {
             .into_iter()
             .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
             .collect::<Vec<_>>();
-        let query = format!($query, vec!["?"; params.len()].join(","),);
+        let query = format!($query, ::stash::utils::placeholders(params.len()),);
         (query, params)
     }};
 }
@@ -138,6 +132,8 @@ pub enum AppError {
     Stash(#[from] StashError),
     #[error("Could not load user info")]
     UserNotFound,
+    #[error("Label error: {0}")]
+    Label(#[from] LabelError),
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

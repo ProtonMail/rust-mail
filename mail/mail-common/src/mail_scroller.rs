@@ -13,7 +13,7 @@ use proton_api_mail::services::proton::prelude::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Bond, StashError, Tether, WatcherHandle};
 use std::collections::BTreeSet;

@@ -11,9 +11,9 @@ use crate::actions::{
     GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
-    AttachmentMetadata, ConversationCount, CustomLabel, Disposition, ExclusiveLocation, LabelType,
-    LocalMessageId, MessageAttachmentInfos, MessageRecipients, MessageSenders, ReadFilter,
-    SystemLabel, SystemLabelId,
+    AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
+    LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
+    ReadFilter, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -35,8 +35,8 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
@@ -1402,7 +1402,7 @@ impl Conversation {
     ///
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
-    ) -> Result<Vec<ConversationCount>, ApiServiceError> {
+    ) -> Result<Vec<ConversationLabelsCount>, ApiServiceError> {
         api.get_conversations_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
@@ -1517,7 +1517,7 @@ impl Conversation {
         let labels = Label::find(
             format!(
                 "WHERE local_id IN ({}) ORDER BY display_order ASC",
-                vec!["?"; ids.len()].join(",")
+                stash::utils::placeholders(ids.len()),
             ),
             ids,
             tehter,
@@ -1580,7 +1580,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND remote_label_id NOT IN ({})
                 ",
-                    vec!["?"; self.labels.len()].join(",")
+                    stash::utils::placeholders(self.labels.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1612,7 +1612,7 @@ impl Conversation {
                 // If attachment record already exists, the conversation ids are updated.
                 // If no record exists we create a new one.
                 let mut result = Vec::with_capacity(self.attachments_metadata.len());
-                for metadata in &self.attachments_metadata {
+                for metadata in &mut self.attachments_metadata {
                     let mut attachment = Attachment::find_first(
                         "WHERE remote_id = ?",
                         params![metadata.remote_id.clone()],
@@ -1624,8 +1624,8 @@ impl Conversation {
                     attachment.local_conversation_id = self.local_id;
                     attachment.remote_conversation_id = self.remote_id.clone();
                     attachment.save(bond).await?;
-
                     let local_id = attachment.local_id.expect("Should be set");
+                    metadata.local_id = Some(local_id);
 
                     bond.execute(
                         "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
@@ -1649,7 +1649,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                    vec!["?"; local_ids.len()].join(",")
+                    stash::utils::placeholders(local_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1996,7 +1996,7 @@ impl Conversation {
                 let num_unread = Message::find(
                     format!(
                         "WHERE local_id IN ({})",
-                        vec!["?"; message_ids.len()].join(",")
+                        stash::utils::placeholders(message_ids.len()),
                     ),
                     message_ids
                         .iter()
@@ -2101,22 +2101,25 @@ impl Conversation {
         api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), AppError> {
-        let mut missing_labels = vec![];
+        let mut missing_labels_ids = vec![];
         for conv in conversations {
             for label in &conv.labels {
                 let rid = label.id.clone();
                 if (Label::find_by_remote_id(rid, tether)).await?.is_none() {
-                    missing_labels.push(label.id.clone());
+                    missing_labels_ids.push(label.id.clone());
                 }
             }
         }
 
-        if !missing_labels.is_empty() {
+        if !missing_labels_ids.is_empty() {
             info!(
                 "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
+                missing_labels_ids.len()
             );
-            Label::sync_labels_by_ids(api, tether, missing_labels).await?;
+            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
+            let tx = tether.transaction().await?;
+            Label::sync_labels(&tx, missing_labels).await?;
+            tx.commit().await?;
         }
         Ok(())
     }
@@ -2188,8 +2191,9 @@ impl Conversation {
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
-        Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
-        Label::create_or_update_message_counts(message_counts, &tx).await?;
+        ConversationLabelsCount::create_or_update_conversation_counts(conversation_counts, &tx)
+            .await?;
+        MessageLabelsCount::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -3381,10 +3385,14 @@ impl ConversationMessageLabelStats {
             .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
-        let messages = Message::find(format!(indoc! {"
+        let query = format!(
+            indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
+            "},
+            stash::utils::placeholders(message_ids.len())
+        );
+        let messages = Message::find(query, params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3407,10 +3415,14 @@ impl ConversationMessageLabelStats {
             .chain(message_ids.iter().map(|id| id.as_u64()))
             .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
             .collect();
-        let messages = Message::find(format!(indoc! {"
+        let query = format!(
+            indoc! {"
                 JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
                 WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
-            "}, vec!["?"; message_ids.len()].join(",")), params, tether).await?;
+            "},
+            stash::utils::placeholders(message_ids.len())
+        );
+        let messages = Message::find(query, params, tether).await?;
 
         if messages.is_empty() {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
@@ -3768,10 +3780,13 @@ impl ConversationCounters {
 
     /// Returns [`ConversationCounts`] datastructure that contains label's Remote ID
     /// instead of the Local ID.
-    pub async fn conversation_count(&self, tether: &Tether) -> Result<ConversationCount, AppError> {
+    pub async fn conversation_count(
+        &self,
+        tether: &Tether,
+    ) -> Result<ConversationLabelsCount, AppError> {
         let remote_id = Label::resolve_remote_label_id(self.local_label_id, tether).await?;
 
-        Ok(ConversationCount {
+        Ok(ConversationLabelsCount {
             label_id: remote_id,
             total: self.total,
             unread: self.unread,

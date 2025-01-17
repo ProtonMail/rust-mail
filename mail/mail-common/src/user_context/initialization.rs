@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::models::{Conversation, Label, MailSettings};
+use crate::models::{Conversation, ConversationCounters, MailSettings, MessageCounters};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_core::session::CoreSession;
-use proton_core_common::models::{Address, Contact, User};
+use proton_core_common::models::{Address, Contact, Label, LabelError, User};
 use tracing::{debug, error, Level};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -68,7 +68,19 @@ impl MailUserContext {
         let ctx_clone = ctx.clone();
         let labels_handle = tokio::spawn(async move {
             debug!("Syncing labels");
-            Label::sync_labels(ctx_clone.session().api(), ctx_clone.user_stash()).await
+            let labels = Label::all_labels(ctx_clone.session().api()).await?;
+            let mut tether = ctx_clone.user_stash().connection();
+            let tx = tether.transaction().await?;
+            let label_ids = Label::sync_labels(&tx, labels).await?;
+
+            for local_id in label_ids {
+                ConversationCounters::new(local_id).save(&tx).await?;
+                MessageCounters::new(local_id).save(&tx).await?;
+            }
+
+            tx.commit().await?;
+
+            Result::<(), LabelError>::Ok(())
         });
         let ctx_clone = ctx.clone();
         let contacts_handle = tokio::spawn(async move {

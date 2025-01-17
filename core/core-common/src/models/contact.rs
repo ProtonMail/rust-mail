@@ -1,9 +1,12 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::iter;
+use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{GroupedContacts, Labels, LocalContactId};
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
+use futures::future::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
@@ -20,6 +23,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use tokio::task::JoinSet;
 use tracing::{debug, error};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -204,106 +208,131 @@ impl Contact {
     ///
     /// Errors when the API request fails or when the database query fails.
     ///
+    #[tracing::instrument(skip(api, stash))]
     #[allow(clippy::too_many_lines)]
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        macro_rules! request_pages {
-            ($api: expr, $type: tt, $field: tt, $api_rq:tt, $options_type: tt) => {{
-                let mut retval = vec![];
-                let mut page_index = 0;
-                debug!("Syncing partial {}", stringify!($field));
-                loop {
-                    let response = $api
-                        .$api_rq($options_type {
-                            page: page_index,
-                            page_size: SYNC_CONTACT_PAGE_SIZE,
-                            ..Default::default()
-                        })
-                        .await
-                        .map_err(|err| {
-                            error!(
-                                "Failed to sync {} for page {page_index}: {err}",
-                                stringify!($field)
-                            );
+        // In order to maximize throughput we do as follows:
+        // 1. We download the first batch
+        // 2. We calculate how many batches are left and request them all in parallel.
+        // 3. When all of the batches arrive we store them in the database efficiently. This is, without
+        //    going through the on_save method and calling `[Model::save]` diretly which performs too many
+        //    queries. Previously nlogn, now n.
+        //    This is fine because
+        //    * We empty the database beforehand
+        //    * We don't update any record
+        //    * We manually map the ContactId from the contact to the ContactEmail.
 
-                            err
-                        })?;
+        let t0 = Instant::now();
+        let (first_contacts, first_emails) = try_join(
+            api.get_contacts(GetContactsOptions {
+                page: 0,
+                page_size: SYNC_CONTACT_PAGE_SIZE,
+                ..Default::default()
+            }),
+            api.get_contacts_emails(GetContactsEmailsOptions {
+                page: 0,
+                page_size: SYNC_CONTACT_PAGE_SIZE,
+                ..Default::default()
+            }),
+        )
+        .await?;
+        debug!("Requested initial batch in {:?}", t0.elapsed());
 
-                    let is_last_request = response.$field.len() < SYNC_CONTACT_PAGE_SIZE;
+        let mut contacts_joinset = JoinSet::new();
+        let mut emails_joinset = JoinSet::new();
 
-                    debug!(
-                        "Synced page {} of partial {}, {} {} fetched",
-                        page_index,
-                        stringify!($field),
-                        response.$field.len(),
-                        stringify!($field),
-                    );
-
-                    retval.extend(response.$field.into_iter().map($type::from).collect_vec());
-
-                    if is_last_request {
-                        break;
-                    }
-
-                    page_index += 1;
-                }
-
-                CoreContextResult::<Vec<$type>>::Ok(retval)
-            }};
+        let page = SYNC_CONTACT_PAGE_SIZE as u64;
+        if let Some(rem) = first_contacts.total.checked_sub(page) {
+            let rem = rem.div_ceil(page);
+            debug!("Requesting {rem} batches for contacts");
+            for page in 1..=rem {
+                let api = api.clone();
+                contacts_joinset.spawn(async move {
+                    api.get_contacts(GetContactsOptions {
+                        page,
+                        page_size: SYNC_CONTACT_PAGE_SIZE,
+                        ..Default::default()
+                    })
+                    .await
+                    .map(|x| x.contacts)
+                });
+            }
         }
 
-        let api_clone = api.clone();
-        let contacts_handle = tokio::spawn(async move {
-            request_pages!(
-                api_clone,
-                Contact,
-                contacts,
-                get_contacts,
-                GetContactsOptions
-            )
-        });
-
-        let api_clone = api.clone();
-        let contact_emails_handle = tokio::spawn(async move {
-            request_pages!(
-                api_clone,
-                ContactEmail,
-                contact_emails,
-                get_contacts_emails,
-                GetContactsEmailsOptions
-            )
-        });
-
-        #[allow(clippy::items_after_statements)]
-        fn map_err<T, E1, E2>(res: Result<Result<T, E1>, E2>) -> CoreContextResult<T>
-        where
-            E1: Into<CoreContextError>,
-            E2: Into<CoreContextError>,
-        {
-            res.map_err(Into::into).and_then(|r| r.map_err(Into::into))
+        if let Some(rem) = first_emails.total.checked_sub(page) {
+            let rem = rem.div_ceil(page);
+            debug!("Requesting {rem} batches for emails");
+            for page in 1..=rem {
+                let api = api.clone();
+                emails_joinset.spawn(async move {
+                    api.get_contacts_emails(GetContactsEmailsOptions {
+                        page,
+                        page_size: SYNC_CONTACT_PAGE_SIZE,
+                        ..Default::default()
+                    })
+                    .await
+                    .map(|x| x.contact_emails)
+                });
+            }
         }
 
-        let (contacts, contact_emails) = tokio::join!(contacts_handle, contact_emails_handle);
-        let (contacts, contact_emails) = (map_err(contacts)?, map_err(contact_emails)?);
+        let contacts = contacts_joinset.join_all().await;
+        let contacts = iter::once(Ok(first_contacts.contacts)).chain(contacts);
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
-        // Reset the database state by deleting all contacts.
+        let emails = emails_joinset.join_all().await;
+        let emails = iter::once(Ok(first_emails.contact_emails)).chain(emails);
+
+        // Let's start with a clean database
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
         tx.execute("DELETE FROM contacts", vec![]).await?;
         tx.execute("DELETE FROM contact_emails", vec![]).await?;
         tx.execute("DELETE FROM contact_cards", vec![]).await?;
         tx.execute("DELETE FROM contact_email_labels", vec![])
             .await?;
 
-        for mut contact in contacts {
-            contact.save(&tx).await?;
+        // We will use this to map the contact_emails to the contacts without having to
+        // query the db each time we instert one.
+        // We require this to happen since the contact_emails need the local id of its contact.
+        let mut id_map = HashMap::new();
+
+        let t = Instant::now();
+        for (page, contact_page) in contacts.enumerate() {
+            debug!("storing contacts page {page}");
+            for contact in contact_page? {
+                let mut contact = Contact::from(contact);
+                <Contact as Model>::save(&mut contact, &tx).await?;
+                id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
+            }
+        }
+        debug!(
+            "Stored {} contacts to the db in {:?}",
+            id_map.len(),
+            t.elapsed()
+        );
+
+        let mut count = 0;
+        let t = Instant::now();
+        for (page, email_page) in emails.enumerate() {
+            debug!("storing contact_emails page {page}");
+            for em in email_page? {
+                let Some(local_id) = id_map.get(&em.contact_id) else {
+                    error!("a contact_email has no contact");
+                    continue;
+                };
+                count += 1;
+                let mut email = ContactEmail::from(em);
+                email.local_contact_id = Some(*local_id);
+                <ContactEmail as Model>::save(&mut email, &tx).await?;
+            }
         }
 
-        for mut contact_email in contact_emails {
-            contact_email.save(&tx).await?;
-        }
-
+        debug!(
+            "Stored {count} contacts_emails to the db in {:?}",
+            t.elapsed()
+        );
         tx.commit().await?;
-
+        debug!("Synced all contacts in {:?}", t0.elapsed());
         Ok(())
     }
 

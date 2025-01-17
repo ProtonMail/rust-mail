@@ -1,7 +1,9 @@
 use crate::datatypes::{LabelColor, ViewMode};
-use crate::models::{ConversationCounters, Label, MailSettings, MessageCounters, MAIL_SETTINGS_ID};
+use crate::models::{
+    ConversationCounters, MailLabel, MailSettings, MessageCounters, MAIL_SETTINGS_ID,
+};
 use crate::AppError;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use stash::orm::Model;
 use stash::stash::Tether;
 

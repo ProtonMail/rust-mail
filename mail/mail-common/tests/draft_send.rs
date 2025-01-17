@@ -12,6 +12,7 @@ use proton_api_mail::services::proton::request_data::{
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
+use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
@@ -21,8 +22,12 @@ use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
-use proton_mail_common::models::{MailSettings, Message, MessageBodyMetadata};
-use proton_mail_common::{draft, MailContextError};
+use proton_mail_common::models::{
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
+    MessageBodyMetadata,
+};
+use proton_mail_common::{draft, MailContextError, MailUserContext};
+use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -148,6 +153,15 @@ async fn basic_send_check() {
         .await
         .unwrap();
 
+    // Check draft is in outbox.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert!(draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
     let tether = user_ctx.user_stash().connection();
@@ -155,6 +169,11 @@ async fn basic_send_check() {
         .await
         .unwrap()
         .expect("failed to load message");
+
+    // Check message is in the sent folder
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::sent()));
 
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
     assert!(draft_message.flags.contains(MessageFlags::SENT.into()));
@@ -167,11 +186,24 @@ async fn basic_send_check() {
         .unwrap()
         .unwrap();
     assert_eq!(body_metadata.header, sent_message.body.header);
+
+    // Check send result was created.
+
+    let send_result = DraftSendResult::find_by_id(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(send_result.is_success());
+    assert_eq!(
+        send_result.remote_message_id,
+        Some(draft_message.remote_id.unwrap())
+    );
+    assert!(!send_result.seen);
 }
 
 #[tokio::test]
 async fn send_fails_if_recipient_is_not_valid() {
-    let err =
+    let (err, _, _) =
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
 
     let err = err
@@ -187,7 +219,7 @@ async fn send_fails_if_recipient_is_not_valid() {
 
 #[tokio::test]
 async fn send_fails_if_recipient_is_not_a_known_proton_address() {
-    let err =
+    let (err, _, _) =
         send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetAddressMissing as u32).await;
 
     let err = err
@@ -201,17 +233,112 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
     ));
 }
 
-async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> Arc<anyhow::Error> {
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to sent folder
+#[tokio::test]
+async fn send_fail_recorded_to_db() {
+    let (_, local_id, ctx) =
+        send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
+
+    let send_result = DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!send_result.is_success());
+    assert!(!send_result.seen);
+    assert!(matches! { send_result.error, Some(DraftSendFailure::RecipientEmailInvalid(_))});
+    assert_eq!(send_result.origin, DraftSendResultOrigin::Send);
+}
+
+#[tokio::test]
+async fn send_fail_puts_message_back_in_drafts() {
+    let (_, local_id, ctx) =
+        send_fails_if_recipient_is_not_valid_impl(CoreBundle::KeyGetInputInvalid as u32).await;
+
+    let send_result = DraftSendResult::find_by_id(local_id, &ctx.user_stash().connection())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let draft_message =
+        Message::find_by_id(send_result.local_message_id, &ctx.user_stash().connection())
+            .await
+            .unwrap()
+            .unwrap();
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::sent()));
+}
+
+#[tokio::test]
+async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_before_send() {
+    // Create a new draft, save once to create, save again to trigger
+    // update on server.
+
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
     )
     .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft_failure(
+        expected_draft_params,
+        DraftAction::Reply,
+        None,
+        DraftAttachmentKeyPackets::new(),
+        CoreBundle::AppVersionInvalid as u32,
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".to_owned(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    user_ctx
+        .with_queue(|queue| draft.send(queue))
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap_err();
+    let tether = user_ctx.user_stash().connection();
+
+    let send_result =
+        DraftSendResult::find_by_id(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    assert!(!send_result.is_success());
+    assert_eq!(send_result.origin, DraftSendResultOrigin::SaveBeforeSend);
+}
+
+async fn send_fails_if_recipient_is_not_valid_impl(
+    api_error_code: u32,
+) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    // Check :
+    // * Draft is saved before sent
+    // * Send API endpoint is updated
+    // * Draft is moved to sent folder
+    // Set up a user and initialise the inbox
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
@@ -275,7 +402,15 @@ async fn send_fails_if_recipient_is_not_valid_impl(api_error_code: u32) -> Arc<a
         panic!("invalid error");
     };
 
-    err
+    (
+        err,
+        draft
+            .message_id(&user_ctx.user_stash().connection())
+            .await
+            .unwrap()
+            .unwrap(),
+        user_ctx,
+    )
 }
 
 fn draft_test_params() -> TestParams {

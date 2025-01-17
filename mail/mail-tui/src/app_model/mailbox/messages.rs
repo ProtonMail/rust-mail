@@ -16,13 +16,14 @@ use crate::widgets::{
 use anyhow::{anyhow, Context};
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
-use proton_mail_common::models::{Label, MailSettings, Message as MailMessage, MessageScrollData};
+use proton_mail_common::models::{MailSettings, Message as MailMessage, MessageScrollData};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;

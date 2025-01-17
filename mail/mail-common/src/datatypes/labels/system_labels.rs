@@ -1,8 +1,8 @@
 use crate::datatypes::labels::messages_counts;
 use crate::datatypes::LabelDescription;
-use crate::models::Label;
 use crate::AppError;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::Label;
 use stash::stash::Tether;
 
 /// Representation of a `Label` defined by the system

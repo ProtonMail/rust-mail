@@ -1,10 +1,11 @@
 use crate::datatypes::RollbackItemType;
-use crate::models::{Label, RollbackItem};
+use crate::models::RollbackItem;
 use crate::{actions::ActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash};
@@ -113,7 +114,7 @@ impl proton_action_queue::action::Handler for Handler {
         self.apply_local(ctx, action, tx).await?;
 
         if let Some(remote_id) = action.remote_id.clone() {
-            RollbackItem::new(remote_id.as_ref().to_owned(), RollbackItemType::Label)
+            RollbackItem::new(remote_id.to_string(), RollbackItemType::Label)
                 .save(tx)
                 .await?;
         }

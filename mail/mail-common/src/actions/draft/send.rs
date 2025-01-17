@@ -1,19 +1,21 @@
-use crate::actions::draft::{load_message_body, local_draft_label_id};
+use crate::actions::draft::{local_draft_label_id, local_outbox_label_id, local_sent_label_id};
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
 };
 use crate::draft::{Error, ReplyMode};
 use crate::models::{
-    Conversation, DraftMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Conversation, DraftMetadata, DraftSendFailure, DraftSendResult, DraftSendResultOrigin,
+    MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::{Bond, Stash, StashError};
 use tracing::error;
 
 #[derive(Serialize, Deserialize)]
@@ -35,8 +37,8 @@ impl Action for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = SendHandler;
-    type RemoteOutput = ();
+    type Handler = WrappedSendHandler;
+    type RemoteOutput = MessageId;
     type LocalOutput = ();
     type Error = MailContextError;
     type Context = MailUserContext;
@@ -56,7 +58,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_label_id = local_draft_label_id(tx).await?;
-        let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
+        let local_outbox_label_id = local_outbox_label_id(tx).await?;
 
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
@@ -86,14 +88,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             error!("Failed to update message sent flag: {e}");
         })?;
 
-        Message::move_messages(
-            local_draft_label_id,
-            local_sent_label_id,
-            vec![local_message_id],
-            tx,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to move draft into sent folder: {e}"))?;
+        Message::remove_label(local_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+        Message::apply_label(local_outbox_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply outbox label: {e}"))?;
 
         action.local_message_id = Some(local_message_id);
 
@@ -108,7 +108,7 @@ impl proton_action_queue::action::Handler for SendHandler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
-        let local_sent_label_id = crate::actions::draft::local_sent_label_id(tx).await?;
+        let local_outbox_label_id = local_outbox_label_id(tx).await?;
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
@@ -123,14 +123,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             error!("Failed to update message sent flag (revert): {e}");
         })?;
 
-        Message::move_messages(
-            local_sent_label_id,
-            local_draft_label_id,
-            vec![local_message_id],
-            tx,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to move draft from sent folder: {e}"))?;
+        Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+        Message::apply_label(local_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
 
         Ok(())
     }
@@ -143,6 +141,9 @@ impl proton_action_queue::action::Handler for SendHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
         let mut tether = stash.connection();
+        let local_outbox_label_id = local_outbox_label_id(&tether).await?;
+        let local_sent_label_id = local_sent_label_id(&tether).await?;
+
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, &tether)
             .await
             .inspect_err(|e| {
@@ -179,7 +180,13 @@ impl proton_action_queue::action::Handler for SendHandler {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let stored_message_body = load_message_body(context, &message_metadata)?;
+        let Some(stored_message_body) = Message::load_decrypted_message_body_from_cache(
+            context,
+            message_metadata.local_id.unwrap(),
+        )?
+        else {
+            return Err(AppError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
+        };
 
         // Get recipient emails.
         let recipient_emails = load_all_recipients(&message_metadata);
@@ -283,12 +290,91 @@ impl proton_action_queue::action::Handler for SendHandler {
             };
         }
 
+        // Move message to sent folder
+        Message::remove_label(local_outbox_label_id, [local_message_id], &tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+        Message::apply_label(local_sent_label_id, [local_message_id], &tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply sent label: {e}"))?;
+
         // Delete draft metadata
         DraftMetadata::delete(action.metadata_id, &tx)
             .await
             .inspect_err(|e| error!("Failed to delete draft metadata after send: {e}"))?;
 
         tx.commit().await?;
-        Ok(())
+        Ok(metadata.remote_id.expect("This is valid"))
     }
+}
+
+/// Wraps the execution of the default draft [`SendHandler`] to record
+/// remote execution failure.
+#[derive(Default)]
+pub struct WrappedSendHandler(SendHandler);
+
+impl proton_action_queue::action::Handler for WrappedSendHandler {
+    type Action = <SendHandler as proton_action_queue::action::Handler>::Action;
+    type Context = <SendHandler as proton_action_queue::action::Handler>::Context;
+    async fn apply_local(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        self.0.apply_local(context, action, tx).await
+    }
+
+    async fn revert_local(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        self.0.revert_local(context, action, tx).await
+    }
+
+    async fn apply_remote(
+        &self,
+        context: &Self::Context,
+        action: &mut Self::Action,
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let r = self.0.apply_remote(context, action, stash).await;
+        if let Err(e) = save_send_status(action, stash, &r).await {
+            error!("Failed to save draft send result: {e}");
+        }
+        r
+    }
+}
+
+// Simple wrapper function to catch errors
+async fn save_send_status(
+    action: &Send,
+    stash: &Stash,
+    status: &Result<<Send as Action>::RemoteOutput, MailContextError>,
+) -> Result<(), StashError> {
+    let mut send_result = match status {
+        Ok(output) => DraftSendResult::success(
+            action.local_message_id.expect("Should be set"),
+            output.clone(),
+        ),
+        Err(error) => {
+            let error = DraftSendFailure::from_mail_context_error(error);
+            if error.is_skippable() {
+                return Ok(());
+            } else {
+                DraftSendResult::failure(
+                    action.local_message_id.expect("Should be set by now"),
+                    DraftSendResultOrigin::Send,
+                    error,
+                )
+            }
+        }
+    };
+
+    let mut conn = stash.connection();
+    let tx = conn.transaction().await?;
+    send_result.save(&tx).await?;
+    tx.commit().await
 }

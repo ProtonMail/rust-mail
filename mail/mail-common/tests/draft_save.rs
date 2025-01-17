@@ -1,5 +1,7 @@
 use itertools::Itertools;
+use proton_api_core::consts::{CoreBundle, Mail};
 use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
+use proton_api_core::services::proton::prelude::ApiErrorInfo;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -22,8 +24,11 @@ use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
-use proton_mail_common::draft::{Draft, Error, ReplyMode};
-use proton_mail_common::models::{Attachment, Conversation, DraftMetadata, MailSettings, Message};
+use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, ReplyMode};
+use proton_mail_common::models::{
+    Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    Message,
+};
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
@@ -260,7 +265,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening the draft and check if all the information is up to date
-    let draft = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    let (draft, _) = Draft::open(user_ctx, draft_message_id).await.unwrap();
     assert_eq!(draft.body, new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
@@ -398,7 +403,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     );
 
     // Create draft.
-    let draft = Draft::open(user_ctx.clone(), message.local_id.unwrap())
+    let (draft, _) = Draft::open(user_ctx.clone(), message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -410,7 +415,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     drop(draft);
 
     // Opening this draft again should not create new metadata;
-    let draft = Draft::open(user_ctx, message.local_id.unwrap())
+    let (draft, _) = Draft::open(user_ctx, message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -437,6 +442,57 @@ async fn create_draft_reply_inherits_only_inline_attachments() {
     let attachment = draft_body.metadata.attachments.first().unwrap();
     let inline_attachment = gen_inline_attachment();
     compare_inline_attachment(attachment, inline_attachment);
+}
+
+#[tokio::test]
+async fn draft_save_failure_creates_send_result_with_correct_origin() {
+    // Create a new draft, save once to create, save again to trigger
+    // update on server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft_failure(
+        expected_draft_params,
+        DraftAction::Reply,
+        None,
+        DraftAttachmentKeyPackets::new(),
+        CoreBundle::AppVersionInvalid as u32,
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap_err();
+    let tether = user_ctx.user_stash().connection();
+
+    let send_result =
+        DraftSendResult::find_by_id(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    assert!(!send_result.is_success());
+    assert_eq!(send_result.origin, DraftSendResultOrigin::Save);
 }
 
 #[tokio::test]
@@ -619,6 +675,119 @@ async fn create_draft_reply_impl(
     Draft::open(user_ctx, draft_message_id).await.unwrap();
 
     draft_body
+}
+
+#[tokio::test]
+async fn open_draft_sync_status_success() {
+    // Check that open draft successfully reports synced status when synced from server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        DraftAction::Reply,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft should work;
+    let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
+}
+
+#[tokio::test]
+async fn open_draft_sync_status_cached() {
+    // Check that open draft reports cached status when we can't sync from server due to
+    // network failure.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        DraftAction::Reply,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Draft open always loads message from remote.
+    ctx.mock_get_message_failure(
+        &message.metadata.id,
+        500,
+        ApiErrorInfo {
+            code: Mail::MessageUpdateDraftNotExist as u32,
+            error: None,
+            details: None,
+        },
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft should work;
+    let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Cached);
 }
 
 fn draft_test_params() -> TestParams {

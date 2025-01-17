@@ -3,7 +3,9 @@ mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::{LocalAttachmentId, ViewMode};
-use crate::models::{Conversation, ConversationCounters, Label, Message, MessageCounters};
+use crate::models::{
+    Conversation, ConversationCounters, MailLabel, MailboxLabels, Message, MessageCounters,
+};
 use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
@@ -12,7 +14,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};
@@ -141,71 +143,60 @@ impl Mailbox {
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let ctx = self.user_ctx.clone();
         let mut tether = ctx.user_stash().connection();
-        let Some(mut label) = Label::load(self.label_id, &tether).await? else {
+        let Some(label) = Label::load(self.label_id, &tether).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 
-        if let Some(remote_id) = label.remote_id.clone() {
-            debug!("Syncing {}({})", self.label_id, &remote_id);
+        let Some(remote_id) = label.remote_id.clone() else {
+            return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
+        };
 
-            let initialized = match self.view_mode {
-                ViewMode::Conversations => label.initialized_conv,
-                ViewMode::Messages => label.initialized_msg,
-            };
-            if initialized {
-                debug!("Label {} already initialized, skipping", self.label_id);
-                return Ok(());
-            }
-            debug!(
-                "Label {} not initialized, fetching (mode={:?})",
-                self.label_id, self.view_mode
-            );
+        debug!("Syncing {}({})", self.label_id, &remote_id);
 
-            match self.view_mode {
-                ViewMode::Conversations => Conversation::sync_first_conversation_page(
-                    remote_id,
-                    count,
-                    ctx.session().api(),
-                    &mut tether,
-                )
-                .await
-                .map_err(|e| {
-                    error!("Failed to sync conversations for label: {e}");
-                    e
-                }),
-                ViewMode::Messages => Message::sync_first_message_page(
-                    remote_id,
-                    count,
-                    ctx.session().api(),
-                    &mut tether,
-                )
-                .await
-                .map_err(|e| {
-                    error!("Failed to sync messages for label: {e}");
-                    e
-                }),
-            }?;
-
-            match self.view_mode {
-                ViewMode::Conversations => {
-                    label.initialized_conv = true;
-                }
-                ViewMode::Messages => {
-                    label.initialized_msg = true;
-                }
-            }
-            let tx = tether.transaction().await?;
-            label.save(&tx).await.map_err(|e| {
-                error!("Failed to mark label as initialized: {e}");
-                MailContextError::Stash(e)
-            })?;
-            tx.commit().await?;
-
-            debug!("Syncing finished");
-            Ok(())
-        } else {
-            Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))
+        let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, &tether)
+            .await?
+            .unwrap_or_else(|| MailboxLabels::new(self.label_id));
+        if mailbox_label.initialized {
+            debug!("Label {} already initialized, skipping", self.label_id);
+            return Ok(());
         }
+        debug!(
+            "Label {} not initialized, fetching (mode={:?})",
+            self.label_id, self.view_mode
+        );
+
+        match self.view_mode {
+            ViewMode::Conversations => Conversation::sync_first_conversation_page(
+                remote_id,
+                count,
+                ctx.session().api(),
+                &mut tether,
+            )
+            .await
+            .map_err(|e| {
+                error!("Failed to sync conversations for label: {e}");
+                e
+            }),
+            ViewMode::Messages => {
+                Message::sync_first_message_page(remote_id, count, ctx.session().api(), &mut tether)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to sync messages for label: {e}");
+                        e
+                    })
+            }
+        }?;
+
+        mailbox_label.initialized = true;
+        let tx = tether.transaction().await?;
+        mailbox_label.save(&tx).await.map_err(|e| {
+            error!("Failed to mark label as initialized: {e}");
+            MailContextError::Stash(e)
+        })?;
+        tx.commit().await?;
+
+        debug!("Syncing finished");
+        Ok(())
     }
 
     /// The mailbox's current view mode.

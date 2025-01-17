@@ -1,10 +1,8 @@
-use futures::executor::block_on;
 use stash::stash::{Bond, StashError};
 
-pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
-    block_on(async {
-        tx.execute(
-            r"
+pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
+    tx.execute(
+        r"
         CREATE TABLE users (
             remote_id TEXT PRIMARY KEY,
             name TEXT,
@@ -33,12 +31,12 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
             keys TEXT,
             product_used_space TEXT
         )",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            r"
+    tx.execute(
+        r"
         CREATE TABLE user_keys (
             user_id TEXT NOT NULL,
             key_id TEXT PRIMARY KEY NOT NULL,
@@ -53,16 +51,15 @@ pub fn create_tables(tx: &Bond) -> Result<(), StashError> {
                 FOREIGN KEY (user_id)
                 REFERENCES users (remote_id)
         )",
-            vec![],
-        )
-        .await?;
+        vec![],
+    )
+    .await?;
 
-        tx.execute(
-            "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
-            vec![],
-        )
-        .await?;
+    tx.execute(
+        "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
+        vec![],
+    )
+    .await?;
 
-        Ok(())
-    })
+    Ok(())
 }

@@ -10,13 +10,17 @@ use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyModifiers};
-use flume::{Receiver, Sender};
+use flume::Sender;
 use futures::FutureExt;
 
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
-use proton_mail_common::models::{ConversationCounters, Label, MailSettings, MessageCounters};
+use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::models::{
+    ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    MessageCounters,
+};
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
@@ -28,7 +32,8 @@ use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
-use tracing::error;
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error};
 
 enum State {
     Syncing(ThrobberState),
@@ -63,7 +68,7 @@ pub struct Model {
     msg_counters: MessageCounters,
     label_watcher: Option<WatchHandle>,
     state: State,
-    cancel_token: Option<Sender<()>>,
+    cancel_token: CancellationToken,
     composer: Option<Composer>,
 }
 
@@ -89,21 +94,15 @@ impl Model {
             label,
             conv_counters,
             msg_counters,
-            cancel_token: None,
+            cancel_token: CancellationToken::new(),
             label_watcher: None,
             composer: None,
         })
     }
 
-    fn init_background_worker(&mut self) -> Command<Messages> {
-        if self.cancel_token.is_some() {
-            return Command::none();
-        }
-
+    fn create_background_worker(&mut self) -> Command<Messages> {
         let ctx = self.ctx.clone();
-        let (sender, receiver) = flume::bounded(0);
-        self.cancel_token = Some(sender);
-        background_worker(ctx, receiver)
+        background_worker(ctx, self.cancel_token.clone())
     }
 
     #[must_use]
@@ -111,7 +110,7 @@ impl Model {
         self.state = State::new_syncing();
         // Create the background worker.
         Command::batch([
-            self.init_background_worker(),
+            self.create_background_worker(),
             Command::task(async {
                 let tether = mbox.user_context().user_stash().connection();
                 let label = match Label::find_by_id(mbox.label_id(), &tether).await {
@@ -288,7 +287,15 @@ impl Model {
 
 impl AppStateHandler for Model {
     fn on_state_enter(&mut self) -> Command<Messages> {
-        Command::message(Message::Sync(self.mailbox.clone()).into())
+        let ctx = self.mailbox.user_context();
+        let cancel_token = self.cancel_token.clone();
+        Command::batch([
+            self.create_background_worker(),
+            Command::message(Message::Sync(self.mailbox.clone()).into()),
+            Command::background_task(move |sender| {
+                observe_draft_action_errors(ctx, cancel_token, sender).boxed()
+            }),
+        ])
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if let Some(composer) = &mut self.composer {
@@ -485,13 +492,16 @@ impl From<Model> for AppState {
     }
 }
 
-fn background_worker(context: Arc<MailUserContext>, reader: Receiver<()>) -> Command<Messages> {
+fn background_worker(
+    context: Arc<MailUserContext>,
+    cancel_token: CancellationToken,
+) -> Command<Messages> {
     Command::background_task(|sender| {
         async move {
             let mut interval = tokio::time::interval(Duration::from_secs(15));
             loop {
                 tokio::select! {
-                _ = reader.recv_async() => {
+                () = cancel_token.cancelled() => {
                     return;
                 }
                 _ = interval.tick() => {
@@ -528,4 +538,80 @@ fn background_worker(context: Arc<MailUserContext>, reader: Receiver<()>) -> Com
         }
         .boxed()
     })
+}
+
+/// Observe and report draft save failures.
+async fn observe_draft_action_errors(
+    ctx: Arc<MailUserContext>,
+    cancellation_token: CancellationToken,
+    sender: Sender<Command<Messages>>,
+) {
+    let mut observer = match DraftSendResultWatcher::new(ctx.user_stash().clone()).await {
+        Ok(observer) => observer,
+        Err(e) => {
+            error!("Failed to create draft send result observer:{e}");
+            let _ = sender
+                .send_async(Command::message(Messages::DisplayError(
+                    Some("Draft Send Result".to_owned()),
+                    anyhow::Error::new(e),
+                )))
+                .await;
+            return;
+        }
+    };
+
+    loop {
+        tokio::select! {
+            () = cancellation_token.cancelled() => {
+                debug!(
+                    "Exiting draft save observer"
+                );
+                return;
+            }
+            r = observer.next() => {
+                match r {
+                    Ok(failures) => {
+                        handle_draft_failure(&ctx, &sender, failures).await;
+                    }
+                    Err(e) => {
+                        error!("Failed to observe: {e}");
+                        return;
+                    }
+                }
+            }
+
+        }
+    }
+}
+
+async fn handle_draft_failure(
+    ctx: &Arc<MailUserContext>,
+    sender: &Sender<Command<Messages>>,
+    results: Vec<DraftSendResult>,
+) {
+    for result in results {
+        if result.is_success() {
+            //TODO: notify of success
+            continue;
+        }
+
+        if result.origin == DraftSendResultOrigin::Save {
+            let _ = sender
+                .send_async(Command::message(Messages::DisplayError(
+                    Some("Failed to Save Draft".to_string()),
+                    anyhow!("{:?}", result.error.unwrap_or(DraftSendFailure::Internal)),
+                )))
+                .await;
+        } else {
+            let err_command = Command::message(Messages::DisplayError(
+                Some("Failed to Send Draft".to_string()),
+                anyhow!("{:?}", result.error.unwrap_or(DraftSendFailure::Internal)),
+            ));
+
+            let open_composer_command = Composer::open(Arc::clone(ctx), result.local_message_id);
+            let _ = sender
+                .send_async(Command::batch([err_command, open_composer_command]))
+                .await;
+        }
+    }
 }

@@ -5,11 +5,14 @@ use proton_api_mail::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::{
+    datatypes::SystemLabel,
+    models::{Label, ModelExtension, ModelIdExtension},
+};
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter, SystemLabel},
     mail_scroller::MailScroller,
-    models::{Conversation, ConversationCounters, ConversationScrollData, Label},
+    models::{Conversation, ConversationCounters, ConversationScrollData},
 };
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{

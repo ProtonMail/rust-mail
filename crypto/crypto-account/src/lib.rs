@@ -35,9 +35,11 @@ macro_rules! string_id {
             }
         }
 
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                &self.0
+        impl ::std::ops::Deref for $name {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                self.0.as_str()
             }
         }
 

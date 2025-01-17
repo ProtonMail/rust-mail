@@ -369,6 +369,40 @@ impl From<DecryptedMessageBody> for StorableMessageBody {
     }
 }
 
+/// Consists of the message's body and decrypted content.
+///
+/// Used to store PGP attachments in cache along the message body.
+///
+#[derive(Default, Serialize)]
+pub struct StorableMessageBodyRef<'r> {
+    /// The decrypted message contents.
+    pub body: &'r str,
+
+    /// Attachments that come from a multipart message.
+    pub pgp_attachments: Option<&'r [ProcessedAttachment]>,
+
+    /// The subject that comes from a multipart message.
+    // TODO: Figure this out
+    pub pgp_subject: Option<&'r str>,
+}
+
+impl<'r> StorableMessageBodyRef<'r> {
+    /// Create a new instance
+    pub(crate) fn from_decrypted_message_body(value: &'r DecryptedMessageBody) -> Self {
+        Self {
+            body: value.body.as_str(),
+            pgp_attachments: value.pgp_attachments.as_deref(),
+            pgp_subject: value.pgp_subject.as_deref(),
+        }
+    }
+
+    /// Serialize into a Vec<u8> with MessagePack format
+    ///
+    pub(crate) fn serialize(&self) -> Result<Vec<u8>, AppError> {
+        Ok(rmp_serde::encode::to_vec(self)?)
+    }
+}
+
 /// The result of transforming the message body.
 /// It will have more things in the future
 #[non_exhaustive]

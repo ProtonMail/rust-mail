@@ -1,6 +1,6 @@
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
-use proton_api_mail::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::common::LabelType;
+use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
@@ -48,7 +48,7 @@ async fn sidebar_custom_labels(labels: &[(LabelId, String, u32)], expected: &[St
 
 fn sidebar_test_params(labels: &[(LabelId, String, u32)]) -> TestParams {
     TestParams {
-        labels: hash_map! { ApiLabelType::Label: labels.iter().map(create_label).collect()},
+        labels: hash_map! { LabelType::Label: labels.iter().map(create_label).collect()},
         ..Default::default()
     }
 }

@@ -4,18 +4,18 @@ use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    Label as ApiLabel,
 };
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId};
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    Label as ApiLabel, MessageMetadata, MessageRecipient as ApiMessageRecipient,
-    MessageSender as ApiMessageSender,
+    MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
+use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
-use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
-use proton_mail_common::models::Label;
+use proton_mail_common::datatypes::SystemLabelId;
 use stash::stash::Tether;
 use std::collections::BTreeMap;
 
@@ -54,7 +54,7 @@ macro_rules! msg_id {
 #[macro_export]
 macro_rules! label {
     ($($field:tt)*) => {{
-        use proton_mail_common::models::Label;
+        use proton_core_common::models::Label;
 
         Label {
             $($field)*,
@@ -66,7 +66,7 @@ macro_rules! label {
 #[macro_export]
 macro_rules! api_label {
     ($($field:tt)*) => {{
-        use proton_api_mail::services::proton::response_data::{Label as ApiLabel};
+        use proton_api_core::services::proton::response_data::{Label as ApiLabel};
 
         ApiLabel {
             $($field)*,

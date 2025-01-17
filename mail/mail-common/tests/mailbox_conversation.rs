@@ -1,8 +1,9 @@
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::common::{LabelId, LabelType as ApiLabelType};
+use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, MessageId};
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::{
-    Label as ApiLabel, MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;

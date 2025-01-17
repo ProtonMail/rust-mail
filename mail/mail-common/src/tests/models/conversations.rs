@@ -3,10 +3,10 @@
 use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
-    attachment, ContextualConversation, ConversationCount, LabelColor, LabelType, MessageFlags,
-    MessageSender, MovableSystemFolder, SystemLabel, SystemLabelId,
+    attachment, ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
+    MovableSystemFolder, SystemLabelId,
 };
-use crate::models::{Attachment, Conversation, ConversationLabel, Label, MailSettings, Message};
+use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
@@ -16,6 +16,8 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition,
 };
+use proton_core_common::datatypes::{LabelColor, LabelType};
+use proton_core_common::models::Label;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
@@ -306,6 +308,7 @@ mod available_actions {
     use crate::actions::MovableSystemFolderAction;
     use crate::datatypes::MovableSystemFolder;
     use pretty_assertions::assert_eq;
+    use proton_core_common::datatypes::{LabelColor, LabelType};
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conv_id, conversation};
     use test_case::test_case;
@@ -585,9 +588,9 @@ mod available_actions {
 
 mod available_move_to_actions {
     use super::*;
-    use crate::datatypes::SystemLabel;
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
+    use proton_core_common::datatypes::{LabelColor, LabelType, SystemLabel};
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conv_id, conversation, label, lbl_id};
     use stash::stash::Tether;
@@ -1891,12 +1894,12 @@ async fn test_conversation_counts() {
     create_address(&mut tether).await;
     let labels = create_labels(&mut tether).await;
     let counts = vec![
-        ConversationCount {
+        ConversationLabelsCount {
             label_id: MY_LABEL_ID1.clone(),
             total: 20,
             unread: 4,
         },
-        ConversationCount {
+        ConversationLabelsCount {
             label_id: MY_LABEL_ID2.clone(),
             total: 400,
             unread: 124,
@@ -1904,7 +1907,7 @@ async fn test_conversation_counts() {
     ];
     let counts_clone = counts.clone();
     let tx = tether.transaction().await.unwrap();
-    Label::create_or_update_conversation_counts(counts_clone, &tx)
+    ConversationLabelsCount::create_or_update_conversation_counts(counts_clone, &tx)
         .await
         .expect("failed to creat counters");
     tx.commit().await.expect("failed to commit");

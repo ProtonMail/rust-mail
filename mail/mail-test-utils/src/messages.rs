@@ -27,6 +27,19 @@ use wiremock::{Mock, ResponseTemplate};
 
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
+    pub async fn mock_get_message_failure(
+        &self,
+        message_id: &MessageId,
+        http_error: u16,
+        error: ApiErrorInfo,
+    ) {
+        Mock::given(method("GET"))
+            .and(path(format!("/api/mail/v4/messages/{message_id}")))
+            .respond_with(ResponseTemplate::new(http_error).set_body_json(error))
+            .mount(self.mock_server())
+            .await;
+    }
+    /// Generate new mock expectations for message fetch request for `message_id`.
     pub async fn mock_get_message(&self, message_id: &MessageId, message: ApiMessage) {
         self.mock_get_message_with_expected(message_id, message, 1)
             .await;
@@ -285,6 +298,49 @@ impl MailTestContext {
             )))
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate a new mock expectation for a failed draft creation.
+    ///
+    /// Note that this mock does not valid the draft body.
+    ///
+    /// # Parameters
+    ///
+    /// * `params`                 - Expected draft params.
+    /// * `action`                 - Draft action (Reply, ReplyAll, Forward)
+    /// * `reply`                  - Expected server reply.
+    /// * `parent_id`              - Parent id to from which we are
+    ///                              replying/forwarding to/from
+    /// * `attachment_key_packets` - Attachment key packets for the attachment.
+    ///                              included in this request.
+    #[allow(clippy::doc_markdown)]
+    pub async fn mock_create_draft_failure(
+        &self,
+        params: DraftParams,
+        action: DraftAction,
+        parent_id: Option<MessageId>,
+        attachment_key_packets: DraftAttachmentKeyPackets,
+        error_code: u32,
+    ) {
+        let response = ApiErrorInfo {
+            code: error_code,
+            error: None,
+            details: None,
+        };
+        Mock::given(method("POST"))
+            .and(body_partial_json(TestCreateDraftRequest::from(
+                PostCreateDraftRequest {
+                    message: params,
+                    action,
+                    attachment_key_packets,
+                    parent_id,
+                },
+            )))
+            .and(path("/api/mail/v4/messages".to_string()))
+            .respond_with(ResponseTemplate::new(422).set_body_json(response))
             .expect(1)
             .mount(self.mock_server())
             .await;

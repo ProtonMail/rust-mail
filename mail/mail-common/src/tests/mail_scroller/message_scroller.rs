@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
 use crate::datatypes::ReadFilter;
-use crate::models::{CachedScrollData, Label, MessageScrollData, ScrollCursor};
+use crate::models::{CachedScrollData, MessageScrollData, ScrollCursor};
 use crate::models::{Message, ScrollData};
 use maplit::btreemap;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::create_address;

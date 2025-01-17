@@ -23,10 +23,9 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::{
-    AttachmentId, ConversationId, ExternalId, LabelType, MessageId,
-};
+use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
 use proton_api_core::services::proton::common::{AddressId, EventId, LabelId};
+use proton_api_core::services::proton::prelude::LabelEvent;
 use proton_api_core::services::proton::response_data::{
     Action, AddressEvent, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
     UserSettings,
@@ -555,93 +554,6 @@ pub struct ConversationLabel {
     /// TODO: Document this field.
     pub context_time: u64,
 }
-
-/// TODO: Document this struct.
-#[serde_as]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-#[allow(clippy::struct_excessive_bools)]
-pub struct Label {
-    /// TODO: Document this field.
-    #[serde(rename = "ID")]
-    pub id: LabelId,
-
-    /// TODO: Document this field.
-    #[serde(rename = "ParentID")]
-    pub parent_id: Option<LabelId>,
-
-    /// TODO: Document this field.
-    pub color: String,
-
-    /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
-    pub display: bool,
-
-    /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
-    pub expanded: bool,
-
-    /// TODO: Document this field.
-    #[serde(rename = "Type")]
-    pub label_type: LabelType,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
-    pub notify: bool,
-
-    /// TODO: Document this field.
-    #[serde(default)]
-    pub order: u32,
-
-    /// TODO: Document this field.
-    pub path: Option<String>,
-
-    /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
-    pub sticky: bool,
-}
-
-#[cfg(any(test, debug_assertions))]
-impl Default for Label {
-    fn default() -> Self {
-        Self {
-            id: LabelId::from(""),
-            parent_id: None,
-            color: String::default(),
-            display: false,
-            expanded: false,
-            label_type: LabelType::Label,
-            name: String::default(),
-            notify: false,
-            order: 0,
-            path: None,
-            sticky: false,
-        }
-    }
-}
-
-/// Data for an event related to a [`LabelEvent`] record.
-#[serde_as]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct LabelEvent {
-    /// TODO: Document this field.
-    #[serde(rename = "ID")]
-    pub id: LabelId,
-
-    /// TODO: Document this field.
-    pub action: Action,
-
-    /// TODO: Document this field.
-    pub label: Option<Label>,
-}
-
-impl GetEventResponse for LabelEvent {}
 
 /// Data for an event related to a [`MailEvent`] record.
 #[serde_as]

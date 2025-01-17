@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased] - 2025-01-XX
+
+### Fixed
+
+ - Drafts are moved to outbox before being sent
+
+## [0.33.0] - 2025-01-17
+
+### Added
+
+  - `DraftSendResultWatcher` - Observe new send results as they are created.
+  - `draft_send_result_unseen` - check all unseen send results.
+  - `draft_send_result_mark_read`
+  - `draft_send_result_delete`
+  - `Draft::send_result` - Loads associated send result with `open_draft` if any is available.
+  - [ET-1192] `ContactEmailItem` has two new fields: `is_proton` & `last_used_time`
+
+### Changed
+
+  - `open_draft` now returns `OpenDraft` type which includes whether the body is synced or cached.
+  - [ET-1192] `GroupedContacts.item` was renamed to `items`
+  - [ET-1192] `ContactGroupItem.email` was renamed to `contacts`
+    and now carries `Vec<ContactItem>` instead of `Vec<ContactEmailItem>`
+
+### Fixed
+
+  - [ET-1869] Unable to open drafts in certain conditions
+
 
 ## [0.32.1] - 2025-01-15
 

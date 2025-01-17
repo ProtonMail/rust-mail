@@ -1,5 +1,3 @@
-use std::iter;
-
 use proton_crypto_inbox::{
     message::packages::{EncryptablePackage, PackageMimeType},
     proton_crypto::crypto::{
@@ -104,7 +102,7 @@ fn test_package_create_mime_large_compression() {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
     let plain_package = TestPlainPackage {
         mime_type: PackageMimeType::Multipart,
-        content: iter::repeat(1).take(1024 * 1024 + 1).collect(),
+        content: vec![1; 1024 * 1024 + 1],
     };
     let address_keys =
         create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");

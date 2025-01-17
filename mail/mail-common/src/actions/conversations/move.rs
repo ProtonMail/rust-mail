@@ -89,12 +89,9 @@ impl ActionHandler for Handler {
         .await?;
 
         for remote_id in &action.0.remote_target_ids {
-            RollbackItem::new(
-                remote_id.as_ref().to_owned(),
-                RollbackItemType::Conversation,
-            )
-            .save(tx)
-            .await?;
+            RollbackItem::new(remote_id.to_string(), RollbackItemType::Conversation)
+                .save(tx)
+                .await?;
         }
 
         Ok(())
