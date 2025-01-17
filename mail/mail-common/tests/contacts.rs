@@ -54,7 +54,7 @@ async fn contact_list() {
         contact_list,
         vec![GroupedContacts {
             grouped_by: "M".to_string(),
-            item: vec![ContactItemType::Contact(ContactItem {
+            items: vec![ContactItemType::Contact(ContactItem {
                 local_id: 1.into(),
                 name: "Mr Banksy".to_string(),
                 avatar_information: AvatarInformation {
@@ -63,7 +63,9 @@ async fn contact_list() {
                 },
                 emails: vec![ContactEmailItem {
                     local_id: 1.into(),
-                    email: "banksy@proton.me".to_string()
+                    email: "banksy@proton.me".to_string(),
+                    is_proton: true,
+                    last_used_time: 0
                 }]
             })]
         }]

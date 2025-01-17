@@ -1612,7 +1612,7 @@ impl Conversation {
                 // If attachment record already exists, the conversation ids are updated.
                 // If no record exists we create a new one.
                 let mut result = Vec::with_capacity(self.attachments_metadata.len());
-                for metadata in &self.attachments_metadata {
+                for metadata in &mut self.attachments_metadata {
                     let mut attachment = Attachment::find_first(
                         "WHERE remote_id = ?",
                         params![metadata.remote_id.clone()],
@@ -1624,8 +1624,8 @@ impl Conversation {
                     attachment.local_conversation_id = self.local_id;
                     attachment.remote_conversation_id = self.remote_id.clone();
                     attachment.save(bond).await?;
-
                     let local_id = attachment.local_id.expect("Should be set");
+                    metadata.local_id = Some(local_id);
 
                     bond.execute(
                         "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
