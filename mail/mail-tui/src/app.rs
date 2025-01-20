@@ -166,6 +166,7 @@ impl<Message> Command<Message> {
         Self::Batch(Vec::from_iter(commands))
     }
 
+    #[allow(dead_code)]
     pub fn is_some(&self) -> bool {
         !matches!(self, Command::None)
     }
