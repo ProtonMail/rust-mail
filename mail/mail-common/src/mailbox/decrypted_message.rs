@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use super::MailboxResult;
 
@@ -406,7 +406,7 @@ impl<'r> StorableMessageBodyRef<'r> {
 /// The result of transforming the message body.
 /// It will have more things in the future
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BodyOutput {
     /// The transformed html of the message.
@@ -437,6 +437,23 @@ pub struct BodyOutput {
     pub body_banners: BodyBanners,
 }
 
+impl std::fmt::Debug for BodyOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BodyOutput")
+            .field("body", &(format!("{} bytes", self.body.len())))
+            .field("had_blockquote", &self.had_blockquote)
+            .field("tags_stripped", &self.tags_stripped)
+            .field("utm_stripped", &self.utm_stripped)
+            .field("remote_images_disabled", &self.remote_images_disabled)
+            .field("embedded_images_disabled", &self.embedded_images_disabled)
+            .field("images_proxied", &self.images_proxied)
+            .field("transform_opts", &self.transform_opts)
+            .field("body_banners", &self.body_banners)
+            .finish()
+    }
+}
+
+#[tracing::instrument(skip(html))]
 pub fn transform_html(
     html: &str,
     opts: TransformOptsResolved<'_>,
@@ -497,7 +514,7 @@ pub fn transform_html(
 
     transformer.inject_style();
 
-    BodyOutput {
+    let output = BodyOutput {
         body: transformer.to_string(),
         had_blockquote,
         tags_stripped,
@@ -507,5 +524,7 @@ pub fn transform_html(
         images_proxied,
         transform_opts: opts.into(),
         body_banners: BodyBanners::new(opts),
-    }
+    };
+    debug!("Transform done. Output: {output:#?}");
+    output
 }
