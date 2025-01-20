@@ -1,5 +1,5 @@
 use super::avatar::AvatarInformation;
-use crate::datatypes::{LocalContactEmailId, LocalContactId, LocalLabelId};
+use crate::datatypes::{LabelType, LocalContactEmailId, LocalContactId, LocalLabelId};
 use crate::models::{Contact, ContactEmail, Label};
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
@@ -22,18 +22,26 @@ impl GroupedContacts {
     /// Builds grouped contacts based on flat contact list and contact groups
     ///
     /// # Contact groups
+    ///
     /// Note, that the contact group is represented by [`Label`]. Currently, this function WON'T
     /// assert if the label has type `ContactGroup`.
     ///
     /// # Panics
+    ///
     /// This function may panic if the contact group does not have local ID assigned.
+    ///
     #[must_use]
     pub fn from_contacts_and_groups(
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
     ) -> Vec<Self> {
+        debug_assert!(contact_groups
+            .iter()
+            .all(|group| group.label_type == LabelType::ContactGroup));
+
         let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
             .into_iter()
+            .filter(|group| group.label_type == LabelType::ContactGroup)
             .map(|group| {
                 (
                     group.remote_id.unwrap().clone(),

@@ -4,7 +4,7 @@ mod contact_list {
         ceid, cid, contact, contact_email,
         datatypes::{
             AvatarInformation, ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType,
-            GroupedContacts,
+            GroupedContacts, LabelType,
         },
         label, label_id, labels, lid,
         models::{Contact, ContactEmail, Label},
@@ -152,7 +152,7 @@ mod contact_list {
         contact!(local_id: lid!(124), label_ids: labels!("family"), name: "Dad".to_string()),
         contact!(local_id: lid!(125), label_ids: labels!("family"), name: "Sister".to_string())
     ], vec![
-        label!(local_id: lid!(100), remote_id: Some(label_id!("family")), name: "Family".to_string())
+        label!(local_id: lid!(100), remote_id: Some(label_id!("family")), name: "Family".to_string(), label_type: LabelType::ContactGroup)
     ], vec![
         GroupedContacts {
             grouped_by: "D".to_string(),
