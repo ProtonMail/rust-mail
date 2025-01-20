@@ -18,6 +18,17 @@ async fn auto_queued_on_network_failure() {
     assert!(matches!(output.remote, ActionRemoteOutput::Queued(_)),);
 }
 
+#[tokio::test]
+async fn execute_all_does_not_loop_forever_on_network_failure() {
+    // There was a bug where execute all would loop forever if an action was re-queued due to
+    // network failure.
+    let queue = new_queue_typed::<ErrorAction>().await;
+
+    let _ = queue.queue_action(ErrorAction {}).await.unwrap();
+
+    queue.execute_all().await.unwrap();
+}
+
 #[derive(Serialize, Deserialize)]
 struct ErrorAction {}
 

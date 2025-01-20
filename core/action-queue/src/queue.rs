@@ -728,13 +728,21 @@ impl Queue {
     }
 }
 
+/// Indicates the state of the action.
+pub enum QueuedActionState {
+    /// The action was executed, which led to either a success or failure result.
+    Executed(Id),
+    /// The action was deferred due to lack of network.
+    Queued(Id),
+}
+
 /// Wrapper trait around the actual action type.
 pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
         metadata: Arc<QueuedMetadata>,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
@@ -759,12 +767,12 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         &'a mut self,
         shared: &'a Shared,
         metadata: Arc<QueuedMetadata>,
-    ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
+    ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
             let context = result?;
             // Can't return result here as there is no one to consume it.
-            let _ = execute_action_remote(
+            let output = execute_action_remote(
                 shared,
                 self.action_id,
                 context.as_ref(),
@@ -773,7 +781,11 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
             )
             .await
             .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
-            Ok(())
+
+            Ok(match output {
+                ActionRemoteOutput::Executed(_) => QueuedActionState::Executed(self.action_id),
+                ActionRemoteOutput::Queued(id) => QueuedActionState::Queued(id),
+            })
         })
     }
 
@@ -902,7 +914,17 @@ impl BackgroundWorker {
                     self.wait_on_tasks().await;
                     let tether = self.shared.stash.connection();
                     let r = self.execute_impl(&tether).await;
-                    if tx.send(r).is_err() {
+
+                    if tx
+                        .send(r.map(|v| {
+                            if let Some(QueuedActionState::Executed(value)) = v {
+                                Some(value)
+                            } else {
+                                None
+                            }
+                        }))
+                        .is_err()
+                    {
                         error!("Failed to send execute one result back to callee");
                     }
                 }
@@ -933,7 +955,7 @@ impl BackgroundWorker {
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
     #[tracing::instrument(level = Level::DEBUG, skip(self, tether))]
-    async fn execute_impl(&self, tether: &Tether) -> QueuedResult<Option<Id>> {
+    async fn execute_impl(&self, tether: &Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some(action) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
             e
@@ -951,7 +973,7 @@ impl BackgroundWorker {
         );
         let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
-        decoded
+        let exec_output = decoded
             .execute(&self.shared, metadata)
             .await
             .inspect_err(|e| {
@@ -970,13 +992,13 @@ impl BackgroundWorker {
             .broadcast_sender
             .send(BroadcastMessage::Success(action_id));
 
-        Ok(Some(action_id))
+        Ok(Some(exec_output))
     }
 
     /// See [`Queue::execute_all()`] for more details.
     async fn execute_all(&self) -> QueuedResult<()> {
         let tether = self.shared.stash.connection();
-        while self.execute_impl(&tether).await?.is_some() {}
+        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&tether).await? {}
         Ok(())
     }
 
@@ -1083,6 +1105,7 @@ async fn execute_action_remote<T: Action>(
         Err(e) => {
             error!("Failed to apply on server: {e}");
             if e.is_network_failure() {
+                debug!("Action remains in queue due to lack of network");
                 // if this failed due to network error we should leave it in the queue.
                 return Ok(ActionRemoteOutput::Queued(id));
             }
