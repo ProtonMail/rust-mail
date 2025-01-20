@@ -17,7 +17,7 @@ use crate::models::*;
 use crate::{find_in_query, MailContextError};
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
-    ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue,
+    ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -370,9 +370,9 @@ impl Message {
         queue: &Queue,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Move multiple messages.
