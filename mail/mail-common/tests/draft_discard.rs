@@ -7,7 +7,7 @@ use proton_api_mail::services::proton::prelude::{
     DraftAction, DraftAttachmentKeyPackets, MessageFlags, OperationResult,
     PutMessagesDeleteResponse,
 };
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::{Conversation, DraftMetadata, Message};
@@ -207,6 +207,90 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
 }
 
 #[tokio::test]
+async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_data() {
+    // We use cancel here to explicitly trigger the revert changes, but
+    // this can also be achieved by having the execute remote part of `draft::save` fail. The
+    // latter would require more setup.
+
+    // This test is similar to discard, but we are simulating a delete message from
+    // the list of messages in the draft label, which will not use the discard action.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.clear();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let action_id = user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap()
+        .id;
+
+    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    // Cancel create draft, will leave the message and conversation there.
+    user_ctx
+        .with_queue(|queue| queue.cancel(action_id))
+        .await
+        .unwrap();
+
+    // Use message delete rather than discard - simulates deleting from the draft message view.
+    let local_draft_label_id = Label::remote_id_counterpart(LabelId::drafts(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_delete(queue, local_draft_label_id, vec![local_message_id])
+        })
+        .await
+        .unwrap();
+
+    // Check the message is marked as deleted.
+    let draft_message = Message::find_by_id(local_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(draft_message.deleted);
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // Message is deleted.
+    let draft_message = Message::find_by_id(local_message_id, &tether)
+        .await
+        .unwrap();
+    assert!(draft_message.is_none());
+
+    // Conversation is deleted.
+    let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
+        .await
+        .unwrap();
+    assert!(conv_message.is_none());
+
+    Draft::open(user_ctx, local_message_id)
+        .await
+        .expect_err("Should not work");
+}
+
+#[tokio::test]
 async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_message() {
     // We use cancel here to explicitly trigger the revert changes, but
     // this can also be achieved by having the execute remote part of `draft::save` fail. The
@@ -282,6 +366,126 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     // queue discard.
     user_ctx
         .with_queue(|queue| draft.discard(queue))
+        .await
+        .unwrap();
+
+    // Check the message is marked as deleted.
+    let draft_message = Message::find_by_id(local_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(draft_message.deleted);
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // Message is deleted.
+    let draft_message = Message::find_by_id(local_message_id, &tether)
+        .await
+        .unwrap();
+    assert!(draft_message.is_none());
+
+    // Conversation is not deleted.
+    let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
+        .await
+        .unwrap();
+    assert!(conv_message.is_some());
+
+    Draft::open(user_ctx, local_message_id)
+        .await
+        .expect_err("Should not work");
+}
+
+#[tokio::test]
+async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_message() {
+    // We use cancel here to explicitly trigger the revert changes, but
+    // this can also be achieved by having the execute remote part of `draft::save` fail. The
+    // latter would require more setup.
+
+    // This test is similar to discard, but we are simulating a delete message from
+    // the list of messages in the draft label, which will not use the discard action.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.clear();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let mut remote_existing_message = draft_message_with_attachments();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+    for attachment in &remote_existing_message.body.attachments {
+        ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
+            .await;
+    }
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mut tether = user_ctx.user_stash().connection();
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+    let tx = tether.transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    let existing_message = existing_message;
+    // Decrypted message downloads attachments.
+    tx.commit().await.unwrap();
+
+    // Get the message body - required to reply to draft.
+    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
+        .await
+        .unwrap();
+
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::All,
+        true,
+    )
+    .await
+    .unwrap();
+    let action_id = user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap()
+        .id;
+
+    let local_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let local_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    // Cancel create draft, will leave the message and conversation there.
+    user_ctx
+        .with_queue(|queue| queue.cancel(action_id))
+        .await
+        .unwrap();
+
+    // Use message delete rather than discard - simulates deleting from the draft message view.
+    let local_draft_label_id = Label::remote_id_counterpart(LabelId::drafts(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    user_ctx
+        .with_queue(|queue| {
+            Message::action_delete(queue, local_draft_label_id, vec![local_message_id])
+        })
         .await
         .unwrap();
 
