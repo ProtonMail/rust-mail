@@ -5,7 +5,7 @@ use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -50,7 +50,9 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        action.0.resolve_ids(tx).await?;
+        if action.0.target_ids.is_empty() {
+            return Err(ActionError::NoInput);
+        }
 
         Conversation::mark_deleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
 
@@ -83,31 +85,55 @@ impl proton_action_queue::action::Handler for Handler {
             .remote_label_id
             .clone()
             .expect("Should not be none");
-        let responses = Conversation::delete_multiple_remote(
-            action.0.remote_target_ids.clone(),
-            remote_label_id,
-            ctx.session().api(),
-        )
-        .await
-        .map_err(|e| {
-            error!("Failed to delete conversations on API: {e}");
-            e
-        })?;
 
-        let failed_ids = filter_responses(responses);
+        let mut conn = stash.connection();
 
-        if !failed_ids.is_empty() {
-            error!("Delete operation failed for: {:?}", failed_ids);
-            let mut conn = stash.connection();
+        action.0.resolve_ids(&conn).await?;
+
+        let local_ids_without_remote_id = action
+            .0
+            .local_only_ids(&conn)
+            .await
+            .inspect_err(|e| error!("Failed to load local only ids: {e})"))?;
+
+        let failed_ids = if action.0.remote_target_ids.is_empty() {
+            vec![]
+        } else {
+            let responses = Conversation::delete_multiple_remote(
+                action.0.remote_target_ids.clone(),
+                remote_label_id,
+                ctx.session().api(),
+            )
+            .await
+            .map_err(|e| {
+                error!("Failed to delete conversations on API: {e}");
+                e
+            })?;
+
+            filter_responses(responses)
+        };
+
+        if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             let tx = conn.transaction().await?;
-            let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+            if !failed_ids.is_empty() {
+                error!("Delete operation failed for: {:?}", failed_ids);
+                let local_ids =
+                    Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
-            Conversation::remove_label(action.0.label_id, local_ids, &tx)
-                .await
-                .map_err(|e| {
-                    error!("Failed to rollback failed conversations: {e}");
-                    e
-                })?;
+                Conversation::remove_label(action.0.label_id, local_ids, &tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to rollback failed conversations: {e}");
+                        e
+                    })?;
+            }
+
+            for id in local_ids_without_remote_id {
+                // All messages associated with this conversation are also purged.
+                Conversation::delete_by_id(id, &tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to delete local conversation: {e}"))?;
+            }
 
             tx.commit().await?;
         }
