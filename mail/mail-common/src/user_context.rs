@@ -166,7 +166,7 @@ impl MailUserContext {
         Ok(real_user)
     }
 
-    /// Fetches the account details of the current account.
+    /// Retrieves the account details of the current account.
     ///
     /// Returns the active account's details or an error if active account does not exist.
     ///

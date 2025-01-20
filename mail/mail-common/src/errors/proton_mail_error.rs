@@ -176,6 +176,7 @@ impl From<AppError> for ProtonMailError {
 impl From<MailContextError> for ProtonMailError {
     fn from(error: MailContextError) -> Self {
         match error {
+            MailContextError::AccountMissing(_user_id) => Self::Unexpected(Unexpected::Database),
             MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
                 Self::Unexpected(Unexpected::Crypto)
             }

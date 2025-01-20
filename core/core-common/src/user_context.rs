@@ -120,13 +120,13 @@ impl UserContext {
         &self.user_id
     }
 
-    /// Asynchronously retrieves the current user's account details.
+    /// Retrieves the current user's account details.
     ///
     /// # Returns
-    /// - `Ok(AccountDetails)` if the account is successfully retrieved.
     /// - `Err(CoreContextError)` if the account is missing or a database error occurs.
     ///
     /// # Errors
+    ///
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
     /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
@@ -134,9 +134,7 @@ impl UserContext {
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?
-            .ok_or_else(|| {
-                CoreContextError::Other(anyhow::anyhow!("Missing core account in DB"))
-            })?;
+            .ok_or_else(|| CoreContextError::AccountMissing(user_id.clone()))?;
 
         Ok(account.details())
     }
