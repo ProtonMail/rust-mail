@@ -1,8 +1,10 @@
+mod discard;
 mod save;
 mod send;
 
 use crate::datatypes::SystemLabelId;
 use crate::{AppError, MailContextError};
+pub use discard::*;
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelIdExtension};

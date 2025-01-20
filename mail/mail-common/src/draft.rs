@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::actions::draft;
-use crate::actions::draft::Save;
+use crate::actions::draft::{Discard, Save};
 use crate::cache::CacheMessageKey;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::StorableMessageBody;
@@ -71,6 +71,8 @@ pub enum Error {
     SendMessage(#[from] PackageError),
     #[error("Draft has no recipients")]
     NoRecipients,
+    #[error("Failed to delete draft on server")]
+    DeleteFailed,
 }
 
 /// Potential draft specific errors.
@@ -213,6 +215,11 @@ impl Draft {
             error!("Opened message as draft that does not exist.");
             return Err(AppError::MessageMissing(message_id).into());
         };
+
+        // Ignore deleted messages.
+        if message.deleted {
+            return Err(AppError::MessageMissing(message_id).into());
+        }
 
         if !message.flags.is_draft() {
             error!("Opened a non-draft message as a draft");
@@ -686,6 +693,19 @@ impl Draft {
         self.to_send_action()?.queue(queue).await
     }
 
+    /// Discard the current draft.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to execute.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    pub async fn discard(
+        &self,
+        queue: &Queue,
+    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+        Ok(self.to_discard_action().queue(queue).await?)
+    }
+
     /// Create a save action for the current state of the draft.
     ///
     /// This method is here to provide greater flexibility of integration
@@ -719,6 +739,14 @@ impl Draft {
             save_action,
             send_action,
         ))
+    }
+
+    /// Create a discard action for the draft.
+    ///
+    /// This method is here to provide greater flexibility of integration
+    /// when used in multithreaded contexts.
+    pub fn to_discard_action(&self) -> DraftDiscardActionQueuer {
+        DraftDiscardActionQueuer::new(self.metadata_id, Discard::new(self))
     }
 
     /// Get the message id associated with this draft.
@@ -818,5 +846,35 @@ impl DraftSendActionQueuer {
         Ok(queue
             .queue_action_with_metadata(self.send_action, send_metadata)
             .await?)
+    }
+}
+
+/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
+/// context.
+pub struct DraftDiscardActionQueuer {
+    id: MetadataId,
+    action: Discard,
+}
+
+impl DraftDiscardActionQueuer {
+    fn new(id: MetadataId, action: Discard) -> Self {
+        Self { id, action }
+    }
+
+    /// Consume and queue this action.
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::discard",skip(self,queue))]
+    pub async fn queue(
+        self,
+        queue: &Queue,
+    ) -> Result<QueuedActionOutput<Discard>, ActionError<Discard>> {
+        queue
+            .queue_action_with_metadata(
+                self.action,
+                MetadataBuilder::new()
+                    .with_resource(&self.id)
+                    .expect("This should never fail")
+                    .build(),
+            )
+            .await
     }
 }

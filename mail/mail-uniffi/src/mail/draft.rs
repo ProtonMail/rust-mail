@@ -304,6 +304,32 @@ impl Draft {
         .map_err(DraftError::from)
         .into()
     }
+
+    /// Discard the draft.
+    ///
+    /// Schedules an action which deletes a draft locally and on the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn discard(&self) -> VoidDraftResult {
+        let discard_queuer = {
+            let draft = self.instance.read();
+            draft.to_discard_action()
+        };
+        let ctx = Arc::clone(&self.ctx);
+
+        uniffi_async(async move {
+            ctx.with_queue(|queue| discard_queuer.queue(queue))
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftError::from)
+        .into()
+    }
 }
 
 async fn save_draft(

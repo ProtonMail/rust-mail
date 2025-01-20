@@ -546,7 +546,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         tether: &Tether,
     ) -> Result<Option<Self::RemoteId>, StashError> {
         match tether
-            .query_value::<_, Self::RemoteId>(
+            .query_value::<_, Option<Self::RemoteId>>(
                 formatdoc!(
                     "
                             SELECT
@@ -565,7 +565,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
             )
             .await
         {
-            Ok(v) => Ok(Some(v)),
+            Ok(v) => Ok(v),
             Err(e) => {
                 if matches!(
                     e,
@@ -605,11 +605,14 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                                 {}
                             WHERE
                                 {} IN ({})
+                            AND
+                                {} IS NOT NULL
                             ",
                     Self::remote_id_field_name(),
                     Self::table_name(),
                     Self::id_field_name(),
                     placeholders,
+                    Self::remote_id_field_name(),
                 ),
                 values,
             )

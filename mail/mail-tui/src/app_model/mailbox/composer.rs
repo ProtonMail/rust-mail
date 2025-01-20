@@ -1,6 +1,7 @@
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ComposerMessage, Message};
+use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -234,6 +235,33 @@ impl Composer {
             draft_sync_status: sync_status,
         }
     }
+
+    /// Discard the draft.
+    fn discard(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
+        let discard_action = self.draft.to_discard_action();
+        let popup = YesNoPopup::new(
+            "Discard Draft",
+            "Are you sure you wish to discard the current draft?",
+        )
+        .on_accept(Command::batch([
+            Command::message(Message::CloseComposer.into()),
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Discarding Draft".to_owned(),
+            )),
+            Command::task(async move {
+                let cmd = match context
+                    .with_queue(|queue| discard_action.queue(queue))
+                    .await
+                {
+                    Ok(_) => Command::none(),
+                    Err(e) => Command::message(Messages::DisplayError(None, anyhow::Error::new(e))),
+                };
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ]));
+
+        Command::message(Messages::raise_popup(popup))
+    }
 }
 
 struct AttachmentInfo {
@@ -373,6 +401,8 @@ impl StateHandler for Composer {
             Span::from(" Ctrl+s: ").bold(),
             Span::from("Save"),
             Span::from(" Ctrl+d: ").bold(),
+            Span::from("Discard"),
+            Span::from(" Ctrl+t: ").bold(),
             Span::from("Send"),
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
@@ -416,9 +446,14 @@ impl StateHandler for Composer {
                         return Command::message(ComposerMessage::Save.into());
                     }
                 }
-                KeyCode::Char('d') => {
+                KeyCode::Char('t') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Send.into());
+                    }
+                }
+                KeyCode::Char('d') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return Command::message(ComposerMessage::Discard.into());
                     }
                 }
                 _ => {}
@@ -459,6 +494,7 @@ impl StateHandler for Composer {
         match message {
             ComposerMessage::Save => self.save(mbox.user_context()),
             ComposerMessage::Send => self.send(mbox.user_context()),
+            ComposerMessage::Discard => self.discard(mbox.user_context()),
         }
     }
 }

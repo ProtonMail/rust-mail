@@ -7,8 +7,9 @@ use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::requests::{
-    PostCreateDraftRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
-    PutMessagesUnlabelRequest, PutMessagesUnreadRequest, PutUpdateDraftRequest,
+    PostCreateDraftRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest,
+    PutMessagesReadRequest, PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PutUpdateDraftRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, Message as ApiMessage, MessageMetadata, MimeType,
@@ -111,6 +112,29 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Mock a delete message request
+    ///
+    /// # Params
+    /// * `message_ids`      - List of message ids to delete.
+    /// * `current_label_id` - Current label where the message is deleted from.
+    /// * `response`         - Response to the request.
+    pub async fn mock_message_delete(
+        &self,
+        message_ids: impl IntoIterator<Item = MessageId>,
+        current_label_id: Option<LabelId>,
+        response: PutMessagesDeleteResponse,
+    ) {
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/delete"))
+            .and(body_json(PutMessagesDeleteRequest {
+                ids: message_ids.into_iter().collect(),
+                label_id: current_label_id,
+            }))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .mount(self.mock_server())
             .await;
     }
