@@ -3,17 +3,19 @@ mod contact_list {
     use crate::{
         ceid, cid, contact, contact_email,
         datatypes::{
-            AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
+            AvatarInformation, ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType,
+            GroupedContacts, LabelType,
         },
-        lid,
-        models::{Contact, ContactEmail},
+        label, label_id, labels, lid,
+        models::{Contact, ContactEmail, Label},
         tests::common::new_core_test_connection,
     };
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 
-    #[test_case(vec![], vec![]; "TEST 0 Empty")]
-    #[test_case(vec![contact!(local_id: lid!(123), name: "Barbara Lox".to_string())], vec![
+    #[test_case(vec![], vec![], vec![]; "TEST 0 Empty")]
+    #[test_case(vec![contact!(local_id: lid!(123), name: "Barbara Lox".to_string())], vec![],
+    vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
             items: vec![
@@ -34,7 +36,7 @@ mod contact_list {
     #[test_case(vec![
         contact!(local_id: lid!(123), name: "Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "Barbara Fox".to_string())
-    ], vec![
+    ], vec![], vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
             items: vec![
@@ -66,7 +68,7 @@ mod contact_list {
     #[test_case(vec![
         contact!(local_id: lid!(123), name: "🐂 Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "🦊 Barbara Fox".to_string())
-    ], vec![
+    ], vec![], vec![
         GroupedContacts {
             grouped_by: "B".to_string(),
             items: vec![
@@ -99,7 +101,8 @@ mod contact_list {
         contact!(local_id: lid!(123), name: "🙀".to_string()),
         contact!(local_id: lid!(123), name: "🙀 Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "❤️‍🔥 Barbara Fox".to_string())
-    ], vec![
+    ], vec![],
+    vec![
         GroupedContacts {
             grouped_by: "#".to_string(),
             items: vec![
@@ -144,8 +147,113 @@ mod contact_list {
             ],
         }
     ]; "TEST 4 Mutliple groups")]
-    fn test_grouped_contacts(contacts: Vec<Contact>, expected: Vec<GroupedContacts>) {
-        let result = GroupedContacts::from_contacts(contacts);
+    #[test_case(vec![
+        contact!(local_id: lid!(123), label_ids: labels!("family"), name: "Mom".to_string()),
+        contact!(local_id: lid!(124), label_ids: labels!("family"), name: "Dad".to_string()),
+        contact!(local_id: lid!(125), label_ids: labels!("family"), name: "Sister".to_string())
+    ], vec![
+        label!(local_id: lid!(100), remote_id: Some(label_id!("family")), name: "Family".to_string(), label_type: LabelType::ContactGroup)
+    ], vec![
+        GroupedContacts {
+            grouped_by: "D".to_string(),
+            items: vec![
+                ContactItemType::Contact (
+                    ContactItem {
+                        local_id: 124.into(),
+                        name: "Dad".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "D".to_string(),
+                            color: "#A839A4".to_string(),
+                        },
+                        emails: vec![]
+                    }
+                ),
+            ]
+        },
+        GroupedContacts {
+            grouped_by: "F".to_string(),
+            items: vec![
+                ContactItemType::Group (
+                    ContactGroupItem {
+                        local_id: 100.into(),
+                        name: "Family".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "F".to_string(),
+                            color: "#A839A4".to_string(),
+                        },
+                        contacts: vec![
+                            ContactItem {
+                                local_id: 124.into(),
+                                name: "Dad".to_string(),
+                                avatar_information: AvatarInformation {
+                                    text: "D".to_string(),
+                                    color: "#A839A4".to_string(),
+                                },
+                                emails: vec![]
+                            },
+                            ContactItem {
+                                local_id: 123.into(),
+                                name: "Mom".to_string(),
+                                avatar_information: AvatarInformation {
+                                    text: "M".to_string(),
+                                    color: "#213474".to_string(),
+                                },
+                                emails: vec![]
+                            },
+                            ContactItem {
+                                local_id: 125.into(),
+                                name: "Sister".to_string(),
+                                avatar_information: AvatarInformation {
+                                    text: "S".to_string(),
+                                    color: "#9C89FF".to_string(),
+                                },
+                                emails: vec![]
+                            }
+                        ]
+                    }
+                ),
+            ]
+        },
+        GroupedContacts {
+            grouped_by: "M".to_string(),
+            items: vec![
+                ContactItemType::Contact (
+                    ContactItem {
+                        local_id: 123.into(),
+                        name: "Mom".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "M".to_string(),
+                            color: "#213474".to_string(),
+                        },
+                        emails: vec![]
+                    }
+                ),
+            ]
+        },
+        GroupedContacts {
+            grouped_by: "S".to_string(),
+            items: vec![
+                ContactItemType::Contact (
+                    ContactItem {
+                        local_id: 125.into(),
+                        name: "Sister".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "S".to_string(),
+                            color: "#9C89FF".to_string(),
+                        },
+                        emails: vec![]
+                    }
+                ),
+            ]
+        },
+
+    ]; "TEST 5 Contact groups (labels)")]
+    fn test_grouped_contacts(
+        contacts: Vec<Contact>,
+        groups: Vec<Label>,
+        expected: Vec<GroupedContacts>,
+    ) {
+        let result = GroupedContacts::from_contacts_and_groups(contacts, groups);
         assert_eq!(result, expected);
     }
 

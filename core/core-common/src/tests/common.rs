@@ -48,6 +48,32 @@ macro_rules! contact_email {
     }};
 }
 
+#[macro_export]
+macro_rules! label {
+    ($($field:tt)*) => {{
+        $crate::models::Label {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! label_id {
+    ($id:expr) => {{
+        proton_api_core::services::proton::common::LabelId::from($id)
+    }};
+}
+
+#[macro_export]
+macro_rules! labels {
+    ($($label:expr),*) => {{
+        $crate::datatypes::Labels::new(vec![$(
+            $crate::label_id!($label)
+        ),*])
+    }}
+}
+
 pub async fn new_core_test_connection() -> Stash {
     use crate::db::migrations::migrate_core_db;
     use std::io::stdout;
