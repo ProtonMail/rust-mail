@@ -66,8 +66,20 @@ impl MailTestContext {
 
     /// Generate new mock expectation for batch messages request
     pub async fn mock_get_messages(&self, messages: Vec<MessageMetadata>) {
+        let total = messages.len() as u64;
+        self.mock_get_messages_total_expect(messages, total, 1)
+            .await;
+    }
+
+    /// Generate new mock expectation for batch messages request
+    pub async fn mock_get_messages_total_expect(
+        &self,
+        messages: Vec<MessageMetadata>,
+        total: u64,
+        expect: u64,
+    ) {
         let resp = GetMessagesResponse {
-            total: messages.len() as u64,
+            total,
             messages,
             stale: false,
         };
@@ -75,7 +87,7 @@ impl MailTestContext {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-            .expect(1)
+            .expect(expect)
             .mount(self.mock_server())
             .await;
     }

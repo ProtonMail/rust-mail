@@ -39,6 +39,21 @@ pub async fn create_paginator_tables(tx: &Bond<'_>) -> Result<(), StashError> {
         vec![],
     )
     .await?;
+    tx.execute(
+        r#"
+        CREATE TABLE mail_search_scroll_data (
+            local_message_id INTEGER PRIMARY KEY,
+            display_order INTEGER NOT NULL,
+
+            CONSTRAINT local_message_id_mail_search_scroll_data
+                FOREIGN KEY (local_message_id)
+                REFERENCES messages (local_id)
+                ON DELETE CASCADE
+        )
+    "#,
+        vec![],
+    )
+    .await?;
 
     Ok(())
 }

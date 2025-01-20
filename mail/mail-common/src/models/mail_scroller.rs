@@ -5,6 +5,7 @@ use indoc::formatdoc;
 use proton_api_mail::services::proton::prelude::{ConversationId, MessageId};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelExtension;
+use proton_mail_ids::LocalMessageId;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -56,6 +57,8 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         require_remote_id: bool,
         offset: Option<u64>,
     ) -> String;
+    //TODO:
+    // fn params(&self) -> Vec<Box<dyn ToSql + Send>>;
     /// Conversion between associated types of Model and Item.
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
     /// Get the time of the item.
@@ -363,7 +366,7 @@ pub struct ScrollCursor<T: ScrollData> {
     /// Last synced item time.
     pub time: u64,
 
-    /// Last synced message display order.
+    /// Last synced display order.
     pub display_order: u64,
 
     #[builder(default)]
@@ -609,5 +612,162 @@ impl<T: ScrollData> Deref for CachedScrollData<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.cursor
+    }
+}
+
+#[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
+#[TableName("mail_search_scroll_data")]
+pub struct SearchScrollData {
+    /// Local message id used in the sync.
+    #[IdField]
+    pub local_message_id: LocalMessageId,
+
+    /// Message display order in search.
+    #[DbField]
+    pub display_order: u64,
+
+    #[allow(clippy::doc_markdown)]
+    /// The internal row ID of the record in the database. This is assigned by
+    /// SQLite, and is used as a consistent identifier for records when
+    /// listening for change notifications.
+    #[RowIdField]
+    #[builder(default, setter(strip_option))]
+    pub row_id: Option<u64>,
+}
+
+impl SearchScrollData {
+    pub async fn last(tether: &Tether) -> Result<Option<Self>, StashError> {
+        SearchScrollData::find_first("ORDER BY display_order DESC", vec![], tether).await
+    }
+
+    pub async fn last_remote_message_id(tether: &Tether) -> Result<Option<MessageId>, StashError> {
+        let Some(last) = Self::last(tether).await? else {
+            return Ok(None);
+        };
+
+        last.remote_message_id(tether).await
+    }
+
+    pub async fn remote_message_id(
+        &self,
+        tether: &Tether,
+    ) -> Result<Option<MessageId>, StashError> {
+        let message = Message::find_by_id(self.local_message_id, tether).await?;
+        Ok(message.and_then(|m| m.remote_id))
+    }
+
+    pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
+        let last = Self::last(tether).await?;
+
+        Ok(match last {
+            Some(last) => last.display_order > self.display_order,
+            None => false,
+        })
+    }
+
+    pub async fn fetch_more(
+        &mut self,
+        page_size: usize,
+        tether: &Tether,
+    ) -> Result<Vec<Message>, StashError> {
+        let last = Self::last(tether).await?;
+
+        if let Some(last) = last {
+            if last.display_order > self.display_order {
+                let offset = self.display_order.saturating_add(1);
+
+                let query = Self::query(Some(page_size), Some(offset));
+                let items = Message::find(query, params![last.display_order], tether).await?;
+                *self = last;
+
+                return Ok(items);
+            }
+        }
+
+        Ok(vec![])
+    }
+    /// Same as [`visible_elements`] but returns only the number of items that match.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    ///
+    pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        let query = Self::query(None, None);
+        Message::count(query, params![self.display_order], tether).await
+    }
+
+    /// Return all elements that are in the range of data we have synced from the server.
+    ///
+    /// This means all elements that a newer than the time and display order of the
+    /// last synced element from the server. Elements that are older should not be
+    /// displayed.
+    ///
+    /// It is possible those old elements become available due to interactions of actions
+    /// and the event loop, but those should not be displayed until the user scrolls
+    /// far enough.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    ///
+    pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
+        self.visible_elements_limit(None, None, tether).await
+    }
+
+    /// Internal function to get the visible elements with limit and offset.
+    ///
+    async fn visible_elements_limit(
+        &self,
+        limit: Option<usize>,
+        offset: Option<u64>,
+        tether: &Tether,
+    ) -> Result<Vec<Message>, StashError> {
+        let query = Self::query(limit, offset);
+
+        Message::find(query, params![self.display_order], tether).await
+    }
+
+    /// TODO: Total is not exactly correct as it does not take into account the
+    ///      that search results will be subset of the total messages and its number is not entirely unknonw
+    pub async fn total(
+        &self,
+        local_label_id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<u64, AppError> {
+        let Some(counters) = MessageCounters::find_by_id(local_label_id, tether).await? else {
+            return Err(AppError::LocalLabelHasNoCounters(local_label_id));
+        };
+
+        Ok(counters.total(ReadFilter::All))
+    }
+
+    fn query(limit: Option<usize>, offset: Option<u64>) -> String {
+        //NOTE: we only check the display order for elements with matching time
+        // or we will get incorrect query results.
+        let mut query = formatdoc!(
+            "
+            JOIN mail_search_scroll_data
+                ON messages.local_id = mail_search_scroll_data.local_message_id
+            AND
+                messages.deleted = 0
+            AND
+                mail_search_scroll_data.display_order <= ?
+            "
+        );
+
+        query += " ORDER BY
+            mail_search_scroll_data.display_order ASC
+        ";
+
+        if let Some(limit) = limit {
+            query += &format!(" LIMIT {limit} ");
+        }
+
+        if let Some(offset) = offset {
+            query += &format!(" OFFSET {offset} ");
+        }
+
+        query
     }
 }

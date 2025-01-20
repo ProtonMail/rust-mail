@@ -335,6 +335,20 @@ pub trait ModelExtension: Model {
     async fn delete(self, bond: &Bond<'_>) -> Result<usize, StashError> {
         Self::delete_by_id(self.id_value()?, bond).await
     }
+
+    /// Deletes the model instance from database.
+    ///
+    /// # Errors
+    ///
+    /// When querying the database fails.
+    ///
+    #[must_use]
+    async fn delete_all(bond: &Bond<'_>) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let query = format!("DELETE FROM {table}");
+
+        bond.execute(query, vec![]).await
+    }
 }
 
 /// Extension trait for models where there is a relationship between a local id and remote id
