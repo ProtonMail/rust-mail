@@ -1,7 +1,7 @@
 use crate::actions::draft::local_draft_label_id;
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
-    MessageSenders, MimeType,
+    MessageSenders, MimeType, SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBodyRef;
 use crate::draft::recipients::RecipientList;
@@ -12,7 +12,7 @@ use crate::models::{
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
@@ -177,6 +177,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
+
+            // A draft can only be updated if it is not in the outbox or sent folder.
+            if message.label_ids.contains(&LabelId::outbox())
+                || message.label_ids.contains(&LabelId::sent())
+            {
+                error!("Can't update a draft that was already sent");
+                return Err(Error::AlreadySent.into());
+            }
 
             action.update_message(&address, &mut message, attachment_metadata, body_len, time);
 

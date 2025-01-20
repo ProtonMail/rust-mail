@@ -67,6 +67,8 @@ pub enum Error {
     MetadataNotFound(MetadataId),
     #[error("Draft has no message")]
     DraftWithoutMessage,
+    #[error("Can not update a draft that was sent")]
+    AlreadySent,
     #[error("Draft send failed: {0}")]
     SendMessage(#[from] PackageError),
     #[error("Draft has no recipients")]

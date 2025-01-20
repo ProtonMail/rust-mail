@@ -101,6 +101,8 @@ pub enum DraftErrorReason {
     MessageUpdateIsNotDraft,
     /// This message no longer exists.
     MessageDoesNotExist,
+    /// This draft was already sent and can't be modified
+    AlreadySent,
 }
 
 impl From<RealDraftErrorReason> for DraftErrorReason {
@@ -122,6 +124,7 @@ impl From<RealDraftErrorReason> for DraftErrorReason {
             RealDraftErrorReason::PackageError(v) => Self::PackageError(v),
             RealDraftErrorReason::MessageUpdateIsNotDraft => Self::MessageUpdateIsNotDraft,
             RealDraftErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftErrorReason::AlreadySent => Self::AlreadySent,
         }
     }
 }

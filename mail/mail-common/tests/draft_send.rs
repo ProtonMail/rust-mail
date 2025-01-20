@@ -326,6 +326,57 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     assert_eq!(send_result.origin, DraftSendResultOrigin::SaveBeforeSend);
 }
 
+#[tokio::test]
+async fn save_after_send_is_an_error() {
+    // Re-saving a draft after a queued send action is not allowed.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    user_ctx
+        .with_queue(|queue| draft.save(queue))
+        .await
+        .unwrap();
+
+    // Save at least once so we can retrieve the message id.
+    let send_action = draft.to_send_action().unwrap();
+    user_ctx
+        .with_queue(|queue| send_action.queue(queue))
+        .await
+        .unwrap();
+
+    let result = user_ctx.with_queue(|queue| draft.save(queue)).await;
+    assert!(matches!(
+        result,
+        Err(MailContextError::Draft(draft::Error::AlreadySent))
+    ));
+}
+
 async fn send_fails_if_recipient_is_not_valid_impl(
     api_error_code: u32,
 ) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {

@@ -1,6 +1,6 @@
 use super::mail_error_reason::*;
 use crate::actions::ActionError;
-use crate::draft::PackageError;
+use crate::draft::{Error, PackageError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{draft::Error as DraftError, AppError, MailContextError, MailboxError, SidebarError};
@@ -233,6 +233,9 @@ impl From<DraftError> for ProtonMailError {
                 Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::NoRecipients))
             }
             DraftError::DeleteFailed => Self::Unexpected(Unexpected::Api),
+            Error::AlreadySent => {
+                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::AlreadySent))
+            }
         }
     }
 }
