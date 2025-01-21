@@ -35,6 +35,7 @@ pub enum Message {
     CloseComposer,
     NewLabelWatcher(WatchHandle),
     Composer(ComposerMessage),
+    OpenContacts,
 }
 pub struct LabelAs<T: LocalIdMarker> {
     pub source_label_id: LocalLabelId,
