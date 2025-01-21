@@ -19,6 +19,7 @@ use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
 };
+use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
@@ -1132,9 +1133,7 @@ impl Message {
     pub async fn fetch_counts<PM: ProtonMail>(
         api: &PM,
     ) -> Result<Vec<MessageLabelsCount>, ApiServiceError> {
-        api.get_messages_count()
-            .await
-            .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
+        api.get_messages_count().await.map(|r| r.counts.map_vec())
     }
 
     /// Get message metadata.
@@ -2013,10 +2012,10 @@ impl Message {
                 .map(AttachmentMetadata::from)
                 .collect(),
             bcc_list: MessageRecipients {
-                value: value.bcc_list.into_iter().map(|v| v.into()).collect(),
+                value: value.bcc_list.map_vec(),
             },
             cc_list: MessageRecipients {
-                value: value.cc_list.into_iter().map(|v| v.into()).collect(),
+                value: value.cc_list.map_vec(),
             },
             deleted: false,
             display_order: value.order,
@@ -2030,7 +2029,7 @@ impl Message {
             label_ids,
             num_attachments: value.num_attachments,
             reply_tos: MessageReplyTos {
-                value: value.reply_tos.into_iter().map(|v| v.into()).collect(),
+                value: value.reply_tos.map_vec(),
             },
             sender: value.sender.into(),
             size: value.size,
@@ -2038,7 +2037,7 @@ impl Message {
             subject: value.subject,
             time: value.time,
             to_list: MessageRecipients {
-                value: value.to_list.into_iter().map(|v| v.into()).collect(),
+                value: value.to_list.map_vec(),
             },
             unread: value.unread,
             row_id: None,

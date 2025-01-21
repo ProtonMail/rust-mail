@@ -70,6 +70,7 @@ use proton_core_common::models::{
     ContactEmail as RealContactEmail, ModelIdExtension, User as RealUser,
     UserSettings as RealUserSettings,
 };
+use proton_core_common::utils::MapVec as _;
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
 use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use proton_mail_common::AppError;
@@ -753,7 +754,7 @@ impl Contact {
         }
 
         Ok(Self {
-            cards: value.cards.into_iter().map(ContactCard::from).collect(),
+            cards: value.cards.map_vec(),
             contact_emails,
             create_time: value.create_time,
             label_ids: RealLabel::remote_ids_counterpart(

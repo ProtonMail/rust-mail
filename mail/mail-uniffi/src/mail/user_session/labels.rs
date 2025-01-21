@@ -6,6 +6,7 @@ use crate::uniffi_async;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_core_common::datatypes::LabelType as RealLabelType;
 use proton_core_common::models::Label as RealLabel;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
 use proton_mail_common::datatypes::SystemLabelId;
@@ -26,9 +27,7 @@ impl MailUserSession {
             let tether = stash.connection();
             let labels = RealLabel::find_by_kind(RealLabelType::Folder, &tether).await?;
             let labels = RealCustomFolder::from_labels(labels.as_slice(), &tether).await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarCustomFolder::from).collect(),
-            )
+            Ok::<_, RealProtonMailError>(labels.map_vec())
         })
         .await
         .map_err(UserSessionError::from)
@@ -45,9 +44,7 @@ impl MailUserSession {
             let tether = stash.connection();
             let labels = RealLabel::find_by_kind(RealLabelType::Label, &tether).await?;
             let labels = RealCustomLabel::from_labels(labels.as_slice(), &tether).await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarCustomLabel::from).collect(),
-            )
+            Ok::<_, RealProtonMailError>(labels.map_vec())
         })
         .await
         .map_err(UserSessionError::from)

@@ -22,6 +22,7 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::Label as RealLabel;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
 };
@@ -60,11 +61,7 @@ pub async fn apply_label_to_conversations(
     uniffi_async(async move {
         user_context
             .with_queue(|queue| {
-                RealConversation::action_apply_label(
-                    queue,
-                    label_id.into(),
-                    ids.into_iter().map(Into::into).collect(),
-                )
+                RealConversation::action_apply_label(queue, label_id.into(), ids.map_vec())
             })
             .await
             .map(|_| ())
@@ -352,7 +349,7 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
         Self {
             conversation: value.conversation.into(),
             message_id_to_open: value.message_id_to_open.into(),
-            messages: value.messages.into_iter().map(Into::into).collect(),
+            messages: value.messages.map_vec(),
         }
     }
 }
@@ -443,11 +440,7 @@ pub async fn mark_conversations_as_read(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> 
         let user_context = mailbox.mbox().user_context();
         user_context
             .with_queue(|queue| {
-                RealConversation::action_mark_read(
-                    queue,
-                    mailbox.label_id().into(),
-                    ids.into_iter().map(Into::into).collect(),
-                )
+                RealConversation::action_mark_read(queue, mailbox.label_id().into(), ids.map_vec())
             })
             .await
             .map(|_| ())
@@ -478,7 +471,7 @@ pub async fn mark_conversations_as_unread(mailbox: Arc<Mailbox>, ids: Vec<Id>) -
                 RealConversation::action_mark_unread(
                     queue,
                     mailbox.label_id().into(),
-                    ids.into_iter().map(Into::into).collect(),
+                    ids.map_vec(),
                 )
             })
             .await
@@ -520,7 +513,7 @@ pub async fn move_conversations(
                     queue,
                     mailbox.label_id().into(),
                     label_id.into(),
-                    ids.into_iter().map(Into::into).collect(),
+                    ids.map_vec(),
                 )
             })
             .await
@@ -644,11 +637,7 @@ pub async fn remove_label_from_conversations(
     uniffi_async(async move {
         user_context
             .with_queue(|queue| {
-                RealConversation::action_remove_label(
-                    queue,
-                    label_id.into(),
-                    ids.into_iter().map(Into::into).collect(),
-                )
+                RealConversation::action_remove_label(queue, label_id.into(), ids.map_vec())
             })
             .await
             .map(|_| ())
@@ -716,9 +705,7 @@ pub async fn star_conversations(session: Arc<MailUserSession>, ids: Vec<Id>) -> 
     let user_context = session.ctx();
     uniffi_async(async move {
         user_context
-            .with_queue(|queue| {
-                RealConversation::action_star(queue, ids.into_iter().map(Into::into).collect())
-            })
+            .with_queue(|queue| RealConversation::action_star(queue, ids.map_vec()))
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -744,9 +731,7 @@ pub async fn unstar_conversations(session: Arc<MailUserSession>, ids: Vec<Id>) -
     let user_context = session.ctx();
     uniffi_async(async move {
         user_context
-            .with_queue(|queue| {
-                RealConversation::action_unstar(queue, ids.into_iter().map(Into::into).collect())
-            })
+            .with_queue(|queue| RealConversation::action_unstar(queue, ids.map_vec()))
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)

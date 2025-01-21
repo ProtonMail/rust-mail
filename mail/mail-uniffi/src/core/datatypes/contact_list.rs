@@ -5,6 +5,7 @@ use proton_core_common::datatypes::{
     ContactItem as RealContactItem, ContactItemType as RealContactItemType,
     GroupedContacts as RealGroupedContacts,
 };
+use proton_core_common::utils::MapVec as _;
 
 /// This is the main data structure that is used to represent the group of contacts.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
@@ -20,7 +21,7 @@ impl From<RealGroupedContacts> for GroupedContacts {
     fn from(value: RealGroupedContacts) -> Self {
         Self {
             grouped_by: value.grouped_by,
-            items: value.items.into_iter().map(Into::into).collect(),
+            items: value.items.map_vec(),
         }
     }
 }
@@ -62,7 +63,7 @@ impl From<RealContactItem> for ContactItem {
     fn from(value: RealContactItem) -> Self {
         Self {
             id: value.local_id.into(),
-            emails: value.emails.into_iter().map(Into::into).collect(),
+            emails: value.emails.map_vec(),
             avatar_information: value.avatar_information.into(),
             name: value.name,
         }
@@ -89,7 +90,7 @@ impl From<RealContactGroupItem> for ContactGroupItem {
     fn from(value: RealContactGroupItem) -> Self {
         Self {
             id: value.local_id.into(),
-            contacts: value.contacts.into_iter().map(Into::into).collect(),
+            contacts: value.contacts.map_vec(),
             avatar_color: value.avatar_information.color,
             name: value.name,
         }
