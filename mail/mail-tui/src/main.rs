@@ -8,11 +8,10 @@ mod messages;
 mod widgets;
 
 use crate::app::App;
-use app_model::env::Env;
 use clap::Parser;
+use proton_mail_common::proton_api_mail::proton_api_core::session::Config;
 
 use crate::app_model::AppModel;
-use app_model::AppConfig;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -20,6 +19,7 @@ use crossterm::ExecutableCommand;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
+use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
 pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
@@ -33,26 +33,51 @@ fn initialize_panic_handler() {
     }));
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone, Debug)]
 #[command(name = "proton-mail-tui", about = "proton mail tui application")]
-struct Cli {
+struct CliArgs {
     /// Enable proton black environment
-    #[arg(long)]
-    dev: bool,
+    #[arg(long, short)]
+    atlas: bool,
+
+    /// Open messages in a browser window. Specify to choose an app or leave empty to use the
+    /// default.
+    #[arg(long, short)]
+    browser: Option<String>,
+
+    /// Default username
+    #[arg(long, short)]
+    username: Option<String>,
+
+    /// Default password
+    #[arg(long, short)]
+    password: Option<String>,
 }
 
-impl From<Cli> for AppConfig {
-    fn from(value: Cli) -> Self {
-        let env = if value.dev { Env::Dev } else { Env::Prod };
-        AppConfig { env }
+impl CliArgs {
+    pub fn dir(&self) -> &'static str {
+        if self.atlas {
+            "dev"
+        } else {
+            ""
+        }
+    }
+
+    pub fn api_config(&self) -> Config {
+        if self.atlas {
+            Config::atlas()
+        } else {
+            Config::default()
+        }
     }
 }
+
+static CLI_ARGS: LazyLock<CliArgs> = LazyLock::new(CliArgs::parse);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     initialize_panic_handler();
     let runtime = Runtime::new()?;
-    let args = Cli::parse();
-    let state = AppModel::new(&runtime, &AppConfig::from(args))?;
+    let state = AppModel::new(&runtime)?;
     let mut app = App::new(runtime, state);
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;

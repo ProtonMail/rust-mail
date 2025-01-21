@@ -13,6 +13,7 @@ use crate::widgets::{
     AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
+use crate::CLI_ARGS;
 use anyhow::{anyhow, Context};
 use futures::future::try_join_all;
 use futures::FutureExt;
@@ -32,8 +33,8 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use stash::stash::WatcherHandle;
+use std::fs;
 use std::sync::Arc;
-use std::{env, fs};
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
 
@@ -201,16 +202,23 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
-                if env::var("PROTON_OPEN_MESSAGES").is_ok() {
-                    if cfg!(unix) {
-                        fs::write("tmp.html", &html.body).unwrap();
-                        _ = std::process::Command::new("open")
-                            .args(["tmp.html"])
-                            .spawn()
-                            .unwrap();
+                if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
+                    let cmd_name = if !cmd_name.is_empty() {
+                        cmd_name
+                    } else if cfg!(target_os = "linux") {
+                        "xdg-open"
+                    } else if cfg!(target_os = "macos") {
+                        "open"
                     } else {
-                        panic!("PROTON_OPEN_MESSAGES is not implemented for your platform");
-                    }
+                        panic!("Please specify a browser in --browser");
+                    };
+
+                    fs::write("tmp_before.html", &html.body).unwrap();
+                    fs::write("tmp.html", &html.body).unwrap();
+                    _ = std::process::Command::new(cmd_name)
+                        .args(["tmp.html"])
+                        .spawn()
+                        .unwrap();
                 }
 
                 let html = html_to_text(&html.body)?;
