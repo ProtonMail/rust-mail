@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::actions::draft;
-use crate::actions::draft::{Discard, Save};
+use crate::actions::draft::{Discard, Save, UndoSend};
 use crate::cache::CacheMessageKey;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::StorableMessageBody;
@@ -17,7 +17,7 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
 use proton_action_queue::action::MetadataBuilder;
-use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
@@ -75,6 +75,10 @@ pub enum Error {
     NoRecipients,
     #[error("Failed to delete draft on server")]
     DeleteFailed,
+    #[error("Can not undo send message {0}")]
+    MessageCanNotBeUndoSent(LocalMessageId),
+    #[error("Can no longer undo send for message")]
+    SendCanNoLongerBeUndone,
 }
 
 /// Potential draft specific errors.
@@ -780,6 +784,18 @@ impl Draft {
         };
 
         Ok(metadata.local_conversation_id)
+    }
+
+    /// Enqueue a new cancel send action for the message with `message_id`
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message can't be undo sent or local operations failed.
+    pub async fn action_undo_send(
+        queue: &Queue,
+        message_id: LocalMessageId,
+    ) -> Result<ActionOutput<UndoSend>, ActionError<UndoSend>> {
+        queue.apply_action(UndoSend::new(message_id)).await
     }
 }
 

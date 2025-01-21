@@ -455,7 +455,7 @@ impl MailTestContext {
         message_id: MessageId,
         result: Result<PostCancelSendResponse, ApiErrorInfo>,
     ) {
-        let mock = Mock::given(method("PUT")).and(path(format!(
+        let mock = Mock::given(method("POST")).and(path(format!(
             "/api/mail/v4/messages/{message_id}/cancel_send"
         )));
         match result {

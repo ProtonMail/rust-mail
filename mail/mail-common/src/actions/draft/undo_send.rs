@@ -1,0 +1,174 @@
+use crate::actions::draft::{local_draft_label_id, local_sent_label_id};
+use crate::datatypes::{MessageFlags, SystemLabelId};
+use crate::draft::Error;
+use crate::models::Message;
+use crate::{AppError, MailContextError, MailUserContext};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::consts::Mail;
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::models::ModelExtension;
+use proton_mail_ids::LocalMessageId;
+use serde::{Deserialize, Serialize};
+use stash::stash::{Bond, Stash};
+use tracing::{error, warn};
+
+/// Action to cancel sending of a sent message.
+///
+/// This assumes that the user has a send delay configured in their mail settings.
+///
+/// We locally check if the message is in the sent folder before applying this action as it is
+/// expected that this action only be used after a message was sent.
+///
+#[derive(Serialize, Deserialize)]
+pub struct UndoSend {
+    id: LocalMessageId,
+    remote_id: Option<MessageId>,
+}
+
+impl UndoSend {
+    /// Create a new instance for message with `id`.
+    pub fn new(id: LocalMessageId) -> Self {
+        Self {
+            id,
+            remote_id: None,
+        }
+    }
+}
+
+impl Action for UndoSend {
+    const TYPE: Type = Type("undo_send");
+    const VERSION: u32 = 1;
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = UndoSendHandler;
+    type RemoteOutput = ();
+    type LocalOutput = ();
+    type Error = MailContextError;
+    type Context = MailUserContext;
+}
+
+#[derive(Default)]
+pub struct UndoSendHandler {}
+
+impl proton_action_queue::action::Handler for UndoSendHandler {
+    type Action = UndoSend;
+    type Context = MailUserContext;
+    async fn apply_local(
+        &self,
+        _: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        // Check if message is in sent folder or outbox + sent flag
+
+        let Some(mut message) = Message::find_by_id(action.id, tx).await? else {
+            return Err(AppError::MessageMissing(action.id).into());
+        };
+
+        // Message must have a remote id for this action. Unlike draft action we actually require
+        // that the message has been sent before we can actually undo it, which implies it must
+        // have a remote id.
+        let Some(remote_id) = message.remote_id.clone() else {
+            return Err(AppError::MessageHasNoRemoteId(action.id).into());
+        };
+
+        // Check that the message can actually be undo sent. It must either be in the se
+        if !(message.label_ids.contains(&LabelId::sent())
+            && (message.flags & MessageFlags::SENT == MessageFlags::SENT))
+        {
+            return Err(Error::MessageCanNotBeUndoSent(action.id).into());
+        }
+
+        let local_draft_label_id = local_draft_label_id(tx).await?;
+        let local_sent_label_id = local_sent_label_id(tx).await?;
+
+        message.flags.remove(MessageFlags::SENT);
+        message
+            .save(tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove sent flag: {e}"))?;
+
+        // Move message back to drafts
+        Message::remove_label(local_sent_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove sent label: {e}"))?;
+
+        Message::apply_label(local_draft_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
+
+        action.remote_id = Some(remote_id);
+        Ok(())
+    }
+
+    async fn revert_local(
+        &self,
+        _: &Self::Context,
+        action: &mut Self::Action,
+        tx: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        let Some(mut message) = Message::find_by_id(action.id, tx).await? else {
+            warn!("Message not found: {}", action.id);
+            return Ok(());
+        };
+
+        let local_draft_label_id = local_draft_label_id(tx).await?;
+        let local_sent_label_id = local_sent_label_id(tx).await?;
+        message.flags.set(MessageFlags::SENT, true);
+        message
+            .save(tx)
+            .await
+            .inspect_err(|e| error!("Failed to add sent flag: {e}"))?;
+
+        Message::remove_label(local_draft_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+
+        Message::apply_label(local_sent_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply send label: {e}"))?;
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        ctx: &Self::Context,
+        action: &mut Self::Action,
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let remote_id = action
+            .remote_id
+            .clone()
+            .expect("remote id should not be None");
+
+        let response = match ctx.api().cancel_send(remote_id.clone()).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to cancel send: {e}");
+                if let Some(proton_error) = e.to_proton_error() {
+                    if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
+                        return Err(Error::SendCanNoLongerBeUndone.into());
+                    }
+                }
+                return Err(e.into());
+            }
+        };
+
+        let mut conn = stash.connection();
+        let tx = conn.transaction().await?;
+
+        let mut message = Message::from_api_metadata(response.message, &tx)
+            .await
+            .inspect_err(|e| error!("Failed to convert remote metadata:{e}"))?;
+
+        message
+            .save(&tx)
+            .await
+            .inspect_err(|e| error!("Failed to save update message: {e}"))?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+}

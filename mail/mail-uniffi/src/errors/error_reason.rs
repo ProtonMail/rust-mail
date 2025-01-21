@@ -103,6 +103,10 @@ pub enum DraftErrorReason {
     MessageDoesNotExist,
     /// This draft was already sent and can't be modified
     AlreadySent,
+    /// Can not undo sent this message
+    MessageCanNotBeUndoSent,
+    /// The cancellation of sending for this message is no longer possible.
+    SendCanNoLongerBeUndone,
 }
 
 impl From<RealDraftErrorReason> for DraftErrorReason {
@@ -125,6 +129,8 @@ impl From<RealDraftErrorReason> for DraftErrorReason {
             RealDraftErrorReason::MessageUpdateIsNotDraft => Self::MessageUpdateIsNotDraft,
             RealDraftErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
             RealDraftErrorReason::AlreadySent => Self::AlreadySent,
+            RealDraftErrorReason::MessageCanNotBeUndoSent => Self::MessageCanNotBeUndoSent,
+            RealDraftErrorReason::SendCanNoLongerBeUndone => Self::SendCanNoLongerBeUndone,
         }
     }
 }

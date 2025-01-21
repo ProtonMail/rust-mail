@@ -90,6 +90,7 @@ pub(crate) fn new_action_factory() -> Factory {
         .register::<proton_core_common::actions::contacts::Delete>()
         .expect(ERR_MSG);
     factory.register::<draft::Discard>().expect(ERR_MSG);
+    factory.register::<draft::UndoSend>().expect(ERR_MSG);
     factory
 }
 

@@ -1,6 +1,7 @@
 mod discard;
 mod save;
 mod send;
+mod undo_send;
 
 use crate::datatypes::SystemLabelId;
 use crate::{AppError, MailContextError};
@@ -11,6 +12,7 @@ use proton_core_common::models::{Label, ModelIdExtension};
 pub use save::*;
 pub use send::*;
 use stash::stash::Tether;
+pub use undo_send::*;
 
 /// Resolve the Drafts folder local label id.
 async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
