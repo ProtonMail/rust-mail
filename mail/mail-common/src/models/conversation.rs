@@ -923,10 +923,10 @@ impl Conversation {
             let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
-            conv_counter.total -= 1;
+            conv_counter.total = conv_counter.total.saturating_sub(1);
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                conv_counter.unread -= 1;
+                conv_counter.unread = conv_counter.unread.saturating_sub(1);
             }
 
             conv_counter.save(bond).await?;
@@ -1030,10 +1030,10 @@ impl Conversation {
             let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
                 .await?
                 .ok_or_else(|| AppError::LabelNotFound(label_id))?;
-            conv_counter.total -= 1;
+            conv_counter.total = conv_counter.total.saturating_sub(1);
 
             if stats.filter(|s| s.unread_count > 0).is_some() {
-                conv_counter.unread -= 1;
+                conv_counter.unread = conv_counter.unread.saturating_sub(1);
             }
 
             conv_counter.save(bond).await?;
@@ -1752,7 +1752,7 @@ impl Conversation {
                 if let Some(mut conv_counter) =
                     ConversationCounters::find_by_id(*label_id, bond).await?
                 {
-                    conv_counter.unread -= *count;
+                    conv_counter.unread = conv_counter.unread.saturating_sub(*count);
                     conv_counter.save(bond).await?;
                 }
 
@@ -1789,7 +1789,7 @@ impl Conversation {
             // update message label counters
             for (label_id, count) in &mut label_counts {
                 if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
-                    counters.unread -= *count;
+                    counters.unread = counters.unread.saturating_sub(*count);
                     counters.save(bond).await?;
                 }
             }
@@ -2016,8 +2016,8 @@ impl Conversation {
                 });
 
                 if let Some(mut msg_counter) = MessageCounters::find_by_id(label_id, bond).await? {
-                    msg_counter.total -= message_ids.len() as u64;
-                    msg_counter.unread -= num_unread;
+                    msg_counter.total = msg_counter.total.saturating_sub(message_ids.len() as u64);
+                    msg_counter.unread = msg_counter.unread.saturating_sub(num_unread);
                     msg_counter.save(bond).await?;
                 }
             }
@@ -2036,9 +2036,9 @@ impl Conversation {
             {
                 Ok(num_unread) => {
                     if num_unread > 0 {
-                        conv_counter.unread -= 1;
+                        conv_counter.unread = conv_counter.unread.saturating_sub(1);
                     }
-                    conv_counter.total -= 1;
+                    conv_counter.total = conv_counter.total.saturating_sub(1);
                 }
                 Err(e) => {
                     if !matches!(
