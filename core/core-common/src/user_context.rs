@@ -4,7 +4,7 @@ use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
-use crate::{CoreContextError, CoreContextResult};
+use crate::{Context, CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
@@ -39,7 +39,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 #[derive(Clone)]
 pub struct UserContext {
     session: Session,
-    account_stash: Stash,
+    context: Arc<Context>,
     user_stash: Stash,
     user_id: UserId,
     session_id: AuthId,
@@ -57,7 +57,7 @@ impl UserContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
         session: Session,
-        account_stash: Stash,
+        context: Arc<Context>,
         user_stash_path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
         user_id: UserId,
@@ -76,7 +76,7 @@ impl UserContext {
 
         Ok(Arc::new(Self {
             session,
-            account_stash,
+            context,
             user_stash,
             user_id,
             session_id,
@@ -131,7 +131,8 @@ impl UserContext {
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
     /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
-        let tether = self.account_stash.connection();
+        let context = self.context.clone();
+        let tether = context.account_stash().connection();
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?

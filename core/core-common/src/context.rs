@@ -721,10 +721,14 @@ impl Context {
         let db_path = self.user_db_path(&user_id);
 
         let cache_path = self.cache_path.join(user_id.as_str());
-
-        let context = UserContext::new(
+        let Some(context) = self.this.upgrade() else {
+            return Err(CoreContextError::Other(anyhow::anyhow!(
+                "Failed to convert weak context to arc via upgrade"
+            )));
+        };
+        let user_context = UserContext::new(
             session,
-            self.account_stash().to_owned(),
+            context,
             &db_path,
             &self.user_db_initializers,
             user_id.clone(),
@@ -734,9 +738,9 @@ impl Context {
         )
         .await?;
 
-        active_contexts.insert(user_id, Arc::downgrade(&context));
+        active_contexts.insert(user_id, Arc::downgrade(&user_context));
 
-        Ok(context)
+        Ok(user_context)
     }
 }
 
