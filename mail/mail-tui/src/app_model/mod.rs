@@ -76,7 +76,8 @@ pub trait AppStateHandler {
 /// Behavior for an application popup that will be displayed over the existing views.
 ///
 /// Unlike [`AppStateHandler`], popups can only react to input and can not change their state.
-pub trait Popup {
+pub trait Popup: Send {
+    // Popups must be Send since they need to be sent as messages.
     /// Popup title to be drawn around the box.
     fn title(&self) -> Option<String>;
     /// Handle input event.
