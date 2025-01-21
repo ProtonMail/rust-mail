@@ -10,6 +10,7 @@ pub enum Messages {
     Mailbox(crate::app_model::mailbox::Message),
     TwoFA(crate::app_model::twofa::Message),
     DisplayError(Option<String>, anyhow::Error),
+    DisplayInfo(Option<String>, String),
     /// This message can be used to switch the application state.
     SwitchAppState(AppState),
     /// Display an infinite progress indicator with a given message.

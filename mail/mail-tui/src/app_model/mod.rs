@@ -65,6 +65,11 @@ pub trait AppStateHandler {
 
     /// Called to provide contextual help that is displayed at the top.
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect);
+
+    /// How many lines the help bar is.
+    fn help_bar_lines(&self) -> u16 {
+        1
+    }
     /// Called to provide information it the status bar at the bottom.
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect);
 }
@@ -225,7 +230,11 @@ impl Model<Messages> for AppModel {
                 return Command::None;
             }
             Messages::DisplayError(title, error) => {
-                let popup = ErrorDialog::new(title.unwrap_or("Error".to_owned()), error);
+                let popup = InfoDialog::new_error(title, error);
+                return Command::message(Messages::raise_popup(popup));
+            }
+            Messages::DisplayInfo(title, text) => {
+                let popup = InfoDialog::new_info(title, text);
                 return Command::message(Messages::raise_popup(popup));
             }
             Messages::DismissPopup => {
@@ -257,8 +266,11 @@ impl Model<Messages> for AppModel {
 
     fn view(&mut self, frame: &mut Frame) {
         let area = frame.area();
+
+        let help_lines = self.state.help_bar_lines();
+
         let [help_area, view_area, status_bar_area] = Layout::vertical([
-            Constraint::Length(1),
+            Constraint::Length(help_lines),
             Constraint::Percentage(100),
             Constraint::Length(1),
         ])
@@ -377,6 +389,16 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.view_status_bar(frame, area),
         }
     }
+
+    fn help_bar_lines(&self) -> u16 {
+        match self {
+            AppState::SessionSelect(state) => state.help_bar_lines(),
+            AppState::Login(state) => state.help_bar_lines(),
+            AppState::TwoFA(state) => state.help_bar_lines(),
+            AppState::ContextInit(state) => state.help_bar_lines(),
+            AppState::Mailbox(state) => state.help_bar_lines(),
+        }
+    }
 }
 
 fn app_tracing_env_filter() -> EnvFilter {
@@ -434,20 +456,37 @@ fn log_backtrace_on_panic() {
     }));
 }
 
-struct ErrorDialog {
-    error: anyhow::Error,
-    source: String,
+#[derive(Debug)]
+enum DialogText {
+    Error(anyhow::Error),
+    Text(String),
 }
 
-impl ErrorDialog {
-    fn new(source: String, error: anyhow::Error) -> Self {
-        Self { error, source }
+#[derive(Debug)]
+struct InfoDialog {
+    pub title: Option<String>,
+    pub text: DialogText,
+}
+
+impl InfoDialog {
+    pub fn new_error(title: Option<String>, err: anyhow::Error) -> Self {
+        Self {
+            title: Some(title.unwrap_or_else(|| "Error".to_owned())),
+            text: DialogText::Error(err),
+        }
+    }
+
+    pub fn new_info(title: Option<String>, text: String) -> Self {
+        Self {
+            title,
+            text: DialogText::Text(text),
+        }
     }
 }
 
-impl Popup for ErrorDialog {
+impl Popup for InfoDialog {
     fn title(&self) -> Option<String> {
-        Some(self.source.clone())
+        self.title.clone()
     }
 
     fn handle_event(&mut self, _: Event) -> Command<Messages> {
@@ -463,9 +502,20 @@ impl Popup for ErrorDialog {
         ])
         .flex(Flex::Center)
         .areas(area.inner(Margin::new(2, 2)));
-        frame.render_widget(Block::new().white().on_red(), area);
+
+        let text = match &self.text {
+            DialogText::Error(error) => {
+                frame.render_widget(Block::new().white().on_red(), area);
+                error.to_string()
+            }
+            DialogText::Text(text) => {
+                frame.render_widget(Block::new(), area);
+                text.clone()
+            }
+        };
+
         frame.render_widget(
-            Paragraph::new(self.error.to_string())
+            Paragraph::new(text)
                 .centered()
                 .white()
                 .bold()
