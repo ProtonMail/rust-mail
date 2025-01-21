@@ -39,6 +39,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 #[derive(Clone)]
 pub struct UserContext {
     session: Session,
+    account_stash: Stash,
     user_stash: Stash,
     user_id: UserId,
     session_id: AuthId,
@@ -53,8 +54,10 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
         session: Session,
+        account_stash: Stash,
         user_stash_path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
         user_id: UserId,
@@ -73,6 +76,7 @@ impl UserContext {
 
         Ok(Arc::new(Self {
             session,
+            account_stash,
             user_stash,
             user_id,
             session_id,
@@ -130,7 +134,7 @@ impl UserContext {
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
     /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
-        let tether = self.user_stash.connection();
+        let tether = self.account_stash.connection();
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?

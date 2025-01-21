@@ -724,6 +724,7 @@ impl Context {
 
         let context = UserContext::new(
             session,
+            self.stash().to_owned(),
             &db_path,
             &self.user_db_initializers,
             user_id.clone(),
