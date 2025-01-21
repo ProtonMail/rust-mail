@@ -449,7 +449,7 @@ impl MailContext {
 
     /// Get the connection to the session database.
     pub fn session_stash(&self) -> &Stash {
-        self.core_context.stash()
+        self.core_context.account_stash()
     }
 
     /// Create a new user context or return an existing one.
