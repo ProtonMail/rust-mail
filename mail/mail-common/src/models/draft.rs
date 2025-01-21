@@ -227,6 +227,10 @@ pub struct DraftSendResult {
     /// Timestamp at which this entry was produced.
     #[DbField]
     pub timestamp: i64,
+    /// Timestamp by which we can cancel the sending of this message.
+    ///
+    #[DbField]
+    pub undo_timestamp: i64,
     /// Whether an error occurred while sending the message.
     #[DbField]
     pub error: Option<DraftSendFailure>,
@@ -246,11 +250,16 @@ pub struct DraftSendResult {
 impl DraftSendResult {
     /// Create a new draft send success result for message with `local_message_id` and
     /// the server returned `undo_token`.
-    pub fn success(local_message_id: LocalMessageId, remote_message_id: MessageId) -> Self {
+    pub fn success(
+        local_message_id: LocalMessageId,
+        remote_message_id: MessageId,
+        undo_timestamp: i64,
+    ) -> Self {
         Self {
             local_message_id,
             remote_message_id: Some(remote_message_id),
             timestamp: Utc::now().timestamp(),
+            undo_timestamp,
             error: None,
             seen: false,
             origin: DraftSendResultOrigin::Send,
@@ -269,6 +278,7 @@ impl DraftSendResult {
             local_message_id,
             remote_message_id: None,
             timestamp: Utc::now().timestamp(),
+            undo_timestamp: 0,
             seen: false,
             error: Some(error),
             row_id: None,
@@ -383,6 +393,13 @@ impl DraftSendResult {
         )
         .await?;
         Ok(())
+    }
+
+    /// Returns true whether the current send can be undone as of now.
+    #[must_use]
+    pub fn is_send_undoable(&self) -> bool {
+        let now = Utc::now().timestamp();
+        now < self.undo_timestamp
     }
 }
 

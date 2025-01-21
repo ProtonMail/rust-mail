@@ -1,3 +1,4 @@
+use chrono::Utc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::consts::CoreBundle;
 use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
@@ -110,6 +111,7 @@ async fn basic_send_check() {
         default_mock_send_params(),
         sent_message.clone(),
         sent_conversation,
+        Utc::now().timestamp() + SEND_DELAY_SECONDS as i64,
     )
     .await;
     ctx.core_test_context()
@@ -200,6 +202,7 @@ async fn basic_send_check() {
         send_result.remote_message_id,
         Some(draft_message.remote_id.unwrap())
     );
+    assert!(send_result.timestamp < send_result.undo_timestamp);
     assert!(!send_result.seen);
 }
 

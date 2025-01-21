@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Drafts are moved to outbox before being sent.
   - [ET-503] Drafts can not be updated after being sent.
 
+### Changed
+
+  - `DraftSendStatus` - now includes whether it can be cancelled or not.
+
 ## [0.33.0] - 2025-01-17
 
 ### Added
