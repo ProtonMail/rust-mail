@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use std::time::Duration;
 
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
 use proton_api_core::services::proton::common::LabelId;
@@ -304,12 +305,13 @@ impl ProtonMail for Proton {
         message_id: MessageId,
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
+        delay: Option<Duration>,
     ) -> Result<PostSendMessageResponse, ApiServiceError> {
         let send_request = PostSendRequest {
             expiration_time: None,
             expires_in: None,
             auto_save_contacts,
-            delay_seconds: None,
+            delay_seconds: delay.map(|v| v.as_secs()),
             delivery_time: None,
             packages,
         };

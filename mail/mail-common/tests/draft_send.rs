@@ -30,6 +30,7 @@ use proton_mail_common::{draft, MailContextError, MailUserContext};
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
+use proton_mail_test_utils::messages::TestDraftSendRequest;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::sync::Arc;
@@ -104,8 +105,9 @@ async fn basic_send_check() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
-    ctx.mock_send_draft_basic(
+    ctx.mock_send_draft(
         message.metadata.id.clone(),
+        default_mock_send_params(),
         sent_message.clone(),
         sent_conversation,
     )
@@ -472,6 +474,7 @@ fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     if let Some(mime_type) = mime_type {
         mail_settings.draft_mime_type = mime_type.into();
     }
+    mail_settings.delay_send_seconds = SEND_DELAY_SECONDS;
     let mut params = TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
@@ -522,6 +525,8 @@ fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     params
 }
 
+const SEND_DELAY_SECONDS: u32 = 60;
+
 fn expected_create_draft_params() -> DraftParams {
     let address = message_body_test_addresses();
     DraftParams {
@@ -542,5 +547,15 @@ fn expected_create_draft_params() -> DraftParams {
         draft_flags: 0,
         body: EncryptedDraft(String::new()),
         mime_type: MailSettings::default().draft_mime_type.into(),
+    }
+}
+
+fn default_mock_send_params() -> TestDraftSendRequest {
+    TestDraftSendRequest {
+        expiration_time: None,
+        expires_in: None,
+        auto_save_contacts: Some(true),
+        delay_seconds: Some(SEND_DELAY_SECONDS.into()),
+        delivery_time: None,
     }
 }
