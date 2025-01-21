@@ -11,7 +11,6 @@ use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use secrecy::{ExposeSecret, SecretString};
 use std::sync::Arc;
-use tracing::debug;
 
 pub enum Message {
     Submit,

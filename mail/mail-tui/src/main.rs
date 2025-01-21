@@ -35,7 +35,7 @@ fn initialize_panic_handler() {
 struct CliArgs {
     /// Enable proton black environment
     #[arg(long, short)]
-    atlas: bool,
+    api_dev_env: bool,
 
     /// Open messages in a browser window. Specify to choose an app or leave empty to use the
     /// default.
@@ -53,7 +53,7 @@ struct CliArgs {
 
 impl CliArgs {
     pub fn dir(&self) -> &'static str {
-        if self.atlas {
+        if self.api_dev_env {
             "dev"
         } else {
             ""
@@ -61,7 +61,7 @@ impl CliArgs {
     }
 
     pub fn api_config(&self) -> Config {
-        if self.atlas {
+        if self.api_dev_env {
             Config::atlas()
         } else {
             Config::default()
