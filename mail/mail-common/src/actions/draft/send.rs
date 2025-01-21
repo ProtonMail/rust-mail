@@ -16,6 +16,7 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash, StashError};
+use std::time::Duration;
 use tracing::error;
 
 #[derive(Serialize, Deserialize)]
@@ -237,7 +238,12 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let response = context
             .api()
-            .send_mail(remote_message_id, packages, auto_save_contacts)
+            .send_mail(
+                remote_message_id,
+                packages,
+                auto_save_contacts,
+                Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
+            )
             .await
             .inspect_err(|err| {
                 error!("Failed to send send email request: {err}");

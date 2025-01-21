@@ -1,15 +1,19 @@
 use crate::actions::{filter_responses, ActionError, GenericActionData};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
-use crate::models::Message;
+use crate::models::{Conversation, Message};
 use crate::MailUserContext;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::exports::SqliteError;
+use stash::orm::Model;
+use stash::params;
+use stash::stash::{Bond, Stash, StashError};
 use tracing::error;
 
 /// Action which marks messages as deleted.
@@ -52,7 +56,10 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        action.0.resolve_ids(tx).await?;
+        if action.0.target_ids.is_empty() {
+            return Err(ActionError::NoInput);
+        }
+
         Message::mark_deleted(action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
@@ -77,32 +84,86 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = ctx.session().api();
-        let message_ids = action
+        let mut conn = stash.connection();
+
+        action.0.resolve_ids(&conn).await?;
+
+        let local_ids_without_remote_id = action
             .0
-            .remote_target_ids
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        let label_id = action.0.remote_label_id.clone();
-        let response = api
-            .put_messages_delete(message_ids, label_id)
-            .await?
-            .responses;
+            .local_only_ids(&conn)
+            .await
+            .inspect_err(|e| error!("Failed to load local only ids: {e}"))?;
 
-        let failed_ids = filter_responses(response);
+        let failed_ids = if action.0.remote_target_ids.is_empty() {
+            vec![]
+        } else {
+            let api = ctx.session().api();
+            let message_ids = action
+                .0
+                .remote_target_ids
+                .clone()
+                .into_iter()
+                .map(Into::into)
+                .collect();
+            let label_id = action.0.remote_label_id.clone();
+            let response = api
+                .put_messages_delete(message_ids, label_id)
+                .await?
+                .responses;
 
-        if !failed_ids.is_empty() {
+            filter_responses(response)
+        };
+
+        if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             error!("Delete messages operation failed for: {failed_ids:?}");
 
-            let mut conn = stash.connection();
             let tx = conn.transaction().await?;
-            let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
-            Message::mark_undeleted(local_ids, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to rollback delete on messages: {e}"))?;
+            if !failed_ids.is_empty() {
+                let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+
+                Message::mark_undeleted(local_ids, &tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to rollback delete on messages: {e}"))?;
+            }
+
+            for id in local_ids_without_remote_id {
+                if let Some(conv_id) = match tx.query_value::<_, LocalConversationId>(
+                    format!(
+                        "SELECT {} AS value FROM {} WHERE remote_id IS NULL AND {} IN (SELECT local_conversation_id FROM {} WHERE {} = ?)",
+                        Conversation::id_field_name(),
+                        Conversation::table_name(),
+                        Conversation::id_field_name(),
+                        Message::table_name(),
+                        Message::id_field_name()
+                    ),
+                    params![id],
+                )
+                .await {
+                    Ok(conv_id) => Some(conv_id),
+                    Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => None,
+                    Err(e) => return {
+                        error!("Failed to get conversation id: {e}");
+                        Err(e.into())
+                    },
+                } {
+                    // We should only delete orphaned conversations.
+                    let conversation_message_count = tx.query_value::<_, usize>(
+                        format!("SELECT COUNT(*) AS value FROM {} WHERE local_conversation_id=? AND deleted=0", Message::table_name()), params![conv_id]).await?;
+                    if conversation_message_count == 0 {
+                        Conversation::delete_by_id(conv_id, &tx)
+                            .await
+                            .inspect_err(|e| {
+                                error!("Failed to delete orphaned conversation: {e}")
+                            })?;
+                    }
+                }
+
+                Message::delete_by_id(id, &tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to delete message: {e}"))?;
+            }
+
             tx.commit().await?;
         }
         Ok(())

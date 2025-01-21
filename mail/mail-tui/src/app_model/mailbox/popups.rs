@@ -66,12 +66,14 @@ impl crate::app_model::Popup for MoveItemPopup {
             KeyCode::Enter => self
                 .selected_label_id()
                 .map(|id| match self.item {
-                    Item::Conversation(item_id) => {
-                        Command::message(ConversationMessage::MoveConversation(item_id, id).into())
-                    }
-                    Item::Message(item_id) => {
-                        Command::message(MessageMessage::MoveMessage(item_id, id).into())
-                    }
+                    Item::Conversation(item_id) => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(ConversationMessage::MoveConversation(item_id, id).into()),
+                    ]),
+                    Item::Message(item_id) => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(MessageMessage::MoveMessage(item_id, id).into()),
+                    ]),
                 })
                 .unwrap_or_default(),
             _ => Command::None,
@@ -185,7 +187,12 @@ impl crate::app_model::Popup for LabelItemPopup {
                             partially_selected_label_ids,
                             must_archive: false, // TODO: add this button
                         });
-                        Command::message(ConversationMessage::LabelConversation(label_as).into())
+                        Command::batch([
+                            Command::message(Messages::DismissPopup),
+                            Command::message(
+                                ConversationMessage::LabelConversation(label_as).into(),
+                            ),
+                        ])
                     }
                     Item::Message(id) => {
                         let label_as = Box::new(LabelAs {
@@ -195,7 +202,10 @@ impl crate::app_model::Popup for LabelItemPopup {
                             partially_selected_label_ids,
                             must_archive: false, // TODO: add this button
                         });
-                        Command::message(MessageMessage::LabelMessage(label_as).into())
+                        Command::batch([
+                            Command::message(Messages::DismissPopup),
+                            Command::message(MessageMessage::LabelMessage(label_as).into()),
+                        ])
                     }
                 }
             }
@@ -341,7 +351,10 @@ impl crate::app_model::Popup for LabelSelectPopup {
                     return Command::None;
                 };
 
-                Command::message(Message::SelectLabel(label.label().local_id.unwrap()).into())
+                Command::batch([
+                    Command::message(Messages::DismissPopup),
+                    Command::message(Message::SelectLabel(label.label().local_id.unwrap()).into()),
+                ])
             }
 
             _ => Command::None,

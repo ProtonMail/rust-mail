@@ -113,6 +113,8 @@ pub enum DraftErrorReason {
     MessageUpdateIsNotDraft,
     /// This message no longer exists.
     MessageDoesNotExist,
+    /// This draft was already sent and can't be modified
+    AlreadySent,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

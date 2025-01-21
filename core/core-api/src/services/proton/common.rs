@@ -231,7 +231,7 @@ declare_proton_id! {
 }
 
 declare_proton_id! {
-    /// Represents the Id of an Event.
+    /// Represents the Id of a Label.
     pub LabelId
 }
 

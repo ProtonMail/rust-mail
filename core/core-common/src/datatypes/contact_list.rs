@@ -1,8 +1,9 @@
 use super::avatar::AvatarInformation;
-use crate::datatypes::{LocalContactEmailId, LocalContactId, LocalLabelId};
-use crate::models::{Contact, ContactEmail};
+use crate::datatypes::{LabelType, LocalContactEmailId, LocalContactId, LocalLabelId};
+use crate::models::{Contact, ContactEmail, Label};
 use itertools::Itertools;
-use std::collections::BTreeMap;
+use proton_api_core::services::proton::common::LabelId;
+use std::collections::{BTreeMap, HashMap};
 use unicode_segmentation::UnicodeSegmentation;
 
 const DEFAULT_GROUP: &str = "#";
@@ -18,26 +19,78 @@ pub struct GroupedContacts {
 }
 
 impl GroupedContacts {
-    pub fn from_contacts(value: Vec<Contact>) -> Vec<Self> {
-        let mut btmap: BTreeMap<String, Vec<ContactItemType>> = BTreeMap::new();
+    /// Builds grouped contacts based on flat contact list and contact groups
+    ///
+    /// # Contact groups
+    ///
+    /// Note, that the contact group is represented by [`Label`]. Currently, this function WON'T
+    /// assert if the label has type `ContactGroup`.
+    ///
+    /// # Panics
+    ///
+    /// This function may panic if the contact group does not have local ID assigned.
+    ///
+    #[must_use]
+    pub fn from_contacts_and_groups(
+        contacts: Vec<Contact>,
+        contact_groups: Vec<Label>,
+    ) -> Vec<Self> {
+        debug_assert!(contact_groups
+            .iter()
+            .all(|group| group.label_type == LabelType::ContactGroup));
 
-        value
+        let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
             .into_iter()
-            .map(ContactItem::from)
+            .filter(|group| group.label_type == LabelType::ContactGroup)
+            .map(|group| {
+                (
+                    group.remote_id.unwrap().clone(),
+                    ContactGroupItem {
+                        local_id: group.local_id.unwrap(),
+                        name: group.name.clone(),
+                        avatar_information: AvatarInformation::from(&group.name),
+                        contacts: vec![],
+                    },
+                )
+            })
+            .collect();
+
+        let contact_items = contacts
+            .into_iter()
             .sorted_by(|one, other| {
                 let one_words: String = one.name.unicode_words().collect();
                 let other_words: String = other.name.unicode_words().collect();
                 one_words.cmp(&other_words)
             })
+            .map(|contact| {
+                let item = ContactItem::from(contact.clone());
+                contact.label_ids.iter().for_each(|id| {
+                    if let Some(group) = contact_group_items.get_mut(id) {
+                        group.contacts.push(item.clone());
+                    }
+                });
+                item
+            })
+            .collect::<Vec<_>>();
+
+        let mut btmap: BTreeMap<String, Vec<ContactItemType>> = BTreeMap::new();
+        contact_items
+            .into_iter()
+            .map_into::<ContactItemType>()
+            .chain(
+                contact_group_items
+                    .into_values()
+                    .map_into::<ContactItemType>(),
+            )
             .for_each(|contact| {
-                let key = contact.avatar_information.text.clone();
-                let key = if key.is_empty() || key.as_str() == "?" {
-                    DEFAULT_GROUP.to_string()
+                let key = contact.key();
+                let key = if key.is_empty() || key == "?" {
+                    DEFAULT_GROUP
                 } else {
                     key
                 };
 
-                btmap.entry(key).or_default().push(contact.into());
+                btmap.entry(key.to_owned()).or_default().push(contact);
             });
 
         btmap
@@ -53,6 +106,18 @@ impl GroupedContacts {
 pub enum ContactItemType {
     Contact(ContactItem),
     Group(ContactGroupItem),
+}
+
+impl ContactItemType {
+    /// Represents the first grapheme in the contact list, used to sort the contacts alphabetically
+    fn key(&self) -> &str {
+        let avatar_information = match self {
+            ContactItemType::Contact(contact_item) => &contact_item.avatar_information,
+            ContactItemType::Group(contact_group_item) => &contact_group_item.avatar_information,
+        };
+
+        avatar_information.text.as_str()
+    }
 }
 
 impl From<ContactItem> for ContactItemType {
@@ -111,8 +176,8 @@ pub struct ContactGroupItem {
     /// The field represent the name of the contact group
     pub name: String,
 
-    /// The field represent the avatar color of the contact group
-    pub avatar_color: String,
+    /// The field represent the avatar information of the contact group
+    pub avatar_information: AvatarInformation,
 
     /// The field represent the list of emails of the contact group
     pub contacts: Vec<ContactItem>,

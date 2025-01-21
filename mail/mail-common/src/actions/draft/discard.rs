@@ -1,0 +1,171 @@
+use crate::datatypes::SystemLabelId;
+use crate::draft::{Draft, Error};
+use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
+use crate::{MailContextError, MailUserContext};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::consts::General;
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::session::CoreSession;
+use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_ids::{LocalConversationId, LocalMessageId};
+use serde::{Deserialize, Serialize};
+use stash::stash::{Bond, Stash};
+use tracing::{debug, error};
+
+/// Action which discards a Draft.
+///
+/// Discarding a Draft is equivalent to perma-deleting the message.
+///
+#[derive(Serialize, Deserialize)]
+pub struct Discard {
+    metadata_id: MetadataId,
+    local_message_id: Option<LocalMessageId>,
+    local_conversation_id: Option<LocalConversationId>,
+}
+
+impl Discard {
+    /// Create a new instance for the `draft`.
+    pub fn new(draft: &Draft) -> Self {
+        Self {
+            metadata_id: draft.metadata_id,
+            local_message_id: None,
+            local_conversation_id: None,
+        }
+    }
+}
+
+impl Action for Discard {
+    const TYPE: Type = Type("discard_draft");
+    const VERSION: u32 = 1;
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = DiscardHandler;
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
+    type Error = MailContextError;
+
+    type Context = MailUserContext;
+}
+
+#[derive(Default)]
+pub struct DiscardHandler {}
+
+impl proton_action_queue::action::Handler for DiscardHandler {
+    type Action = Discard;
+    type Context = MailUserContext;
+    async fn apply_local(
+        &self,
+        _: &MailUserContext,
+        action: &mut Self::Action,
+        bond: &Bond<'_>,
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to load draft metadata: {e}");
+            })?
+        else {
+            error!("Could not find metadata {}", action.metadata_id);
+            return Err(Error::MetadataNotFound(action.metadata_id).into());
+        };
+
+        if let Some(local_message_id) = metadata.local_message_id {
+            debug!("Local message is present, marking as deleted.");
+            Message::mark_deleted(vec![local_message_id], bond)
+                .await
+                .inspect_err(|e| error!("Failed to mark message as deleted: {e}"))?;
+        }
+
+        DraftMetadata::delete(action.metadata_id, bond)
+            .await
+            .inspect_err(|e| error!("Failed to delete metadata: {e}"))?;
+
+        action.local_message_id = metadata.local_message_id;
+        action.local_conversation_id = metadata.local_conversation_id;
+        Ok(())
+    }
+
+    async fn revert_local(
+        &self,
+        _: &MailUserContext,
+        action: &mut Self::Action,
+        bond: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        // Only undo the delete of the message. The draft metadata can be re-created on
+        // the next draft open call.
+        if let Some(local_message_id) = action.local_message_id {
+            Message::mark_undeleted(vec![local_message_id], bond)
+                .await
+                .inspect_err(|e| error!("Failed to mark message undeleted: {e}"))?;
+        }
+
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        ctx: &MailUserContext,
+        action: &mut Self::Action,
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let Some(local_message_id) = action.local_message_id else {
+            // if there is no local message id, we never create a message and there is
+            // nothing to do.
+            return Ok(());
+        };
+
+        let mut tether = stash.connection();
+        let Some(message_id) = Message::local_id_counterpart(local_message_id, &tether).await?
+        else {
+            let tx = tether.transaction().await?;
+            // No remote id, we can't issue the request, we should only delete the local data.
+            Message::delete_by_id(local_message_id, &tx)
+                .await
+                .inspect_err(|e| error!("Failed to delete message {}:{e}", local_message_id))?;
+
+            // If we are not replying or forwarding, it means we have a new draft and we may
+            // have to delete the conversation id as well.
+            if let Some(local_conversation_id) = action.local_conversation_id {
+                if let Some(conversation) =
+                    Conversation::find_by_id(local_conversation_id, &tx).await?
+                {
+                    // Conversation has no remote id, so we need to do local cleanup, but only
+                    // if it only has no more messages.
+                    if conversation.num_messages == 0 && conversation.remote_id.is_none() {
+                        Conversation::delete_by_id(local_conversation_id, &tx)
+                            .await
+                            .inspect_err(|e| {
+                                error!(
+                                    "Failed to delete conversation {}:{e}",
+                                    local_conversation_id
+                                )
+                            })?;
+                    }
+                }
+            }
+            tx.commit().await?;
+
+            return Ok(());
+        };
+
+        // Server will take care of deleting orphaned conversations, we do not have
+        // to do anything.
+        let session = ctx.session();
+        let response = session
+            .api()
+            .put_messages_delete(vec![message_id.clone()], Some(LabelId::drafts()))
+            .await
+            .inspect_err(|e| error!("Failed to delete message on server: {e}"))?;
+
+        for result in response.responses {
+            if result.id == message_id && result.response.code != General::NoError as u32 {
+                error!("Failed to delete message: {:?}", result.response);
+                return Err(MailContextError::Draft(Error::DeleteFailed));
+            }
+        }
+
+        // Nothing else to do, event loop will take care of the cleanup.
+        Ok(())
+    }
+}

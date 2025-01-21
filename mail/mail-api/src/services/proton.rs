@@ -16,6 +16,7 @@
 use bytes::Bytes;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
 use proton_api_core::services::proton::common::LabelId;
+use std::time::Duration;
 
 use crate::services::proton::prelude::*;
 
@@ -385,6 +386,7 @@ pub trait ProtonMail {
     ///  * `message_id`         - message id (draft) to send.
     ///  * `packages`           - The packages of the message containing the encrypted e-mail data for the recipients.
     ///  * `auto_save_contacts` - Whether the server should automatically create contacts for the recipients.
+    ///  * `delay`              - Duration by which the message should be delayed before sending
     ///
     /// # Errors
     ///
@@ -394,5 +396,6 @@ pub trait ProtonMail {
         message_id: MessageId,
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
+        delay: Option<Duration>,
     ) -> Result<PostSendMessageResponse, ApiServiceError>;
 }

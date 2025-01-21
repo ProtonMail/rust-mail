@@ -8,6 +8,7 @@ pub use self::available_action::*;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType};
 use crate::models::RollbackItem;
 use crate::AppError;
+use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::action::Factory;
 use proton_api_core::consts::General;
@@ -16,9 +17,10 @@ use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, StashError};
+use stash::stash::{Bond, StashError, Tether};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -87,6 +89,7 @@ pub(crate) fn new_action_factory() -> Factory {
     factory
         .register::<proton_core_common::actions::contacts::Delete>()
         .expect(ERR_MSG);
+    factory.register::<draft::Discard>().expect(ERR_MSG);
     factory
 }
 
@@ -131,14 +134,14 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), ActionError> {
         if self.target_ids.is_empty() {
             return Err(ActionError::NoInput);
         }
 
-        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tx).await?);
+        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
 
-        let conv_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
+        let conv_ids = T::local_ids_counterpart(self.target_ids.clone(), tether)
             .await
             .map_err(|e| {
                 error!("Failed to resolve ids: {e}");
@@ -148,6 +151,43 @@ where
         self.remote_target_ids = conv_ids;
 
         Ok(())
+    }
+
+    /// Return the ids of all the items which do not have a remote id.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn local_only_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, ActionError> {
+        let placeholders = stash::utils::placeholders(self.target_ids.len());
+        #[allow(trivial_casts)]
+        let values = self
+            .target_ids
+            .iter()
+            .map(|id| Box::new(id.clone()) as Box<dyn ToSql + Send>)
+            .collect();
+        Ok(tether
+            .query_values::<_, T::IdType>(
+                formatdoc!(
+                    "
+                            SELECT
+                                {} AS value
+                            FROM
+                                {}
+                            WHERE
+                                {} IN ({})
+                            AND
+                                {} IS NULL
+                            ",
+                    T::id_field_name(),
+                    T::table_name(),
+                    T::id_field_name(),
+                    placeholders,
+                    T::remote_id_field_name(),
+                ),
+                values,
+            )
+            .await?)
     }
 
     /// Mark the action items to be rollback

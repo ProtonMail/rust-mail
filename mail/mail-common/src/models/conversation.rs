@@ -22,7 +22,9 @@ use crate::{actions::conversations::Delete, AppError};
 use anyhow::{anyhow, Context};
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use proton_action_queue::queue::{ActionError as QueueActionError, ActionOutput, Queue};
+use proton_action_queue::queue::{
+    ActionError as QueueActionError, ActionOutput, Queue, QueuedActionOutput,
+};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_core::services::proton::Proton;
@@ -328,9 +330,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Move multiple conversations.

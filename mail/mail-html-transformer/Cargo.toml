@@ -11,6 +11,7 @@ lazy_static = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 velcro = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

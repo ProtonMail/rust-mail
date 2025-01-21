@@ -90,7 +90,7 @@ impl From<RealContactGroupItem> for ContactGroupItem {
         Self {
             id: value.local_id.into(),
             contacts: value.contacts.into_iter().map(Into::into).collect(),
-            avatar_color: value.avatar_color,
+            avatar_color: value.avatar_information.color,
             name: value.name,
         }
     }

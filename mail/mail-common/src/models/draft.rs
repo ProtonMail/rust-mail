@@ -403,6 +403,7 @@ pub enum DraftSendFailure {
     MessageUpdateIsNotDraft,
     MessageDoesNotExist,
     NoConnection,
+    AlreadySent,
     Server(String),
     Internal,
 }
@@ -456,6 +457,7 @@ impl DraftSendFailure {
             }
             Error::SendMessage(package_error) => Self::from_draft_package_error(package_error),
             Error::NoRecipients => Self::NoRecipients,
+            Error::AlreadySent => Self::AlreadySent,
             _ => Self::Internal,
         }
     }
@@ -549,6 +551,9 @@ impl From<DraftSendFailure> for ProtonMailError {
                 Self::ServerError(UserApiServiceError::OtherHttpError(0, v))
             }
             DraftSendFailure::Internal => Self::Unexpected(Unexpected::Internal),
+            DraftSendFailure::AlreadySent => {
+                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::AlreadySent))
+            }
         }
     }
 }

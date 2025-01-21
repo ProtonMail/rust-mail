@@ -105,6 +105,7 @@ pub struct AppModel {
     tui_logger_state: TuiWidgetState,
     display_log: bool,
     _log_guard: WorkerGuard,
+    pending_popups: Vec<Box<dyn Popup>>,
 }
 
 impl AppModel {
@@ -157,12 +158,9 @@ impl AppModel {
                 tui_logger_state: TuiWidgetState::new(),
                 display_log: false,
                 _log_guard: log_guard,
+                pending_popups: vec![],
             })
         })
-    }
-
-    pub fn set_error(&mut self, title: impl Into<String>, error: impl Into<anyhow::Error>) {
-        self.popup = Some(Box::new(ErrorDialog::new(title.into(), error.into())));
     }
 
     fn render_log(&mut self, frame: &mut Frame, area: Rect) {
@@ -210,12 +208,7 @@ impl Model<Messages> for AppModel {
                 }
             }
 
-            let message = popup.handle_event(event);
-            // Close popup if a message is returned.
-            if message.is_some() {
-                self.popup = None;
-            }
-            return message;
+            return popup.handle_event(event);
         }
 
         self.state.handle_event(event)
@@ -232,18 +225,22 @@ impl Model<Messages> for AppModel {
                 return Command::None;
             }
             Messages::DisplayError(title, error) => {
-                self.set_error(title.unwrap_or("Error".to_owned()), error);
-                return Command::None;
+                let popup = ErrorDialog::new(title.unwrap_or("Error".to_owned()), error);
+                return Command::message(Messages::raise_popup(popup));
             }
             Messages::DismissPopup => {
                 self.popup = None;
+                if !self.pending_popups.is_empty() {
+                    self.popup = Some(self.pending_popups.remove(0));
+                }
                 return Command::None;
             }
             Messages::RaisePopup(popup) => {
                 if self.popup.is_some() {
-                    tracing::warn!("Raising new popup over existing");
+                    self.pending_popups.push(popup);
+                } else {
+                    self.popup = Some(popup);
                 }
-                self.popup = Some(popup);
                 return Command::None;
             }
             Messages::SwitchAppState(new_state) => {
