@@ -417,7 +417,6 @@ impl StateHandler for MessagesState {
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
                 .unwrap_or_default(),
-            KeyCode::Char('c') => Command::message(Message::OpenContacts.into()),
             _ => Command::None,
         }
     }

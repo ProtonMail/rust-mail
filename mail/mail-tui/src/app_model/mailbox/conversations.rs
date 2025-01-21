@@ -182,7 +182,6 @@ impl StateHandler for ConversationsState {
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::OpenConversation(id).into()))
                 .unwrap_or_default(),
-            KeyCode::Char('c') => Command::message(Message::OpenContacts.into()),
             _ => Command::None,
         }
     }

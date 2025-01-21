@@ -23,7 +23,6 @@ use proton_mail_common::models::{
     MessageCounters,
 };
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
-use proton_mail_common::proton_api_mail::proton_api_core::services::proton::muon::rest::core::v4::keys::Key;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
 };
@@ -317,7 +316,7 @@ impl AppStateHandler for Model {
                 KeyCode::Char('c') => {
                     return Command::message(Message::OpenContacts.into());
                 }
-                _ => ()
+                _ => (),
             }
         }
 

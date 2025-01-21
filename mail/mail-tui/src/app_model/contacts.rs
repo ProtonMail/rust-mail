@@ -52,14 +52,22 @@ pub enum Message {
     OpenContactPopup,
 }
 
-enum ContactStatus {
-    None,
-    Success(ContactItemType),
+#[derive(Default)]
+struct OpenedContact {
+    contact: Option<ContactItemType>,
 }
 
-impl ContactStatus {
+impl OpenedContact {
+    fn some(contact: ContactItemType) -> Self {
+        Self {
+            contact: Some(contact),
+        }
+    }
+    fn none() -> Self {
+        Self::default()
+    }
     fn is_open(&self) -> bool {
-        matches!(self, Self::Success(_))
+        self.contact.is_some()
     }
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Option<Rect> {
         let (list_area, box_area, contact_area) =
@@ -75,9 +83,9 @@ impl ContactStatus {
                 (Some(list_area), box_area, contact_area)
             };
 
-        match self {
-            Self::None => return Some(area),
-            Self::Success(state) => {
+        match &mut self.contact {
+            None => return Some(area),
+            Some(state) => {
                 frame.render_widget(Block::new().borders(Borders::LEFT), box_area);
                 Self::draw_contact(frame, contact_area, state);
             }
@@ -129,7 +137,7 @@ impl ContactStatus {
 pub struct Model {
     ctx: Arc<MailUserContext>,
     contacts: Vec<FlatContact>,
-    open_contact: ContactStatus,
+    open_contact: OpenedContact,
     list_state: ScrollableListState,
 }
 
@@ -139,7 +147,7 @@ impl Model {
             ctx,
             contacts: Vec::default(),
             list_state: ScrollableListState::new(None),
-            open_contact: ContactStatus::None,
+            open_contact: OpenedContact::default(),
         }
     }
 
@@ -175,17 +183,26 @@ impl AppStateHandler for Model {
             KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),
             KeyCode::Esc => {
                 if self.open_contact.is_open() {
-                    self.open_contact = ContactStatus::None;
+                    self.open_contact = OpenedContact::none();
                     Command::none()
                 } else {
                     let ctx = self.ctx.clone();
-                    Command::task(async move {
-                        let model = crate::app_model::mailbox::Model::new(ctx).await;
-                        match model {
-                            Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
-                            Err(e) => Command::message(e.into()),
-                        }
-                    })
+                    Command::batch([
+                        Command::message(Messages::DisplayBackgroundProgress(
+                            "Loading mailbox ...".to_owned(),
+                        )),
+                        Command::task(async move {
+                            let model = crate::app_model::mailbox::Model::new(ctx).await;
+                            let message = match model {
+                                Ok(model) => Messages::SwitchAppState(model.into()),
+                                Err(e) => e.into(),
+                            };
+                            Command::batch([
+                                Command::Message(Messages::DismissBackgroundProgress),
+                                Command::message(message),
+                            ])
+                        }),
+                    ])
                 }
             }
             _ => Command::None,
@@ -203,29 +220,40 @@ impl AppStateHandler for Model {
 
         let ctx = self.ctx.clone();
         match message {
-            Message::Init => Command::task(async move {
-                let result = async move {
-                    let tether = ctx.user_stash().connection();
+            Message::Init => Command::batch([
+                Command::message(Messages::DisplayBackgroundProgress(
+                    "Loading contacts...".to_owned(),
+                )),
+                Command::task(async move {
+                    let result = async move {
+                        let tether = ctx.user_stash().connection();
 
-                    let list = Contact::contact_list(&tether)
-                        .await?
-                        .into_iter()
-                        .flat_map(|contact| {
-                            std::iter::once(FlatContact::Group {
-                                name: contact.grouped_by,
+                        let list = Contact::contact_list(&tether)
+                            .await?
+                            .into_iter()
+                            .flat_map(|contact| {
+                                std::iter::once(FlatContact::Group {
+                                    name: contact.grouped_by,
+                                })
+                                .chain(contact.items.into_iter().map(FlatContact::Item))
                             })
-                            .chain(contact.items.into_iter().map(FlatContact::Item))
-                        })
-                        .collect();
-                    let command = Command::message(Message::LoadContacts(list).into());
-                    Ok::<_, anyhow::Error>(command)
-                }
-                .await;
+                            .collect();
+                        let command = Command::batch([
+                            Command::Message(Messages::DismissBackgroundProgress),
+                            Command::message(Message::LoadContacts(list).into()),
+                        ]);
+                        Ok::<_, anyhow::Error>(command)
+                    }
+                    .await;
 
-                result
-                    .inspect_err(|e| error!("{e}"))
-                    .unwrap_or_else(|e| Command::message(Messages::DisplayError(None, e)))
-            }),
+                    result.inspect_err(|e| error!("{e}")).unwrap_or_else(|e| {
+                        Command::batch([
+                            Command::Message(Messages::DismissBackgroundProgress),
+                            Command::message(Messages::DisplayError(None, e)),
+                        ])
+                    })
+                }),
+            ]),
             Message::LoadContacts(contacts) => {
                 self.contacts = contacts;
                 self.list_state.set_len(self.contacts.len());
@@ -237,7 +265,7 @@ impl AppStateHandler for Model {
                     return Command::none();
                 };
 
-                self.open_contact = ContactStatus::Success(item.clone());
+                self.open_contact = OpenedContact::some(item.clone());
                 Command::none()
             }
         }
