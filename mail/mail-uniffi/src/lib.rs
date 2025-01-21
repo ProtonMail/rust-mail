@@ -147,6 +147,7 @@ use stash::stash::WatcherHandle;
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
+use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
 };
@@ -311,6 +312,14 @@ impl From<RealPaginatorSearchOptions> for PaginatorSearchOptions {
     fn from(filter: RealPaginatorSearchOptions) -> Self {
         PaginatorSearchOptions {
             keywords: filter.keywords,
+        }
+    }
+}
+
+impl From<PaginatorSearchOptions> for RealSearchOptions {
+    fn from(search_options: PaginatorSearchOptions) -> Self {
+        RealSearchOptions {
+            keywords: search_options.keywords,
         }
     }
 }
