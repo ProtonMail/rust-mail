@@ -1864,7 +1864,7 @@ impl Message {
         for (conversation_id, count) in conversation_count_changed {
             if let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await? {
                 if mark_read {
-                    conversation.num_unread -= count;
+                    conversation.num_unread = conversation.num_unread.saturating_sub(count);
                 } else {
                     conversation.num_unread += count;
                 }
@@ -1893,7 +1893,7 @@ impl Message {
             .await?;
             for mut counter in counters {
                 if mark_read {
-                    counter.unread -= 1;
+                    counter.unread = counter.unread.saturating_sub(1);
                 } else {
                     counter.unread += 1;
                 }
@@ -1916,7 +1916,8 @@ impl Message {
             .await?;
             for conversation_label in &mut conversation_labels {
                 if mark_read {
-                    conversation_label.context_num_unread -= 1;
+                    conversation_label.context_num_unread =
+                        conversation_label.context_num_unread.saturating_sub(1);
 
                     if conversation_label.context_num_unread == 0 {
                         label_ids.insert(conversation_label.local_label_id.unwrap());
@@ -1936,7 +1937,7 @@ impl Message {
             // Update conversation label counts.
             if let Some(mut counters) = ConversationCounters::find_by_id(label_id, bond).await? {
                 if mark_read {
-                    counters.unread -= 1;
+                    counters.unread = counters.unread.saturating_sub(1);
                 } else {
                     counters.unread += 1;
                 }
@@ -2213,10 +2214,10 @@ impl Message {
             // update conversation counters
             if remaining_unread == 0 || remaining_messages == 0 {
                 if remaining_unread == 0 && unread_count != 0 {
-                    conv_counters.unread -= 1;
+                    conv_counters.unread = conv_counters.unread.saturating_sub(1);
                 }
                 if remaining_messages == 0 {
-                    conv_counters.total -= 1;
+                    conv_counters.total = conv_counters.total.saturating_sub(1);
                 }
             }
 
@@ -2225,8 +2226,8 @@ impl Message {
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
 
-            msg_counters.unread -= unread_count;
-            msg_counters.total -= updated_count;
+            msg_counters.unread = msg_counters.unread.saturating_sub(unread_count);
+            msg_counters.total = msg_counters.total.saturating_sub(updated_count);
 
             conv_counters.save(bond).await?;
             msg_counters.save(bond).await?;
@@ -2398,8 +2399,8 @@ impl Message {
         let label_stats = MessageLabelStats::build(messages, bond).await?;
         for (label_id, stats) in label_stats.iter() {
             if let Some(mut counters) = MessageCounters::find_by_id(*label_id, bond).await? {
-                counters.total -= stats.count;
-                counters.unread -= stats.unread_count;
+                counters.total = counters.total.saturating_sub(stats.count);
+                counters.unread = counters.unread.saturating_sub(stats.unread_count);
                 counters.save(bond).await?;
             }
         }
