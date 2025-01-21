@@ -1,6 +1,10 @@
 use crossterm::event::{Event, KeyCode};
+use futures::FutureExt;
 use itertools::Itertools;
-use proton_core_common::{datatypes::ContactItemType, models::Contact};
+use proton_core_common::{
+    datatypes::{ContactItemType, GroupedContacts},
+    models::Contact,
+};
 use proton_mail_common::MailUserContext;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Margin},
@@ -10,6 +14,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
     Frame,
 };
+use stash::stash::{Tether, WatcherHandle};
 use std::sync::Arc;
 use tracing::error;
 
@@ -19,7 +24,7 @@ use crate::{
     widgets::{ScrollableList, ScrollableListState},
 };
 
-use super::{AppState, AppStateHandler};
+use super::{watcher::WatchHandle, AppState, AppStateHandler};
 
 const CONTACT_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
@@ -48,7 +53,7 @@ impl From<FlatContact> for ListItem<'_> {
 
 pub enum Message {
     Init,
-    LoadContacts(Vec<FlatContact>),
+    LoadContacts(Option<WatchHandle>, Vec<FlatContact>),
     OpenContactPopup,
 }
 
@@ -139,6 +144,7 @@ pub struct Model {
     contacts: Vec<FlatContact>,
     open_contact: OpenedContact,
     list_state: ScrollableListState,
+    watcher: Option<WatchHandle>,
 }
 
 impl Model {
@@ -148,6 +154,7 @@ impl Model {
             contacts: Vec::default(),
             list_state: ScrollableListState::new(None),
             open_contact: OpenedContact::default(),
+            watcher: None,
         }
     }
 
@@ -159,6 +166,57 @@ impl Model {
         };
 
         Some(contact_item)
+    }
+
+    async fn load_contacts(tether: &Tether) -> anyhow::Result<Vec<FlatContact>> {
+        let list = Contact::contact_list(tether).await?;
+        Ok(Self::flatten_contacts(list))
+    }
+
+    fn flatten_contacts(contacts: Vec<GroupedContacts>) -> Vec<FlatContact> {
+        contacts
+            .into_iter()
+            .flat_map(|contact| {
+                std::iter::once(FlatContact::Group {
+                    name: contact.grouped_by,
+                })
+                .chain(contact.items.into_iter().map(FlatContact::Item))
+            })
+            .collect()
+    }
+
+    async fn init(ctx: Arc<MailUserContext>) -> anyhow::Result<Command<Messages>> {
+        let stash = ctx.user_stash();
+        let (
+            list,
+            WatcherHandle {
+                handle, receiver, ..
+            },
+        ) = Contact::watch_contact_list(stash).await?;
+        let (watcher, background_command) =
+            WatchHandle::new_dampened(receiver, handle, move || {
+                let tether = ctx.user_stash().connection();
+                async move {
+                    Some(match Self::load_contacts(&tether).await {
+                        Ok(list) => Message::LoadContacts(None, list).into(),
+                        Err(e) => {
+                            let e = anyhow::anyhow!("Contact list query error: {e}");
+                            error!("{e}");
+                            e.into()
+                        }
+                    })
+                }
+                .boxed()
+            });
+
+        let command = Command::batch([
+            Command::Message(Messages::DismissBackgroundProgress),
+            Command::message(
+                Message::LoadContacts(Some(watcher), Self::flatten_contacts(list)).into(),
+            ),
+            background_command,
+        ]);
+        Ok(command)
     }
 }
 
@@ -225,27 +283,7 @@ impl AppStateHandler for Model {
                     "Loading contacts...".to_owned(),
                 )),
                 Command::task(async move {
-                    let result = async move {
-                        let tether = ctx.user_stash().connection();
-
-                        let list = Contact::contact_list(&tether)
-                            .await?
-                            .into_iter()
-                            .flat_map(|contact| {
-                                std::iter::once(FlatContact::Group {
-                                    name: contact.grouped_by,
-                                })
-                                .chain(contact.items.into_iter().map(FlatContact::Item))
-                            })
-                            .collect();
-                        let command = Command::batch([
-                            Command::Message(Messages::DismissBackgroundProgress),
-                            Command::message(Message::LoadContacts(list).into()),
-                        ]);
-                        Ok::<_, anyhow::Error>(command)
-                    }
-                    .await;
-
+                    let result = Self::init(ctx).await;
                     result.inspect_err(|e| error!("{e}")).unwrap_or_else(|e| {
                         Command::batch([
                             Command::Message(Messages::DismissBackgroundProgress),
@@ -254,8 +292,11 @@ impl AppStateHandler for Model {
                     })
                 }),
             ]),
-            Message::LoadContacts(contacts) => {
+            Message::LoadContacts(watcher, contacts) => {
                 self.contacts = contacts;
+                if let Some(watcher) = watcher {
+                    self.watcher = Some(watcher);
+                }
                 self.list_state.set_len(self.contacts.len());
                 self.list_state.select(Some(0));
                 Command::none()

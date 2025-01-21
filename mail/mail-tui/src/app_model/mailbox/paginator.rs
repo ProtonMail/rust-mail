@@ -25,11 +25,11 @@ impl<T: MailScrollerSource> Paginator<T> {
     ///
     /// Creates a paginator and watcher.
     pub async fn new(
-        creat_paginator: impl FnOnce() -> BoxFuture<'static, Result<MailScroller<T>, MailContextError>>,
+        create_paginator: impl FnOnce() -> BoxFuture<'static, Result<MailScroller<T>, MailContextError>>,
         to_message: impl Fn(Result<Vec<T::Item>, MailContextError>) -> Messages + Send + Sync + 'static,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let to_message = Arc::new(to_message);
-        let paginator = Arc::new(Mutex::new(creat_paginator().await?));
+        let paginator = Arc::new(Mutex::new(create_paginator().await?));
         let guard = paginator.lock().await;
         let WatcherHandle {
             handle, receiver, ..
