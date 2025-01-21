@@ -126,9 +126,6 @@ impl UserContext {
 
     /// Retrieves the current user's account details.
     ///
-    /// # Returns
-    /// - `Err(CoreContextError)` if the account is missing or a database error occurs.
-    ///
     /// # Errors
     ///
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
