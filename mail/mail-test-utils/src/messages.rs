@@ -3,6 +3,7 @@ use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::prelude::PostSendRequest;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -372,18 +373,21 @@ impl MailTestContext {
 
     /// Generate a new mock expectation for sending a draft.
     ///
-    /// Note that this mock does not validate the parameters, only
-    /// that the request was made.
+    /// Note that this mock does not validate parameters that are cryptographically
+    /// generated.
     ///
     /// # Parameters
     ///
-    /// * `message_id` - Message to send
-    /// * `result_message` - Updated message returned by the API.
+    /// * `message_id`          - Message to send
+    /// * `pramas`              - Expected send api parameters
+    /// * `result_message`      - Updated message returned by the API.
     /// * `result_conversation` - Updated conversation returned by API.
+    ///
     #[allow(clippy::doc_markdown)]
-    pub async fn mock_send_draft_basic(
+    pub async fn mock_send_draft(
         &self,
         message_id: MessageId,
+        params: TestDraftSendRequest,
         result_message: ApiMessage,
         result_conversation: ApiConversation,
     ) {
@@ -394,6 +398,7 @@ impl MailTestContext {
         };
         Mock::given(method("POST"))
             .and(path(format!("/api/mail/v4/messages/{message_id}")))
+            .and(body_partial_json(params))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
             .mount(self.mock_server())
@@ -554,6 +559,37 @@ impl From<PutUpdateDraftRequest> for TestUpdateDraftRequest {
         Self {
             message: value.message.into(),
             attachment_key_packets: value.attachment_key_packets,
+        }
+    }
+}
+
+/// We can't use the full request struct to mock as it contains data that is cryptographically
+/// generated. So we use a partial completion approach.
+#[serde_as]
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TestDraftSendRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_time: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_in: Option<u64>,
+    #[serde_as(as = "Option<BoolFromInt>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_save_contacts: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delivery_time: Option<u64>,
+}
+
+impl From<PostSendRequest> for TestDraftSendRequest {
+    fn from(value: PostSendRequest) -> Self {
+        Self {
+            expiration_time: value.expiration_time,
+            expires_in: value.expires_in,
+            auto_save_contacts: value.auto_save_contacts,
+            delay_seconds: value.delay_seconds,
+            delivery_time: value.delivery_time,
         }
     }
 }
