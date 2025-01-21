@@ -274,3 +274,10 @@ pub struct PostSendMessageResponse {
     /// The updated conversation.
     pub conversation: Conversation,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostCancelSendResponse {
+    pub message: MessageMetadata,
+}

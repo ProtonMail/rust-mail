@@ -398,4 +398,14 @@ pub trait ProtonMail {
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
     ) -> Result<PostSendMessageResponse, ApiServiceError>;
+
+    /// Cancel the sending of a message with `message_id`, which was previously sent.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails
+    async fn cancel_send(
+        &self,
+        message_id: MessageId,
+    ) -> Result<PostCancelSendResponse, ApiServiceError>;
 }
