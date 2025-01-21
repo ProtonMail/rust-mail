@@ -1,7 +1,4 @@
-// #![feature(try_blocks)]
-// #![feature(try_trait_v2)]
 mod app;
-// mod events;
 mod app_model;
 mod keychain;
 mod messages;
