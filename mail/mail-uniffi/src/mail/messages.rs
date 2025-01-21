@@ -8,7 +8,9 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
+use super::datatypes::{
+    AllBottomBarMessageActions, AttachmentMetadata, Message, ReadFilter, SearchScroller,
+};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
@@ -136,6 +138,16 @@ impl DecryptedMessage {
         })
         .await
         .map_into()
+    }
+
+    /// This function merges the API attachments and PGP attachments into one for easier client
+    /// consumption.
+    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
+        self.body
+            .get_attachments()
+            .into_iter()
+            .map(Into::into)
+            .collect()
     }
 }
 
