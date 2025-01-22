@@ -21,6 +21,7 @@ use std::cmp;
 use std::collections::BTreeSet;
 use std::future::Future;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
@@ -556,12 +557,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-        dbg!("Sync next");
-        dbg!(&self.cached);
         // Always sync the cache as there might be new data
         self.sync_scroller(&tether).await?;
-        dbg!("Sync scroller");
-        dbg!(&self.cached);
 
         if let Some(ref mut scroller) = self.cached {
             let items = if self.initialized {
@@ -591,7 +588,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
             Ok((items, total, task))
         } else if total > 0 {
-            dbg!("FAIL to initialize the scroller");
             // Fallback for failing to initialize the scroller
             let (_, task) = self.initialize(ctx).await?;
             Ok((vec![], total, task))
@@ -1077,7 +1073,7 @@ pub struct SearchScrollerSource {
     search: SearchOptions,
     page_size: usize,
     initialized: bool,
-    total: u64,
+    total: Arc<Mutex<u64>>,
     last: Option<SearchScrollData>,
 }
 
@@ -1087,20 +1083,50 @@ impl SearchScrollerSource {
             search,
             page_size,
             initialized: false,
-            total: 0,
+            total: Arc::new(Mutex::new(0)),
             last: None,
         }
     }
 
     async fn total(&self, tether: &Tether) -> Result<u64, StashError> {
+        let total = *self.total.lock().await;
         Ok(match &self.last {
             Some(last) if last.has_more(tether).await? => cmp::max(
-                self.total,
+                total,
                 last.visible_element_count(tether).await? + self.page_size as u64,
             ),
-            Some(last) => cmp::max(self.total, last.visible_element_count(tether).await?),
-            None => self.total,
+            Some(last) => cmp::max(total, last.visible_element_count(tether).await?),
+            None => total,
         })
+    }
+
+    async fn spawn_first_page_sync(
+        ctx: &MailUserContext,
+        total: Arc<Mutex<u64>>,
+        remote_label_id: LabelId,
+        search: SearchOptions,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let session = ctx.session().clone();
+
+        let task = Some(tokio::spawn(async move {
+            let mut tether = stash.connection();
+
+            Self::sync_first_page(
+                &session,
+                &total,
+                &mut tether,
+                remote_label_id,
+                search,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
     }
 
     async fn spawn_background_sync(
@@ -1136,7 +1162,7 @@ impl SearchScrollerSource {
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,remote_label_id))]
     async fn sync_first_page(
         session: &Session,
-        total: &mut u64,
+        total: &Mutex<u64>,
         tether: &mut Tether,
         remote_label_id: LabelId,
         search: SearchOptions,
@@ -1153,6 +1179,7 @@ impl SearchScrollerSource {
                 ..Default::default()
             })
             .await?;
+        let mut total = total.lock().await;
         *total = response.total;
 
         debug!(
@@ -1280,7 +1307,6 @@ impl MailScrollerSource for SearchScrollerSource {
         ctx: &MailUserContext,
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
         let mut tether = ctx.user_stash().connection();
-        let session = ctx.session().clone();
         let bond = tether.transaction().await?;
         SearchScrollData::delete_all(&bond).await?;
         bond.commit().await?;
@@ -1291,34 +1317,16 @@ impl MailScrollerSource for SearchScrollerSource {
         let page_size = self.page_size;
 
         // Wait for the first page to be fetched
-        let items = Self::sync_first_page(
-            &session,
-            &mut self.total,
-            &mut tether,
+        let task = Self::spawn_first_page_sync(
+            ctx,
+            self.total.clone(),
             remote_label_id.clone(),
             self.search.clone(),
             page_size,
         )
         .await?;
 
-        self.last = SearchScrollData::last(&tether).await?;
-
-        if items.len() >= self.page_size {
-            let task = Self::spawn_background_sync(
-                ctx,
-                remote_label_id,
-                self.search.clone(),
-                self.page_size,
-            )
-            .await?;
-            self.initialized = true;
-            Ok((self.total, task))
-        } else if items.is_empty() {
-            Ok((0, None))
-        } else {
-            self.initialized = true;
-            Ok((self.total, None))
-        }
+        Ok((page_size as u64 * 2, task))
     }
 
     async fn visible_items(
@@ -1326,8 +1334,9 @@ impl MailScrollerSource for SearchScrollerSource {
         ctx: &MailUserContext,
     ) -> Result<Vec<Self::Item>, MailContextError> {
         let tether = ctx.user_stash().connection();
-
-        if let Some(ref last) = self.last {
+        if !self.initialized {
+            Ok(vec![])
+        } else if let Some(ref last) = self.last {
             Ok(last.visible_elements(&tether).await?)
         } else {
             Ok(vec![])
@@ -1337,7 +1346,9 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn visible_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection();
 
-        if let Some(ref last) = self.last {
+        if !self.initialized {
+            Ok(0)
+        } else if let Some(ref last) = self.last {
             Ok(last.visible_element_count(&tether).await?)
         } else {
             Ok(0)
@@ -1357,27 +1368,20 @@ impl MailScrollerSource for SearchScrollerSource {
     ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
 
-        // Fallback for failing to initialize the scroller
         if !self.initialized {
-            debug!("Scroller not initialized, fallback to initialization");
-            let (total, task) = self.initialize(ctx).await?;
-            if let Some(ref last) = self.last {
-                let items = last.visible_elements(&tether).await?;
-                return Ok((items, total, task));
-            } else {
-                // In practice this branch should never happen
-                // as the initialization will fail on empty cache.
-                return Err(MailContextError::Other(anyhow!(
-                    "Failed to initialize scroller"
-                )));
-            }
+            self.last = SearchScrollData::last(&tether).await?;
         }
 
         if let Some(ref mut last) = self.last {
-            let items = last.fetch_more(self.page_size, &tether).await?;
+            let items = if self.initialized {
+                last.fetch_more(self.page_size, &tether).await?
+            } else {
+                self.initialized = true;
+                last.visible_elements(&tether).await?
+            };
 
             let (task, total) = if items.is_empty() {
-                (None, last.visible_element_count(&tether).await?)
+                (None, 0)
             } else {
                 let total = self.total(&tether).await?;
                 let task = Self::spawn_background_sync(
@@ -1393,8 +1397,9 @@ impl MailScrollerSource for SearchScrollerSource {
 
             Ok((items, total, task))
         } else {
-            // This is fallback for empty labels
-            Ok((vec![], 0, None))
+            // Fallback for failing to initialize the scroller
+            let (_, task) = self.initialize(ctx).await?;
+            Ok((vec![], 0, task))
         }
     }
 

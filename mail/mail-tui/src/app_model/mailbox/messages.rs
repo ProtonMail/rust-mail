@@ -91,7 +91,7 @@ impl MessagesState {
         )
         .await?;
 
-        let messages = paginator.all_items().await?;
+        let messages = paginator.fetch_more().await?;
 
         Ok((
             Self {

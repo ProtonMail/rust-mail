@@ -51,8 +51,8 @@ impl<T: MailScrollerSource> Paginator<T> {
         ))
     }
 
-    pub async fn all_items(&self) -> Result<Vec<T::Item>, MailContextError> {
-        self.paginator.lock().await.all_items().await
+    pub async fn fetch_more(&self) -> Result<Vec<T::Item>, MailContextError> {
+        self.paginator.lock().await.fetch_more().await
     }
 
     /// Get the next pagination page as series of background tasks which will

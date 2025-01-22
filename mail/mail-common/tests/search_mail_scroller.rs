@@ -45,7 +45,8 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
         address_id: address.id,
         label_ids: vec![SystemLabel::AllMail.remote_id()]
     );
-    ctx.mock_get_messages(vec![message]).await;
+    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+        .await;
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
@@ -55,7 +56,11 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
         .await
         .unwrap();
 
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    let expected = scroller.fetch_more().await.unwrap();
     let mut actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual, expected);
     assert_eq!(actual.len(), 1);
     let actual = actual.pop().unwrap();
     assert_eq!(actual.remote_id, msg_id!("mymsg"));
@@ -85,6 +90,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     )
     .await
     .unwrap();
+    scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -135,6 +141,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
         MailScroller::search(user_ctx, SearchOptions::from(search_phrase), page_size)
             .await
             .unwrap();
+    scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -213,6 +220,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         receiver,
         ..
     } = scroller.watch().unwrap();
+    scroller.fetch_more().await.unwrap();
     // At this point we have a scroller with one page loaded and one which may be yet loading.
     // There is a case in which there might be a race and notification will be sent before the second page is loaded.
     // This does not hurt anyone but we cannot be sure that we will receive the notification here.
