@@ -202,6 +202,8 @@ pub enum Mail {
     FilterCreateTooManyActive = 50016,
     /// This message was already sent
     MessageAlreadySent = 2500,
+    /// Can no longer undo send
+    MessageSentCanNoLongerBeUndone = 2511,
 }
 
 pub enum Payments {

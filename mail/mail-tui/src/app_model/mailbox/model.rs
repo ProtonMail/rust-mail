@@ -5,7 +5,7 @@ use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
 use crate::app_model::mailbox::{Item, Message};
 use crate::app_model::watcher::WatchHandle;
-use crate::app_model::{AppState, AppStateHandler};
+use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
@@ -17,6 +17,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{
     ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
     MessageCounters,
@@ -591,7 +592,42 @@ async fn handle_draft_failure(
 ) {
     for result in results {
         if result.is_success() {
-            //TODO: notify of success
+            if result.is_send_undoable() {
+                let ctx = Arc::clone(ctx);
+                let popup = YesNoPopup::new(
+                    "Undo Send?",
+                    "Message was sent successfully, would you like to undo this send?",
+                )
+                .on_accept(Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Cancelling Send".to_owned(),
+                    )),
+                    Command::task(async move {
+                        let result_cmd = match ctx
+                            .with_queue(|queue| {
+                                Draft::action_undo_send(queue, result.local_message_id)
+                            })
+                            .await
+                        {
+                            // On success open composer, else display error
+                            Ok(_) => Composer::open(Arc::clone(&ctx), result.local_message_id),
+                            Err(e) => Command::message(Messages::DisplayError(
+                                Some("Undo Send Error".to_owned()),
+                                anyhow::Error::new(e),
+                            )),
+                        };
+                        Command::batch([
+                            Command::message(Messages::DismissBackgroundProgress),
+                            result_cmd,
+                        ])
+                    }),
+                ]));
+
+                let _ = sender
+                    .send_async(Command::message(Messages::raise_popup(popup)))
+                    .await;
+            }
+
             continue;
         }
 

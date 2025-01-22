@@ -115,6 +115,10 @@ pub enum DraftErrorReason {
     MessageDoesNotExist,
     /// This draft was already sent and can't be modified
     AlreadySent,
+    /// Can not undo sent this message
+    MessageCanNotBeUndoSent,
+    /// The cancellation of sending for this message is no longer possible.
+    SendCanNoLongerBeUndone,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

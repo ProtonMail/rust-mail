@@ -223,6 +223,7 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
             local_message_id INTEGER PRIMARY KEY,
             remote_message_id TEXT DEFAULT NULL,
             timestamp INTEGER NOT NULL DEFAULT (now()),
+            undo_timestamp INTEGER NOT NULL,
             error TEXT DEFAULT NULL,
             seen INTEGER NOT NULL DEFAULT 0,
             origin INTEGER NOT NULL,
