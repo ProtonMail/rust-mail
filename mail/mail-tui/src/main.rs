@@ -16,6 +16,7 @@ use crossterm::ExecutableCommand;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
+use std::path::PathBuf;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
@@ -41,6 +42,13 @@ struct CliArgs {
     /// default.
     #[arg(long, short)]
     browser: Option<String>,
+
+    /// Where to store the html files. Defaults to the temp dir of the OS
+    /// In linux this would generate two files:
+    /// `/tmp/proton_htmls/[subject]/before.html` - The raw message
+    /// `/tmp/proton_htmls/[subject]/after.html`  - The file after transforming
+    #[arg(long, short)]
+    html_dir: Option<PathBuf>,
 
     /// Default username
     #[arg(long, short)]

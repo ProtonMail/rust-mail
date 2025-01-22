@@ -34,6 +34,7 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use stash::stash::WatcherHandle;
 use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
@@ -202,6 +203,7 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
+
                 if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
                     let cmd_name = if !cmd_name.is_empty() {
                         cmd_name
@@ -213,10 +215,25 @@ impl MessagesState {
                         panic!("Please specify a browser in --browser");
                     };
 
-                    fs::write("tmp_before.html", &html.body).unwrap();
-                    fs::write("tmp.html", &html.body).unwrap();
+                    let mut temp_dir = CLI_ARGS
+                        .html_dir
+                        .clone()
+                        .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
+                    let escaped_subject = PathBuf::from(
+                        &metadata
+                            .subject
+                            .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
+                    );
+                    temp_dir.push(escaped_subject);
+
+                    let before = temp_dir.join("before.html");
+                    fs::write(&before, &decrypted.body).unwrap();
+
+                    let after = temp_dir.join("after.html");
+                    fs::write(&after, &html.body).unwrap();
+
                     _ = std::process::Command::new(cmd_name)
-                        .args(["tmp.html"])
+                        .args([&after])
                         .spawn()
                         .unwrap();
                 }
