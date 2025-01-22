@@ -20,6 +20,7 @@ use crate::models::*;
 use crate::MailUserContext;
 use crate::{actions::conversations::Delete, AppError};
 use anyhow::{anyhow, Context};
+use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::queue::{
@@ -2184,13 +2185,12 @@ impl Conversation {
     /// Returns an error if the API request failed or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_conversation_and_message_counts<PM: ProtonMail>(
-        api: &PM,
+    pub async fn sync_conversation_and_message_counts(
+        api: &impl ProtonMail,
         stash: &Stash,
     ) -> Result<(), AppError> {
         let (conversation_counts, message_counts) =
-            futures::join!(Conversation::fetch_counts(api), Message::fetch_counts(api));
-        let (conversation_counts, message_counts) = (conversation_counts?, message_counts?);
+            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;
