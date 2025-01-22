@@ -1,5 +1,3 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -8,6 +6,7 @@ use crate::{MailContextError, MailUserContext};
 use futures::try_join;
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::{Address, Contact, Label, User};
+use tokio::task::JoinHandle;
 use tracing::{debug, error, warn, Level};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -45,16 +44,16 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        #[tracing::instrument(level = Level::DEBUG, skip(fut, cb))]
+        #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
         async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
             stage: MailUserContextLoadingStage,
-            fut: Pin<Box<dyn Future<Output = Result<(), E>> + Send + 'static>>,
+            handle: JoinHandle<Result<(), E>>,
             cb: &dyn MailUserContextInitializationCallback,
         ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
             let t = Instant::now();
             debug!("Begin syncing for {stage:?}");
 
-            let r = tokio::spawn(fut).await;
+            let result = handle.await;
             let elapsed = t.elapsed();
             if elapsed > Duration::from_secs(1) {
                 warn!("Slow sync for {stage:?}: {elapsed:?}");
@@ -63,7 +62,7 @@ impl MailUserContext {
             }
 
             cb.on_stage(stage);
-            match r {
+            match result {
                 Ok(Ok(())) => Ok(()),
                 Ok(Err(e)) => {
                     let e = e.into();
@@ -79,27 +78,27 @@ impl MailUserContext {
         }
 
         let ctx_clone = ctx.clone();
-        let event_loop = Box::pin(async move {
+        let event_loop = tokio::spawn(async move {
             ctx_clone
                 .exclusive
                 .initialize_event_loop(ctx_clone.as_ref(), ctx_clone.as_ref())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let user_settings = Box::pin(async move {
+        let user_settings = tokio::spawn(async move {
             User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let mail_settings = Box::pin(async move {
+        let mail_settings = tokio::spawn(async move {
             MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let addresses = Box::pin(async move {
+        let addresses = tokio::spawn(async move {
             Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let labels_and_contacts = Box::pin(async move {
+        let labels_and_contacts = tokio::spawn(async move {
             let labels = Label::all_labels(ctx_clone.session().api()).await?;
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
@@ -117,7 +116,7 @@ impl MailUserContext {
             Ok::<_, MailContextError>(())
         });
 
-        let counters = Box::pin(async move {
+        let counters = tokio::spawn(async move {
             crate::models::Conversation::sync_conversation_and_message_counts(
                 ctx.session().api(),
                 ctx.user_stash(),
