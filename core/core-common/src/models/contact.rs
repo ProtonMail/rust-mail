@@ -546,6 +546,14 @@ pub struct ContactListWatcher {
     sender: flume::Sender<()>,
 }
 
+impl ContactListWatcher {
+    /// Creates a new watcher
+    #[must_use]
+    pub fn new(sender: flume::Sender<()>) -> Self {
+        Self { sender }
+    }
+}
+
 impl TableObserver for ContactListWatcher {
     fn tables(&self) -> Vec<String> {
         vec![

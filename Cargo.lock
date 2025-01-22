@@ -4479,6 +4479,7 @@ dependencies = [
  "futures",
  "hex",
  "html2text",
+ "itertools 0.13.0",
  "keyring",
  "log",
  "proton-core-common",

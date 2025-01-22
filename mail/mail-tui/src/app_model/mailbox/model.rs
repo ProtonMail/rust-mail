@@ -271,6 +271,12 @@ impl Model {
         })
     }
 
+    fn open_contacts(&mut self) -> Command<Messages> {
+        Command::message(Messages::SwitchAppState(AppState::Contacts(
+            crate::app_model::contacts::Model::new(self.ctx.clone()),
+        )))
+    }
+
     fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
@@ -302,9 +308,15 @@ impl AppStateHandler for Model {
         if let Some(composer) = &mut self.composer {
             return composer.handle_event(&self.mailbox, event);
         } else if let Event::Key(key) = &event {
-            if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                let ctx = self.mailbox.user_context();
-                return Composer::empty(ctx);
+            match key.code {
+                KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    let ctx = self.mailbox.user_context();
+                    return Composer::empty(ctx);
+                }
+                KeyCode::Char('c') => {
+                    return Command::message(Message::OpenContacts.into());
+                }
+                _ => (),
             }
         }
 
@@ -364,6 +376,7 @@ impl AppStateHandler for Model {
                 self.label_watcher = Some(handle);
                 Command::None
             }
+            Message::OpenContacts => self.open_contacts(),
             Message::Composer(_) => Command::None,
         }
     }
@@ -415,6 +428,8 @@ impl AppStateHandler for Model {
             Span::from("Forward Msg."),
             Span::from(" a ").bold(),
             Span::from("Fetch all atts."),
+            Span::from(" C: ").bold(),
+            Span::from("Contacts"),
         ];
 
         let [one, two] =
