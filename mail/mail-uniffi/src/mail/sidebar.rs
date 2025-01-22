@@ -13,6 +13,7 @@ use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_core_common::models::Label as RealLabel;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
 
@@ -79,9 +80,7 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.system_labels().await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarSystemLabel::from).collect(),
-            )
+            Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
         .map_err(ActionError::from)
@@ -96,9 +95,7 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_folders().await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarCustomFolder::from).collect(),
-            )
+            Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
         .map_err(ActionError::from)
@@ -113,9 +110,7 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.all_custom_folders().await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarCustomFolder::from).collect(),
-            )
+            Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
         .map_err(ActionError::from)
@@ -130,9 +125,7 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_labels().await?;
-            Result::<_, RealProtonMailError>::Ok(
-                labels.into_iter().map(SidebarCustomLabel::from).collect(),
-            )
+            Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
         .map_err(ActionError::from)

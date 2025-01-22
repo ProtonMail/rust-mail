@@ -2,6 +2,7 @@ use crate::core::datatypes::Id;
 use crate::errors::{DraftError, VoidDraftResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
+use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::LocalMessageId;
 use proton_mail_common::draft::observers::DraftSendResultWatcher as RealDraftSendResultWatcher;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -111,9 +112,7 @@ pub async fn new_draft_send_watcher(
                         Ok(results) => {
                             let callback = callback.clone();
                             async_runtime().spawn_blocking(move || {
-                                callback.on_new_send_result(
-                                    results.into_iter().map(Into::into).collect(),
-                                );
+                                callback.on_new_send_result(results.map_vec());
                             });
                         }
                         Err(e) => {
@@ -155,7 +154,7 @@ pub async fn draft_send_result_unseen(
         let connection = ctx.user_stash().connection();
         RealDraftSendResult::unseen(&connection)
             .await
-            .map(|v| v.into_iter().map(Into::into).collect())
+            .map(MapVec::map_vec)
             .map_err(RealProtonMailError::from)
     })
     .await

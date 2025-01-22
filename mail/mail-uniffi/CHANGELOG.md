@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
 
-## [0.34.0] - 2025-01-17
+## [0.34.0] - 2025-01-22
 
 ### Added
 
@@ -54,14 +54,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.32.1] - 2025-01-15
 
 ### Added
-  - function `scroll_conversations_for_label` which utilies new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
-  - function `scroll_messages_for_label` which utilies new paginator `MessageScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
+  - function `scroll_conversations_for_label` which utilizes new paginator `ConversationScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
+  - function `scroll_messages_for_label` which utilizes new paginator `MessageScroller` for conversation in given label. This paginator is based directly on API data which makes it more resilient option than current pagination solution
 
 ## [0.32.0] - 2025-01-09
 
 ### Changed
 
-  - `DecryptedMessage::body` is now infailable.
+  - `DecryptedMessage::body` is now infallible.
   - `TranformOpts` has been changed to contain exclusively `bool` and `Option<bool>`
   - New helper method `DecryptedMessage::body_with_defaults` with the default options for the user.
 

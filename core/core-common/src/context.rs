@@ -32,6 +32,8 @@ use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
+    #[error("Account with user id {0} is missing in the DB")]
+    AccountMissing(UserId),
     #[error("Build error: {0}")]
     Build(#[from] BuildError),
     #[error("Login error: {0}")]
@@ -193,7 +195,7 @@ pub struct Context {
     this: Weak<Self>,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
-    stash: Stash,
+    account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
@@ -239,15 +241,15 @@ impl Context {
         std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let account_db_path = get_account_db_path(account_db_path);
-        let stash = Stash::get_instance(&account_db_path)?;
-        migrate_account_db(&stash).await?;
+        let account_stash = Stash::get_instance(&account_db_path)?;
+        migrate_account_db(&account_stash).await?;
 
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             network_connected: AtomicBool::new(true),
             user_db_path,
             key_chain,
-            stash,
+            account_stash,
             user_db_initializers: initializers,
             network_callback,
             active_user_contexts: Mutex::new(HashMap::new()),
@@ -267,8 +269,8 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
-        let tehter = self.stash().connection();
-        Ok(CoreAccount::all(&tehter).await?)
+        let tether = self.account_stash().connection();
+        Ok(CoreAccount::all(&tether).await?)
     }
 
     /// Watch the accounts for changes.
@@ -284,7 +286,7 @@ impl Context {
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_accounts(&self) -> CoreContextResult<(Vec<CoreAccount>, WatcherHandle)> {
         let accounts = self.get_accounts().await?;
-        let handle = CoreAccount::watch(self.stash())?;
+        let handle = CoreAccount::watch(self.account_stash())?;
 
         Ok((accounts, handle))
     }
@@ -299,7 +301,7 @@ impl Context {
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> CoreContextResult<Vec<CoreSession>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         Ok(CoreSession::all(&tether).await?)
     }
 
@@ -315,9 +317,9 @@ impl Context {
     ///
     /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(&self) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         let sessions = CoreSession::all(&tether).await?;
-        let handle = CoreSession::watch(self.stash())?;
+        let handle = CoreSession::watch(self.account_stash())?;
 
         Ok((sessions, handle))
     }
@@ -333,7 +335,7 @@ impl Context {
         &self,
         user_id: UserId,
     ) -> CoreContextResult<Vec<CoreSession>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         Ok(CoreSession::find_by_user_id(user_id, &tether).await?)
     }
 
@@ -350,7 +352,7 @@ impl Context {
         user_id: UserId,
     ) -> CoreContextResult<(Vec<CoreSession>, WatcherHandle)> {
         let sessions = self.get_account_sessions(user_id).await?;
-        let handle = CoreSession::watch(self.stash())?;
+        let handle = CoreSession::watch(self.account_stash())?;
 
         Ok((sessions, handle))
     }
@@ -364,7 +366,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_account(&self, user_id: UserId) -> CoreContextResult<Option<CoreAccount>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         Ok(CoreAccount::find_by_id(user_id, &tether).await?)
     }
 
@@ -377,7 +379,7 @@ impl Context {
         &self,
         user_id: UserId,
     ) -> CoreContextResult<Option<CoreAccountState>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
             return Ok(None);
         };
@@ -398,7 +400,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_session(&self, session_id: AuthId) -> CoreContextResult<Option<CoreSession>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         Ok(CoreSession::find_by_id(session_id, &tether).await?)
     }
 
@@ -411,7 +413,7 @@ impl Context {
         &self,
         session_id: AuthId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         let Some(session) = CoreSession::find_by_id(session_id, &tether).await? else {
             return Ok(None);
         };
@@ -425,7 +427,7 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
         for account in CoreAccount::by_primary_at(&tether).await? {
             let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
                 continue;
@@ -445,7 +447,7 @@ impl Context {
     ///
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: UserId) -> CoreContextResult<()> {
-        let mut tether = self.stash().connection();
+        let mut tether = self.account_stash().connection();
         let mut account = CoreAccount::find_by_id(user_id, &tether)
             .await?
             .ok_or(CoreContextError::Other(anyhow!("account not found")))?
@@ -490,7 +492,7 @@ impl Context {
         user_id: UserId,
         session_id: AuthId,
     ) -> CoreContextResult<Flow> {
-        let tether = self.stash().connection();
+        let tether = self.account_stash().connection();
 
         let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
             return Err(CoreContextError::Other(anyhow!("session not found")));
@@ -612,7 +614,7 @@ impl Context {
 
         // TODO(ET-231): User cache paths.
 
-        let mut tether = self.stash().connection();
+        let mut tether = self.account_stash().connection();
         let tx = tether.transaction().await?;
         CoreAccount::delete_by_id(user_id, &tx)
             .inspect_err(|e| error!("Failed to delete account from db: {e}"))
@@ -654,17 +656,17 @@ impl Context {
     fn new_api_session(&self, session: Option<&CoreSession>) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
-        let stash = self.stash();
+        let account_stash = self.account_stash();
         let keychain = Arc::clone(&self.key_chain);
-        let store = AuthStore::new(stash, keychain, user_id, session_id);
+        let store = AuthStore::new(account_stash, keychain, user_id, session_id);
         let config = self.api_config.clone();
 
         Ok(ApiSession::new(config, Some(Box::new(store)))?)
     }
 
     /// Get the stash in use
-    pub fn stash(&self) -> &Stash {
-        &self.stash
+    pub fn account_stash(&self) -> &Stash {
+        &self.account_stash
     }
 
     /// Find the user's database file.
@@ -719,9 +721,14 @@ impl Context {
         let db_path = self.user_db_path(&user_id);
 
         let cache_path = self.cache_path.join(user_id.as_str());
-
-        let context = UserContext::new(
+        let Some(context) = self.this.upgrade() else {
+            return Err(CoreContextError::Other(anyhow::anyhow!(
+                "Failed to convert weak context to arc via upgrade"
+            )));
+        };
+        let user_context = UserContext::new(
             session,
+            context,
             &db_path,
             &self.user_db_initializers,
             user_id.clone(),
@@ -731,9 +738,9 @@ impl Context {
         )
         .await?;
 
-        active_contexts.insert(user_id, Arc::downgrade(&context));
+        active_contexts.insert(user_id, Arc::downgrade(&user_context));
 
-        Ok(context)
+        Ok(user_context)
     }
 }
 

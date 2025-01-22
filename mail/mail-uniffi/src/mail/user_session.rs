@@ -7,7 +7,7 @@ mod labels;
 use crate::errors::{ActionError, UserSessionError, VoidSessionResult};
 use crate::MapIntoResult;
 use crate::{
-    core::datatypes::{Id, User},
+    core::datatypes::{AccountDetails, Id, User},
     uniffi_async,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -110,6 +110,22 @@ impl MailUserSession {
         uniffi_async(async move {
             let user = ctx.user().await?;
             Result::<_, RealProtonMailError>::Ok(user.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Retrieves the account details for the current user session.
+    ///
+    /// Returns the user's account details (name, email and avatar information) or an error if the operation fails.
+    ///
+    /// # Errors
+    /// - Returns `UserSessionError` if the account details cannot be retrieved.
+    pub async fn account_details(self: Arc<Self>) -> Result<AccountDetails, UserSessionError> {
+        uniffi_async(async move {
+            let context = self.ctx.clone();
+            let account_details = context.account_details().await?;
+            Result::<_, RealProtonMailError>::Ok(account_details.into())
         })
         .await
         .map_err(UserSessionError::from)

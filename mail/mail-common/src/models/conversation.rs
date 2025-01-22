@@ -40,6 +40,7 @@ use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::paginator::{DataSource, Paginator, Param};
+use proton_core_common::utils::MapVec as _;
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -1407,7 +1408,7 @@ impl Conversation {
     ) -> Result<Vec<ConversationLabelsCount>, ApiServiceError> {
         api.get_conversations_count()
             .await
-            .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
+            .map(|r| r.counts.map_vec())
     }
 
     /// Retrieve in the first order the first unread message that should be displayed to the user
@@ -3030,16 +3031,16 @@ impl From<ApiConversation> for Conversation {
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
             exclusive_location: None,
-            labels: value.labels.into_iter().map(|v| v.into()).collect(),
+            labels: value.labels.map_vec(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
             display_order: value.order,
             recipients: MessageRecipients {
-                value: value.recipients.into_iter().map(|v| v.into()).collect(),
+                value: value.recipients.map_vec(),
             },
             senders: MessageSenders {
-                value: value.senders.into_iter().map(|v| v.into()).collect(),
+                value: value.senders.map_vec(),
             },
             custom_labels: vec![],
             size: value.size,

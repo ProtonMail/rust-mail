@@ -69,22 +69,21 @@ use proton_core_common::datatypes::{
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
 use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationLabelsCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
-    LocalMessageId, MessageAttachment as RealMessageAttachment,
-    MessageAttachmentHeaders as RealMessageAttachmentHeaders,
-    MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
-    MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
-    MessageRecipient as RealMessageRecipient, MessageReplyTo as RealMessageReplyTo,
-    MessageSender as RealMessageSender, MimeType as RealMimeType,
-    MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
-    NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
-    PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
-    ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
-    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
+    LocalMessageId, MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
+    MessageLabelsCount as RealMessageCount, MessageRecipient as RealMessageRecipient,
+    MessageReplyTo as RealMessageReplyTo, MessageSender as RealMessageSender,
+    MimeType as RealMimeType, MobileSetting as RealMobileSetting,
+    MobileSettings as RealMobileSettings, NextMessageOnMove as RealNextMessageOnMove,
+    ParsedHeaderValue as RealParsedHeaderValue, PgpScheme as RealPgpScheme,
+    PmSignature as RealPmSignature, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
+    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
+    ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -94,7 +93,6 @@ use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
 };
 use proton_mail_common::AppError;
-use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
 use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
@@ -920,7 +918,7 @@ impl From<ContextualConversation> for Conversation {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            custom_labels: value.custom_labels.map_vec(),
             display_order: value.display_order,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
@@ -1585,7 +1583,7 @@ impl From<RealMessage> for Message {
                 .map(MessageRecipient::from)
                 .collect(),
             unread: value.unread,
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            custom_labels: value.custom_labels.map_vec(),
             starred,
             avatar: avatar.into(),
         }
@@ -1696,125 +1694,6 @@ impl From<RealMessageReplyTo> for MessageReplyTo {
         Self {
             address: value.address,
             name: value.name,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAttachment {
-    /// TODO: Document this field.
-    pub disposition: Disposition,
-
-    /// TODO: Document this field.
-    pub enc_signature: Option<String>,
-
-    /// TODO: Document this field.
-    pub headers: MessageAttachmentHeaders,
-
-    /// TODO: Document this field.
-    pub key_packets: String,
-
-    /// Attachment mime type is a flexible type that can be used to categorize
-    /// media types. It allows any media type to be used, but also has a
-    /// category field to allow to pick aprpopriate icons for the media type.
-    pub mime_type: AttachmentMimeType,
-
-    /// TODO: Document this field.
-    pub signature: Option<String>,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    pub size: u64,
-}
-
-impl From<RealMessageAttachment> for MessageAttachment {
-    fn from(value: RealMessageAttachment) -> Self {
-        MessageAttachment {
-            disposition: value.disposition.into(),
-            enc_signature: value
-                .enc_signature
-                .as_deref()
-                .map(|v| to_json_string(v).unwrap()),
-            headers: value.headers.into(),
-            key_packets: to_json_string(&value.key_packets).unwrap(),
-            mime_type: value.mime_type.into(),
-            signature: value
-                .signature
-                .as_deref()
-                .map(|v| to_json_string(&v).unwrap()),
-            name: value.name,
-            size: value.size,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAttachmentHeaders {
-    /// TODO: Document this field.
-    pub content_disposition: String,
-
-    /// TODO: Document this field.
-    pub content_id: Option<String>,
-
-    /// TODO: Document this field.
-    pub content_transfer_encoding: Option<String>,
-
-    /// TODO: Document this field.
-    pub image_height: Option<String>,
-
-    /// TODO: Document this field.
-    pub image_width: Option<String>,
-}
-
-impl From<MessageAttachmentHeaders> for RealMessageAttachmentHeaders {
-    fn from(value: MessageAttachmentHeaders) -> Self {
-        RealMessageAttachmentHeaders {
-            content_disposition: value.content_disposition,
-            content_id: value.content_id,
-            content_transfer_encoding: value.content_transfer_encoding,
-            image_height: value.image_height,
-            image_width: value.image_width,
-        }
-    }
-}
-
-impl From<RealMessageAttachmentHeaders> for MessageAttachmentHeaders {
-    fn from(value: RealMessageAttachmentHeaders) -> Self {
-        MessageAttachmentHeaders {
-            content_disposition: value.content_disposition,
-            content_id: value.content_id,
-            content_transfer_encoding: value.content_transfer_encoding,
-            image_height: value.image_height,
-            image_width: value.image_width,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAttachmentInfo {
-    /// TODO: Document this field.
-    pub attachment: u32,
-
-    /// TODO: Document this field.
-    pub inline: u32,
-}
-
-impl From<MessageAttachmentInfo> for RealMessageAttachmentInfo {
-    fn from(value: MessageAttachmentInfo) -> Self {
-        RealMessageAttachmentInfo {
-            attachment: value.attachment,
-            inline: value.inline,
-        }
-    }
-}
-
-impl From<RealMessageAttachmentInfo> for MessageAttachmentInfo {
-    fn from(value: RealMessageAttachmentInfo) -> Self {
-        MessageAttachmentInfo {
-            attachment: value.attachment,
-            inline: value.inline,
         }
     }
 }

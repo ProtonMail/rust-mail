@@ -2,6 +2,7 @@ use crate::app::Command;
 use crate::app_model::{login, mailbox, AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
+use crate::CLI_ARGS;
 use anyhow::{anyhow, Context as _};
 use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::{MailContext, MailContextError};
@@ -29,10 +30,14 @@ pub struct Model {
 impl Model {
     pub async fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
         let accounts = ctx.get_accounts().await?;
+        let index = accounts
+            .iter()
+            .position(|ac| ac.username == CLI_ARGS.username)
+            .unwrap_or(0);
 
         Ok(Self {
             accounts,
-            session_list_state: ScrollableListState::new(Some(0)),
+            session_list_state: ScrollableListState::new(Some(index)),
         })
     }
 }

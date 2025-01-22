@@ -1,3 +1,4 @@
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::{
     CustomFolderAction as RealCustomFolderAction,
     MovableSystemFolderAction as RealMovableSystemFolderAction, MoveAction as RealMoveAction,
@@ -67,7 +68,7 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
             local_id: value.local_id.into(),
             name: value.name.clone(),
             color: value.color.map(Into::into),
-            children: value.children.into_iter().map(Into::into).collect(),
+            children: value.children.map_vec(),
         }
     }
 }

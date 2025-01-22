@@ -30,6 +30,8 @@ use tokio::task::JoinError;
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
+    #[error("Account with user id {0} is missing in the DB")]
+    AccountMissing(UserId),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Build Error: {0}")]
@@ -89,6 +91,7 @@ impl proton_action_queue::action::Error for MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
+            CoreContextError::AccountMissing(user_id) => MailContextError::AccountMissing(user_id),
             CoreContextError::Build(err) => MailContextError::Build(err),
             CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
@@ -446,7 +449,7 @@ impl MailContext {
 
     /// Get the connection to the session database.
     pub fn session_stash(&self) -> &Stash {
-        self.core_context.stash()
+        self.core_context.account_stash()
     }
 
     /// Create a new user context or return an existing one.

@@ -13,6 +13,7 @@ use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{ModelExtension, User, UserSettings};
+use proton_core_common::utils::MapVec;
 use proton_core_common::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain},
@@ -344,15 +345,9 @@ impl From<TestApiCoreEvent> for TestCoreEvent {
         Self {
             event_id: value.event_id,
             action: value.action.into(),
-            address: value
-                .address
-                .map(|vec| vec.into_iter().map(AddressEvent::from).collect()),
-            contact_emails: value
-                .contact_emails
-                .map(|vec| vec.into_iter().map(ContactEmailEvent::from).collect()),
-            contacts: value
-                .contacts
-                .map(|vec| vec.into_iter().map(ContactEvent::from).collect()),
+            address: value.address.map_vec(),
+            contact_emails: value.contact_emails.map_vec(),
+            contacts: value.contacts.map_vec(),
             has_more: value.has_more,
             user: value.user.map(User::from),
             user_settings: value.user_settings.map(UserSettings::from),

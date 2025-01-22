@@ -17,6 +17,7 @@ use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelIdExtension};
+use proton_core_common::utils::MapVec as _;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -198,7 +199,7 @@ impl Attachment {
                 params![conversation_id],
                    tether,
         )
-        .await.map(|v| v.into_iter().map(Into::into).collect())
+        .await.map(|v| v.map_vec())
     }
 
     /// Load attachment metadata for a given `message_id`.
@@ -214,7 +215,7 @@ impl Attachment {
                    params![message_id],
                    tether,
         )
-        .await.map(|v| v.into_iter().map(Into::into).collect())
+        .await.map(|v| v.map_vec())
     }
 
     /// Save or update the attachment in the database.

@@ -13,7 +13,9 @@ use crate::widgets::{
     AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
+use crate::CLI_ARGS;
 use anyhow::{anyhow, Context};
+use futures::future::try_join_all;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
@@ -31,9 +33,11 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
 use stash::stash::WatcherHandle;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::{env, fs};
 use throbber_widgets_tui::ThrobberState;
+use tracing::debug;
 
 use super::LabelAs;
 
@@ -199,16 +203,39 @@ impl MessagesState {
                 let html = decrypted
                     .transformed(&mbox.user_context(), TransformOpts::default())
                     .await;
-                if env::var("PROTON_OPEN_MESSAGES").is_ok() {
-                    if cfg!(unix) {
-                        fs::write("tmp.html", &html.body).unwrap();
-                        _ = std::process::Command::new("open")
-                            .args(["tmp.html"])
-                            .spawn()
-                            .unwrap();
+
+                if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
+                    let cmd_name = if !cmd_name.is_empty() {
+                        cmd_name
+                    } else if cfg!(target_os = "linux") {
+                        "xdg-open"
+                    } else if cfg!(target_os = "macos") {
+                        "open"
                     } else {
-                        panic!("PROTON_OPEN_MESSAGES is not implemented for your platform");
-                    }
+                        panic!("Please specify a browser in --browser");
+                    };
+
+                    let mut temp_dir = CLI_ARGS
+                        .html_dir
+                        .clone()
+                        .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
+                    let escaped_subject = PathBuf::from(
+                        &metadata
+                            .subject
+                            .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
+                    );
+                    temp_dir.push(escaped_subject);
+
+                    let before = temp_dir.join("before.html");
+                    fs::write(&before, &decrypted.body).unwrap();
+
+                    let after = temp_dir.join("after.html");
+                    fs::write(&after, &html.body).unwrap();
+
+                    _ = std::process::Command::new(cmd_name)
+                        .args([&after])
+                        .spawn()
+                        .unwrap();
                 }
 
                 let html = html_to_text(&html.body)?;
@@ -300,6 +327,55 @@ impl StateHandler for MessagesState {
                     }
                 }
                 Command::None
+            }
+            KeyCode::Char('a') => {
+                let message = self
+                    .selected_message()
+                    .expect("Should have a message selected");
+                debug!(
+                    "Downloading the attachments for message {}",
+                    message.subject
+                );
+                let context = mbox.user_context();
+                let download = Command::task(async move {
+                    let all = message.attachments_metadata.into_iter().map(|mdata| {
+                        let context = context.clone();
+                        async move {
+                            context
+                                .get_attachment(mdata.local_id.unwrap())
+                                .await
+                                .map(|att| {
+                                    format!(
+                                        "{} -> {}",
+                                        att.attachment_metadata.filename,
+                                        att.data_path.to_string_lossy(),
+                                    )
+                                })
+                        }
+                    });
+                    let tri = try_join_all(all)
+                        .await
+                        .context("Failed to download attachments");
+
+                    match tri {
+                        Ok(attatchments) => Command::message(Messages::DisplayInfo(
+                            Some("Attachments Successfully Fetched".to_owned()),
+                            format!(
+                                "{} attachments fetched successfully:\n{}",
+                                attatchments.len(),
+                                attatchments.join("\n"),
+                            ),
+                        )),
+                        Err(e) => Command::message(Messages::DisplayError(None, e)),
+                    }
+                });
+
+                Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Fetching attachments".to_string(),
+                    )),
+                    download,
+                ])
             }
             KeyCode::Char('e') => {
                 let context = mbox.user_context();

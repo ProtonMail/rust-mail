@@ -1,5 +1,4 @@
 pub mod context_init;
-pub mod env;
 pub mod login;
 pub mod mailbox;
 pub mod session_select;
@@ -9,8 +8,8 @@ mod watcher;
 use crate::app::{Command, Model};
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
+use crate::CLI_ARGS;
 use anyhow::anyhow;
-use env::Env;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::Flex;
@@ -65,6 +64,11 @@ pub trait AppStateHandler {
 
     /// Called to provide contextual help that is displayed at the top.
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect);
+
+    /// How many lines the help bar is.
+    fn help_bar_lines(&self) -> u16 {
+        1
+    }
     /// Called to provide information it the status bar at the bottom.
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect);
 }
@@ -72,7 +76,8 @@ pub trait AppStateHandler {
 /// Behavior for an application popup that will be displayed over the existing views.
 ///
 /// Unlike [`AppStateHandler`], popups can only react to input and can not change their state.
-pub trait Popup {
+pub trait Popup: Send {
+    // Popups must be Send since they need to be sent as messages.
     /// Popup title to be drawn around the box.
     fn title(&self) -> Option<String>;
     /// Handle input event.
@@ -81,20 +86,6 @@ pub trait Popup {
     }
     /// Display popup contents.
     fn view(&mut self, frame: &mut Frame, area: Rect);
-}
-
-#[derive(Clone, Debug, Default, Eq, Hash, PartialEq)]
-pub struct AppConfig {
-    pub env: Env,
-}
-
-impl AppConfig {
-    pub fn dir(&self) -> &'static str {
-        match self.env {
-            Env::Prod => "",
-            Env::Dev => "dev",
-        }
-    }
 }
 
 pub struct AppModel {
@@ -109,7 +100,8 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(runtime: &Runtime, app_config: &AppConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(runtime: &Runtime) -> Result<Self, Box<dyn Error>> {
+        let app_config = &CLI_ARGS;
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
             .join(APP_ID)
@@ -142,9 +134,9 @@ impl AppModel {
                 user_db_path,
                 core_cache_dir,
                 mail_cache_dir,
-                100 * 1024 * 1024,
+                2 << 30, // 1GiB
                 Arc::new(keychain),
-                app_config.env.api_config(),
+                app_config.api_config(),
                 None,
             )
             .await?;
@@ -225,7 +217,11 @@ impl Model<Messages> for AppModel {
                 return Command::None;
             }
             Messages::DisplayError(title, error) => {
-                let popup = ErrorDialog::new(title.unwrap_or("Error".to_owned()), error);
+                let popup = InfoDialog::new_error(title, error);
+                return Command::message(Messages::raise_popup(popup));
+            }
+            Messages::DisplayInfo(title, text) => {
+                let popup = InfoDialog::new_info(title, text);
                 return Command::message(Messages::raise_popup(popup));
             }
             Messages::DismissPopup => {
@@ -257,8 +253,11 @@ impl Model<Messages> for AppModel {
 
     fn view(&mut self, frame: &mut Frame) {
         let area = frame.area();
+
+        let help_lines = self.state.help_bar_lines();
+
         let [help_area, view_area, status_bar_area] = Layout::vertical([
-            Constraint::Length(1),
+            Constraint::Length(help_lines),
             Constraint::Percentage(100),
             Constraint::Length(1),
         ])
@@ -377,6 +376,16 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.view_status_bar(frame, area),
         }
     }
+
+    fn help_bar_lines(&self) -> u16 {
+        match self {
+            AppState::SessionSelect(state) => state.help_bar_lines(),
+            AppState::Login(state) => state.help_bar_lines(),
+            AppState::TwoFA(state) => state.help_bar_lines(),
+            AppState::ContextInit(state) => state.help_bar_lines(),
+            AppState::Mailbox(state) => state.help_bar_lines(),
+        }
+    }
 }
 
 fn app_tracing_env_filter() -> EnvFilter {
@@ -434,20 +443,37 @@ fn log_backtrace_on_panic() {
     }));
 }
 
-struct ErrorDialog {
-    error: anyhow::Error,
-    source: String,
+#[derive(Debug)]
+enum DialogText {
+    Error(anyhow::Error),
+    Text(String),
 }
 
-impl ErrorDialog {
-    fn new(source: String, error: anyhow::Error) -> Self {
-        Self { error, source }
+#[derive(Debug)]
+struct InfoDialog {
+    pub title: Option<String>,
+    pub text: DialogText,
+}
+
+impl InfoDialog {
+    pub fn new_error(title: Option<String>, err: anyhow::Error) -> Self {
+        Self {
+            title: Some(title.unwrap_or_else(|| "Error".to_owned())),
+            text: DialogText::Error(err),
+        }
+    }
+
+    pub fn new_info(title: Option<String>, text: String) -> Self {
+        Self {
+            title,
+            text: DialogText::Text(text),
+        }
     }
 }
 
-impl Popup for ErrorDialog {
+impl Popup for InfoDialog {
     fn title(&self) -> Option<String> {
-        Some(self.source.clone())
+        self.title.clone()
     }
 
     fn handle_event(&mut self, _: Event) -> Command<Messages> {
@@ -463,9 +489,20 @@ impl Popup for ErrorDialog {
         ])
         .flex(Flex::Center)
         .areas(area.inner(Margin::new(2, 2)));
-        frame.render_widget(Block::new().white().on_red(), area);
+
+        let text = match &self.text {
+            DialogText::Error(error) => {
+                frame.render_widget(Block::new().white().on_red(), area);
+                error.to_string()
+            }
+            DialogText::Text(text) => {
+                frame.render_widget(Block::new(), area);
+                text.clone()
+            }
+        };
+
         frame.render_widget(
-            Paragraph::new(self.error.to_string())
+            Paragraph::new(text)
                 .centered()
                 .white()
                 .bold()

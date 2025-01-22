@@ -47,6 +47,7 @@ use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::events::ContactEvent;
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
 use proton_core_common::models::{Label, User, UserSettings};
+use proton_core_common::utils::MapVec as _;
 use proton_core_common::CoreEvent;
 use proton_event_loop::Event;
 
@@ -211,9 +212,7 @@ impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
             event_id: value.event_id,
-            addresses: value
-                .addresses
-                .map(|addresses| addresses.into_iter().map(AddressEvent::from).collect()),
+            addresses: value.addresses.map(|addresses| addresses.map_vec()),
             conversation_counts: value.conversation_counts.map(|conversation_counts| {
                 conversation_counts
                     .into_iter()
@@ -227,9 +226,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .collect()
             }),
             has_more: value.has_more,
-            labels: value
-                .labels
-                .map(|labels| labels.into_iter().map(LabelEvent::from).collect()),
+            labels: value.labels.map(|labels| labels.map_vec()),
             mail_settings: value.mail_settings.map(MailSettings::from),
             message_counts: value.message_counts.map(|message_counts| {
                 message_counts
@@ -237,16 +234,12 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(MessageLabelsCount::from)
                     .collect()
             }),
-            messages: value
-                .messages
-                .map(|messages| messages.into_iter().map(MessageEvent::from).collect()),
+            messages: value.messages.map(|messages| messages.map_vec()),
             product_used_space: value.product_used_space.map(ProductUsedSpace::from),
             used_space: value.used_space,
             user: value.user.map(User::from),
             user_settings: value.user_settings.map(UserSettings::from),
-            contacts: value
-                .contacts
-                .map(|contacts| contacts.into_iter().map(ContactEvent::from).collect()),
+            contacts: value.contacts.map(|contacts| contacts.map_vec()),
             contact_emails: value.contact_emails.map(|contact_emails| {
                 contact_emails
                     .into_iter()

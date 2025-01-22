@@ -2,6 +2,7 @@ use crate::app::Command;
 use crate::app_model::{context_init, twofa, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
+use crate::CLI_ARGS;
 use anyhow::anyhow;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::MailContext;
@@ -26,9 +27,11 @@ pub struct Model {
 
 impl Model {
     pub fn new() -> Self {
+        let email = CLI_ARGS.username.as_deref().unwrap_or_default();
+        let password = CLI_ARGS.password.as_deref().unwrap_or_default();
         Self {
-            email_input_state: TextInputState::new().selected(true),
-            password_input_state: TextInputState::new().secret(true),
+            email_input_state: TextInputState::with_value(email).selected(true),
+            password_input_state: TextInputState::with_value(password).secret(true),
             active_input: ActiveInput::Email,
         }
     }

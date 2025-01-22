@@ -6,7 +6,7 @@ use crate::services::proton::prelude::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::session::Config;
 use crate::store::{AuthInfo, DynStore, MbpMode, TfaMode};
-use muon::client::flow::{LoginFlow, LoginFlowData};
+use muon::client::flow::{LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
 use tracing::info;
 
@@ -38,7 +38,11 @@ impl WantLogin {
 
         store.write().await.set_name_or_addr(&user);
 
-        let state = match client.auth().login(&user, &pass).await {
+        let state = match client
+            .auth()
+            .login_with_extra(&user, &pass, LoginExtraInfo::default())
+            .await
+        {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
 

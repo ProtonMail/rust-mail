@@ -92,7 +92,9 @@ use proton_crypto_inbox::message::{
     DecryptableMessage, DecryptedBody, GettablePGPMessage, MessageError,
 };
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
+use proton_crypto_inbox::proton_crypto_inbox_mime::{
+    Disposition as CryptoDisposition, ProcessedMessage,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -234,6 +236,15 @@ impl From<ApiDisposition> for Disposition {
         match value {
             ApiDisposition::Attachment => Self::Attachment,
             ApiDisposition::Inline => Self::Inline,
+        }
+    }
+}
+
+impl From<CryptoDisposition> for Disposition {
+    fn from(value: CryptoDisposition) -> Self {
+        match value {
+            CryptoDisposition::Attachment => Self::Attachment,
+            CryptoDisposition::Inline => Self::Inline,
         }
     }
 }
