@@ -69,7 +69,6 @@ pub trait MailScrollerSource: Send + Sync {
     /// # Errors
     ///
     /// Return error if the query failed.
-    // TODO: Rework to `has_more` as search will not compare totals
     fn visible_items_total(
         &self,
         ctx: &MailUserContext,
@@ -476,7 +475,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 if scroller.has_more_than_a_page(&tether).await? || total < self.page_size as u64 {
                     None
                 } else {
-                    let cp = scroller.data(&tether).await?;
+                    let cp = scroller.scroll_data(&tether).await?;
                     self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
                         .await?
                 };
@@ -512,7 +511,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             let task = if total < self.page_size as u64 {
                 None
             } else {
-                let cp = scroller.data(&tether).await?;
+                let cp = scroller.scroll_data(&tether).await?;
                 self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
                     .await?
             };
@@ -616,7 +615,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             let task = if scroller.has_more_than_a_page(&tether).await? {
                 None
             } else {
-                let cp = scroller.data(&tether).await?;
+                let cp = scroller.scroll_data(&tether).await?;
                 self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
                     .await?
             };
@@ -1094,11 +1093,11 @@ impl RemoteMessageScrollerSource {
     }
 }
 
-/// Mail scroller implementation for [`Message`] on in a [`Label`].
+/// Mail scroller implementation for Server search.
 ///
 /// The scroller keeps track of the last element returned by the server for the
-/// selected label and read filter. This element is then used to fetch
-/// new data from the server.
+/// selected search query. This element is then used to fetch next pages
+///
 #[derive(Debug)]
 pub struct SearchScrollerSource {
     search: SearchOptions,
@@ -1266,7 +1265,7 @@ impl SearchScrollerSource {
 
         let mut display_order = SearchScrollData::last(&tx)
             .await?
-            .map(|s| s.display_order)
+            .map(|s| s.display_order.saturating_add(1))
             .unwrap_or_default();
 
         // Save all messages.
@@ -1354,11 +1353,6 @@ impl MailScrollerSource for SearchScrollerSource {
     ) -> Result<Vec<Self::Item>, MailContextError> {
         let tether = ctx.user_stash().connection();
 
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
         if let Some(ref last) = self.last {
             Ok(last.visible_elements(&tether).await?)
         } else {
@@ -1369,11 +1363,6 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn visible_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection();
 
-        // If cache is empty we have either
-        // * an empty label
-        // * a label that has not been initialized
-        // The latter case is handled in the `Self::sync_more` method.
-        // Here we simply assume empty label.
         if let Some(ref last) = self.last {
             Ok(last.visible_element_count(&tether).await?)
         } else {
@@ -1411,13 +1400,6 @@ impl MailScrollerSource for SearchScrollerSource {
         }
 
         if let Some(ref mut last) = self.last {
-            // This is the only place where cache progresses,
-            // There might be a case in which someone will try to fetch more
-            // for the label which has no more data.
-            // The the cache will not progress and `items` will be empty.
-            // Note: Task is always spawned, if there is no more data to download.
-            // As this information is provided in a trait. It is up to the implementation
-            // To check if there is more data to download before asking for more.
             let items = last.fetch_more(self.page_size, &tether).await?;
 
             let (task, total) = if items.is_empty() {

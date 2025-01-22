@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1417] `Draft::discard` - Discards a draft from the composer.
-  - [ET-1685] `scroll_search` & `SearchScroller` to make server searches
+  - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
   - More logging for the html transformations.
 
 ### Fixed

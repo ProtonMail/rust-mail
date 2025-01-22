@@ -447,7 +447,7 @@ pub async fn paginate_search(
 
 #[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
-pub async fn scroll_search(
+pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
     callback: Box<dyn LiveQueryCallback>,

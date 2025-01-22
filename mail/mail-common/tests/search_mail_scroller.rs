@@ -70,7 +70,8 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
 async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
     let page_size = 5;
-    let params = setup_api_message_pages(&ctx, page_size, 2).await;
+    let search_phrase = "Invoice 2024";
+    let params = setup_api_message_pages(&ctx, page_size, search_phrase, 2).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -79,7 +80,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     // Online
     let mut scroller = MailScroller::search(
         user_ctx.clone(),
-        SearchOptions::from("Invoice 2024"),
+        SearchOptions::from(search_phrase),
         page_size,
     )
     .await
@@ -131,7 +132,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
 
     // Search always relay on online data even for the same options used just before.
     let mut scroller =
-        MailScroller::search(user_ctx, SearchOptions::from("Invoice 2024"), page_size)
+        MailScroller::search(user_ctx, SearchOptions::from(search_phrase), page_size)
             .await
             .unwrap();
 
@@ -187,22 +188,26 @@ async fn test_search_mail_scroller_notificate_about_changes() {
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
+    let search_phrase = "123";
     let local_label_id = SystemLabel::AllMail
         .local_id(&tether)
         .await
         .unwrap()
         .unwrap();
-    let params = setup_api_message_pages(&ctx, page_size, 1).await;
+    let params = setup_api_message_pages(&ctx, page_size, search_phrase, 1).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
 
-    let mut scroller =
-        MailScroller::search(user_ctx.clone(), SearchOptions::from("123"), page_size)
-            .await
-            .unwrap();
+    let mut scroller = MailScroller::search(
+        user_ctx.clone(),
+        SearchOptions::from(search_phrase),
+        page_size,
+    )
+    .await
+    .unwrap();
     let WatcherHandle {
         handle: _handle,
         receiver,
@@ -319,6 +324,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,
+    search_phrase: &str,
     expect: u64,
 ) -> TestParams {
     let params = TestParams::default_basic();
@@ -331,7 +337,7 @@ async fn setup_api_message_pages(
         label_ids: vec![SystemLabel::Inbox.remote_id()]
     );
 
-    // Messages are returned and displayed in DESC order, newer at the top
+    // Messages in search are returned in exact order response provides
     let second_page = (0..page_size)
         .rev()
         .map(|i| {
@@ -354,9 +360,25 @@ async fn setup_api_message_pages(
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
     let total = (page_size * 2) as u64;
 
-    mock_get_messages_page(ctx, second_page, total, &first_page_last_id, expect).await;
+    mock_get_messages_page(
+        ctx,
+        second_page,
+        total,
+        search_phrase,
+        &first_page_last_id,
+        expect,
+    )
+    .await;
     // last page is empty
-    mock_get_messages_page(ctx, vec![], total, &second_page_last_id, expect).await;
+    mock_get_messages_page(
+        ctx,
+        vec![],
+        total,
+        search_phrase,
+        &second_page_last_id,
+        expect,
+    )
+    .await;
     ctx.mock_get_messages_total_expect(first_page, total, expect)
         .await;
 
@@ -367,12 +389,14 @@ pub async fn mock_get_messages_page(
     ctx: &MailTestContext,
     messages: Vec<ApiMessageMetadata>,
     total: u64,
+    search_phrase: &str,
     last_id: &str,
     expect: u64,
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
         .and(query_param_contains("EndID", last_id))
+        .and(query_param_contains("Keyword", search_phrase))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                 total,
