@@ -216,8 +216,8 @@ async fn send_fails_if_recipient_is_not_valid() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SendMessage(
-            draft::PackageError::RecipientEmailInvalid(_)
+        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
+            draft::SaveOrSendError::SendMessage(draft::PackageError::RecipientEmailInvalid(_))
         )))
     ));
 }
@@ -232,8 +232,10 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SendMessage(
-            draft::PackageError::ProtonRecipientDoesNotExist(_)
+        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
+            draft::SaveOrSendError::SendMessage(draft::PackageError::ProtonRecipientDoesNotExist(
+                _
+            ))
         )))
     ));
 }
@@ -378,7 +380,9 @@ async fn save_after_send_is_an_error() {
     let result = user_ctx.with_queue(|queue| draft.save(queue)).await;
     assert!(matches!(
         result,
-        Err(MailContextError::Draft(draft::Error::AlreadySent))
+        Err(MailContextError::Draft(draft::Error::SaveOrSend(
+            draft::SaveOrSendError::AlreadySent
+        )))
     ));
 }
 

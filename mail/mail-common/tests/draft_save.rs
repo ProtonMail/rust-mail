@@ -12,7 +12,7 @@ use proton_api_mail::services::proton::response_data::{Disposition, MessageAttac
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, ReplyMode};
+use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
 use proton_mail_common::models::{
     Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message,
 };
@@ -299,7 +299,9 @@ async fn create_draft_reply_without_body_is_error() {
 
     assert!(matches!(
         result,
-        Err(MailContextError::Draft(Error::MessageBodyMissing(_)))
+        Err(MailContextError::Draft(Error::Open(
+            OpenError::MessageBodyMissing(_)
+        )))
     ));
 }
 
@@ -345,7 +347,9 @@ async fn create_draft_reply_should_fail_for_drafts() {
 
     assert!(matches!(
         result,
-        Err(MailContextError::Draft(Error::ReplyOrForwardToDraft(_)))
+        Err(MailContextError::Draft(Error::Open(
+            OpenError::ReplyOrForwardToDraft(_)
+        )))
     ));
 }
 

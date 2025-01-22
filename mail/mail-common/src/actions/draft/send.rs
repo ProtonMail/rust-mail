@@ -3,13 +3,14 @@ use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
 };
-use crate::draft::{Error, ReplyMode};
+use crate::draft::{ReplyMode, SaveOrSendError};
 use crate::models::{
     Conversation, DraftMetadata, DraftSendFailure, DraftSendResult, DraftSendResultOrigin,
     MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_api_core::consts::Mail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
@@ -70,12 +71,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             })?
         else {
             error!("Could not find metadata {}", action.metadata_id);
-            return Err(Error::MetadataNotFound(action.metadata_id).into());
+            return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
         let Some(local_message_id) = metadata.local_message_id else {
             error!("The Draft does not have message yet");
-            return Err(Error::DraftWithoutMessage.into());
+            return Err(SaveOrSendError::LocalDraftWithoutMessage.into());
         };
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
@@ -154,7 +155,7 @@ impl proton_action_queue::action::Handler for SendHandler {
             })?
         else {
             error!("Could not find metadata {}", action.metadata_id);
-            return Err(Error::MetadataNotFound(action.metadata_id).into());
+            return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
         let Some(message_metadata) = Message::find_by_id(local_message_id, &tether).await? else {
@@ -195,7 +196,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let recipient_emails = load_all_recipients(&message_metadata);
         if recipient_emails.is_empty() {
             error!("No recipients associated with the current draft");
-            return Err(Error::NoRecipients.into());
+            return Err(SaveOrSendError::NoRecipients.into());
         }
 
         let pgp_provider = new_pgp_provider();
@@ -233,12 +234,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             &attachments,
         )
         .await
-        .map_err(Error::SendMessage)
+        .map_err(SaveOrSendError::SendMessage)
         .inspect_err(|err| error!("Failed build packages for recipients: {err}"))?;
 
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);
 
-        let response = context
+        let response = match context
             .api()
             .send_mail(
                 remote_message_id,
@@ -247,9 +248,20 @@ impl proton_action_queue::action::Handler for SendHandler {
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
             )
             .await
-            .inspect_err(|err| {
+        {
+            Ok(response) => response,
+            Err(err) => {
                 error!("Failed to send send email request: {err}");
-            })?;
+
+                if let Some(proton_error) = err.to_proton_error() {
+                    if proton_error.code == Mail::MessageAlreadySent as u32 {
+                        return Err(SaveOrSendError::AlreadySent.into());
+                    }
+                }
+
+                return Err(err.into());
+            }
+        };
 
         // Update conversation
         let tx = tether.transaction().await?;

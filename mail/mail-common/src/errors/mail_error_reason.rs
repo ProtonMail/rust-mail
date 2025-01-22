@@ -9,7 +9,10 @@ pub enum MailErrorReason {
     ActionReason(ActionErrorReason),
     SessionReason(ContextErrorReason),
     LoginReason(LoginErrorReason),
-    DraftReason(DraftErrorReason),
+    DraftOpenReason(DraftOpenErrorReason),
+    DraftSaveSendReason(DraftSaveSendErrorReason),
+    DraftUndoSendReason(DraftUndoSendErrorReason),
+    DraftDiscardReason(DraftDiscardErrorReason),
     EventReason(EventErrorReason),
     OtherReason(OtherErrorReason),
 }
@@ -32,9 +35,21 @@ impl From<LoginErrorReason> for MailErrorReason {
     }
 }
 
-impl From<DraftErrorReason> for MailErrorReason {
-    fn from(reason: DraftErrorReason) -> Self {
-        Self::DraftReason(reason)
+impl From<DraftOpenErrorReason> for MailErrorReason {
+    fn from(reason: DraftOpenErrorReason) -> Self {
+        Self::DraftOpenReason(reason)
+    }
+}
+
+impl From<DraftSaveSendErrorReason> for MailErrorReason {
+    fn from(value: DraftSaveSendErrorReason) -> Self {
+        Self::DraftSaveSendReason(value)
+    }
+}
+
+impl From<DraftUndoSendErrorReason> for MailErrorReason {
+    fn from(value: DraftUndoSendErrorReason) -> Self {
+        Self::DraftUndoSendReason(value)
     }
 }
 
@@ -53,7 +68,7 @@ impl From<OtherErrorReason> for MailErrorReason {
 /// Specific Reason for error occurrence within ActionQueue
 ///
 /// This enum is used to represent the specific reason for an error that occurred
-/// in oreder to provide only the necessary information to the user.
+/// in order to provide only the necessary information to the user.
 #[derive(Debug)]
 pub enum ActionErrorReason {
     UnknownLabel,
@@ -66,7 +81,7 @@ pub enum ActionErrorReason {
 /// This enum is used to represent the specific reason for an error that occurred
 /// in handling context related operations in order to provide only the necessary
 /// information to the user. This error type in uniffi library is named `SessionErrorReason`
-/// as the session is nomeclature used in the client library.
+/// as the session is nomenclature used in the client library.
 #[derive(Debug)]
 pub enum ContextErrorReason {
     UnknownLabel,
@@ -86,13 +101,32 @@ pub enum LoginErrorReason {
     CantUnlockUserKey,
 }
 
-/// Specific Reason for error occurrence within Draft.
+/// Specific Reason when opening a draft fails.
 ///
 /// This enum is used to represent the specific reason for an error that occurred
 /// while drafting a new message in order to provide only the necessary
 /// information to the user.
 #[derive(Debug)]
-pub enum DraftErrorReason {
+pub enum DraftOpenErrorReason {
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// This message is not a draft
+    MessageIsNotADraft,
+    /// Attempting to reply or forward to a draft
+    ReplyOrForwardDraft,
+    /// Could not find the user's address
+    AddressNotFound,
+    /// Message body is missing
+    MessageBodyMissing,
+}
+
+/// Specific Reason when opening a draft save or send fails.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug)]
+pub enum DraftSaveSendErrorReason {
     /// Message has no recipients
     NoRecipients,
     /// Address does not have a primary key
@@ -109,16 +143,42 @@ pub enum DraftErrorReason {
     MessageAlreadySent,
     /// A packaging error occurred
     PackageError(String),
-    /// Updating a message that is not draft.
-    MessageUpdateIsNotDraft,
-    /// This message no longer exists.
-    MessageDoesNotExist,
     /// This draft was already sent and can't be modified
     AlreadySent,
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message is not a draft
+    MessageIsNotADraft,
+}
+
+/// Specific Reason when attempting to cancel sending of an already sent draft.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug)]
+pub enum DraftUndoSendErrorReason {
     /// Can not undo sent this message
     MessageCanNotBeUndoSent,
     /// The cancellation of sending for this message is no longer possible.
     SendCanNoLongerBeUndone,
+    /// Message is not a draft
+    MessageIsNotADraft,
+    /// This message no longer exists.
+    MessageDoesNotExist,
+}
+
+/// Specific Reason when attempting to discard a draft.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug)]
+pub enum DraftDiscardErrorReason {
+    /// This message does not exist
+    MessageDoesNotExist,
+    /// Deleting the draft failed
+    DeleteFailed,
 }
 
 /// Specific Reason for error occurrence within Event Loop.
