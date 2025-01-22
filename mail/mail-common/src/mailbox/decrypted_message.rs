@@ -2,12 +2,13 @@
 
 //! Everything related to processing a decrypted message.
 
-use crate::datatypes::{LocalAttachmentId, MimeType};
+use crate::datatypes::attachment::MimeType as AttachmentMimeType;
+use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use parking_lot::Mutex;
 use proton_api_core::services::proton::common::AuthId;
-use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
+use proton_crypto_inbox::proton_crypto_inbox_mime::{self, ProcessedAttachment};
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -16,6 +17,7 @@ use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
 use std::io::Read;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
@@ -260,9 +262,7 @@ impl DecryptedMessageBody {
             width: att.image_width.clone(),
         })
     }
-}
 
-impl DecryptedMessageBody {
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
         let value = self.metadata.parsed_headers.headers.get(key)?;
@@ -325,6 +325,33 @@ impl DecryptedMessageBody {
             stored.pgp_subject,
             ctx,
         )
+    }
+
+    /// This function merges the API attachments and PGP attachments into one for easier client consumption.
+    pub fn get_attachments(&self) -> Vec<AttachmentMetadata> {
+        let mut atts: Vec<AttachmentMetadata> = self
+            .metadata
+            .attachments
+            .iter()
+            .filter(|att| att.disposition == Disposition::Attachment)
+            .map(|x| x.clone().into())
+            .collect();
+
+        if let Some(pgp_atts) = &self.pgp_attachments {
+            let iter = pgp_atts
+                .iter()
+                .filter(|att| att.disposition == proton_crypto_inbox_mime::Disposition::Attachment)
+                .map(|att| AttachmentMetadata {
+                    disposition: att.disposition.into(),
+                    mime_type: AttachmentMimeType::from_str(&att.mime_type).unwrap_or_default(),
+                    size: att.size as u64,
+                    filename: att.name.clone(),
+                    remote_id: None,
+                    local_id: None,
+                });
+            atts.extend(iter);
+        }
+        atts
     }
 }
 
