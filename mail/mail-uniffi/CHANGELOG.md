@@ -10,13 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1794] `DecryptedMessage::get_attachments` which merges the API attachments and PGP attachments into one for easier client consumption. 
+  - [ET-1685] `scroll_search` & `SearchScroller` to make server searches
 
-## [0.34.0] - 2025-01-17
+### Removed
+
+  - `MessageAttachments`, `MessageAttachmentsHeaders` and `MessageAttachmentsInfo` have been removed as they are not needed or used.
+
+## [0.34.0] - 2025-01-22
 
 ### Added
 
   - [ET-1417] `Draft::discard` - Discards a draft from the composer.
-  - [ET-1685] `scroll_search` & `SearchScroller` to make server searches
   - More logging for the html transformations.
   - [ET-679] `draft_undo_send` - Cancel sending of a message.
 
@@ -28,10 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - `DraftSendStatus` - now includes whether it can be cancelled or not.
-
-### Removed
-
-  - `MessageAttachments`, `MessageAttachmentsHeaders` and `MessageAttachmentsInfo` have been removed as they are not needed or used.
 
 ## [0.33.0] - 2025-01-17
 
