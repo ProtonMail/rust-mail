@@ -21,14 +21,14 @@ pub enum Messages {
     /// Dismiss progress indicator (if any).
     DismissBackgroundProgress,
     /// Raise a popup window.
-    RaisePopup(Box<dyn Popup + Send>),
+    RaisePopup(Box<dyn Popup>),
     /// Dismiss active pop (if any).
     DismissPopup,
 }
 
 impl Messages {
     /// Utility helper to create raise popup messages.
-    pub fn raise_popup(pop_up: impl Popup + Send + 'static) -> Self {
+    pub fn raise_popup(pop_up: impl Popup + 'static) -> Self {
         Self::RaisePopup(Box::new(pop_up))
     }
 }

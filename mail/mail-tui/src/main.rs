@@ -1,18 +1,14 @@
-// #![feature(try_blocks)]
-// #![feature(try_trait_v2)]
 mod app;
-// mod events;
 mod app_model;
 mod keychain;
 mod messages;
 mod widgets;
 
 use crate::app::App;
-use app_model::env::Env;
 use clap::Parser;
+use proton_mail_common::proton_api_mail::proton_api_core::session::Config;
 
 use crate::app_model::AppModel;
-use app_model::AppConfig;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -20,6 +16,8 @@ use crossterm::ExecutableCommand;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
+use std::path::PathBuf;
+use std::sync::LazyLock;
 use tokio::runtime::Runtime;
 
 pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
@@ -33,26 +31,58 @@ fn initialize_panic_handler() {
     }));
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone, Debug)]
 #[command(name = "proton-mail-tui", about = "proton mail tui application")]
-struct Cli {
+struct CliArgs {
     /// Enable proton black environment
-    #[arg(long)]
-    dev: bool,
+    #[arg(long, short)]
+    api_dev_env: bool,
+
+    /// Open messages in a browser window. Specify to choose an app or leave empty to use the
+    /// default.
+    #[arg(long, short)]
+    browser: Option<String>,
+
+    /// Where to store the html files. Defaults to the temp dir of the OS
+    /// In linux this would generate two files:
+    /// `/tmp/proton_htmls/[subject]/before.html` - The raw message
+    /// `/tmp/proton_htmls/[subject]/after.html`  - The file after transforming
+    #[arg(long, short)]
+    html_dir: Option<PathBuf>,
+
+    /// Default username
+    #[arg(long, short)]
+    username: Option<String>,
+
+    /// Default password
+    #[arg(long, short)]
+    password: Option<String>,
 }
 
-impl From<Cli> for AppConfig {
-    fn from(value: Cli) -> Self {
-        let env = if value.dev { Env::Dev } else { Env::Prod };
-        AppConfig { env }
+impl CliArgs {
+    pub fn dir(&self) -> &'static str {
+        if self.api_dev_env {
+            "dev"
+        } else {
+            ""
+        }
+    }
+
+    pub fn api_config(&self) -> Config {
+        if self.api_dev_env {
+            Config::atlas()
+        } else {
+            Config::default()
+        }
     }
 }
+
+static CLI_ARGS: LazyLock<CliArgs> = LazyLock::new(CliArgs::parse);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     initialize_panic_handler();
     let runtime = Runtime::new()?;
-    let args = Cli::parse();
-    let state = AppModel::new(&runtime, &AppConfig::from(args))?;
+    let state = AppModel::new(&runtime)?;
     let mut app = App::new(runtime, state);
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
