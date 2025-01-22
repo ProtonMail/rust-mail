@@ -131,8 +131,7 @@ impl UserContext {
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
     /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
-        let context = self.context.clone();
-        let tether = context.account_stash().connection();
+        let tether = self.context.account_stash().connection();
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?
