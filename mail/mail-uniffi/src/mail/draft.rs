@@ -2,7 +2,10 @@ mod observer;
 mod recipients;
 
 use crate::core::datatypes::Id;
-use crate::errors::{DraftError, OptIdDraftResult, VoidDraftResult};
+use crate::errors::{
+    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, OptIdProtonResult,
+    ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult, VoidDraftUndoSendResult,
+};
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::MailUserSession;
@@ -63,8 +66,8 @@ impl Draft {
         })
     }
 }
-export_typed_result!(NewDraftResult, Arc<Draft>, DraftError);
-export_typed_result!(OpenDraftResult, OpenDraft, DraftError);
+export_typed_result!(NewDraftResult, Arc<Draft>, DraftOpenError);
+export_typed_result!(OpenDraftResult, OpenDraft, DraftOpenError);
 
 /// Represent an open draft.
 #[derive(uniffi::Record)]
@@ -120,7 +123,7 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
         Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(DraftOpenError::from)
     .into()
 }
 
@@ -141,7 +144,7 @@ pub async fn open_draft(session: &MailUserSession, message_id: Id) -> OpenDraftR
         })
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(DraftOpenError::from)
     .into()
 }
 
@@ -178,7 +181,7 @@ impl Draft {
     }
 
     /// Set the draft's `subject`.
-    pub fn set_subject(&self, subject: String) -> VoidDraftResult {
+    pub fn set_subject(&self, subject: String) -> VoidDraftSaveSendResult {
         let action = {
             let mut draft = self.instance.write();
             draft.subject = subject;
@@ -190,12 +193,12 @@ impl Draft {
                     .await
                     .map_err(RealProtonMailError::from)
             })
-            .map_err(DraftError::from)
+            .map_err(DraftSaveSendError::from)
             .into()
     }
 
     /// Set the draft's `body`.
-    pub fn set_body(&self, body: String) -> VoidDraftResult {
+    pub fn set_body(&self, body: String) -> VoidDraftSaveSendResult {
         let action = {
             let mut draft = self.instance.write();
             draft.body = body;
@@ -207,7 +210,7 @@ impl Draft {
                     .await
                     .map_err(RealProtonMailError::from)
             })
-            .map_err(DraftError::from)
+            .map_err(DraftSaveSendError::from)
             .into()
     }
 
@@ -230,7 +233,7 @@ impl Draft {
     /// Get the Draft's message id .
     ///
     /// Returns `None` if no message was created.
-    pub async fn message_id(self: Arc<Self>) -> OptIdDraftResult {
+    pub async fn message_id(self: Arc<Self>) -> OptIdProtonResult {
         let metadata_id = { self.instance.read().metadata_id };
         let tether = self.ctx.user_stash().connection();
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
@@ -240,7 +243,7 @@ impl Draft {
                 .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(DraftError::from)
+        .map_err(ProtonError::from)
         .into()
     }
 
@@ -261,7 +264,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(&self) -> VoidDraftResult {
+    pub async fn save(&self) -> VoidDraftSaveSendResult {
         let action = {
             let draft = self.instance.read();
             draft.to_save_action()
@@ -274,7 +277,7 @@ impl Draft {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(DraftError::from)
+        .map_err(DraftSaveSendError::from)
         .into()
     }
 
@@ -285,7 +288,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn send(&self) -> VoidDraftResult {
+    pub async fn send(&self) -> VoidDraftSaveSendResult {
         let send_queuer = {
             let draft = self.instance.read();
             draft.to_send_action()
@@ -301,7 +304,7 @@ impl Draft {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(DraftError::from)
+        .map_err(DraftSaveSendError::from)
         .into()
     }
 
@@ -312,7 +315,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn discard(&self) -> VoidDraftResult {
+    pub async fn discard(&self) -> VoidDraftDiscardResult {
         let discard_queuer = {
             let draft = self.instance.read();
             draft.to_discard_action()
@@ -327,7 +330,7 @@ impl Draft {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(DraftError::from)
+        .map_err(DraftDiscardError::from)
         .into()
     }
 }
@@ -336,7 +339,7 @@ impl Draft {
 ///
 /// Note that will only work if the message has been sent with a send delay.
 #[uniffi::export]
-pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftResult {
+pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftUndoSendResult {
     let ctx = session.ctx();
     uniffi_async(async move {
         ctx.with_queue(|queue| RealDraft::action_undo_send(queue, message_id.into()))
@@ -344,7 +347,7 @@ pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidD
         Ok::<_, RealProtonMailError>(())
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(DraftUndoSendError::from)
     .into()
 }
 

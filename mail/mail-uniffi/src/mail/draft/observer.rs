@@ -1,5 +1,5 @@
 use crate::core::datatypes::Id;
-use crate::errors::{DraftError, VoidDraftResult};
+use crate::errors::{DraftSaveSendError, ProtonError, VoidProtonResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_core_common::utils::MapVec;
@@ -42,7 +42,7 @@ pub enum DraftSendStatus {
     /// of the message can be cancelled.
     Success(bool),
     /// Something failed.
-    Failure(DraftError),
+    Failure(DraftSaveSendError),
 }
 
 /// Result of sending a draft
@@ -68,7 +68,7 @@ impl From<RealDraftSendResult> for DraftSendResult {
             error: value
                 .error
                 .map_or(DraftSendStatus::Success(is_undoable), |e| {
-                    DraftSendStatus::Failure(DraftError::from(RealProtonMailError::from(e)))
+                    DraftSendStatus::Failure(DraftSaveSendError::from(RealProtonMailError::from(e)))
                 }),
             origin: value.origin.into(),
         }
@@ -85,7 +85,7 @@ pub trait DraftSendResultCallback: Send + Sync {
 export_typed_result!(
     NewDraftSendResultWatcherResult,
     Arc<DraftSendResultWatcher>,
-    DraftError
+    ProtonError
 );
 
 /// Observe draft send results.
@@ -128,7 +128,7 @@ pub async fn new_draft_send_watcher(
         }))
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(ProtonError::from)
     .into()
 }
 
@@ -148,7 +148,7 @@ impl DraftSendResultWatcher {
 #[proton_uniffi_macros::export_result]
 pub async fn draft_send_result_unseen(
     session: &MailUserSession,
-) -> Result<Vec<DraftSendResult>, DraftError> {
+) -> Result<Vec<DraftSendResult>, ProtonError> {
     let ctx = session.ctx();
     uniffi_async(async move {
         let connection = ctx.user_stash().connection();
@@ -158,7 +158,7 @@ pub async fn draft_send_result_unseen(
             .map_err(RealProtonMailError::from)
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(ProtonError::from)
 }
 
 /// Mark the send results for the `message_ids` as seen.
@@ -170,7 +170,7 @@ pub async fn draft_send_result_unseen(
 pub async fn draft_send_result_mark_seen(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidDraftResult {
+) -> VoidProtonResult {
     let ctx = session.ctx();
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
@@ -181,7 +181,7 @@ pub async fn draft_send_result_mark_seen(
         Ok(())
     })
     .await
-    .map_err(|e: MailContextError| DraftError::from(RealProtonMailError::from(e)))
+    .map_err(|e: MailContextError| ProtonError::from(RealProtonMailError::from(e)))
     .into()
 }
 
@@ -194,7 +194,7 @@ pub async fn draft_send_result_mark_seen(
 pub async fn draft_send_result_delete(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidDraftResult {
+) -> VoidProtonResult {
     let ctx = session.ctx();
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
@@ -204,6 +204,6 @@ pub async fn draft_send_result_delete(
         Ok(())
     })
     .await
-    .map_err(|e: MailContextError| DraftError::from(RealProtonMailError::from(e)))
+    .map_err(|e: MailContextError| ProtonError::from(RealProtonMailError::from(e)))
     .into()
 }

@@ -10,8 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1864] `account_details` function in `MailUserSession` and `details` function in `StoredAccount` (it contains account name, email and avatar information that needs to be displayed to the user).
-  - [ET-1794] `DecryptedMessage::get_attachments` which merges the API attachments and PGP attachments into one for easier client consumption. 
+  - [ET-1794] `DecryptedMessage::get_attachments` which merges the API attachments and PGP attachments into one for easier client consumption.
   - [ET-1685] `scroll_search` & `SearchScroller` to make server searches
+
+### Changed
+
+  - [ET-1747] `DraftError` has been split into 4 different sub errors:
+    - `DraftOpenError` - For creating and opening drafts.
+    - `DraftSaveSendError` - For sending and saving.
+    - `DraftUndoError` - For undo send.
+    - `DraftDiscardError` - For discard.
 
 ### Removed
 

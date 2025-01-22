@@ -1,5 +1,5 @@
 use crate::datatypes::SystemLabelId;
-use crate::draft::{Draft, Error};
+use crate::draft::{DiscardError, Draft};
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
@@ -67,7 +67,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             })?
         else {
             error!("Could not find metadata {}", action.metadata_id);
-            return Err(Error::MetadataNotFound(action.metadata_id).into());
+            return Err(DiscardError::MetadataNotFound(action.metadata_id).into());
         };
 
         if let Some(local_message_id) = metadata.local_message_id {
@@ -161,7 +161,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         for result in response.responses {
             if result.id == message_id && result.response.code != General::NoError as u32 {
                 error!("Failed to delete message: {:?}", result.response);
-                return Err(MailContextError::Draft(Error::DeleteFailed));
+                return Err(MailContextError::Draft(DiscardError::DeleteFailed.into()));
             }
         }
 

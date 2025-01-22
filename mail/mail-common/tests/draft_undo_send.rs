@@ -6,7 +6,7 @@ use proton_api_mail::services::proton::prelude::{MessageFlags, PostCancelSendRes
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::actions::draft::UndoSend;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::draft::{Draft, Error};
+use proton_mail_common::draft::{Draft, Error, UndoError};
 use proton_mail_common::models::Message;
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::{
@@ -141,6 +141,8 @@ async fn draft_undo_send_failure() {
         .contains(MessageFlags::SENT.into()));
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(Error::SendCanNoLongerBeUndone))
+        ActionError::Action(MailContextError::Draft(Error::Undo(
+            UndoError::SendCanNoLongerBeUndone
+        )))
     ));
 }

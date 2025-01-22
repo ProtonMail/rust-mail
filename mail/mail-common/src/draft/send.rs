@@ -1,7 +1,7 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::ValidationState;
-use crate::draft::{compose::html_to_text, Error, PackageError};
+use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_mail::services::proton::request_data::{
@@ -73,21 +73,21 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
                 if let MailContextError::Api(err) = &err {
                     match ValidationState::from(err) {
                         ValidationState::InvalidEmail => {
-                            return Error::SendMessage(PackageError::RecipientEmailInvalid(
-                                recipient.clone(),
-                            ))
+                            return SaveOrSendError::SendMessage(
+                                PackageError::RecipientEmailInvalid(recipient.clone()),
+                            )
                             .into();
                         }
                         ValidationState::DoesNotExist => {
-                            return Error::SendMessage(PackageError::ProtonRecipientDoesNotExist(
-                                recipient.clone(),
-                            ))
+                            return SaveOrSendError::SendMessage(
+                                PackageError::ProtonRecipientDoesNotExist(recipient.clone()),
+                            )
                             .into();
                         }
                         ValidationState::Unknown => {
-                            return Error::SendMessage(PackageError::RecipientEmailInvalid(
-                                recipient.clone(),
-                            ))
+                            return SaveOrSendError::SendMessage(
+                                PackageError::RecipientEmailInvalid(recipient.clone()),
+                            )
                             .into();
                         }
                         _ => {}

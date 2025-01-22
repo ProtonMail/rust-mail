@@ -1,35 +1,115 @@
-use super::{DraftErrorReason, ProtonError};
-use crate::core::datatypes::Id;
+use super::{
+    DraftDiscardErrorReason, DraftOpenErrorReason, DraftSaveSendErrorReason,
+    DraftUndoSendErrorReason, ProtonError,
+};
+use crate::export_void_result;
 use crate::UniffiEnum;
-use crate::{export_typed_result, export_void_result};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
-export_void_result!(VoidDraftResult, DraftError);
-export_typed_result!(OptIdDraftResult, Option<Id>, DraftError);
+export_void_result!(VoidDraftSaveSendResult, DraftSaveSendError);
+export_void_result!(VoidDraftUndoSendResult, DraftUndoSendError);
+export_void_result!(VoidDraftDiscardResult, DraftDiscardError);
 
 #[derive(Debug, UniffiEnum)]
-pub enum DraftError {
-    Reason(DraftErrorReason),
+pub enum DraftSaveSendError {
+    Reason(DraftSaveSendErrorReason),
     Other(ProtonError),
 }
 
-impl From<RealProtonMailError> for DraftError {
+impl From<RealProtonMailError> for DraftSaveSendError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("DraftError from {error:?}");
+        error!("DraftSaveSendError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
-            mail_error => DraftError::Other(ProtonError::from(mail_error)),
+            mail_error => DraftSaveSendError::Other(ProtonError::from(mail_error)),
         }
     }
 }
 
-impl From<RealMailErrorReason> for DraftError {
+impl From<RealMailErrorReason> for DraftSaveSendError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::DraftReason(reason) => DraftError::Reason(reason.into()),
-            other_reason => DraftError::Other(ProtonError::from(other_reason)),
+            RealMailErrorReason::DraftSaveSendReason(reason) => {
+                DraftSaveSendError::Reason(reason.into())
+            }
+            other_reason => DraftSaveSendError::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftOpenError {
+    Reason(DraftOpenErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftOpenError {
+    fn from(error: RealProtonMailError) -> Self {
+        error!("DraftOpenError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => DraftOpenError::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftOpenError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftOpenReason(reason) => DraftOpenError::Reason(reason.into()),
+            other_reason => DraftOpenError::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftUndoSendError {
+    Reason(DraftUndoSendErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftUndoSendError {
+    fn from(error: RealProtonMailError) -> Self {
+        error!("DraftUndoSendError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => DraftUndoSendError::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftUndoSendError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftUndoSendReason(reason) => Self::Reason(reason.into()),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftDiscardError {
+    Reason(DraftDiscardErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftDiscardError {
+    fn from(error: RealProtonMailError) -> Self {
+        error!("DraftDiscardError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => Self::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftDiscardError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftDiscardReason(reason) => Self::Reason(reason.into()),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
         }
     }
 }
