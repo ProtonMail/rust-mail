@@ -406,6 +406,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.help_bar_lines(),
             AppState::ContextInit(state) => state.help_bar_lines(),
             AppState::Mailbox(state) => state.help_bar_lines(),
+            AppState::Contacts(state) => state.help_bar_lines(),
         }
     }
 }

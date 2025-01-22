@@ -3,7 +3,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
     datatypes::{ContactItemType, GroupedContacts},
-    models::Contact,
+    models::{Contact, ContactListWatcher},
 };
 use proton_mail_common::MailUserContext;
 use ratatui::{
@@ -53,7 +53,7 @@ impl From<FlatContact> for ListItem<'_> {
 
 pub enum Message {
     Init,
-    LoadContacts(Option<WatchHandle>, Vec<FlatContact>),
+    LoadContacts(Vec<FlatContact>),
     OpenContactPopup,
 }
 
@@ -185,20 +185,51 @@ impl Model {
             .collect()
     }
 
-    async fn init(ctx: Arc<MailUserContext>) -> anyhow::Result<Command<Messages>> {
+    /// Initializes model
+    fn init(&mut self) -> Command<Messages> {
+        let ctx = self.ctx.clone();
+        let (watcher, background_command) = match Self::init_watch(ctx) {
+            Ok(t) => t,
+            Err(e) => {
+                error!("{e}");
+                return Command::batch([
+                    Command::Message(Messages::DismissBackgroundProgress),
+                    Command::message(Messages::DisplayError(None, e)),
+                ]);
+            }
+        };
+
+        self.watcher = Some(watcher);
+        let ctx = self.ctx.clone();
+        Command::task(async move {
+            (Self::init_contact_list(ctx, background_command).await)
+                .inspect_err(|e| error!("{e}"))
+                .unwrap_or_else(|e| {
+                    Command::batch([
+                        Command::Message(Messages::DismissBackgroundProgress),
+                        Command::message(Messages::DisplayError(None, e)),
+                    ])
+                })
+        })
+    }
+
+    /// Initializes the Watcher over contact lists
+    ///
+    /// # Errors
+    ///
+    /// Might result an error if it was unable to subscribe to the database
+    ///
+    fn init_watch(ctx: Arc<MailUserContext>) -> anyhow::Result<(WatchHandle, Command<Messages>)> {
         let stash = ctx.user_stash();
-        let (
-            list,
-            WatcherHandle {
-                handle, receiver, ..
-            },
-        ) = Contact::watch_contact_list(stash).await?;
+        let WatcherHandle {
+            handle, receiver, ..
+        } = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
         let (watcher, background_command) =
             WatchHandle::new_dampened(receiver, handle, move || {
                 let tether = ctx.user_stash().connection();
                 async move {
                     Some(match Self::load_contacts(&tether).await {
-                        Ok(list) => Message::LoadContacts(None, list).into(),
+                        Ok(list) => Message::LoadContacts(list).into(),
                         Err(e) => {
                             let e = anyhow::anyhow!("Contact list query error: {e}");
                             error!("{e}");
@@ -209,14 +240,21 @@ impl Model {
                 .boxed()
             });
 
-        let command = Command::batch([
+        Ok((watcher, background_command))
+    }
+
+    /// Initializes contact list by fetching it from Database
+    async fn init_contact_list(
+        ctx: Arc<MailUserContext>,
+        background_command: Command<Messages>,
+    ) -> anyhow::Result<Command<Messages>> {
+        let tether = ctx.user_stash().connection();
+        let list = Self::load_contacts(&tether).await?;
+        Ok(Command::batch([
             Command::Message(Messages::DismissBackgroundProgress),
-            Command::message(
-                Message::LoadContacts(Some(watcher), Self::flatten_contacts(list)).into(),
-            ),
+            Command::message(Message::LoadContacts(list).into()),
             background_command,
-        ]);
-        Ok(command)
+        ]))
     }
 }
 
@@ -276,27 +314,15 @@ impl AppStateHandler for Model {
             return Command::None;
         };
 
-        let ctx = self.ctx.clone();
         match message {
             Message::Init => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
                     "Loading contacts...".to_owned(),
                 )),
-                Command::task(async move {
-                    let result = Self::init(ctx).await;
-                    result.inspect_err(|e| error!("{e}")).unwrap_or_else(|e| {
-                        Command::batch([
-                            Command::Message(Messages::DismissBackgroundProgress),
-                            Command::message(Messages::DisplayError(None, e)),
-                        ])
-                    })
-                }),
+                self.init(),
             ]),
-            Message::LoadContacts(watcher, contacts) => {
+            Message::LoadContacts(contacts) => {
                 self.contacts = contacts;
-                if let Some(watcher) = watcher {
-                    self.watcher = Some(watcher);
-                }
                 self.list_state.set_len(self.contacts.len());
                 self.list_state.select(Some(0));
                 Command::none()
