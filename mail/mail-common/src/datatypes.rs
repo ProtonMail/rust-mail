@@ -43,6 +43,7 @@ pub(crate) mod exclusive_location;
 pub mod labels;
 mod read_filter;
 mod rollback_item_type;
+mod search_options;
 mod system_folder;
 
 pub use contextual_conversation::*;
@@ -51,6 +52,7 @@ use indoc::formatdoc;
 use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
 pub use rollback_item_type::RollbackItemType;
+pub use search_options::SearchOptions;
 use stash::stash::{Bond, StashError, Tether};
 pub use system_folder::MovableSystemFolder;
 

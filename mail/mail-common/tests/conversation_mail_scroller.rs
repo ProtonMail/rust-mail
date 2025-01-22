@@ -11,7 +11,7 @@ use proton_core_common::{
 };
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
-    mail_scroller::{MailConversationScrollerSource, MailScroller},
+    mail_scroller::MailScroller,
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
 use proton_mail_test_utils::init::Params as TestParams;
@@ -134,8 +134,9 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
-    let mut scroller = MailScroller::new(user_ctx, source).await.unwrap();
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
     let actual = scroller.all_items().await.unwrap();
     let expected = expected_conversations(page_size, REMOTE_LABEL_ID, &data).unwrap();
 
@@ -169,8 +170,9 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
-    let mut scroller = MailScroller::new(user_ctx, source).await.unwrap();
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
 
     let mut actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 1);
@@ -204,8 +206,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     bond.commit().await.unwrap();
 
     // Online
-    let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
-    let mut scroller = MailScroller::new(user_ctx.clone(), source).await.unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -257,8 +261,9 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // This is because cursor have only two pages in cache, which means we will try to get new page while progressing
     // to the second page.
 
-    let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
-    let mut scroller = MailScroller::new(user_ctx, source).await.unwrap();
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -326,8 +331,10 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
-    let source = MailConversationScrollerSource::new(local_label_id, unread, page_size);
-    let mut scroller = MailScroller::new(user_ctx.clone(), source).await.unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let WatcherHandle {
         handle: _handle,
         receiver,

@@ -37,6 +37,8 @@ pub mod contact_email;
 pub mod labels;
 pub mod sender_image_cache;
 
+use std::future::Future;
+
 pub use self::contact::*;
 pub use self::contact_card::*;
 pub use self::contact_email::*;
@@ -195,24 +197,26 @@ pub trait ModelExtension: Model {
     ///
     /// When querying the database fails.
     ///
-    async fn count<Q>(
+    fn count<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
-    ) -> Result<u64, StashError>
+    ) -> impl Future<Output = Result<u64, StashError>> + Send
     where
         Q: Into<String> + Send,
     {
-        tether
-            .query_value::<_, u64>(
-                formatdoc!(
-                    "SELECT COUNT(*) AS value FROM {} {}",
-                    Self::table_name(),
-                    query_logic.into(),
-                ),
-                params,
-            )
-            .await
+        async move {
+            tether
+                .query_value::<_, u64>(
+                    formatdoc!(
+                        "SELECT COUNT(*) AS value FROM {} {}",
+                        Self::table_name(),
+                        query_logic.into(),
+                    ),
+                    params,
+                )
+                .await
+        }
     }
 
     /// Saves the model by value, returning the updated model.
@@ -330,6 +334,20 @@ pub trait ModelExtension: Model {
     ///
     async fn delete(self, bond: &Bond<'_>) -> Result<usize, StashError> {
         Self::delete_by_id(self.id_value()?, bond).await
+    }
+
+    /// Deletes the model instance from database.
+    ///
+    /// # Errors
+    ///
+    /// When querying the database fails.
+    ///
+    #[must_use]
+    async fn delete_all(bond: &Bond<'_>) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let query = format!("DELETE FROM {table}");
+
+        bond.execute(query, vec![]).await
     }
 }
 

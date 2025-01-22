@@ -8,7 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter};
+use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
@@ -32,7 +32,7 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::mail_scroller::{MailMessageScrollerSource, MailScroller};
+use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{self, Message as RealMessage};
 use proton_mail_common::models::{
     PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
@@ -385,8 +385,7 @@ pub async fn scroll_messages_for_label(
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx();
     uniffi_async(async move {
-        let source = MailMessageScrollerSource::new(label_id.into(), filter.into(), 50);
-        let scroller = MailScroller::new(context, source).await?;
+        let scroller = MailScroller::messages(context, label_id.into(), filter.into(), 50).await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {
@@ -439,6 +438,27 @@ pub async fn paginate_search(
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
+            handle: watch_channel(handle, callback),
+        }))
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+#[allow(clippy::missing_panics_doc)]
+#[proton_uniffi_macros::export_result]
+pub async fn scroll_search(
+    session: Arc<MailUserSession>,
+    options: PaginatorSearchOptions,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<Arc<SearchScroller>, ActionError> {
+    let context = session.ctx();
+    uniffi_async(async move {
+        let scroller = MailScroller::search(context, options.into(), 50).await?;
+        let handle = scroller.watch()?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(SearchScroller {
+            scroller: Mutex::new(scroller),
             handle: watch_channel(handle, callback),
         }))
     })
