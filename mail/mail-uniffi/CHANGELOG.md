@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Added
+
+  - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
+
 ## [0.34.0] - 2025-01-17
 
 ### Added
 
   - [ET-1417] `Draft::discard` - Discards a draft from the composer.
-  - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
   - More logging for the html transformations.
   - [ET-679] `draft_undo_send` - Cancel sending of a message.
 
