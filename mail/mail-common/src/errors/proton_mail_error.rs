@@ -70,6 +70,10 @@ impl From<ApiServiceError> for ProtonMailError {
                 return Self::Reason(MailErrorReason::DraftReason(
                     DraftErrorReason::MessageDoesNotExist,
                 ));
+            } else if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
+                return Self::Reason(MailErrorReason::DraftReason(
+                    DraftErrorReason::SendCanNoLongerBeUndone,
+                ));
             }
         }
 
@@ -236,6 +240,12 @@ impl From<DraftError> for ProtonMailError {
             Error::AlreadySent => {
                 Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::AlreadySent))
             }
+            Error::SendCanNoLongerBeUndone => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::SendCanNoLongerBeUndone,
+            )),
+            Error::MessageCanNotBeUndoSent(_) => Self::Reason(MailErrorReason::DraftReason(
+                DraftErrorReason::MessageCanNotBeUndoSent,
+            )),
         }
     }
 }

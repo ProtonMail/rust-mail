@@ -37,8 +37,9 @@ impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
 /// Indicates how a draft operation completed.
 #[derive(uniffi::Enum)]
 pub enum DraftSendStatus {
-    /// Everything was completed with success.
-    Success,
+    /// Everything was completed with success, is set to true when the sending
+    /// of the message can be cancelled.
+    Success(bool),
     /// Something failed.
     Failure(DraftError),
 }
@@ -59,12 +60,15 @@ pub struct DraftSendResult {
 
 impl From<RealDraftSendResult> for DraftSendResult {
     fn from(value: RealDraftSendResult) -> Self {
+        let is_undoable = value.is_send_undoable();
         Self {
             message_id: value.local_message_id.into(),
             timestamp: value.timestamp,
-            error: value.error.map_or(DraftSendStatus::Success, |e| {
-                DraftSendStatus::Failure(DraftError::from(RealProtonMailError::from(e)))
-            }),
+            error: value
+                .error
+                .map_or(DraftSendStatus::Success(is_undoable), |e| {
+                    DraftSendStatus::Failure(DraftError::from(RealProtonMailError::from(e)))
+                }),
             origin: value.origin.into(),
         }
     }

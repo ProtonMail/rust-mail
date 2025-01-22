@@ -34,12 +34,14 @@ impl Send {
     }
 }
 
+pub type UndoTimestamp = u64;
+
 impl Action for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = WrappedSendHandler;
-    type RemoteOutput = MessageId;
+    type RemoteOutput = (MessageId, UndoTimestamp);
     type LocalOutput = ();
     type Error = MailContextError;
     type Context = MailUserContext;
@@ -310,7 +312,10 @@ impl proton_action_queue::action::Handler for SendHandler {
             .inspect_err(|e| error!("Failed to delete draft metadata after send: {e}"))?;
 
         tx.commit().await?;
-        Ok(metadata.remote_id.expect("This is valid"))
+        Ok((
+            metadata.remote_id.expect("This is valid"),
+            response.delivery_time,
+        ))
     }
 }
 
@@ -361,9 +366,10 @@ async fn save_send_status(
     status: &Result<<Send as Action>::RemoteOutput, MailContextError>,
 ) -> Result<(), StashError> {
     let mut send_result = match status {
-        Ok(output) => DraftSendResult::success(
+        Ok((remote_id, delivery_time)) => DraftSendResult::success(
             action.local_message_id.expect("Should be set"),
-            output.clone(),
+            remote_id.clone(),
+            (*delivery_time).try_into().unwrap_or(0),
         ),
         Err(error) => {
             let error = DraftSendFailure::from_mail_context_error(error);

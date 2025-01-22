@@ -323,4 +323,15 @@ impl ProtonMail for Proton {
             .ok()?
             .into_body_json()?)
     }
+
+    async fn cancel_send(
+        &self,
+        message_id: MessageId,
+    ) -> Result<PostCancelSendResponse, ApiServiceError> {
+        Ok(POST!("{MAIL_V4}/messages/{message_id}/cancel_send")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
 }

@@ -332,6 +332,22 @@ impl Draft {
     }
 }
 
+/// Cancel the sending of message with `message_id`.
+///
+/// Note that will only work if the message has been sent with a send delay.
+#[uniffi::export]
+pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        ctx.with_queue(|queue| RealDraft::action_undo_send(queue, message_id.into()))
+            .await?;
+        Ok::<_, RealProtonMailError>(())
+    })
+    .await
+    .map_err(DraftError::from)
+    .into()
+}
+
 async fn save_draft(
     ctx: &MailUserContext,
     action: DraftSaveActionQueuer,

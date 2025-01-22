@@ -3,7 +3,7 @@ use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::PostSendRequest;
+use proton_api_mail::services::proton::prelude::{PostCancelSendResponse, PostSendRequest};
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -402,9 +402,10 @@ impl MailTestContext {
         params: TestDraftSendRequest,
         result_message: ApiMessage,
         result_conversation: ApiConversation,
+        delivery_time: u64,
     ) {
         let response = PostSendMessageResponse {
-            delivery_time: 0,
+            delivery_time,
             sent: result_message,
             conversation: result_conversation,
         };
@@ -449,6 +450,34 @@ impl MailTestContext {
             .expect(1)
             .mount(self.mock_server())
             .await;
+    }
+
+    /// Generate a new mock expectation for cancelling a sent message.
+    ///
+    /// Note that this mock does not validate parameters that are cryptographically
+    /// generated.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id` - Id of the sent message
+    /// * `result`     - Success or failure response
+    ///
+    #[allow(clippy::doc_markdown)]
+    pub async fn mock_undo_send(
+        &self,
+        message_id: MessageId,
+        result: Result<PostCancelSendResponse, ApiErrorInfo>,
+    ) {
+        let mock = Mock::given(method("POST")).and(path(format!(
+            "/api/mail/v4/messages/{message_id}/cancel_send"
+        )));
+        match result {
+            Ok(response) => mock.respond_with(ResponseTemplate::new(200).set_body_json(response)),
+            Err(e) => mock.respond_with(ResponseTemplate::new(422).set_body_json(e)),
+        }
+        .expect(1)
+        .mount(self.mock_server())
+        .await;
     }
 }
 
