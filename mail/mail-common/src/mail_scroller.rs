@@ -310,24 +310,15 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok(label)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, local_label_id, remote_label_id))]
     async fn sync_first_page(
-        session: &Session,
-        tether: &mut Tether,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-    ) -> Result<Vec<T::Item>, MailContextError> {
-        T::sync_first_page(
-            session,
-            tether,
-            local_label_id,
-            remote_label_id,
-            unread,
-            page_size,
-        )
-        .await
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        T::sync_first_page(ctx, local_label_id, remote_label_id, unread, page_size).await
     }
 
     async fn spawn_background_sync(
@@ -354,13 +345,12 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 
 pub trait RemoteSource: ScrollData + Send {
     fn sync_first_page(
-        session: &Session,
-        tether: &mut Tether,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-    ) -> impl Future<Output = Result<Vec<Self::Item>, MailContextError>> + Send;
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn spawn_background_sync(
         ctx: &MailUserContext,
@@ -374,22 +364,29 @@ pub trait RemoteSource: ScrollData + Send {
 
 impl RemoteSource for ConversationScrollData {
     async fn sync_first_page(
-        session: &Session,
-        tether: &mut Tether,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-    ) -> Result<Vec<Self::Item>, MailContextError> {
-        RemoteConversationScrollerSource::sync_first_page(
-            session,
-            tether,
-            local_label_id,
-            remote_label_id,
-            unread,
-            page_size,
-        )
-        .await
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let session = ctx.session().clone();
+        let mut tether = ctx.user_stash().connection();
+        let handle = tokio::task::spawn(async move {
+            RemoteConversationScrollerSource::sync_first_page(
+                &session,
+                &mut tether,
+                local_label_id,
+                remote_label_id,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        });
+
+        Ok(Some(handle))
     }
 
     async fn spawn_background_sync(
@@ -414,22 +411,29 @@ impl RemoteSource for ConversationScrollData {
 
 impl RemoteSource for MessageScrollData {
     async fn sync_first_page(
-        session: &Session,
-        tether: &mut Tether,
+        ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
-    ) -> Result<Vec<Self::Item>, MailContextError> {
-        RemoteMessageScrollerSource::sync_first_page(
-            session,
-            tether,
-            local_label_id,
-            remote_label_id,
-            unread,
-            page_size,
-        )
-        .await
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let session = ctx.session().clone();
+        let mut tether = ctx.user_stash().connection();
+        let handle = tokio::task::spawn(async move {
+            RemoteMessageScrollerSource::sync_first_page(
+                &session,
+                &mut tether,
+                local_label_id,
+                remote_label_id,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        });
+
+        Ok(Some(handle))
     }
 
     async fn spawn_background_sync(
@@ -460,10 +464,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
-        let mut tether = ctx.user_stash().connection();
+        let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-        let session = ctx.session().clone();
         let unread = self.unread;
 
         // Check if we have a data suggesting we have synced this label before
@@ -481,7 +484,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 };
 
             self.cached = Some(scroller);
-            self.initialized = true;
 
             return Ok((total, task));
         }
@@ -493,45 +495,13 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let page_size = self.page_size;
 
         // Wait for the first page to be fetched
-        Self::sync_first_page(
-            &session,
-            &mut tether,
-            local_label_id,
-            remote_label_id,
-            unread,
-            page_size,
-        )
-        .await?;
-
-        // Sync the scroller data
-        self.sync_scroller(&tether).await?;
-
-        if let Some(ref scroller) = self.cached {
-            // And spawn a background task to fetch the next page
-            let task = if total < self.page_size as u64 {
-                None
-            } else {
-                let cp = scroller.scroll_data(&tether).await?;
-                self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
-                    .await?
-            };
-
-            self.initialized = true;
-
-            Ok((total, task))
-        } else if total == 0 {
-            debug!("Empty label, no need to initialize scroller");
-            // Do not initialize scroller as there might be an update to the label in the future.
-            // But as there is nothing to paginate over, simply return an empty list.
-            Ok((0, None))
+        let task = if total == 0 {
+            None
         } else {
-            // This might happen when there is no network to get the first page.
-            // Initialization of the scroller failed, and it has to be done once more.
-            // There is a fallback in the `fetch_more` method to handle this case.
-            Err(MailContextError::Other(anyhow!(
-                "Failed to initialize scroller"
-            )))
-        }
+            Self::sync_first_page(ctx, local_label_id, remote_label_id, unread, page_size).await?
+        };
+
+        Ok((total, task))
     }
 
     async fn visible_items(
@@ -545,7 +515,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // * a label that has not been initialized
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
-        if let Some(ref scroller) = self.cached {
+        if !self.initialized {
+            Ok(vec![])
+        } else if let Some(ref scroller) = self.cached {
             Ok(scroller.visible_elements(&tether).await?)
         } else {
             Ok(vec![])
@@ -560,7 +532,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // * a label that has not been initialized
         // The latter case is handled in the `Self::sync_more` method.
         // Here we simply assume empty label.
-        if let Some(ref scroller) = self.cached {
+        if !self.initialized {
+            Ok(0)
+        } else if let Some(ref scroller) = self.cached {
             Ok(scroller.visible_element_count(&tether).await?)
         } else {
             Ok(0)
@@ -582,37 +556,32 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
-
-        // Fallback for failing to initialize the scroller
-        if !self.initialized {
-            debug!("Scroller not initialized, fallback to initialization");
-            let (_, task) = self.initialize(ctx).await?;
-            if let Some(ref scroller) = self.cached {
-                let items = scroller.visible_elements(&tether).await?;
-                return Ok((items, total, task));
-            } else {
-                // In practice this branch should never happen
-                // as the initialization will fail on empty cache.
-                return Err(MailContextError::Other(anyhow!(
-                    "Failed to initialize scroller"
-                )));
-            }
-        }
-
+        dbg!("Sync next");
+        dbg!(&self.cached);
         // Always sync the cache as there might be new data
         self.sync_scroller(&tether).await?;
+        dbg!("Sync scroller");
+        dbg!(&self.cached);
 
         if let Some(ref mut scroller) = self.cached {
-            // This is the only place where cache progresses,
-            // There might be a case in which someone will try to fetch more
-            // for the label which has no more data.
-            // The the cache will not progress and `items` will be empty.
-            // Note: Task is always spawned, if there is no more data to download.
-            // As this information is provided in a trait. It is up to the implementation
-            // To check if there is more data to download before asking for more.
-            let items = scroller.fetch_more(&tether).await?;
+            let items = if self.initialized {
+                // This is the only place where cache progresses,
+                // There might be a case in which someone will try to fetch more
+                // for the label which has no more data.
+                // The the cache will not progress and `items` will be empty.
+                // Note: Task is always spawned, if there is no more data to download.
+                // As this information is provided in a trait. It is up to the implementation
+                // To check if there is more data to download before asking for more.
+                scroller.fetch_more(&tether).await?
+            } else {
+                self.initialized = true;
+                scroller.visible_elements(&tether).await?
+            };
 
-            let task = if scroller.has_more_than_a_page(&tether).await? {
+            let should_not_load_more_from_remote =
+                scroller.has_more_than_a_page(&tether).await? || total < self.page_size as u64;
+
+            let task = if should_not_load_more_from_remote {
                 None
             } else {
                 let cp = scroller.scroll_data(&tether).await?;
@@ -621,6 +590,11 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             };
 
             Ok((items, total, task))
+        } else if total > 0 {
+            dbg!("FAIL to initialize the scroller");
+            // Fallback for failing to initialize the scroller
+            let (_, task) = self.initialize(ctx).await?;
+            Ok((vec![], total, task))
         } else {
             // This is fallback for empty labels
             Ok((vec![], total, None))
