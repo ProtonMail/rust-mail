@@ -4,7 +4,6 @@ use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 
-#[allow(clippy::large_futures)]
 #[uniffi::export]
 impl MailUserSession {
     /// Initialize the user context. Should be called at least once.
@@ -37,8 +36,8 @@ pub enum MailUserSessionInitializationStage {
     MailSettings,
     Addresses,
     Events,
-    Labels,
-    Contacts,
+    /// This will be split into Labels and Contacts in a future release
+    LabelsAndContacts,
     Counters,
     Finished,
 }
@@ -52,13 +51,14 @@ pub trait MailUserSessionInitializationCallback: Send + Sync {
 impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserSessionInitializationStage {
     fn from(value: proton_mail_common::MailUserContextLoadingStage) -> Self {
         match value {
-            proton_mail_common::MailUserContextLoadingStage::User => Self::User,
+            proton_mail_common::MailUserContextLoadingStage::UserSettings => Self::User,
             proton_mail_common::MailUserContextLoadingStage::MailSettings => Self::MailSettings,
             proton_mail_common::MailUserContextLoadingStage::Addresses => Self::Addresses,
             proton_mail_common::MailUserContextLoadingStage::Events => Self::Events,
-            proton_mail_common::MailUserContextLoadingStage::LabelsAndContacts => Self::Labels,
+            proton_mail_common::MailUserContextLoadingStage::LabelsAndContacts => {
+                Self::LabelsAndContacts
+            }
             proton_mail_common::MailUserContextLoadingStage::Counters => Self::Counters,
-            proton_mail_common::MailUserContextLoadingStage::Contacts => Self::Contacts,
             proton_mail_common::MailUserContextLoadingStage::Finished => Self::Finished,
         }
     }
