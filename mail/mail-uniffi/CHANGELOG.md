@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
+  - [ET-1864] `account_details` function in `MailUserSession` and `details` function in `StoredAccount` (it contains account name, email and avatar information that needs to be displayed to the user).
+  - [ET-1794] `DecryptedMessage::get_attachments` which merges the API attachments and PGP attachments into one for easier client consumption.
+
+### Removed
+
+  - [ET-1864] `avatar_information`, `display_name`, `name_or_addr`, `primary_addr`, `username` functions from `StoredAccount` (replaced with `details` function).
+  - `MessageAttachments`, `MessageAttachmentsHeaders` and `MessageAttachmentsInfo` have been removed as they are not needed or used.
 
 ## [0.34.0] - 2025-01-22
 
