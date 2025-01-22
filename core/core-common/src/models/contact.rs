@@ -1,3 +1,4 @@
+use crate::utils::MapVec as _;
 use std::collections::{BTreeSet, HashMap};
 use std::iter;
 use std::time::Instant;
@@ -11,7 +12,7 @@ use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
-use proton_api_core::services::proton::common::{ContactId, LabelId};
+use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::prelude::ContactUID;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
@@ -523,14 +524,14 @@ impl From<ApiContactFull> for Contact {
         Self {
             local_id: None,
             remote_id: Some(value.id),
-            cards: value.cards.into_iter().map(ContactCard::from).collect(),
+            cards: value.cards.map_vec(),
             contact_emails: value
                 .contact_emails
                 .into_iter()
                 .map(ContactEmail::from)
                 .collect(),
             create_time: value.create_time,
-            label_ids: Labels::new(value.label_ids.into_iter().map(LabelId::from).collect()),
+            label_ids: Labels::new(value.label_ids.map_vec()),
             modify_time: value.modify_time,
             name: value.name,
             size: value.size,

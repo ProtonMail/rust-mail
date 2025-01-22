@@ -1,6 +1,7 @@
 use super::avatar::AvatarInformation;
 use crate::datatypes::{LabelType, LocalContactEmailId, LocalContactId, LocalLabelId};
 use crate::models::{Contact, ContactEmail, Label};
+use crate::utils::MapVec as _;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
 use std::collections::{BTreeMap, HashMap};
@@ -161,7 +162,7 @@ impl From<Contact> for ContactItem {
                         .unwrap_or_default(),
                 )
                 .or_else_unchecked("?"),
-            emails: value.contact_emails.into_iter().map(Into::into).collect(),
+            emails: value.contact_emails.map_vec(),
             name: value.name,
         }
     }

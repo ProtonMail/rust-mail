@@ -69,6 +69,7 @@ use proton_core_common::datatypes::{
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
 use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -917,7 +918,7 @@ impl From<ContextualConversation> for Conversation {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            custom_labels: value.custom_labels.map_vec(),
             display_order: value.display_order,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
@@ -1582,7 +1583,7 @@ impl From<RealMessage> for Message {
                 .map(MessageRecipient::from)
                 .collect(),
             unread: value.unread,
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            custom_labels: value.custom_labels.map_vec(),
             starred,
             avatar: avatar.into(),
         }

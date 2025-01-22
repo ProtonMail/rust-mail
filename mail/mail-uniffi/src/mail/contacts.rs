@@ -6,6 +6,7 @@ use crate::{
 };
 use crate::{watch_channel_inner, UniffiRecord};
 use proton_core_common::models::Contact as RealContact;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContextError;
 use std::{
@@ -92,7 +93,7 @@ pub async fn watch_contact_list(
         let watcher = Arc::new(WatchHandle::new(handle.handle, &task_handle));
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
-            contact_list: contact_list.into_iter().map(Into::into).collect(),
+            contact_list: contact_list.map_vec(),
             handle: watcher,
         })
     })

@@ -47,9 +47,9 @@ impl AsTable for Vec<Message> {
 
         let headers = Row::new([
             Cell::from("Date"),
-            Cell::from("#L"),
-            Cell::from("#A"),
-            Cell::from(""),
+            Cell::from("#L"), // Labels
+            Cell::from("#A"), // Attachments
+            Cell::from(""),   // Starred
             Cell::from("Sender"),
             Cell::from("Subject"),
         ])
