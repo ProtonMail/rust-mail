@@ -34,12 +34,14 @@ impl Send {
     }
 }
 
+pub type UndoTimestamp = u64;
+
 impl Action for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = WrappedSendHandler;
-    type RemoteOutput = (MessageId, i64); // (MessageId, UndoTimestamp)
+    type RemoteOutput = (MessageId, UndoTimestamp);
     type LocalOutput = ();
     type Error = MailContextError;
     type Context = MailUserContext;
@@ -367,7 +369,7 @@ async fn save_send_status(
         Ok((remote_id, delivery_time)) => DraftSendResult::success(
             action.local_message_id.expect("Should be set"),
             remote_id.clone(),
-            *delivery_time,
+            (*delivery_time).try_into().unwrap_or(0),
         ),
         Err(error) => {
             let error = DraftSendFailure::from_mail_context_error(error);

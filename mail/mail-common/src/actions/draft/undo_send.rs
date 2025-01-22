@@ -73,7 +73,8 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             return Err(AppError::MessageHasNoRemoteId(action.id).into());
         };
 
-        // Check that the message can actually be undo sent. It must either be in the se
+        // Check that the message can actually be undo sent. It must be in the send folder
+        // and have the SENT flag.
         if !(message.label_ids.contains(&LabelId::sent())
             && (message.flags & MessageFlags::SENT == MessageFlags::SENT))
         {

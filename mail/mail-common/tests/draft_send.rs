@@ -111,7 +111,7 @@ async fn basic_send_check() {
         default_mock_send_params(),
         sent_message.clone(),
         sent_conversation,
-        Utc::now().timestamp() + SEND_DELAY_SECONDS as i64,
+        (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
     )
     .await;
     ctx.core_test_context()

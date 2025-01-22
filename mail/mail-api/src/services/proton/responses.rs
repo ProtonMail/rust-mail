@@ -266,7 +266,7 @@ pub struct PutUpdateDraftResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PostSendMessageResponse {
     /// The expected epoch of delivery
-    pub delivery_time: i64,
+    pub delivery_time: u64,
 
     /// The sent message
     pub sent: Message,

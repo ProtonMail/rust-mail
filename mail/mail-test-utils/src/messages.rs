@@ -390,7 +390,7 @@ impl MailTestContext {
         params: TestDraftSendRequest,
         result_message: ApiMessage,
         result_conversation: ApiConversation,
-        delivery_time: i64,
+        delivery_time: u64,
     ) {
         let response = PostSendMessageResponse {
             delivery_time,
