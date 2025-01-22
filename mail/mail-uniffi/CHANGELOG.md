@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - `DraftSendStatus` - now includes whether it can be cancelled or not.
 
+### Removed
+
+  - `MessageAttachments`, `MessageAttachmentsHeaders` and `MessageAttachmentsInfo` have been removed as they are not needed or used.
+
 ## [0.33.0] - 2025-01-17
 
 ### Added
