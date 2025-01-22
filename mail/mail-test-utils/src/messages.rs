@@ -29,6 +29,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
+    #[function_name::named]
     pub async fn mock_get_message_failure(
         &self,
         message_id: &MessageId,
@@ -38,6 +39,7 @@ impl MailTestContext {
         Mock::given(method("GET"))
             .and(path(format!("/api/mail/v4/messages/{message_id}")))
             .respond_with(ResponseTemplate::new(http_error).set_body_json(error))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -50,6 +52,7 @@ impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
     ///
     /// This mock is expected to be called `expected` number of times.
+    #[function_name::named]
     pub async fn mock_get_message_with_expected(
         &self,
         message_id: &MessageId,
@@ -62,6 +65,7 @@ impl MailTestContext {
             .and(path(format!("/api/mail/v4/messages/{message_id}")))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(expected)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -74,6 +78,7 @@ impl MailTestContext {
     }
 
     /// Generate new mock expectation for batch messages request
+    #[function_name::named]
     pub async fn mock_get_messages_total_expect(
         &self,
         messages: Vec<MessageMetadata>,
@@ -90,6 +95,7 @@ impl MailTestContext {
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -107,6 +113,7 @@ impl MailTestContext {
     /// * `failed`      - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<MessageId>) {
         let ids = message_ids.clone();
         let request = PutMessagesLabelRequest {
@@ -125,6 +132,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -135,6 +143,7 @@ impl MailTestContext {
     /// * `message_ids`      - List of message ids to delete.
     /// * `current_label_id` - Current label where the message is deleted from.
     /// * `response`         - Response to the request.
+    #[function_name::named]
     pub async fn mock_message_delete(
         &self,
         message_ids: impl IntoIterator<Item = MessageId>,
@@ -148,10 +157,12 @@ impl MailTestContext {
                 label_id: current_label_id,
             }))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
 
+    #[function_name::named]
     pub async fn mock_messages_ok(&self) {
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/messages/delete"))
@@ -159,6 +170,7 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesDeleteResponse { responses: vec![] }),
             )
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
 
@@ -168,6 +180,7 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesReadResponse { responses: vec![] }),
             )
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
 
@@ -177,6 +190,7 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesUnreadResponse { responses: vec![] }),
             )
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -192,6 +206,7 @@ impl MailTestContext {
     /// * `failed_ids`  - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_put_messages_read(
         &self,
         message_ids: Vec<MessageId>,
@@ -210,6 +225,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -224,6 +240,7 @@ impl MailTestContext {
     /// * `message_ids` - The list of message IDs to mark unread.
     /// * `failed_ids`  - The list of message IDs for which we want to
     ///                   simulate failure.
+    #[function_name::named]
     pub async fn mock_put_messages_unread(
         &self,
         message_ids: Vec<MessageId>,
@@ -242,6 +259,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -259,6 +277,7 @@ impl MailTestContext {
     /// * `failed`      - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_unlabel_messages(
         &self,
         label_id: &LabelId,
@@ -280,6 +299,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -291,12 +311,14 @@ impl MailTestContext {
     /// * `id`      - ID of the message to relabel.
     /// * `message` - modified message as response.
     ///
+    #[function_name::named]
     pub async fn mock_relabel_message(&self, id: &MessageId, message: MessageMetadata) {
         let response = PostMessagesRelabelResponse { message };
         Mock::given(method("POST"))
             .and(path(format!("/api/mail/v4/messages/{id}/relabel")))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -315,6 +337,7 @@ impl MailTestContext {
     /// * `attachment_key_packets` - Attachment key packets for the attachment.
     ///                              included in this request.
     #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_create_draft(
         &self,
         params: DraftParams,
@@ -336,6 +359,7 @@ impl MailTestContext {
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -354,6 +378,7 @@ impl MailTestContext {
     /// * `attachment_key_packets` - Attachment key packets for the attachment.
     ///                              included in this request.
     #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_create_draft_failure(
         &self,
         params: DraftParams,
@@ -379,6 +404,7 @@ impl MailTestContext {
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(422).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -396,6 +422,7 @@ impl MailTestContext {
     /// * `result_conversation` - Updated conversation returned by API.
     ///
     #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_send_draft(
         &self,
         message_id: MessageId,
@@ -414,6 +441,7 @@ impl MailTestContext {
             .and(body_partial_json(params))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -430,6 +458,7 @@ impl MailTestContext {
     /// * `attachment_key_packets` - Attachment key packets for the attachment.
     ///                              included in this request.
     #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_update_draft(
         &self,
         message_id: MessageId,
@@ -448,6 +477,7 @@ impl MailTestContext {
             .and(path(format!("/api/mail/v4/messages/{message_id}")))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -463,6 +493,7 @@ impl MailTestContext {
     /// * `result`     - Success or failure response
     ///
     #[allow(clippy::doc_markdown)]
+    #[function_name::named]
     pub async fn mock_undo_send(
         &self,
         message_id: MessageId,
@@ -476,6 +507,7 @@ impl MailTestContext {
             Err(e) => mock.respond_with(ResponseTemplate::new(422).set_body_json(e)),
         }
         .expect(1)
+        .named(function_name!())
         .mount(self.mock_server())
         .await;
     }

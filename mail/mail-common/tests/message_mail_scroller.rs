@@ -478,6 +478,7 @@ async fn setup_api_message_pages(
     params
 }
 
+#[function_name::named]
 pub async fn mock_get_messages_page(
     ctx: &MailTestContext,
     messages: Vec<ApiMessageMetadata>,
@@ -495,6 +496,7 @@ pub async fn mock_get_messages_page(
             }),
         )
         .expect(expect)
+        .named(function_name!())
         .mount(ctx.mock_server())
         .await;
 }

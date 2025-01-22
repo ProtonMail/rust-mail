@@ -10,26 +10,31 @@ use wiremock::{Mock, ResponseTemplate};
 
 impl MailTestContext {
     // Gets 3 labels called Label1, Label2, Label3
+    #[function_name::named]
     pub async fn mock_get_all_labels(&self, labels: Vec<ApiLabel>) {
         let response = GetLabelsResponse { labels };
 
         Mock::given(method("GET"))
             .and(path("/api/core/v4/labels"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
 
+    #[function_name::named]
     pub async fn mock_get_labels_by_ids(&self, labels: Vec<ApiLabel>) {
         let response = GetLabelsResponse { labels };
 
         Mock::given(method("POST"))
             .and(path("/api/core/v4/labels/by-ids"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
 
+    #[function_name::named]
     pub async fn mock_patch_label(&self, label_id: LabelId, expand: bool) {
         let request = PatchLabelRequest {
             expanded: Some(expand),
@@ -47,6 +52,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

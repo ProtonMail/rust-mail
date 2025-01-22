@@ -288,6 +288,7 @@ impl TestContext {
                     String::from_utf8(request.body.clone()).unwrap(),
                 );
             })
+            .named("Catch all mock")
             .mount(self.mock_server())
             .await;
     }

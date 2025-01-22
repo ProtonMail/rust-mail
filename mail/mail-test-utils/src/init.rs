@@ -257,6 +257,7 @@ impl MailTestContext {
                 }),
             )
             .expect(1) // this should only ever be initialized once at the moment
+            .named("Setup user get latest events")
             .mount(self.mock_server())
             .await;
 
@@ -304,6 +305,7 @@ impl MailTestContext {
                 }),
             }))
             .expect(number_of_calls)
+            .named("Setup user get user")
             .mount(self.mock_server())
             .await;
 
@@ -360,6 +362,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get core settings")
             .mount(self.mock_server())
             .await;
 
@@ -414,6 +417,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get mail settings")
             .mount(self.mock_server())
             .await;
 
@@ -426,6 +430,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get addresses")
             .mount(self.mock_server())
             .await;
 
@@ -439,6 +444,7 @@ impl MailTestContext {
                 .and(query_param("Type", (label_type as u8).to_string()))
                 .respond_with(ResponseTemplate::new(200).set_body_json(resp))
                 .expect(number_of_calls)
+                .named("Setup user get labels")
                 .mount(self.mock_server())
                 .await;
         }
@@ -452,6 +458,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get contact emails")
             .mount(self.mock_server())
             .await;
 
@@ -464,6 +471,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get contacts")
             .mount(self.mock_server())
             .await;
 
@@ -476,6 +484,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get messages count")
             .mount(self.mock_server())
             .await;
 
@@ -488,6 +497,7 @@ impl MailTestContext {
                 }),
             )
             .expect(number_of_calls)
+            .named("Setup user get conversations count")
             .mount(self.mock_server())
             .await;
 
@@ -507,6 +517,7 @@ impl MailTestContext {
     /// * `conversations` - The list of conversations to respond with.
     /// * `expect`        - How many times the endpoint should be called.
     ///
+    #[function_name::named]
     pub async fn mock_get_conversations(&self, conversations: Vec<ApiConversation>, expect: u64) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/conversations"))
@@ -518,6 +529,7 @@ impl MailTestContext {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -535,6 +547,7 @@ impl MailTestContext {
     /// * `total`         - Total number of pages.
     /// * `expect`        - How many times the endpoint should be called.
     ///
+    #[function_name::named]
     pub async fn mock_get_conversations_page(
         &self,
         conversations: Vec<ApiConversation>,
@@ -562,6 +575,7 @@ impl MailTestContext {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -575,6 +589,7 @@ impl MailTestContext {
     /// * `metadata` - The list of message to respond with.
     /// * `expect`   - How many times the endpoint should be called.
     ///
+    #[function_name::named]
     pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages"))
@@ -586,6 +601,7 @@ impl MailTestContext {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -603,6 +619,7 @@ impl MailTestContext {
     /// * `total`     - Total number of pages.
     /// * `expect`    - How many times the endpoint should be called.
     ///
+    #[function_name::named]
     pub async fn mock_get_message_metadata_page(
         &self,
         metadata: Vec<MessageMetadata>,
@@ -630,6 +647,7 @@ impl MailTestContext {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -644,6 +662,7 @@ impl MailTestContext {
     /// * `messages`     -
     /// * `expect`       - How many times the endpoint should be called.
     ///
+    #[function_name::named]
     pub async fn mock_get_conversation_messages(
         &self,
         conversation: ApiConversation,
@@ -662,6 +681,7 @@ impl MailTestContext {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
