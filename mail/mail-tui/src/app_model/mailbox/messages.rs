@@ -14,6 +14,7 @@ use crate::widgets::{
     ScrollableTableState,
 };
 use anyhow::{anyhow, Context};
+use futures::future::try_join_all;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
@@ -34,6 +35,7 @@ use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use std::{env, fs};
 use throbber_widgets_tui::ThrobberState;
+use tracing::debug;
 
 use super::LabelAs;
 
@@ -300,6 +302,55 @@ impl StateHandler for MessagesState {
                     }
                 }
                 Command::None
+            }
+            KeyCode::Char('a') => {
+                let message = self
+                    .selected_message()
+                    .expect("Should have a message selected");
+                debug!(
+                    "Downloading the attachments for message {}",
+                    message.subject
+                );
+                let context = mbox.user_context();
+                let download = Command::task(async move {
+                    let all = message.attachments_metadata.into_iter().map(|mdata| {
+                        let context = context.clone();
+                        async move {
+                            context
+                                .get_attachment(mdata.local_id.unwrap())
+                                .await
+                                .map(|att| {
+                                    format!(
+                                        "{} -> {}",
+                                        att.attachment_metadata.filename,
+                                        att.data_path.to_string_lossy(),
+                                    )
+                                })
+                        }
+                    });
+                    let tri = try_join_all(all)
+                        .await
+                        .context("Failed to download attachments");
+
+                    match tri {
+                        Ok(attatchments) => Command::message(Messages::DisplayInfo(
+                            Some("Attachments Successfully Fetched".to_owned()),
+                            format!(
+                                "{} attachments fetched successfully:\n{}",
+                                attatchments.len(),
+                                attatchments.join("\n"),
+                            ),
+                        )),
+                        Err(e) => Command::message(Messages::DisplayError(None, e)),
+                    }
+                });
+
+                Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Fetching attachments".to_string(),
+                    )),
+                    download,
+                ])
             }
             KeyCode::Char('e') => {
                 let context = mbox.user_context();

@@ -376,7 +376,7 @@ impl AppStateHandler for Model {
     }
 
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
-        let spans = vec![
+        let line_1 = vec![
             Span::from(" ▲: ").bold(),
             Span::from("Up"),
             Span::from(" ▼: ").bold(),
@@ -399,20 +399,32 @@ impl AppStateHandler for Model {
             Span::from("Label"),
             Span::from(" D: ").bold(),
             Span::from("Delete"),
+            Span::from(" Crtl+N: ").bold(),
+            Span::from("New Msg."),
+        ];
+        let line_2 = vec![
             Span::from(" Shift+▲: ").bold(),
             Span::from("Msg. Up"),
             Span::from(" Shift+▼: ").bold(),
             Span::from("Msg. Down"),
-            Span::from(" Crtl+N: ").bold(),
-            Span::from("New Msg."),
             Span::from(" Crtl+R: ").bold(),
             Span::from("Reply Msg."),
             Span::from(" Crtl+T: ").bold(),
             Span::from("Reply All Msg."),
             Span::from(" Crtl+F: ").bold(),
             Span::from("Forward Msg."),
+            Span::from(" a ").bold(),
+            Span::from("Fetch all atts."),
         ];
-        frame.render_widget(Line::from(spans), area);
+
+        let [one, two] =
+            Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+        frame.render_widget(Line::from(line_1), one);
+        frame.render_widget(Line::from(line_2), two);
+    }
+
+    fn help_bar_lines(&self) -> u16 {
+        2
     }
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
