@@ -37,10 +37,12 @@
 //! Hence event data types are placed into the [`events`](crate::events) module.
 //!
 
+mod account_details;
 mod avatar;
 mod contact_list;
 mod system_label;
 
+pub use self::account_details::AccountDetails;
 pub use self::avatar::AvatarInformation;
 pub use self::contact_list::*;
 pub use self::system_label::*;

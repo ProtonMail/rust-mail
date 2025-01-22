@@ -43,9 +43,11 @@
 //!   - [`User::keys`](proton_core_common::datatypes::User::keys)
 //!
 
+mod account_details;
 mod avatar;
 mod contact_list;
 
+pub use account_details::*;
 pub use avatar::*;
 pub use contact_list::*;
 use stash::stash::Tether;

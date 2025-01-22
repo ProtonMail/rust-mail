@@ -1,4 +1,10 @@
-use crate::datatypes::{AuthScopes, PasswordMode, TfaStatus, Timestamp};
+#[cfg(test)]
+#[path = "../../tests/db/types.rs"]
+mod tests;
+
+use crate::datatypes::{
+    AccountDetails, AuthScopes, AvatarInformation, PasswordMode, TfaStatus, Timestamp,
+};
 use crate::models::ModelExtension;
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
@@ -199,6 +205,34 @@ impl CoreAccount {
 
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
+    }
+
+    /// Retrieves account details including the name, email, and avatar information.
+    ///
+    /// This method constructs the account details using the available fields. If the display name
+    /// or username is not set, it falls back to `name_or_addr`. Similarly, the email defaults to
+    /// `name_or_addr` if the primary address is unavailable.
+    ///
+    /// # Returns
+    /// - `AccountDetails`: A struct containing the account's name, email, and avatar information.
+    #[must_use]
+    pub fn details(&self) -> AccountDetails {
+        let name = self
+            .display_name
+            .clone()
+            .or(self.username.clone())
+            .unwrap_or_else(|| self.name_or_addr.clone());
+        let email = self
+            .primary_addr
+            .clone()
+            .unwrap_or_else(|| self.name_or_addr.clone());
+        let avatar_information = AvatarInformation::from(name.clone());
+
+        AccountDetails {
+            name,
+            email,
+            avatar_information,
+        }
     }
 }
 

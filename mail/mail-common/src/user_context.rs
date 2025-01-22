@@ -19,7 +19,7 @@ use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::LocalAddressId;
+use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
@@ -164,6 +164,17 @@ impl MailUserContext {
             .ok_or_else(|| MailContextError::Other(anyhow!("Missing User, this is a bug.")))?;
 
         Ok(real_user)
+    }
+
+    /// Retrieves the account details of the current account.
+    ///
+    /// Returns the active account's details or an error if active account does not exist.
+    ///
+    /// # Errors
+    /// - Returns `MailContextError::Other` if the active account is missing.
+    pub async fn account_details(&self) -> MailContextResult<AccountDetails> {
+        let account_details = self.user_context.account_details().await?;
+        Ok(account_details)
     }
 
     /// Returns the unlocked user keys of this user.
