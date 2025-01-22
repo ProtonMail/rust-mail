@@ -4,14 +4,16 @@ use email_address::EmailAddress;
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::prelude::*;
+use proton_api_core::services::proton::prelude::GetKeysAllOptions;
 use proton_api_core::session::CoreSession;
 use proton_api_core::{consts::CoreBundle, services::proton::ProtonCore};
+use proton_core_common::models::ContactEmail;
 use serde::{Deserialize, Serialize};
+use stash::stash::Tether;
 use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
-use tracing::{error, warn};
+use tracing::error;
 
 #[cfg(test)]
 #[path = "../tests/draft/recipients.rs"]
@@ -135,24 +137,39 @@ pub struct RecipientEntry {
 pub trait ContactGroupResolver {
     /// Resolve the total number of members in a contact group.
     ///
-    /// Return 0 on error or if the group can't be found.
-    fn resolve_contact_group_total(&self, name: &NonEmptyString) -> impl Future<Output = u64>;
+    /// Return `None` on error or if the group can't be found.
+    fn resolve_contact_group_total(
+        &self,
+        name: &NonEmptyString,
+    ) -> impl Future<Output = Option<u64>>;
 }
 
-/// Default contact group resolver, always returns 0
+/// Default contact group resolver, always returns `None`.
 #[derive(Default, Copy, Clone)]
 pub struct NullContactGroupResolver;
 impl ContactGroupResolver for NullContactGroupResolver {
-    async fn resolve_contact_group_total(&self, _: &NonEmptyString) -> u64 {
-        0
+    async fn resolve_contact_group_total(&self, _: &NonEmptyString) -> Option<u64> {
+        None
     }
 }
 
-impl ContactGroupResolver for MailUserContext {
-    async fn resolve_contact_group_total(&self, _: &NonEmptyString) -> u64 {
-        // TODO: resolve total contact group count - depends on ET-476
-        warn!("Mail user context contact group resolving is not implemented yet");
-        0
+pub struct ProtonContactGroupResolver<'t>(&'t Tether);
+
+impl ContactGroupResolver for ProtonContactGroupResolver<'_> {
+    async fn resolve_contact_group_total(&self, group_name: &NonEmptyString) -> Option<u64> {
+        ContactEmail::count_in_contact_group_by_name(group_name.clone().into_inner(), self.0)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Failed to load contact group: {e}");
+                None
+            })
+            .map(|v| v as u64)
+    }
+}
+
+impl<'t> ProtonContactGroupResolver<'t> {
+    pub fn new(tether: &'t Tether) -> Self {
+        Self(tether)
     }
 }
 
@@ -208,10 +225,8 @@ impl RecipientList {
             if let Recipient::Group(group) = recipient {
                 group.total_in_group = contact_group_resolver
                     .resolve_contact_group_total(&group.group_name)
-                    .await;
-                if group.total_in_group == 0 {
-                    group.total_in_group = group.recipients.len() as u64;
-                }
+                    .await
+                    .unwrap_or(group.recipients.len() as u64)
             }
         }
 

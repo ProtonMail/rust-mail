@@ -1,4 +1,9 @@
 use super::*;
+use proton_api_core::services::proton::common::{ContactEmailId, ContactId, LabelId};
+use proton_core_common::datatypes::{LabelType, Labels};
+use proton_core_common::models::{Contact, ContactEmail, Label};
+use proton_mail_test_utils::db::new_test_connection_file;
+
 #[test]
 fn duplicate_single_recipient_reports_error() {
     let mut list = RecipientList::default();
@@ -351,6 +356,98 @@ fn to_message_recipient_only_copies_valid_values_group() {
     ];
 
     assert_eq!(recipients, expected_message_recipients);
+}
+
+#[tokio::test]
+async fn contact_group_resolution_from_message_recipients() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+
+    let contact_group_name = "contact_group".to_owned();
+    let unknown_contact_group_name = "unknown".to_owned();
+
+    let tx = tether.transaction().await.unwrap();
+
+    let contact_group_id = LabelId::from("l2");
+    let mut contact_group = Label {
+        remote_id: Some(contact_group_id.clone()),
+        name: contact_group_name.clone(),
+        label_type: LabelType::ContactGroup,
+        ..Default::default()
+    };
+
+    let mut contact1 = Contact {
+        remote_id: Some(ContactId::from("123")),
+        name: "Barbara Fox".to_string(),
+        ..Default::default()
+    };
+    let mut contact2 = Contact {
+        remote_id: Some(ContactId::from("456")),
+        name: "Stevie Wonder".to_string(),
+        ..Default::default()
+    };
+    let mut contact1_email = ContactEmail {
+        remote_id: Some(ContactEmailId::from("ceid1")),
+        label_ids: Labels::new(vec![contact_group_id.clone()]),
+        remote_contact_id: contact1.remote_id.clone(),
+        ..Default::default()
+    };
+    let mut contact2_email = ContactEmail {
+        remote_id: Some(ContactEmailId::from("ceid2")),
+        label_ids: Labels::new(vec![contact_group_id.clone()]),
+        remote_contact_id: contact1.remote_id.clone(),
+        ..Default::default()
+    };
+    contact_group.save(&tx).await.unwrap();
+    contact1.save(&tx).await.unwrap();
+    contact2.save(&tx).await.unwrap();
+    contact1_email.save(&tx).await.unwrap();
+    contact2_email.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    // Note: it doesn't matter if the emails add up, what we are testing is that
+    // the total numer of contact in that group is reported correctly.
+    let message_recipients = vec![
+        MessageRecipient {
+            address: "foo@proton.ch".to_owned(),
+            is_proton: false,
+            name: "".to_string(),
+            group: MaybeEmptyString::from(contact_group_name.clone()),
+        },
+        MessageRecipient {
+            address: "bar@proton.ch".to_owned(),
+            is_proton: false,
+            name: "".to_string(),
+            group: MaybeEmptyString::from(unknown_contact_group_name.clone()),
+        },
+        MessageRecipient {
+            address: "zzz@proton.ch".to_owned(),
+            is_proton: false,
+            name: "".to_string(),
+            group: MaybeEmptyString::from(unknown_contact_group_name.clone()),
+        },
+    ];
+
+    // Create the list.
+    let resolver = ProtonContactGroupResolver::new(&tether);
+    let mut recipients =
+        RecipientList::from_message_recipients(&resolver, message_recipients).await;
+
+    let contact_group_name = NonEmptyString::new(contact_group_name).unwrap();
+    let unknown_contact_group_name = NonEmptyString::new(unknown_contact_group_name).unwrap();
+
+    // We only have one contact with this group, but there are 2 members total in the group.
+    let group = recipients.find_group_mut(&contact_group_name).unwrap();
+    assert_eq!(group.recipients.len(), 1);
+    assert_eq!(group.total_in_group, 2);
+
+    // We don't know this group (e.g.: may have been deleted) so the total matches
+    // the number of recipients with this group.
+    let group = recipients
+        .find_group_mut(&unknown_contact_group_name)
+        .unwrap();
+    assert_eq!(group.recipients.len(), 2);
+    assert_eq!(group.total_in_group, 2);
 }
 
 fn group_name_always() -> NonEmptyString {

@@ -1,5 +1,6 @@
 #![allow(clippy::needless_pass_by_value)]
 mod contact_list {
+    use crate::datatypes::Labels;
     use crate::{
         ceid, cid, contact, contact_email,
         datatypes::{
@@ -11,6 +12,7 @@ mod contact_list {
         tests::common::new_core_test_connection,
     };
     use pretty_assertions::assert_eq;
+    use proton_api_core::services::proton::common::LabelId;
     use test_case::test_case;
 
     #[test_case(vec![], vec![], vec![]; "TEST 0 Empty")]
@@ -316,6 +318,83 @@ mod contact_list {
 
         let result = Contact::contact_list(&tether).await.unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[tokio::test]
+    async fn test_count_email_group_count() {
+        let mut tether = new_core_test_connection().await.connection();
+
+        let empty_group_id = LabelId::from("l1");
+        let not_empty_group_id = LabelId::from("l2");
+        let mut contact_group_empty = Label {
+            remote_id: Some(empty_group_id.clone()),
+            name: "contact_group_empty".to_owned(),
+            label_type: LabelType::ContactGroup,
+            ..Default::default()
+        };
+
+        let mut contact_group_not_empty = Label {
+            remote_id: Some(not_empty_group_id.clone()),
+            name: "contact_group_not_empty".to_owned(),
+            label_type: LabelType::ContactGroup,
+            ..Default::default()
+        };
+
+        let mut contact1 = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
+        let mut contact2 = contact!(remote_id: cid!("456"), name: "Stevie Wonder".to_string());
+
+        let mut contact1_email = contact_email!(remote_id: ceid!("ceid1"), label_ids: Labels::new(vec![not_empty_group_id.clone()]), remote_contact_id: contact1.remote_id.clone());
+
+        let mut contact2_email = contact_email!(remote_id: ceid!("ceid2"), label_ids: Labels::new(vec![not_empty_group_id.clone()]), remote_contact_id: contact2.remote_id.clone());
+
+        let tx = tether.transaction().await.unwrap();
+
+        contact_group_empty.save(&tx).await.unwrap();
+        contact_group_not_empty.save(&tx).await.unwrap();
+        contact1.save(&tx).await.unwrap();
+        contact2.save(&tx).await.unwrap();
+        contact1_email.save(&tx).await.unwrap();
+        contact2_email.save(&tx).await.unwrap();
+
+        tx.commit().await.unwrap();
+
+        assert_eq!(
+            ContactEmail::count_in_contact_group(empty_group_id, &tether)
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            ContactEmail::count_in_contact_group(not_empty_group_id, &tether)
+                .await
+                .unwrap(),
+            2
+        );
+
+        assert_eq!(
+            ContactEmail::count_in_contact_group_by_name("contact_group_empty".to_owned(), &tether)
+                .await
+                .unwrap(),
+            Some(0)
+        );
+        assert_eq!(
+            ContactEmail::count_in_contact_group_by_name(
+                "contact_group_not_empty".to_owned(),
+                &tether
+            )
+            .await
+            .unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            ContactEmail::count_in_contact_group_by_name(
+                "contact_group_unknown".to_owned(),
+                &tether
+            )
+            .await
+            .unwrap(),
+            None
+        );
     }
 }
 
