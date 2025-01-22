@@ -20,8 +20,8 @@ dirs = "5"
 flume = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
-html2text = { version = "0.13.2" }
-log = "0.4.22"
+html2text = { version = "0.13.6" }
+log = "0.4.25"
 ratatui = { version = "0.28.1", features = ["all-widgets"] }
 scopeguard = "1.2"
 secrecy = "0.8"
@@ -40,10 +40,10 @@ unicode-width = "0.1"
 sqlite-watcher = { workspace = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
-keyring = { version = "3.0.3", features = ["linux-native"] }
+keyring = { version = "3.6.1", features = ["linux-native"] }
 
 [target.'cfg(target_os="macos")'.dependencies]
-keyring = { version = "3.0.3", features = ["apple-native"] }
+keyring = { version = "3.6.1", features = ["apple-native"] }
 
 
 [lints]
