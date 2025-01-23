@@ -153,6 +153,7 @@ mod apply_remote {
         Mock, MockServer, ResponseTemplate,
     };
 
+    #[function_name::named]
     pub async fn mock_patch_label(
         mock_server: &MockServer,
         remote_id: &str,
@@ -179,6 +180,7 @@ mod apply_remote {
                 }),
             )
             .expect(expect)
+            .named(function_name!())
             .mount(mock_server)
             .await;
     }

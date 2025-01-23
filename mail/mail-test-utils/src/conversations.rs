@@ -31,6 +31,7 @@ impl MailTestContext {
     /// * `failed`      - The list of conversation IDs for which we want to
     ///                   simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_label_conversation(
         &self,
         label_id: &LabelId,
@@ -55,6 +56,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -71,6 +73,7 @@ impl MailTestContext {
     /// * `failed`   - The list of conversation IDs for which we want to
     ///                simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_unlabel_conversation(
         &self,
         label_id: &LabelId,
@@ -92,6 +95,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -107,6 +111,7 @@ impl MailTestContext {
     /// * `failed` - The list of conversation IDs for which we want to
     ///              simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_mark_conversation_read(
         &self,
         ids: Vec<ConversationId>,
@@ -123,6 +128,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -138,6 +144,7 @@ impl MailTestContext {
     /// * `failed` - The list of conversation IDs for which we want to
     ///              simulate failure.
     ///
+    #[function_name::named]
     pub async fn mock_mark_conversation_unread(
         &self,
         ids: Vec<ConversationId>,
@@ -154,6 +161,7 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -161,6 +169,7 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving a `conversation` and associated `messages`'s
     /// metadata.
     ///
+    #[function_name::named]
     pub async fn mock_get_conversation(
         &self,
         conversation: ApiConversation,
@@ -178,15 +187,18 @@ impl MailTestContext {
             )))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
 
+    #[function_name::named]
     pub async fn mock_get_image_for_conversation(&self, response: Vec<u8>) {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/images/logo"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

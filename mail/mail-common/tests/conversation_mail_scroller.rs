@@ -465,6 +465,7 @@ async fn setup_api_conversation_pages(
     params
 }
 
+#[function_name::named]
 pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
     conversations: Vec<ApiConversation>,
@@ -482,6 +483,7 @@ pub async fn mock_get_conversations_page(
             }),
         )
         .expect(expect)
+        .named(function_name!())
         .mount(ctx.mock_server())
         .await;
 }

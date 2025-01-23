@@ -46,6 +46,7 @@ velcro = "0.5.4"
 serde_with = { workspace = true }
 proton-core-test-utils = { workspace = true }
 rand = "0.8"
+function_name = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

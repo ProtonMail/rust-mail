@@ -21,6 +21,7 @@ derive_more = "1.0"
 email_address = { version = "0.2.9", features = ["serde"] }
 flume = "0.11"
 futures = "0.3.31"
+function_name = "0.3.0"
 hex = "0.4.3"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"
