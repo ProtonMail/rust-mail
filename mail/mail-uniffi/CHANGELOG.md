@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.36.0] - 2025-01-23
+
 ### Changed
 
   - [ET-1633] Change `core_accounts.primary_at` from `u64` to `f64`
+
+### Fixed
+ - Fixed a race condition in the initialization regarding label counters.
 
 ## [0.35.0] - 2025-01-23
 
