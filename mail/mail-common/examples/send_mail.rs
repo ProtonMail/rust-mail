@@ -112,5 +112,5 @@ async fn main() {
     user_ctx
         .with_queue(|queue| queue.execute_all())
         .await
-        .unwrap()
+        .unwrap();
 }
