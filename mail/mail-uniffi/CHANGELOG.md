@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Changed
+
+  - [ET-1633] Change `core_accounts.primary_at` from `u64` to `f64`
+
 ## [0.35.0] - 2025-01-23
 
 ### Added

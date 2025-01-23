@@ -1417,11 +1417,11 @@ impl Serialize for UserKeys {
 
 sql_using_serde!(UserKeys);
 
-/// A simple wrapper around a [`u64`] to represent a timestamp.
+/// A simple wrapper around a [`f64`] to represent a timestamp.
 ///
 /// Represents the number of seconds since the Unix epoch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Timestamp(u64);
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct Timestamp(f64);
 
 impl Timestamp {
     /// Create a new [`Timestamp`] at the current time.
@@ -1434,27 +1434,27 @@ impl Timestamp {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("system time should be after epoch")
-            .as_secs();
+            .as_secs_f64();
 
         Self(now)
     }
 
-    /// Returns the inner value as a [`u64`].
+    /// Returns the inner value as a [`f64`].
     #[must_use]
-    pub const fn as_u64(&self) -> u64 {
+    pub const fn as_f64(&self) -> f64 {
         self.0
     }
 }
 
 impl FromSql for Timestamp {
     fn column_result(value: ValueRef) -> FromSqlResult<Self> {
-        u64::column_result(value).map(Timestamp)
+        f64::column_result(value).map(Timestamp)
     }
 }
 
 impl ToSql for Timestamp {
     fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
-        u64::to_sql(&self.0)
+        f64::to_sql(&self.0)
     }
 }
 
