@@ -200,7 +200,7 @@ module_name_repetitions = "allow"
 # missing_docs_in_private_items = "warn"
 mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
-# (which is provided by the `log` crate).
+# (which is provided by the `tracing` crate).
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
