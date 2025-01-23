@@ -96,6 +96,9 @@ pub struct Contact {
 
 impl ModelIdExtension for Contact {
     type RemoteId = ContactId;
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Contact {

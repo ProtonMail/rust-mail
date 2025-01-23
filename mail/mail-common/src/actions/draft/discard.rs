@@ -134,7 +134,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
                 {
                     // Conversation has no remote id, so we need to do local cleanup, but only
                     // if it only has no more messages.
-                    if conversation.num_messages == 0 && conversation.remote_id.is_none() {
+                    if conversation.num_messages == 0 && !conversation.is_synced() {
                         Conversation::delete_by_id(local_conversation_id, &tx)
                             .await
                             .inspect_err(|e| {

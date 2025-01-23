@@ -90,7 +90,7 @@ impl ActionHandler for Handler {
 
         let local_ids_without_remote_id = action
             .0
-            .local_only_ids(&conn)
+            .unsynced_item_ids(&conn)
             .await
             .inspect_err(|e| error!("Failed to load local only ids: {e}"))?;
 
