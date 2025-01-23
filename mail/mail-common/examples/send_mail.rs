@@ -103,7 +103,7 @@ async fn main() {
         })
         .unwrap();
 
-    let send_action = draft.to_send_action().unwrap();
+    let send_action = draft.to_send_action(None).unwrap();
     user_ctx
         .with_queue(|queue| send_action.queue(queue))
         .await

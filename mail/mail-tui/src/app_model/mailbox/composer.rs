@@ -139,7 +139,9 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match context.with_queue(|queue| save_action.queue(queue)).await {
-                        Ok(_) => Command::none(),
+                        Ok(output) => {
+                            Command::message(ComposerMessage::UpdateDraftSaveId(output.id).into())
+                        }
                         Err(e) => {
                             error!("Failed to save draft: {e}");
                             Command::message(MailContextError::from(e).into())
@@ -163,7 +165,9 @@ impl Composer {
 
     fn create_save_action(&mut self) -> Result<DraftSaveActionQueuer, recipients::RecipientError> {
         self.update_draft_from_state()?;
-        Ok(self.draft.to_save_action())
+        Ok(self
+            .draft
+            .to_save_action(self.draft.last_draft_save_action_id))
     }
 
     /// Send the draft.
@@ -174,7 +178,10 @@ impl Composer {
                 err.into(),
             ));
         };
-        match self.draft.to_send_action() {
+        match self
+            .draft
+            .to_send_action(self.draft.last_draft_save_action_id)
+        {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
                     "Sending draft...".to_owned(),
@@ -495,6 +502,10 @@ impl StateHandler for Composer {
             ComposerMessage::Save => self.save(mbox.user_context()),
             ComposerMessage::Send => self.send(mbox.user_context()),
             ComposerMessage::Discard => self.discard(mbox.user_context()),
+            ComposerMessage::UpdateDraftSaveId(id) => {
+                self.draft.last_draft_save_action_id = Some(id);
+                Command::none()
+            }
         }
     }
 }

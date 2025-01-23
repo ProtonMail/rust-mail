@@ -97,7 +97,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -157,7 +157,7 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     let action_id = user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -235,7 +235,7 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     let action_id = user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -340,7 +340,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(
+    let mut draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         ReplyMode::All,
@@ -454,7 +454,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(
+    let mut draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         ReplyMode::All,
@@ -561,7 +561,7 @@ async fn discard_draft_failure_undeletes_message() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await

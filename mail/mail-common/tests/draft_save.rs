@@ -53,7 +53,7 @@ async fn create_empty_draft() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -466,7 +466,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -604,7 +604,7 @@ async fn create_draft_reply_impl(
         .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(
+    let mut draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         reply_mode,
@@ -701,7 +701,7 @@ async fn open_draft_sync_status_success() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await
@@ -762,7 +762,7 @@ async fn open_draft_sync_status_cached() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     user_ctx
         .with_queue(|queue| draft.save(queue))
         .await

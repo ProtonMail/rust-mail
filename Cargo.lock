@@ -4500,6 +4500,7 @@ dependencies = [
  "itertools 0.13.0",
  "keyring",
  "log",
+ "proton-action-queue",
  "proton-core-common",
  "proton-mail-common",
  "ratatui",

@@ -16,7 +16,7 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
-use proton_action_queue::action::MetadataBuilder;
+use proton_action_queue::action::{Id, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
@@ -264,6 +264,8 @@ pub struct Draft {
     pub mime_type: MimeType,
     /// `None` if there is no associated send result.
     pub send_result: Option<DraftSendResult>,
+    /// Records the last queued draft save id.
+    pub last_draft_save_action_id: Option<Id>,
 }
 
 /// Indicates the status of syncing a draft.
@@ -406,6 +408,7 @@ impl Draft {
                 attachments: body_metadata.attachments,
                 mime_type: body_metadata.mime_type,
                 send_result,
+                last_draft_save_action_id: None,
             },
             sync_status,
         ))
@@ -468,6 +471,7 @@ impl Draft {
             attachments: Vec::new(),
             mime_type: mail_settings.draft_mime_type,
             send_result: None,
+            last_draft_save_action_id: None,
         }
     }
 
@@ -631,6 +635,7 @@ impl Draft {
             },
             mime_type: mail_settings.draft_mime_type,
             send_result: None,
+            last_draft_save_action_id: None,
         };
 
         patch_draft_with_reply_mode(
@@ -779,8 +784,16 @@ impl Draft {
     ///
     /// Returns error if the action failed to execute.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
-    pub async fn save(&self, queue: &Queue) -> Result<QueuedActionOutput<Save>, MailContextError> {
-        Ok(self.to_save_action().queue(queue).await?)
+    pub async fn save(
+        &mut self,
+        queue: &Queue,
+    ) -> Result<QueuedActionOutput<Save>, MailContextError> {
+        let queued_output = self
+            .to_save_action(self.last_draft_save_action_id)
+            .queue(queue)
+            .await?;
+        self.last_draft_save_action_id = Some(queued_output.id);
+        Ok(queued_output)
     }
 
     /// Apply an action which will send this draft.
@@ -790,10 +803,15 @@ impl Draft {
     /// Returns error if the action failed to execute.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
     pub async fn send(
-        &self,
+        &mut self,
         queue: &Queue,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        self.to_send_action()?.queue(queue).await
+        let (save_output, send_output) = self
+            .to_send_action(self.last_draft_save_action_id)?
+            .queue(queue)
+            .await?;
+        self.last_draft_save_action_id = Some(save_output.id);
+        Ok(send_output)
     }
 
     /// Discard the current draft.
@@ -814,11 +832,14 @@ impl Draft {
     /// This method is here to provide greater flexibility of integration
     /// when used in multithreaded contexts.
     ///
+    /// While we have our own instance variable for the `last_save_action_id`, it may
+    /// be beneficial for users of this method to pass in an alternate source.
     ///
-    pub fn to_save_action(&self) -> DraftSaveActionQueuer {
+    pub fn to_save_action(&self, last_save_action_id: Option<Id>) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
             Save::new(self, DraftSendResultOrigin::Save),
+            last_save_action_id,
         )
     }
 
@@ -826,11 +847,16 @@ impl Draft {
     ///
     /// This method is here to provide greater flexibility of integration
     /// when used in multithreaded contexts.
+    /// While we have our own instance variable for the `last_save_action_id`, it may
+    /// be beneficial for users of this method to pass in an alternate source.
     ///
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
+    pub fn to_send_action(
+        &self,
+        last_draft_save_action_id: Option<Id>,
+    ) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SaveOrSendError::NoRecipients.into());
         }
@@ -841,6 +867,7 @@ impl Draft {
             metadata_id,
             save_action,
             send_action,
+            last_draft_save_action_id,
         ))
     }
 
@@ -901,25 +928,34 @@ impl Draft {
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
     action: Save,
+    previous_action_id: Option<Id>,
 }
 
 impl DraftSaveActionQueuer {
-    fn new(id: MetadataId, action: Save) -> Self {
-        Self { id, action }
+    fn new(id: MetadataId, action: Save, previous_action_id: Option<Id>) -> Self {
+        Self {
+            id,
+            action,
+            previous_action_id,
+        }
     }
 
     /// Consume and queue this action.
     #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip(self,queue))]
     pub async fn queue(self, queue: &Queue) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
-        queue
-            .queue_action_with_metadata(
-                self.action,
-                MetadataBuilder::new()
-                    .with_resource(&self.id)
-                    .expect("This should never fail")
-                    .build(),
-            )
-            .await
+        let metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail")
+            .build();
+        if let Some(previous_action_id) = self.previous_action_id {
+            queue
+                .replace_or_queue_action_with_metadata(previous_action_id, self.action, metadata)
+                .await
+        } else {
+            queue
+                .queue_action_with_metadata(self.action, metadata)
+                .await
+        }
     }
 }
 
@@ -929,14 +965,21 @@ pub struct DraftSendActionQueuer {
     id: MetadataId,
     save_action: Save,
     send_action: draft::Send,
+    last_draft_save_action_id: Option<Id>,
 }
 
 impl DraftSendActionQueuer {
-    fn new(id: MetadataId, save_action: Save, send_action: draft::Send) -> Self {
+    fn new(
+        id: MetadataId,
+        save_action: Save,
+        send_action: draft::Send,
+        last_draft_save_action_id: Option<Id>,
+    ) -> Self {
         Self {
             id,
             save_action,
             send_action,
+            last_draft_save_action_id,
         }
     }
 
@@ -945,22 +988,35 @@ impl DraftSendActionQueuer {
     pub async fn queue(
         self,
         queue: &Queue,
-    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+    ) -> Result<(QueuedActionOutput<Save>, QueuedActionOutput<draft::Send>), MailContextError> {
         let save_metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
             .build();
-        let save_output = queue
-            .queue_action_with_metadata(self.save_action, save_metadata)
-            .await?;
+        let save_output = if let Some(last_draft_save_action_id) = self.last_draft_save_action_id {
+            queue
+                .replace_or_queue_action_with_metadata(
+                    last_draft_save_action_id,
+                    self.save_action,
+                    save_metadata,
+                )
+                .await?
+        } else {
+            queue
+                .queue_action_with_metadata(self.save_action, save_metadata)
+                .await?
+        };
         let send_metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
             .with_dependency(save_output.id)
             .build();
-        Ok(queue
-            .queue_action_with_metadata(self.send_action, send_metadata)
-            .await?)
+        Ok((
+            save_output,
+            queue
+                .queue_action_with_metadata(self.send_action, send_metadata)
+                .await?,
+        ))
     }
 }
 
