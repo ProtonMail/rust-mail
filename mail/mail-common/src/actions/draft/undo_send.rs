@@ -3,7 +3,7 @@ use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -40,6 +40,7 @@ impl UndoSend {
 impl Action for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UndoSendHandler;
     type RemoteOutput = ();
