@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::models::{ConversationCounters, MailSettings, MessageCounters};
+use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
 use proton_api_core::session::CoreSession;
@@ -100,6 +100,9 @@ impl MailUserContext {
         let ctx_clone = ctx.clone();
         let labels_and_contacts = tokio::spawn(async move {
             let labels = Label::all_labels(ctx_clone.session().api()).await?;
+
+            let api = ctx_clone.session().api().to_owned();
+            let counters = tokio::spawn(async move { StoreLabelCounters::new(&api).await });
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
             let label_ids = Label::sync_labels(&tx, labels).await?;
@@ -110,18 +113,12 @@ impl MailUserContext {
 
             tx.commit().await?;
 
+            let counters = counters.await.expect("Can't fail to join")?;
+            counters.store(ctx_clone.user_stash()).await?;
             // FIXME:(perf): This should be a different future that requests contact
             // group labels
             Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await?;
             Ok::<_, MailContextError>(())
-        });
-
-        let counters = tokio::spawn(async move {
-            crate::models::Conversation::sync_conversation_and_message_counts(
-                ctx.session().api(),
-                ctx.user_stash(),
-            )
-            .await
         });
 
         try_join!(
@@ -134,7 +131,6 @@ impl MailUserContext {
                 labels_and_contacts,
                 cb
             ),
-            initial_sync_for(MailUserContextLoadingStage::Counters, counters, cb),
         )?;
 
         debug!("Syncing Complete");
