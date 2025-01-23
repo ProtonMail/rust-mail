@@ -11,7 +11,7 @@ use crate::models::{
     DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::request_data::DraftAction;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -95,6 +95,7 @@ impl Save {
 impl Action for Save {
     const TYPE: Type = Type("save_draft");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = WrappedSaveHandler;
     type RemoteOutput = ();

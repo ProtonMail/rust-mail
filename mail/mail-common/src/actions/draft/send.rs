@@ -9,7 +9,7 @@ use crate::models::{
     MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::Mail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
@@ -40,6 +40,7 @@ pub type UndoTimestamp = u64;
 impl Action for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = WrappedSendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);

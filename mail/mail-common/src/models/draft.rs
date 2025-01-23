@@ -21,6 +21,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 
 /// Identifier for draft [`DraftMetadata`]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -399,6 +400,13 @@ impl DraftSendResult {
     pub fn is_send_undoable(&self) -> bool {
         let now = Utc::now().timestamp();
         now < self.undo_timestamp
+    }
+
+    /// Returns the time left until this message's sending can be cancelled.
+    #[must_use]
+    pub fn time_left_for_undo(&self) -> Duration {
+        let now = Utc::now().timestamp();
+        Duration::from_secs(self.undo_timestamp.saturating_sub(now).unsigned_abs())
     }
 }
 

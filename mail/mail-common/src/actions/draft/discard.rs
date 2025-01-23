@@ -2,7 +2,7 @@ use crate::datatypes::SystemLabelId;
 use crate::draft::{DiscardError, Draft};
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -38,6 +38,8 @@ impl Discard {
 impl Action for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
+
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = DiscardHandler;
     type RemoteOutput = ();
