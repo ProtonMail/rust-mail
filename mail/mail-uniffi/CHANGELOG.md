@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `DraftSaveSendError` - For sending and saving.
     - `DraftUndoError` - For undo send.
     - `DraftDiscardError` - For discard.
+  - `DraftSendStatus` now contains the number of seconds left for the message to be undo sent.
 
 ### Removed
 
