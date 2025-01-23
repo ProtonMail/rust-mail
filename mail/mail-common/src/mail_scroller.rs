@@ -1281,7 +1281,6 @@ impl SearchScrollerSource {
             message.save(&tx).await?;
             SearchScrollData::builder()
                 .local_message_id(message.local_id.unwrap())
-                .time(message.time)
                 .display_order(display_order)
                 .build()
                 .with_save(&tx)

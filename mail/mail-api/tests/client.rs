@@ -21,6 +21,7 @@ mod basic {
             .and(path("/api/ping"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
+            .named("Api ping")
             .mount(&mock_server)
             .await;
         // Make a request to the mock server
@@ -62,6 +63,7 @@ mod messages {
                 "Total": 0,
                 "Stale": 0,
             })))
+            .named("Get messages")
             .mount(&server)
             .await;
 

@@ -71,6 +71,7 @@ impl TestContext {
     /// * `internal_only`      - Whether the search should be performed only for proton addresses.
     /// * `response`           - The response to mock.
     ///
+    #[function_name::named]
     pub async fn mock_get_keys_all_with_internal_param(
         &self,
         email: &str,
@@ -84,6 +85,7 @@ impl TestContext {
             mock = mock.and(query_param("InternalOnly", u8::from(value).to_string()));
         }
         mock.respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -95,6 +97,7 @@ impl TestContext {
     /// * `email`              - The email of the other user to retrieve the keys for.
     /// * `response`           - The response to mock.
     ///
+    #[function_name::named]
     pub async fn mock_get_keys_all_failure(
         &self,
         email: &str,
@@ -108,6 +111,7 @@ impl TestContext {
             mock = mock.and(query_param("InternalOnly", u8::from(value).to_string()));
         }
         mock.respond_with(ResponseTemplate::new(422).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

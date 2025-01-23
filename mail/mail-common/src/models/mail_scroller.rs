@@ -641,9 +641,6 @@ pub struct SearchScrollData {
     #[DbField]
     pub display_order: u64,
 
-    #[DbField]
-    pub time: u64,
-
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when

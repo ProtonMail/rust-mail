@@ -1,12 +1,13 @@
 use crate::datatypes::{
     ContactSendingPreferences, ContactTypes, Labels, LocalContactEmailId, LocalContactId,
 };
-use crate::models::{Contact, ModelIdExtension};
-use proton_api_core::services::proton::common::{ContactEmailId, ContactId};
+use crate::models::{Contact, Label, ModelIdExtension};
+use proton_api_core::services::proton::common::{ContactEmailId, ContactId, LabelId};
 use proton_api_core::services::proton::response_data::ContactEmail as ApiContactEmail;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Bond, StashError};
+use stash::params;
+use stash::stash::{Bond, StashError, Tether};
 
 /// Represents a contact's email.
 ///
@@ -83,6 +84,10 @@ pub struct ContactEmail {
 
 impl ModelIdExtension for ContactEmail {
     type RemoteId = ContactEmailId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl From<ApiContactEmail> for ContactEmail {
@@ -158,5 +163,53 @@ impl ContactEmail {
         }
 
         <Self as Model>::save(self, bond).await
+    }
+
+    /// Count the number of emails in a contact group with name `group_name`.
+    ///
+    /// If the group could not be found, this method returns `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn count_in_contact_group_by_name(
+        group_name: String,
+        tether: &Tether,
+    ) -> Result<Option<usize>, StashError> {
+        // Resolve label
+        let Some(label) = Label::find_first("WHERE name = ?", params![group_name], tether).await?
+        else {
+            return Ok(None);
+        };
+
+        // Contact emails are not stored with local id information at the moment.
+        // TODO(post-release): Should be using local ids instead of remote.
+        // This is not a problem at the moment since we can not create contact groups.
+        let Some(remote_id) = label.remote_id else {
+            return Ok(None);
+        };
+
+        Self::count_in_contact_group(remote_id, tether)
+            .await
+            .map(Some)
+    }
+
+    /// Count the number of emails in a contact group with `contact_group_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn count_in_contact_group(
+        contact_group_id: LabelId,
+        tether: &Tether,
+    ) -> Result<usize, StashError> {
+        // Unfortunately, at this time the ids are not stored in relational table, so we need
+        // to decode the raw json.
+        // TODO(post-release): Transform into relational table.
+        tether.query_value::<_, usize>(format!(
+            "SELECT DISTINCT COUNT(local_id) AS value FROM {}, json_each({}.label_ids) WHERE json_each.value = ?",
+            Self::table_name(),
+            Self::table_name()
+        ), params![contact_group_id]).await
     }
 }

@@ -1,12 +1,11 @@
 use crate::datatypes::LocalMessageId;
-use crate::draft::{Error, PackageError, ReplyMode};
+use crate::draft::{Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
-use crate::errors::{DraftErrorReason, MailErrorReason, ProtonMailError};
+use crate::errors::{DraftSaveSendErrorReason, MailErrorReason, ProtonMailError};
 use crate::models::Message;
 use crate::MailContextError;
 use chrono::Utc;
-use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -22,6 +21,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 
 /// Identifier for draft [`DraftMetadata`]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -401,11 +401,18 @@ impl DraftSendResult {
         let now = Utc::now().timestamp();
         now < self.undo_timestamp
     }
+
+    /// Returns the time left until this message's sending can be cancelled.
+    #[must_use]
+    pub fn time_left_for_undo(&self) -> Duration {
+        let now = Utc::now().timestamp();
+        Duration::from_secs(self.undo_timestamp.saturating_sub(now).unsigned_abs())
+    }
 }
 
 /// Represents the reason why a draft failed to send.
 ///
-/// Unfortunately we can not re-use [`DraftErrorReason`] as we can not take ownership of
+/// Unfortunately we can not re-use [`DraftSaveSendErrorReason`] as we can not take ownership of
 /// the error so we have to do our own conversion.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum DraftSendFailure {
@@ -469,12 +476,17 @@ impl DraftSendFailure {
     #[must_use]
     pub fn from_draft_error(error: &Error) -> Self {
         match error {
-            Error::AddressWithoutPrimaryKey(remote_id) => {
-                Self::AddressDoesNotHavePrimaryKey(remote_id.clone())
-            }
-            Error::SendMessage(package_error) => Self::from_draft_package_error(package_error),
-            Error::NoRecipients => Self::NoRecipients,
-            Error::AlreadySent => Self::AlreadySent,
+            Error::SaveOrSend(err) => match err {
+                SaveOrSendError::AddressWithoutPrimaryKey(remote_id) => {
+                    Self::AddressDoesNotHavePrimaryKey(remote_id.clone())
+                }
+                SaveOrSendError::SendMessage(package_error) => {
+                    Self::from_draft_package_error(package_error)
+                }
+                SaveOrSendError::NoRecipients => Self::NoRecipients,
+                SaveOrSendError::AlreadySent => Self::AlreadySent,
+                _ => Self::Internal,
+            },
             _ => Self::Internal,
         }
     }
@@ -501,17 +513,6 @@ impl DraftSendFailure {
             return Self::NoConnection;
         }
 
-        if let Some(proton_error) = error.to_proton_error() {
-            //TODO(ET-1407) - attachment error codes
-            if proton_error.code == Mail::MessageAlreadySent as u32 {
-                return Self::MessageAlreadySent;
-            } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
-                return Self::MessageUpdateIsNotDraft;
-            } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
-                return Self::MessageDoesNotExist;
-            }
-        }
-
         Self::Server(error.to_string())
     }
 
@@ -529,36 +530,44 @@ impl DraftSendFailure {
 impl From<DraftSendFailure> for ProtonMailError {
     fn from(value: DraftSendFailure) -> Self {
         match value {
-            DraftSendFailure::NoRecipients => {
-                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::NoRecipients))
+            DraftSendFailure::NoRecipients => Self::Reason(MailErrorReason::DraftSaveSendReason(
+                DraftSaveSendErrorReason::NoRecipients,
+            )),
+            DraftSendFailure::AddressDoesNotHavePrimaryKey(v) => {
+                Self::Reason(MailErrorReason::DraftSaveSendReason(
+                    DraftSaveSendErrorReason::AddressDoesNotHavePrimaryKey(v),
+                ))
             }
-            DraftSendFailure::AddressDoesNotHavePrimaryKey(v) => Self::Reason(
-                MailErrorReason::DraftReason(DraftErrorReason::AddressDoesNotHavePrimaryKey(v)),
+            DraftSendFailure::RecipientEmailInvalid(v) => {
+                Self::Reason(MailErrorReason::DraftSaveSendReason(
+                    DraftSaveSendErrorReason::RecipientEmailInvalid(v),
+                ))
+            }
+            DraftSendFailure::ProtonRecipientDoesNotExist(v) => {
+                Self::Reason(MailErrorReason::DraftSaveSendReason(
+                    DraftSaveSendErrorReason::ProtonRecipientDoesNotExist(v),
+                ))
+            }
+            DraftSendFailure::UnknownRecipientValidationError(v) => {
+                Self::Reason(MailErrorReason::DraftSaveSendReason(
+                    DraftSaveSendErrorReason::UnknownRecipientValidationError(v),
+                ))
+            }
+            DraftSendFailure::AddressDisabled(v) => Self::Reason(
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::AddressDisabled(v)),
             ),
-            DraftSendFailure::RecipientEmailInvalid(v) => Self::Reason(
-                MailErrorReason::DraftReason(DraftErrorReason::RecipientEmailInvalid(v)),
+            DraftSendFailure::MessageAlreadySent => Self::Reason(
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::MessageAlreadySent),
             ),
-            DraftSendFailure::ProtonRecipientDoesNotExist(v) => Self::Reason(
-                MailErrorReason::DraftReason(DraftErrorReason::ProtonRecipientDoesNotExist(v)),
+            DraftSendFailure::PackageError(v) => Self::Reason(
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::PackageError(v)),
             ),
-            DraftSendFailure::UnknownRecipientValidationError(v) => Self::Reason(
-                MailErrorReason::DraftReason(DraftErrorReason::UnknownRecipientValidationError(v)),
-            ),
-            DraftSendFailure::AddressDisabled(v) => Self::Reason(MailErrorReason::DraftReason(
-                DraftErrorReason::AddressDisabled(v),
-            )),
-            DraftSendFailure::MessageAlreadySent => Self::Reason(MailErrorReason::DraftReason(
-                DraftErrorReason::MessageAlreadySent,
-            )),
-            DraftSendFailure::PackageError(v) => Self::Reason(MailErrorReason::DraftReason(
-                DraftErrorReason::PackageError(v),
-            )),
             DraftSendFailure::MessageUpdateIsNotDraft => Self::Reason(
-                MailErrorReason::DraftReason(DraftErrorReason::MessageUpdateIsNotDraft),
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::MessageIsNotADraft),
             ),
-            DraftSendFailure::MessageDoesNotExist => Self::Reason(MailErrorReason::DraftReason(
-                DraftErrorReason::MessageDoesNotExist,
-            )),
+            DraftSendFailure::MessageDoesNotExist => Self::Reason(
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::MessageDoesNotExist),
+            ),
             DraftSendFailure::NoConnection => Self::Network,
             DraftSendFailure::Server(v) => {
                 // While there is no good conversion to be performed here, it should be very rare
@@ -568,9 +577,9 @@ impl From<DraftSendFailure> for ProtonMailError {
                 Self::ServerError(UserApiServiceError::OtherHttpError(0, v))
             }
             DraftSendFailure::Internal => Self::Unexpected(Unexpected::Internal),
-            DraftSendFailure::AlreadySent => {
-                Self::Reason(MailErrorReason::DraftReason(DraftErrorReason::AlreadySent))
-            }
+            DraftSendFailure::AlreadySent => Self::Reason(MailErrorReason::DraftSaveSendReason(
+                DraftSaveSendErrorReason::AlreadySent,
+            )),
         }
     }
 }

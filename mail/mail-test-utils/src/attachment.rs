@@ -79,6 +79,7 @@ impl MailTestContext {
     ///
     /// * `attachment` - The metadata to return as a response.
     ///
+    #[function_name::named]
     pub async fn mock_get_attachment_metadata(&self, attachment: ApiAttachment) {
         let path_for_attachment = format!("api/mail/v4/attachments/{}/metadata", attachment.id);
         Mock::given(method("GET"))
@@ -88,6 +89,7 @@ impl MailTestContext {
                     .set_body_json(GetAttachmentMetadataResponse { attachment }),
             )
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -101,6 +103,7 @@ impl MailTestContext {
     /// * `attachment_id`      - The attachment id the content should correspond to.
     /// * `attachment_content` - The attachment content the mock replies with.
     ///
+    #[function_name::named]
     pub async fn mock_get_attachment_data(
         &self,
         attachment_id: AttachmentId,
@@ -111,6 +114,7 @@ impl MailTestContext {
             .and(path(path_for_attachment))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -125,6 +129,7 @@ impl MailTestContext {
     /// * `attachment_id`      - The attachment id the content should correspond to.
     /// * `attachment_content` - The attachment content the mock replies with.
     ///
+    #[function_name::named]
     pub async fn mock_maybe_get_attachment_data(
         &self,
         attachment_id: AttachmentId,
@@ -135,6 +140,7 @@ impl MailTestContext {
             .and(path(path_for_attachment))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
             .up_to_n_times(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

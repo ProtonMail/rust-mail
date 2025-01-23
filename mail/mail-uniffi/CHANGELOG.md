@@ -9,9 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-  - [ET-1685] `scroller_search` & `SearchScroller` to make server searches
+  - [ET-1633] Add async live query callback, use it for new `watch_accounts_async` and `watch_sessions_async` methods
+
+### Changed
+
+  - [ET-1685] `scroll_search` was renamed to `scroller_search`
+
+## [0.36.0] - 2025-01-23
+
+### Changed
+
+  - [ET-1633] Change `core_accounts.primary_at` from `u64` to `f64`
+
+### Fixed
+ - Fixed a race condition in the initialization regarding label counters.
+
+## [0.35.0] - 2025-01-23
+
+### Added
+
   - [ET-1864] `account_details` function in `MailUserSession` and `details` function in `StoredAccount` (it contains account name, email and avatar information that needs to be displayed to the user).
   - [ET-1794] `DecryptedMessage::get_attachments` which merges the API attachments and PGP attachments into one for easier client consumption.
+  - [ET-1685] `scroll_search` & `SearchScroller` to make server searches
+  - [ET-1385] Resolve contact group total for message recipients.
+
+### Changed
+
+  - [ET-1747] `DraftError` has been split into 4 different sub errors:
+    - `DraftOpenError` - For creating and opening drafts.
+    - `DraftSaveSendError` - For sending and saving.
+    - `DraftUndoError` - For undo send.
+    - `DraftDiscardError` - For discard.
+  - `DraftSendStatus` now contains the number of seconds left for the message to be undo sent.
 
 ### Removed
 

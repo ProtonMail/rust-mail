@@ -384,6 +384,7 @@ async fn paginate_conversations_for_label_with_filter() {
             }),
         )
         .expect(2)
+        .named("Mock get conversations")
         .mount(context.mock_server())
         .await;
 
@@ -493,6 +494,7 @@ async fn paginate_messages_for_label_with_filter() {
             }),
         )
         .expect(2)
+        .named("Mock get messages")
         .mount(context.mock_server())
         .await;
 
@@ -607,6 +609,7 @@ async fn paginate_search() {
             }),
         )
         .expect(2)
+        .named("Mock get messages")
         .mount(context.mock_server())
         .await;
 

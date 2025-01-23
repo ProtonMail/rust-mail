@@ -362,6 +362,17 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// Remote Id type.
     type RemoteId: ProtonIdMarker;
 
+    /// Return the remote id for this model.
+    fn remote_id(&self) -> Option<&Self::RemoteId>;
+
+    /// Returns whether this item has been synced.
+    //
+    /// An item is considered synced when it has a remote id that was assigned
+    /// by the server.
+    fn is_synced(&self) -> bool {
+        self.remote_id().is_some()
+    }
+
     /// Remote id field name.
     #[must_use]
     fn remote_id_field_name() -> &'static str {
@@ -784,6 +795,10 @@ pub struct Address {
 
 impl ModelIdExtension for Address {
     type RemoteId = AddressId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Address {

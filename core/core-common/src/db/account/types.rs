@@ -31,7 +31,7 @@ use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Model)]
+#[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("core_accounts")]
 pub struct CoreAccount {
     /// Remote ID of the account (i.e. the API User ID).

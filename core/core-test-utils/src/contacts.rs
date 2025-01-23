@@ -21,6 +21,7 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
+    #[function_name::named]
     pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<ApiContactBasic>) {
         let num_contacts = contacts.len() as u64;
         let response = GetContactsResponse {
@@ -31,6 +32,7 @@ impl TestContext {
             .and(path(r"/api/contacts"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -41,6 +43,7 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
+    #[function_name::named]
     pub async fn mock_get_all_contact_emails_request(&self, contact_emails: Vec<ApiContactEmail>) {
         let num_contacts = contact_emails.len() as u64;
         let response = GetContactsEmailsResponse {
@@ -51,6 +54,7 @@ impl TestContext {
             .and(path("/api/contacts/emails"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -61,11 +65,13 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
+    #[function_name::named]
     pub async fn mock_get_full_contact(&self, contact: ApiContactFull) {
         Mock::given(method("GET"))
             .and(path(format!("/api/contacts/{}", &contact.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(GetContactResponse { contact }))
             //.expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
@@ -76,6 +82,7 @@ impl TestContext {
     ///
     /// * `contact_ids` - The contacts that should be delted.
     ///
+    #[function_name::named]
     pub async fn mock_delete_contacts(&self, contact_ids: Vec<ContactId>) {
         Mock::given(method("PUT"))
             .and(path("/api/contacts/delete"))
@@ -97,6 +104,7 @@ impl TestContext {
                 }),
             )
             .expect(1)
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

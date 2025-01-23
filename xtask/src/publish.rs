@@ -44,10 +44,20 @@ impl Publish {
         let mut exclude = Vec::new();
 
         for pkg in meta.workspace_packages() {
+            let mut want = true;
+
+            if pkg.publish.as_ref().is_some_and(Vec::is_empty) {
+                want = false;
+            }
+
             if registry.has(&pkg.name, &pkg.version)? {
-                exclude.push(&pkg.name);
-            } else {
+                want = false;
+            }
+
+            if want {
                 include.push(pkg);
+            } else {
+                exclude.push(&pkg.name);
             }
         }
 
@@ -64,23 +74,17 @@ impl Publish {
             .ok()?;
 
         for pkg in include {
-            if pkg.publish.as_ref().is_some_and(Vec::is_empty) {
-                continue;
+            if !self.exclude.contains(&pkg.name) {
+                let data = (meta.target_directory)
+                    .join("package")
+                    .join(format!("{}-{}.crate", &pkg.name, &pkg.version));
+
+                let json = cargo::metadata()
+                    .manifest_path(&pkg.manifest_path)
+                    .stdout()?;
+
+                registry.commit(&pkg.name, &pkg.version, &data, &json)?;
             }
-
-            if self.exclude.contains(&pkg.name) {
-                continue;
-            }
-
-            let data = (meta.target_directory)
-                .join("package")
-                .join(format!("{}-{}.crate", &pkg.name, &pkg.version));
-
-            let json = cargo::metadata()
-                .manifest_path(&pkg.manifest_path)
-                .stdout()?;
-
-            registry.commit(&pkg.name, &pkg.version, &data, &json)?;
         }
 
         if !self.dry_run {

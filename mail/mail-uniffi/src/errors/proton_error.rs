@@ -1,7 +1,8 @@
+use crate::core::datatypes::Id;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::OtherErrorReason;
-use crate::UniffiEnum;
+use crate::{export_typed_result, export_void_result, UniffiEnum};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
@@ -43,3 +44,6 @@ impl From<RealMailErrorReason> for ProtonError {
         }
     }
 }
+
+export_void_result!(VoidProtonResult, ProtonError);
+export_typed_result!(OptIdProtonResult, Option<Id>, ProtonError);

@@ -1,3 +1,4 @@
+pub mod contacts;
 pub mod context_init;
 pub mod login;
 pub mod mailbox;
@@ -46,6 +47,8 @@ pub enum AppState {
     ContextInit(context_init::Model),
     /// Display conversation/messages.
     Mailbox(mailbox::Model),
+    /// Display contacts and groups
+    Contacts(contacts::Model),
 }
 
 /// Trait to enforce behavior on each of the app states.
@@ -324,6 +327,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.on_state_enter(),
             AppState::ContextInit(state) => state.on_state_enter(),
             AppState::Mailbox(state) => state.on_state_enter(),
+            AppState::Contacts(state) => state.on_state_enter(),
         }
     }
 
@@ -334,6 +338,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.handle_event(event),
             AppState::ContextInit(state) => state.handle_event(event),
             AppState::Mailbox(state) => state.handle_event(event),
+            AppState::Contacts(state) => state.handle_event(event),
         }
     }
 
@@ -344,6 +349,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.update(ctx, message),
             AppState::ContextInit(state) => state.update(ctx, message),
             AppState::Mailbox(state) => state.update(ctx, message),
+            AppState::Contacts(state) => state.update(ctx, message),
         }
     }
 
@@ -354,6 +360,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.view(frame, area),
             AppState::ContextInit(state) => state.view(frame, area),
             AppState::Mailbox(state) => state.view(frame, area),
+            AppState::Contacts(state) => state.view(frame, area),
         }
     }
 
@@ -364,6 +371,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.view_help_bar(frame, area),
             AppState::ContextInit(state) => state.view_help_bar(frame, area),
             AppState::Mailbox(state) => state.view_help_bar(frame, area),
+            AppState::Contacts(state) => state.view_help_bar(frame, area),
         }
     }
 
@@ -374,6 +382,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.view_status_bar(frame, area),
             AppState::ContextInit(state) => state.view_status_bar(frame, area),
             AppState::Mailbox(state) => state.view_status_bar(frame, area),
+            AppState::Contacts(state) => state.view_status_bar(frame, area),
         }
     }
 
@@ -384,6 +393,7 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.help_bar_lines(),
             AppState::ContextInit(state) => state.help_bar_lines(),
             AppState::Mailbox(state) => state.help_bar_lines(),
+            AppState::Contacts(state) => state.help_bar_lines(),
         }
     }
 }

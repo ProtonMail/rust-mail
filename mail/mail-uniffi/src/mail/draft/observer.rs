@@ -1,5 +1,5 @@
 use crate::core::datatypes::Id;
-use crate::errors::{DraftError, VoidDraftResult};
+use crate::errors::{DraftSaveSendError, ProtonError, VoidProtonResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_core_common::utils::MapVec;
@@ -38,11 +38,12 @@ impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
 /// Indicates how a draft operation completed.
 #[derive(uniffi::Enum)]
 pub enum DraftSendStatus {
-    /// Everything was completed with success, is set to true when the sending
-    /// of the message can be cancelled.
-    Success(bool),
+    /// Everything was completed with success. Contains the number of seconds left
+    /// until the message's sending can be cancelled. `0` means it is no longer
+    /// possible or the operation can not be done.
+    Success(u64),
     /// Something failed.
-    Failure(DraftError),
+    Failure(DraftSaveSendError),
 }
 
 /// Result of sending a draft
@@ -61,14 +62,14 @@ pub struct DraftSendResult {
 
 impl From<RealDraftSendResult> for DraftSendResult {
     fn from(value: RealDraftSendResult) -> Self {
-        let is_undoable = value.is_send_undoable();
+        let second_left_for_undo = value.time_left_for_undo().as_secs();
         Self {
             message_id: value.local_message_id.into(),
             timestamp: value.timestamp,
             error: value
                 .error
-                .map_or(DraftSendStatus::Success(is_undoable), |e| {
-                    DraftSendStatus::Failure(DraftError::from(RealProtonMailError::from(e)))
+                .map_or(DraftSendStatus::Success(second_left_for_undo), |e| {
+                    DraftSendStatus::Failure(DraftSaveSendError::from(RealProtonMailError::from(e)))
                 }),
             origin: value.origin.into(),
         }
@@ -85,7 +86,7 @@ pub trait DraftSendResultCallback: Send + Sync {
 export_typed_result!(
     NewDraftSendResultWatcherResult,
     Arc<DraftSendResultWatcher>,
-    DraftError
+    ProtonError
 );
 
 /// Observe draft send results.
@@ -128,7 +129,7 @@ pub async fn new_draft_send_watcher(
         }))
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(ProtonError::from)
     .into()
 }
 
@@ -148,7 +149,7 @@ impl DraftSendResultWatcher {
 #[proton_uniffi_macros::export_result]
 pub async fn draft_send_result_unseen(
     session: &MailUserSession,
-) -> Result<Vec<DraftSendResult>, DraftError> {
+) -> Result<Vec<DraftSendResult>, ProtonError> {
     let ctx = session.ctx();
     uniffi_async(async move {
         let connection = ctx.user_stash().connection();
@@ -158,7 +159,7 @@ pub async fn draft_send_result_unseen(
             .map_err(RealProtonMailError::from)
     })
     .await
-    .map_err(DraftError::from)
+    .map_err(ProtonError::from)
 }
 
 /// Mark the send results for the `message_ids` as seen.
@@ -170,7 +171,7 @@ pub async fn draft_send_result_unseen(
 pub async fn draft_send_result_mark_seen(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidDraftResult {
+) -> VoidProtonResult {
     let ctx = session.ctx();
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
@@ -181,7 +182,7 @@ pub async fn draft_send_result_mark_seen(
         Ok(())
     })
     .await
-    .map_err(|e: MailContextError| DraftError::from(RealProtonMailError::from(e)))
+    .map_err(|e: MailContextError| ProtonError::from(RealProtonMailError::from(e)))
     .into()
 }
 
@@ -194,7 +195,7 @@ pub async fn draft_send_result_mark_seen(
 pub async fn draft_send_result_delete(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidDraftResult {
+) -> VoidProtonResult {
     let ctx = session.ctx();
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
@@ -204,6 +205,6 @@ pub async fn draft_send_result_delete(
         Ok(())
     })
     .await
-    .map_err(|e: MailContextError| DraftError::from(RealProtonMailError::from(e)))
+    .map_err(|e: MailContextError| ProtonError::from(RealProtonMailError::from(e)))
     .into()
 }

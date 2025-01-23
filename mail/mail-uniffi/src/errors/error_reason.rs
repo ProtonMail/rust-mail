@@ -2,14 +2,18 @@ use super::login_flow::HumanChallenge;
 use crate::UniffiEnum;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
-    DraftErrorReason as RealDraftErrorReason, EventErrorReason as RealEventErrorReason,
-    LoginErrorReason as RealLoginErrorReason, OtherErrorReason as RealOtherErrorReason,
+    DraftDiscardErrorReason as RealDraftDiscardErrorReason,
+    DraftOpenErrorReason as RealDraftOpenErrorReason,
+    DraftSaveSendErrorReason as RealDraftSaveSendErrorReason,
+    DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
+    EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
+    OtherErrorReason as RealOtherErrorReason,
 };
 
 /// Specific Reason for error occurrence within ActionQueue
 ///
 /// This enum is used to represent the specific reason for an error that occurred
-/// in oreder to provide only the necessary information to the user.
+/// in order to provide only the necessary information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum ActionErrorReason {
     UnknownLabel,
@@ -32,7 +36,7 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 /// This enum is used to represent the specific reason for an error that occurred
 /// in handling session related operations in order to provide only the necessary
 /// information to the user. This error type in common library is named `ContextErrorReason`
-/// as context is nomeclature used in the common library.
+/// as context is nomenclature used in the common library.
 #[derive(Debug, UniffiEnum)]
 pub enum SessionErrorReason {
     UnknownLabel,
@@ -74,13 +78,43 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
     }
 }
 
-/// Specific Reason for error occurrence within Draft.
+/// Specific Reason when opening a draft fails.
 ///
 /// This enum is used to represent the specific reason for an error that occurred
 /// while drafting a new message in order to provide only the necessary
 /// information to the user.
 #[derive(Debug, UniffiEnum)]
-pub enum DraftErrorReason {
+pub enum DraftOpenErrorReason {
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// This message is not a draft
+    MessageIsNotADraft,
+    /// Attempting to reply or forward to a draft
+    ReplyOrForwardDraft,
+    /// Could not find the user's address
+    AddressNotFound,
+    /// Message body is missing
+    MessageBodyMissing,
+}
+impl From<RealDraftOpenErrorReason> for DraftOpenErrorReason {
+    fn from(value: RealDraftOpenErrorReason) -> Self {
+        match value {
+            RealDraftOpenErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftOpenErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+            RealDraftOpenErrorReason::ReplyOrForwardDraft => Self::ReplyOrForwardDraft,
+            RealDraftOpenErrorReason::AddressNotFound => Self::AddressNotFound,
+            RealDraftOpenErrorReason::MessageBodyMissing => Self::MessageBodyMissing,
+        }
+    }
+}
+
+/// Specific Reason when opening a draft save or send fails.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug, UniffiEnum)]
+pub enum DraftSaveSendErrorReason {
     /// Message has no recipients
     NoRecipients,
     /// Address does not have a primary key
@@ -97,40 +131,86 @@ pub enum DraftErrorReason {
     MessageAlreadySent,
     /// A packaging error occurred
     PackageError(String),
-    /// Updating a message that is not draft.
-    MessageUpdateIsNotDraft,
-    /// This message no longer exists.
-    MessageDoesNotExist,
     /// This draft was already sent and can't be modified
     AlreadySent,
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message is not a draft
+    MessageIsNotADraft,
+}
+
+impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
+    fn from(value: RealDraftSaveSendErrorReason) -> Self {
+        match value {
+            RealDraftSaveSendErrorReason::NoRecipients => Self::NoRecipients,
+            RealDraftSaveSendErrorReason::AddressDoesNotHavePrimaryKey(value) => {
+                Self::AddressDoesNotHavePrimaryKey(value.into_inner())
+            }
+            RealDraftSaveSendErrorReason::RecipientEmailInvalid(value) => {
+                Self::RecipientEmailInvalid(value)
+            }
+            RealDraftSaveSendErrorReason::ProtonRecipientDoesNotExist(value) => {
+                Self::ProtonRecipientDoesNotExist(value)
+            }
+            RealDraftSaveSendErrorReason::UnknownRecipientValidationError(value) => {
+                Self::UnknownRecipientValidationError(value)
+            }
+            RealDraftSaveSendErrorReason::AddressDisabled(value) => Self::AddressDisabled(value),
+            RealDraftSaveSendErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+            RealDraftSaveSendErrorReason::PackageError(value) => Self::PackageError(value),
+            RealDraftSaveSendErrorReason::AlreadySent => Self::AlreadySent,
+            RealDraftSaveSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftSaveSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+        }
+    }
+}
+
+/// Specific Reason when attempting to cancel sending of an already sent draft.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug, UniffiEnum)]
+pub enum DraftUndoSendErrorReason {
     /// Can not undo sent this message
     MessageCanNotBeUndoSent,
     /// The cancellation of sending for this message is no longer possible.
     SendCanNoLongerBeUndone,
+    /// Message is not a draft
+    MessageIsNotADraft,
+    /// This message no longer exists.
+    MessageDoesNotExist,
 }
 
-impl From<RealDraftErrorReason> for DraftErrorReason {
-    fn from(reason: RealDraftErrorReason) -> Self {
-        match reason {
-            RealDraftErrorReason::NoRecipients => Self::NoRecipients,
-            RealDraftErrorReason::AddressDoesNotHavePrimaryKey(v) => {
-                Self::AddressDoesNotHavePrimaryKey(v.into_inner())
-            }
-            RealDraftErrorReason::RecipientEmailInvalid(v) => Self::RecipientEmailInvalid(v),
-            RealDraftErrorReason::ProtonRecipientDoesNotExist(v) => {
-                Self::ProtonRecipientDoesNotExist(v)
-            }
-            RealDraftErrorReason::UnknownRecipientValidationError(v) => {
-                Self::UnknownRecipientValidationError(v)
-            }
-            RealDraftErrorReason::AddressDisabled(v) => Self::AddressDisabled(v),
-            RealDraftErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
-            RealDraftErrorReason::PackageError(v) => Self::PackageError(v),
-            RealDraftErrorReason::MessageUpdateIsNotDraft => Self::MessageUpdateIsNotDraft,
-            RealDraftErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
-            RealDraftErrorReason::AlreadySent => Self::AlreadySent,
-            RealDraftErrorReason::MessageCanNotBeUndoSent => Self::MessageCanNotBeUndoSent,
-            RealDraftErrorReason::SendCanNoLongerBeUndone => Self::SendCanNoLongerBeUndone,
+impl From<RealDraftUndoSendErrorReason> for DraftUndoSendErrorReason {
+    fn from(value: RealDraftUndoSendErrorReason) -> Self {
+        match value {
+            RealDraftUndoSendErrorReason::MessageCanNotBeUndoSent => Self::MessageCanNotBeUndoSent,
+            RealDraftUndoSendErrorReason::SendCanNoLongerBeUndone => Self::SendCanNoLongerBeUndone,
+            RealDraftUndoSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+            RealDraftUndoSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+        }
+    }
+}
+
+/// Specific Reason when attempting to discard a draft.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// while saving or sending a draft in order to provide only the necessary
+/// information to the user.
+#[derive(Debug, UniffiEnum)]
+pub enum DraftDiscardErrorReason {
+    /// This message does not exist
+    MessageDoesNotExist,
+    /// Deleting the draft failed
+    DeleteFailed,
+}
+
+impl From<RealDraftDiscardErrorReason> for DraftDiscardErrorReason {
+    fn from(value: RealDraftDiscardErrorReason) -> Self {
+        match value {
+            RealDraftDiscardErrorReason::DeleteFailed => Self::DeleteFailed,
+            RealDraftDiscardErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
         }
     }
 }

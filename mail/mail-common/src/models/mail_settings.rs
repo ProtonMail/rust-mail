@@ -225,8 +225,8 @@ impl MailSettings {
         api: &PM,
         stash: &Stash,
     ) -> Result<(), AppError> {
+        debug!("Storing settings into database");
         let mut settings = MailSettings::from(api.get_mail_settings().await?.mail_settings);
-        debug!("Storing labels into database");
 
         let mut tether = stash.connection();
         let tx = tether.transaction().await?;

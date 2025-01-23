@@ -21,6 +21,7 @@ derive_more = "1.0"
 email_address = { version = "0.2.9", features = ["serde"] }
 flume = "0.11"
 futures = "0.3.31"
+function_name = "0.3.0"
 hex = "0.4.3"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"
@@ -199,7 +200,7 @@ module_name_repetitions = "allow"
 # missing_docs_in_private_items = "warn"
 mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
-# (which is provided by the `log` crate).
+# (which is provided by the `tracing` crate).
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"

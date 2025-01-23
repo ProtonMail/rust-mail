@@ -119,6 +119,7 @@ impl MailTestContext {
     /// establish a catch-all in that way.
     ///
     /// # Panics
+    #[function_name::named]
     pub async fn catch_all(&self) {
         // If there are any unconfigured calls, we will panic because it's not what
         // we expect to happen, so the test should fail
@@ -137,6 +138,7 @@ impl MailTestContext {
                     String::from_utf8(request.body.clone()).unwrap(),
                 );
             })
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

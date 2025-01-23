@@ -6,6 +6,7 @@ use proton_mail_common::{MailContextError, MailboxError};
 pub enum Messages {
     Login(crate::app_model::login::Message),
     SessionSelect(crate::app_model::session_select::Message),
+    Contacts(crate::app_model::contacts::Message),
     ContextInit(crate::app_model::context_init::Message),
     Mailbox(crate::app_model::mailbox::Message),
     TwoFA(crate::app_model::twofa::Message),

@@ -9,7 +9,7 @@ use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
     prepare_html_reply, prepare_plain_text_reply,
 };
-use crate::draft::recipients::{ContactGroupResolver, RecipientList};
+use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, DraftMetadata, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
     MessageBodyMetadata, MetadataId,
@@ -18,6 +18,7 @@ use crate::{AppError, MailContextError, MailUserContext};
 use futures::future::join3;
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
+use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
@@ -47,6 +48,44 @@ pub(crate) mod send;
 /// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error(transparent)]
+    Open(#[from] OpenError),
+    #[error(transparent)]
+    SaveOrSend(#[from] SaveOrSendError),
+    #[error(transparent)]
+    Discard(#[from] DiscardError),
+    #[error(transparent)]
+    Undo(#[from] UndoError),
+}
+
+/// Errors that occur during draft creation or opening an existing draft.
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    #[error("No addresses found for current user")]
+    UserHasNoAddresses,
+    #[error("User Address {0} not found")]
+    AddressNotFound(AddressId),
+    #[error("Message {0} is not a draft")]
+    MessageNotADraft(LocalMessageId),
+    #[error("Message Body for {0} missing")]
+    MessageBodyMissing(LocalMessageId),
+    #[error("Can't reply or forward to a draft message {0}")]
+    ReplyOrForwardToDraft(LocalMessageId),
+}
+
+impl From<OpenError> for MailContextError {
+    fn from(err: OpenError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur during sending or saving a draft.
+///
+/// While these could in theory be separate errors, there is a lot of overlap
+/// between the two, so we group them together. Additionally send always depends
+/// on save, so these two will always come together.
+#[derive(Debug, thiserror::Error)]
+pub enum SaveOrSendError {
     #[error("No addresses found for current user")]
     UserHasNoAddresses,
     #[error("User Address {0} not found")]
@@ -55,30 +94,66 @@ pub enum Error {
     AddressWithoutPrimaryKey(AddressId),
     #[error("Message {0} is not a draft")]
     MessageNotADraft(LocalMessageId),
-    #[error("Create Metadata not found for {0}")]
-    CreateMetadataNotFound(MetadataId),
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
     #[error("Attachment {0} does not have key packets")]
     AttachmentDoesNotHaveKeyPackets(LocalAttachmentId),
-    #[error("Can't reply or forward to a draft message {0}")]
-    ReplyOrForwardToDraft(LocalMessageId),
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
     #[error("Draft has no message")]
-    DraftWithoutMessage,
+    LocalDraftWithoutMessage,
     #[error("Can not update a draft that was sent")]
     AlreadySent,
     #[error("Draft send failed: {0}")]
     SendMessage(#[from] PackageError),
     #[error("Draft has no recipients")]
     NoRecipients,
-    #[error("Failed to delete draft on server")]
-    DeleteFailed,
+    #[error("Draft does not exist on server")]
+    DraftDoesNotExistOnServer,
+}
+
+impl From<SaveOrSendError> for MailContextError {
+    fn from(err: SaveOrSendError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur while attempting to undo a sent message.
+#[derive(Debug, thiserror::Error)]
+pub enum UndoError {
+    #[error("Message {0} is not a draft")]
+    MessageNotADraft(LocalMessageId),
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
     #[error("Can not undo send message {0}")]
     MessageCanNotBeUndoSent(LocalMessageId),
     #[error("Can no longer undo send for message")]
     SendCanNoLongerBeUndone,
+    #[error("Draft does not exist on server")]
+    DraftDoesNotExistOnServer,
+}
+
+impl From<UndoError> for MailContextError {
+    fn from(err: UndoError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur while discarding a draft.
+#[derive(Debug, thiserror::Error)]
+pub enum DiscardError {
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Failed to delete draft on server")]
+    DeleteFailed,
+    #[error("Draft does not exist on server")]
+    DraftDoesNotExistOnServer,
+}
+
+impl From<DiscardError> for MailContextError {
+    fn from(err: DiscardError) -> Self {
+        Self::Draft(err.into())
+    }
 }
 
 /// Potential draft specific errors.
@@ -229,7 +304,7 @@ impl Draft {
 
         if !message.flags.is_draft() {
             error!("Opened a non-draft message as a draft");
-            return Err(Error::MessageNotADraft(message_id).into());
+            return Err(OpenError::MessageNotADraft(message_id).into());
         }
 
         // First let's try to sync the body and metadata. If we can't we will fill it
@@ -311,11 +386,11 @@ impl Draft {
             .await
             .inspect_err(|e| error!("Failed to load send result: {e}"))?;
 
-        let context = &*context;
+        let contact_group_resolver = ProtonContactGroupResolver::new(tether);
         let (to_list, cc_list, bcc_list) = join3(
-            RecipientList::from_message_recipients(context, message.to_list.value),
-            RecipientList::from_message_recipients(context, message.cc_list.value),
-            RecipientList::from_message_recipients(context, message.bcc_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.to_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.cc_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.bcc_list.value),
         )
         .await;
         Ok((
@@ -354,7 +429,7 @@ impl Draft {
 
         if addresses.is_empty() {
             error!("No addresses found for current user");
-            return Err(Error::UserHasNoAddresses.into());
+            return Err(OpenError::UserHasNoAddresses.into());
         }
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
@@ -421,7 +496,7 @@ impl Draft {
 
         // Source message can not be a draft.
         if source_message.flags.is_draft() {
-            return Err(Error::ReplyOrForwardToDraft(message_id).into());
+            return Err(OpenError::ReplyOrForwardToDraft(message_id).into());
         }
 
         // Source message much have a remote id.
@@ -441,14 +516,16 @@ impl Draft {
         })?
         else {
             error!("Source message body is not present");
-            return Err(Error::MessageBodyMissing(message_id).into());
+            return Err(OpenError::MessageBodyMissing(message_id).into());
         };
 
         // Find out which address this message has and use that to craft te reply.
         let Some(address) =
             Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether).await?
         else {
-            return Err(Error::AddressNotFound(source_message.remote_address_id.clone()).into());
+            return Err(
+                OpenError::AddressNotFound(source_message.remote_address_id.clone()).into(),
+            );
         };
 
         let key = CacheMessageKey::from(&source_message);
@@ -458,7 +535,7 @@ impl Draft {
             })?
         else {
             error!("Could not load message body");
-            return Err(Error::MessageBodyMissing(message_id).into());
+            return Err(OpenError::MessageBodyMissing(message_id).into());
         };
 
         let source_body = StorableMessageBody::from_reader(source_body_reader)
@@ -479,8 +556,10 @@ impl Draft {
         .inspect_err(|e| error!("Failed to create new reply draft metadata: {e}"))?;
         tx.commit().await?;
 
+        let contact_group_resolver = ProtonContactGroupResolver::new(&tether);
+
         Ok(Self::new_draft_reply(
-            context,
+            &contact_group_resolver,
             metadata.id.unwrap(),
             reply_mode,
             &address,
@@ -603,9 +682,10 @@ impl Draft {
                 );
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(
-                    Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
-                );
+                return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
+                    attachment.local_id.unwrap(),
+                )
+                .into());
             };
             attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
@@ -658,22 +738,39 @@ impl Draft {
                 );
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(
-                    Error::AttachmentDoesNotHaveKeyPackets(attachment.local_id.unwrap()).into(),
-                );
+                return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
+                    attachment.local_id.unwrap(),
+                )
+                .into());
             };
             attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
 
-        let response = session
+        match session
             .api()
             .update_draft(
                 message.remote_id.clone().unwrap(),
                 params,
                 attachment_key_packets,
             )
-            .await?;
-        Ok(response.message)
+            .await
+        {
+            Err(e) => {
+                if let Some(proton_error) = e.to_proton_error() {
+                    if proton_error.code == Mail::MessageAlreadySent as u32 {
+                        return Err(SaveOrSendError::AlreadySent.into());
+                    } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
+                        return Err(
+                            SaveOrSendError::MessageNotADraft(message.local_id.unwrap()).into()
+                        );
+                    } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
+                        return Err(SaveOrSendError::DraftDoesNotExistOnServer.into());
+                    }
+                }
+                Err(e.into())
+            }
+            Ok(response) => Ok(response.message),
+        }
     }
 
     /// Apply an action which will create a new draft.
@@ -735,7 +832,7 @@ impl Draft {
     /// Returns error if the action failed to execute.
     pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
-            return Err(Error::NoRecipients);
+            return Err(SaveOrSendError::NoRecipients.into());
         }
         let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
         let send_action = draft::Send::new(self.metadata_id);

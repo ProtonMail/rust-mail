@@ -18,16 +18,19 @@ lazy_static! {
 }
 
 impl TestContext {
+    #[function_name::named]
     pub async fn mock_get_all_addresses(&self, addresses: Vec<ApiAddress>) {
         let response = GetAddressesResponse { addresses };
 
         Mock::given(method("GET"))
             .and(path("/api/core/v4/addresses"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }
 
+    #[function_name::named]
     pub async fn mock_get_address(&self, address: ApiAddress) {
         let response = GetAddressResponse {
             address: address.clone(),
@@ -36,6 +39,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path(format!("/api/core/v4/addresses/{}", address.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
             .mount(self.mock_server())
             .await;
     }

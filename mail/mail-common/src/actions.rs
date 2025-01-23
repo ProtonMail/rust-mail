@@ -159,7 +159,7 @@ where
     /// # Error
     ///
     /// Returns error if the query failed.
-    async fn local_only_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, ActionError> {
+    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, ActionError> {
         let placeholders = stash::utils::placeholders(self.target_ids.len());
         #[allow(trivial_casts)]
         let values = self

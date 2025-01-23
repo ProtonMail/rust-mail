@@ -10,6 +10,7 @@ async fn test_mock_context() {
         .and(path("/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
         .expect(1)
+        .named("Mock ping")
         .mount(ctx.mock_server())
         .await;
 

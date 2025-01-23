@@ -23,6 +23,7 @@ hex = "0.4"
 html2text = { version = "0.13.6" }
 log = "0.4.25"
 ratatui = { version = "0.28.1", features = ["all-widgets"] }
+itertools = { workspace = true }
 scopeguard = "1.2"
 secrecy = "0.8"
 thiserror = "1"

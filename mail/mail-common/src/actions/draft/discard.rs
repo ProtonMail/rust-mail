@@ -1,8 +1,8 @@
 use crate::datatypes::SystemLabelId;
-use crate::draft::{Draft, Error};
+use crate::draft::{DiscardError, Draft};
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -38,6 +38,8 @@ impl Discard {
 impl Action for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
+
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = DiscardHandler;
     type RemoteOutput = ();
@@ -67,7 +69,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             })?
         else {
             error!("Could not find metadata {}", action.metadata_id);
-            return Err(Error::MetadataNotFound(action.metadata_id).into());
+            return Err(DiscardError::MetadataNotFound(action.metadata_id).into());
         };
 
         if let Some(local_message_id) = metadata.local_message_id {
@@ -132,7 +134,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
                 {
                     // Conversation has no remote id, so we need to do local cleanup, but only
                     // if it only has no more messages.
-                    if conversation.num_messages == 0 && conversation.remote_id.is_none() {
+                    if conversation.num_messages == 0 && !conversation.is_synced() {
                         Conversation::delete_by_id(local_conversation_id, &tx)
                             .await
                             .inspect_err(|e| {
@@ -161,7 +163,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         for result in response.responses {
             if result.id == message_id && result.response.code != General::NoError as u32 {
                 error!("Failed to delete message: {:?}", result.response);
-                return Err(MailContextError::Draft(Error::DeleteFailed));
+                return Err(MailContextError::Draft(DiscardError::DeleteFailed.into()));
             }
         }
 

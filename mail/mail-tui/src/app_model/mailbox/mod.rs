@@ -43,6 +43,7 @@ pub enum Message {
     CloseSearchPopup,
     SearchStatusBar(SearchStatusBar),
     ClearSearchStatusBar,
+    OpenContacts,
 }
 pub struct LabelAs<T: LocalIdMarker> {
     pub source_label_id: LocalLabelId,

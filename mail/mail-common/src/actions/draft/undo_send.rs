@@ -1,9 +1,9 @@
 use crate::actions::draft::{local_draft_label_id, local_sent_label_id};
 use crate::datatypes::{MessageFlags, SystemLabelId};
-use crate::draft::Error;
+use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -40,6 +40,7 @@ impl UndoSend {
 impl Action for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UndoSendHandler;
     type RemoteOutput = ();
@@ -78,7 +79,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         if !(message.label_ids.contains(&LabelId::sent())
             && (message.flags & MessageFlags::SENT == MessageFlags::SENT))
         {
-            return Err(Error::MessageCanNotBeUndoSent(action.id).into());
+            return Err(UndoError::MessageCanNotBeUndoSent(action.id).into());
         }
 
         let local_draft_label_id = local_draft_label_id(tx).await?;
@@ -149,7 +150,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
                 error!("Failed to cancel send: {e}");
                 if let Some(proton_error) = e.to_proton_error() {
                     if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
-                        return Err(Error::SendCanNoLongerBeUndone.into());
+                        return Err(UndoError::SendCanNoLongerBeUndone.into());
                     }
                 }
                 return Err(e.into());

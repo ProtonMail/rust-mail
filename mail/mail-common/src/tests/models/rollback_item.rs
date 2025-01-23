@@ -249,6 +249,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
     (mock_server, api)
 }
 
+#[function_name::named]
 async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
     let api_conversation = api_conversation!(id: remote_id.clone().into());
@@ -264,10 +265,12 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
             }),
         )
         .expect(1)
+        .named(function_name!())
         .mount(mock_server)
         .await;
 }
 
+#[function_name::named]
 async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether: &Tether) {
     let remote_id = &item.remote_id;
     let db_message = Message::find_by_remote_id(remote_id.clone().into(), tether)
@@ -291,10 +294,12 @@ async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether:
             }),
         )
         .expect(1)
+        .named(function_name!())
         .mount(mock_server)
         .await;
 }
 
+#[function_name::named]
 async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
     let remote_id = &item.remote_id;
     let api_label = api_label!(id: remote_id.clone().into());
@@ -308,6 +313,7 @@ async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
             labels: vec![api_label],
         }))
         .expect(1)
+        .named(function_name!())
         .mount(mock_server)
         .await;
 }

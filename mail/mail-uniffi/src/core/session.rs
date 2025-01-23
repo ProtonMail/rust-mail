@@ -78,8 +78,8 @@ impl StoredAccount {
 
     /// Timestamp of when the account was last set as the primary account.
     #[must_use]
-    pub fn primary_at(&self) -> Option<u64> {
-        self.account.primary_at.map(|ts| ts.as_u64())
+    pub fn primary_at(&self) -> Option<f64> {
+        self.account.primary_at.map(|ts| ts.as_f64())
     }
 
     /// Get the state of the account.
