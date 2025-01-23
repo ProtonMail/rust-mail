@@ -44,7 +44,7 @@ async fn create_table_core_accounts(tx: &Bond<'_>) -> Result<(), StashError> {
                 primary_addr TEXT,
 
                 -- Timestamp of when account was made primary
-                primary_at INTEGER
+                primary_at REAL
             )
         ",
         vec![],
