@@ -8,6 +8,7 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -232,7 +233,36 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new(accounts, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(accounts, rx, callback))
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Watch the accounts for changes using an async callback.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_accounts_async(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<WatchedAccounts, UserSessionError> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let mut accounts = Vec::new();
+
+            let (initial, rx) = ctx.watch_accounts().await?;
+
+            // TODO(ET-1431): Compute this on the core side.
+            for account in initial {
+                if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
+                    accounts.push(StoredAccount::new(account, state));
+                };
+            }
+
+            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(accounts, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -285,7 +315,36 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(sessions, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(sessions, rx, callback))
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Watch all API sessions for changes using an async callback.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_sessions_async(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<WatchedSessions, UserSessionError> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let mut sessions = Vec::new();
+
+            let (initial, rx) = ctx.watch_sessions().await?;
+
+            // TODO(ET-1431): Compute this on the core side.
+            for session in initial {
+                if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
+                    sessions.push(StoredSession::new(session, state));
+                };
+            }
+
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(sessions, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -344,7 +403,7 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new(sessions, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(sessions, rx, callback))
         })
         .await
         .map_err(UserSessionError::from)
@@ -617,14 +676,24 @@ pub struct WatchedAccounts {
 }
 
 impl WatchedAccounts {
-    fn new(
+    fn new(accounts: Vec<Arc<StoredAccount>>, handle: Arc<WatchHandle>) -> Self {
+        Self { accounts, handle }
+    }
+
+    fn new_sync(
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        let handle = watch_channel(handle, callback);
+        WatchedAccounts::new(accounts, watch_channel(handle, callback))
+    }
 
-        WatchedAccounts { accounts, handle }
+    fn new_async(
+        accounts: Vec<Arc<StoredAccount>>,
+        handle: WatcherHandle,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> WatchedAccounts {
+        WatchedAccounts::new(accounts, watch_channel_async(handle, callback))
     }
 }
 
@@ -639,13 +708,23 @@ pub struct WatchedSessions {
 }
 
 impl WatchedSessions {
-    fn new(
+    fn new(sessions: Vec<Arc<StoredSession>>, handle: Arc<WatchHandle>) -> Self {
+        Self { sessions, handle }
+    }
+
+    fn new_sync(
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        let handle = watch_channel(handle, callback);
+        WatchedSessions::new(sessions, watch_channel(handle, callback))
+    }
 
-        WatchedSessions { sessions, handle }
+    fn new_async(
+        sessions: Vec<Arc<StoredSession>>,
+        handle: WatcherHandle,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> WatchedSessions {
+        WatchedSessions::new(sessions, watch_channel_async(handle, callback))
     }
 }
