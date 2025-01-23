@@ -2177,34 +2177,6 @@ impl Conversation {
         Ok(conversations)
     }
 
-    /// Synchronize the conversations and message counts for each label.
-    ///
-    /// # Parameters
-    ///
-    /// * `api`   - The API instance to use.
-    /// * `stash` - The stash to use for the database connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed or the data could not be
-    /// written to the database.
-    ///
-    pub async fn sync_conversation_and_message_counts(
-        api: &impl ProtonMail,
-        stash: &Stash,
-    ) -> Result<(), AppError> {
-        let (conversation_counts, message_counts) =
-            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
-
-        let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
-        ConversationLabelsCount::create_or_update_conversation_counts(conversation_counts, &tx)
-            .await?;
-        MessageLabelsCount::create_or_update_message_counts(message_counts, &tx).await?;
-        tx.commit().await?;
-        Ok(())
-    }
-
     /// Synchronize the first `count` conversations of the label with `label_id`.
     ///
     /// # Parameters
@@ -3798,5 +3770,28 @@ impl ConversationCounters {
             total: self.total,
             unread: self.unread,
         })
+    }
+}
+
+// TODO: Refactor this at 1.85 into an AsyncFnOnce
+/// This acts like a closure that on `new` syncs the label counters and on `store` actually stores
+/// them to the db.
+/// This is useful to split the store and fetch behavior since we need labels to exist in the db
+/// before storing them.
+pub struct StoreLabelCounters(Vec<ConversationLabelsCount>, Vec<MessageLabelsCount>);
+impl StoreLabelCounters {
+    pub async fn new(api: &impl ProtonMail) -> Result<Self, AppError> {
+        let (a, b) =
+            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
+        Ok(Self(a, b))
+    }
+
+    pub async fn store(self, stash: &Stash) -> Result<(), AppError> {
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
+        ConversationLabelsCount::create_or_update_conversation_counts(self.0, &tx).await?;
+        MessageLabelsCount::create_or_update_message_counts(self.1, &tx).await?;
+        tx.commit().await?;
+        Ok(())
     }
 }
