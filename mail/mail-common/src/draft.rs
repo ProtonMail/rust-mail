@@ -9,7 +9,7 @@ use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
     prepare_html_reply, prepare_plain_text_reply,
 };
-use crate::draft::recipients::{ContactGroupResolver, RecipientList};
+use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, DraftMetadata, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
     MessageBodyMetadata, MetadataId,
@@ -386,11 +386,11 @@ impl Draft {
             .await
             .inspect_err(|e| error!("Failed to load send result: {e}"))?;
 
-        let context = &*context;
+        let contact_group_resolver = ProtonContactGroupResolver::new(tether);
         let (to_list, cc_list, bcc_list) = join3(
-            RecipientList::from_message_recipients(context, message.to_list.value),
-            RecipientList::from_message_recipients(context, message.cc_list.value),
-            RecipientList::from_message_recipients(context, message.bcc_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.to_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.cc_list.value),
+            RecipientList::from_message_recipients(&contact_group_resolver, message.bcc_list.value),
         )
         .await;
         Ok((
@@ -556,8 +556,10 @@ impl Draft {
         .inspect_err(|e| error!("Failed to create new reply draft metadata: {e}"))?;
         tx.commit().await?;
 
+        let contact_group_resolver = ProtonContactGroupResolver::new(&tether);
+
         Ok(Self::new_draft_reply(
-            context,
+            &contact_group_resolver,
             metadata.id.unwrap(),
             reply_mode,
             &address,
