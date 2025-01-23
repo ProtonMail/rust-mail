@@ -167,6 +167,10 @@ pub struct Conversation {
 
 impl ModelIdExtension for Conversation {
     type RemoteId = ConversationId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Conversation {

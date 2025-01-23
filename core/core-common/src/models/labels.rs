@@ -110,6 +110,10 @@ pub struct Label {
 
 impl ModelIdExtension for Label {
     type RemoteId = LabelId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Label {

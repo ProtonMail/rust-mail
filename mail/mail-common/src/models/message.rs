@@ -211,6 +211,10 @@ pub struct Message {
 
 impl ModelIdExtension for Message {
     type RemoteId = MessageId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Message {

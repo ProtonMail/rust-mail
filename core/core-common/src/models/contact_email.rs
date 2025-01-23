@@ -84,6 +84,10 @@ pub struct ContactEmail {
 
 impl ModelIdExtension for ContactEmail {
     type RemoteId = ContactEmailId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl From<ApiContactEmail> for ContactEmail {

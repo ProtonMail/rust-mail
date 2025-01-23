@@ -183,6 +183,10 @@ pub struct Attachment {
 
 impl ModelIdExtension for Attachment {
     type RemoteId = AttachmentId;
+
+    fn remote_id(&self) -> Option<&Self::RemoteId> {
+        self.remote_id.as_ref()
+    }
 }
 
 impl Attachment {
