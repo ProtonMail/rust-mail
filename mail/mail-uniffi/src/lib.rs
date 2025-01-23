@@ -181,6 +181,23 @@ pub trait LiveQueryCallback: Send + Sync {
     fn on_update(&self);
 }
 
+/// An async callback interface for live queries.
+///
+/// This interface is used to notify the client when observed data has been
+/// updated.
+///
+#[uniffi::export(with_foreign)]
+#[async_trait::async_trait]
+pub trait AsyncLiveQueryCallback: Send + Sync {
+    /// Notify the client that the observed data has been updated.
+    ///
+    /// This method is called when the observed data has been updated. It does
+    /// not provide any information about the update, but the client can use
+    /// this as a signal to refresh its view of the data.
+    ///
+    async fn on_update(&self);
+}
+
 /// A handle to a live query.
 ///
 /// This handle can be used to disconnect from the live query.
@@ -268,6 +285,27 @@ fn watch_channel_inner<T: Send + 'static>(
             _ = async_runtime().spawn_blocking(callback).await;
         }
     })
+}
+
+/// Watch a notification channel for changes and trigger the callback
+/// once a message has been received.
+///
+#[must_use]
+pub fn watch_channel_async(
+    handle: WatcherHandle,
+    callback: Arc<dyn AsyncLiveQueryCallback>,
+) -> Arc<WatchHandle> {
+    let WatcherHandle {
+        receiver, handle, ..
+    } = handle;
+
+    let task_handle = spawn_async(async move {
+        while receiver.recv_async().await.is_ok() {
+            callback.on_update().await;
+        }
+    });
+
+    Arc::new(WatchHandle::new(handle, &task_handle))
 }
 
 /// Filter options for pagination
