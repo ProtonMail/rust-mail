@@ -55,6 +55,10 @@ impl<T: MailScrollerSource> Paginator<T> {
         self.paginator.lock().await.fetch_more().await
     }
 
+    pub async fn total(&self) -> u64 {
+        self.paginator.lock().await.total()
+    }
+
     /// Get the next pagination page as series of background tasks which will
     /// display a message while the data is syncing.
     ///

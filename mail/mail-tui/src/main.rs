@@ -47,7 +47,7 @@ struct CliArgs {
     /// In linux this would generate two files:
     /// `/tmp/proton_htmls/[subject]/before.html` - The raw message
     /// `/tmp/proton_htmls/[subject]/after.html`  - The file after transforming
-    #[arg(long, short)]
+    #[arg(long)]
     html_dir: Option<PathBuf>,
 
     /// Default username

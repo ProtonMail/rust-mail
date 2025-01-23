@@ -641,6 +641,9 @@ pub struct SearchScrollData {
     #[DbField]
     pub display_order: u64,
 
+    #[DbField]
+    pub time: u64,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -655,20 +658,26 @@ impl SearchScrollData {
         SearchScrollData::find_first("ORDER BY display_order DESC", vec![], tether).await
     }
 
-    pub async fn last_remote_message_id(tether: &Tether) -> Result<Option<MessageId>, StashError> {
+    pub async fn last_remote_message_id_and_time(
+        tether: &Tether,
+    ) -> Result<Option<(MessageId, u64)>, StashError> {
         let Some(last) = Self::last(tether).await? else {
             return Ok(None);
         };
 
-        last.remote_message_id(tether).await
+        let message = last.remote_message(tether).await?;
+
+        Ok(match message {
+            Some(message) if message.remote_id.is_some() => {
+                Some((message.remote_id.unwrap(), message.time))
+            }
+            _ => None,
+        })
     }
 
-    pub async fn remote_message_id(
-        &self,
-        tether: &Tether,
-    ) -> Result<Option<MessageId>, StashError> {
+    pub async fn remote_message(&self, tether: &Tether) -> Result<Option<Message>, StashError> {
         let message = Message::find_by_id(self.local_message_id, tether).await?;
-        Ok(message.and_then(|m| m.remote_id))
+        Ok(message)
     }
 
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {

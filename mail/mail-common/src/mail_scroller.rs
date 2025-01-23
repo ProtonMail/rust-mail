@@ -1141,12 +1141,15 @@ impl SearchScrollerSource {
         let task = Some(tokio::spawn(async move {
             let tether = stash.connection();
 
-            if let Some(remote_id) = SearchScrollData::last_remote_message_id(&tether).await? {
+            if let Some((remote_id, time)) =
+                SearchScrollData::last_remote_message_id_and_time(&tether).await?
+            {
                 Self::sync_next_page(
                     &session,
                     tether,
                     remote_label_id,
                     remote_id,
+                    time,
                     search,
                     page_size,
                 )
@@ -1181,6 +1184,7 @@ impl SearchScrollerSource {
             .await?;
         let mut total = total.lock().await;
         *total = response.total;
+        drop(total);
 
         debug!(
             "Fetched {}/{} elements",
@@ -1210,6 +1214,7 @@ impl SearchScrollerSource {
         mut tether: Tether,
         remote_label_id: LabelId,
         last_element_id: MessageId,
+        last_time: u64,
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
@@ -1218,6 +1223,7 @@ impl SearchScrollerSource {
             .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
+                end: Some(last_time),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
@@ -1271,9 +1277,11 @@ impl SearchScrollerSource {
 
         // Save all messages.
         for message in messages.iter_mut() {
+            tracing::warn!("Saving message {:?}", message.remote_id);
             message.save(&tx).await?;
             SearchScrollData::builder()
                 .local_message_id(message.local_id.unwrap())
+                .time(message.time)
                 .display_order(display_order)
                 .build()
                 .with_save(&tx)
@@ -1397,9 +1405,7 @@ impl MailScrollerSource for SearchScrollerSource {
 
             Ok((items, total, task))
         } else {
-            // Fallback for failing to initialize the scroller
-            let (_, task) = self.initialize(ctx).await?;
-            Ok((vec![], 0, task))
+            Ok((vec![], 0, None))
         }
     }
 
