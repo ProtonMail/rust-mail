@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.37.0] - 2025-01-24
+
+### Changed
+
+  - [ET-1896] Draft save actions are now deduped in the queue.
+  - [ET-1685] `scroll_search` was renamed to `scroller_search`
+
 ## [0.36.1] - 2025-01-24
 
 ### Fixed
@@ -16,10 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1633] Add async live query callback, use it for new `watch_accounts_async` and `watch_sessions_async` methods
-
-### Changed
-
-  - [ET-1685] `scroll_search` was renamed to `scroller_search`
 
 ## [0.36.0] - 2025-01-23
 

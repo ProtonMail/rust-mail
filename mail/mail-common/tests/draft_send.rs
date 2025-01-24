@@ -150,10 +150,8 @@ async fn basic_send_check() {
     // get draft message id.
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
-    let send_action = draft.to_send_action().unwrap();
-
     user_ctx
-        .with_queue(|queue| send_action.queue(queue))
+        .with_queue(|queue| draft.send(queue))
         .await
         .unwrap();
 
@@ -371,9 +369,8 @@ async fn save_after_send_is_an_error() {
         .unwrap();
 
     // Save at least once so we can retrieve the message id.
-    let send_action = draft.to_send_action().unwrap();
     user_ctx
-        .with_queue(|queue| send_action.queue(queue))
+        .with_queue(|queue| draft.send(queue))
         .await
         .unwrap();
 
@@ -449,10 +446,9 @@ async fn send_fails_if_recipient_is_not_valid_impl(
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    let send_action = draft.to_send_action().unwrap();
 
     user_ctx
-        .with_queue(|queue| send_action.queue(queue))
+        .with_queue(|queue| draft.send(queue))
         .await
         .unwrap();
 

@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use topological_sort::TopologicalSort;
-use tracing::{debug, error, Level};
+use tracing::{debug, debug_span, error, Instrument, Level};
 
 /// Execution context errors
 #[derive(Debug, thiserror::Error)]
@@ -52,6 +52,8 @@ pub enum Error {
     WorkerChannel,
     #[error("Unknown action: {0}")]
     UnknownAction(String),
+    #[error("Replacing an action with dependencies to self")]
+    SelfReferenceDependency,
 }
 
 impl<T> From<SendError<T>> for Error {
@@ -507,6 +509,7 @@ impl Queue {
             &handler,
             &mut action,
             metadata,
+            None,
         )
         .await?;
         debug!("Action queued with id={id}");
@@ -515,6 +518,106 @@ impl Queue {
             local: local_output,
             id,
         })
+    }
+
+    /// Attempt to replace an existing action with an updated version. If the action no longer
+    /// exists or the types do not match, a new action will be queued instead.
+    ///
+    /// A default [`Metadata`] type is assigned to this `action`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action could not be executed locally.
+    pub async fn replace_or_queue_action<T: Action>(
+        &self,
+        existing_id: Id,
+        action: T,
+    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+        self.replace_or_queue_action_with_metadata::<T>(existing_id, action, Metadata::default())
+            .await
+    }
+
+    /// Attempt to replace an existing action with an updated version. If the action no longer
+    /// exists or the types do not match, a new action will be queued instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action could not be executed locally.
+    #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
+    "QueueAction")]
+    pub async fn replace_or_queue_action_with_metadata<T: Action>(
+        &self,
+        existing_id: Id,
+        mut action: T,
+        metadata: Metadata,
+    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+        debug!(
+            "Replacing {} or Queueing action: {} {:?}",
+            existing_id,
+            T::TYPE,
+            metadata
+        );
+        if metadata.dependencies.contains(&existing_id) {
+            return Err(Error::SelfReferenceDependency.into());
+        }
+
+        if !self.shared.has_action::<T>() {
+            error!("Unknown action queued: {}", T::TYPE);
+            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+        }
+
+        let handler = T::Handler::default();
+        let context = self
+            .shared
+            .resolve_execution_context::<T>()
+            .map_err(|e| ActionError::Queue(e.into()))?;
+
+        let (sender, receiver) = oneshot::channel();
+
+        let shared = Arc::clone(&self.shared);
+
+        let future = async move {
+            let r = async {
+                let (local_output, id) = execute_action_local(
+                    &shared,
+                    context.as_ref(),
+                    &handler,
+                    &mut action,
+                    metadata,
+                    Some(existing_id),
+                )
+                .await?;
+                if existing_id == id {
+                    debug!("Action has been updated");
+                } else {
+                    debug!("Action queued with id={id}");
+                }
+
+                Ok(QueuedActionOutput {
+                    local: local_output,
+                    id,
+                })
+            }
+            .instrument(debug_span!(
+                "Queue::replace_or_queue_action",
+                id = ?existing_id
+            ))
+            .await;
+
+            let _ = sender.send(r);
+        }
+        .boxed();
+
+        // This command needs to be deferred to ensure that the executor is not executing this
+        // action while we attempt to replace it.
+        self.sender
+            .send_async(Command::ReplaceOrQueue(future))
+            .await
+            .map_err(|_| Error::WorkerChannel)?;
+
+        receiver
+            .await
+            .map_err(|_| ActionError::Queue(Error::WorkerChannel))?
     }
 
     /// Execute an `action` immediately.
@@ -584,6 +687,7 @@ impl Queue {
                     &handler,
                     &mut action,
                     metadata,
+                    None,
                 )
                 .await?;
                 debug!("Action queued with id={id}");
@@ -635,11 +739,13 @@ impl Queue {
 
     /// Execute all available actions from the queue.
     ///
+    /// Returns the number of executed actions.
+    ///
     /// # Errors
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
-    pub async fn execute_all(&self) -> QueuedResult<()> {
+    pub async fn execute_all(&self) -> QueuedResult<usize> {
         let (sender, receiver) = oneshot::channel();
         self.sender.send_async(Command::ExecuteAll(sender)).await?;
 
@@ -828,10 +934,12 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 enum Command {
     /// Run immediate action
     Apply(BoxFuture<'static, ()>),
+    /// Replace or queue an action
+    ReplaceOrQueue(BoxFuture<'static, ()>),
     /// Execute one queued action
     ExecuteOne(oneshot::Sender<QueuedResult<Option<Id>>>),
     /// Execute all queued actions
-    ExecuteAll(oneshot::Sender<QueuedResult<()>>),
+    ExecuteAll(oneshot::Sender<QueuedResult<usize>>),
     /// Cancel an action and all the actions which depend on this action
     Cancel(Id, oneshot::Sender<QueuedResult<Vec<Id>>>),
     /// Delete an action without cancelling
@@ -855,6 +963,9 @@ impl Debug for Command {
             }
             Command::Delete(id, _) => {
                 write!(f, "Command::Delete({id})")
+            }
+            Command::ReplaceOrQueue(_) => {
+                write!(f, "Command::ReplaceOrQueue")
             }
         }
     }
@@ -945,6 +1056,10 @@ impl BackgroundWorker {
                         error!("Failed to send delete result back to callee");
                     }
                 }
+                Command::ReplaceOrQueue(task) => {
+                    self.wait_on_tasks().await;
+                    task.await;
+                }
             }
         }
         debug!("Terminating action queue background worker");
@@ -996,10 +1111,13 @@ impl BackgroundWorker {
     }
 
     /// See [`Queue::execute_all()`] for more details.
-    async fn execute_all(&self) -> QueuedResult<()> {
+    async fn execute_all(&self) -> QueuedResult<usize> {
         let tether = self.shared.stash.connection();
-        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&tether).await? {}
-        Ok(())
+        let mut counter = 0;
+        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&tether).await? {
+            counter += 1;
+        }
+        Ok(counter)
     }
 
     async fn next_action(
@@ -1054,6 +1172,7 @@ async fn execute_action_local<T: Action>(
     handler: &T::Handler,
     action: &mut T,
     metadata: Metadata,
+    existing_id: Option<Id>,
 ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
     let mut tether = shared.stash.connection();
     let tx = tether.transaction().await?;
@@ -1071,15 +1190,24 @@ async fn execute_action_local<T: Action>(
         Error::from(e)
     })?;
 
-    stored_action.save(&tx).await.map_err(|e| {
-        error!("Failed to store action: {e}");
-        e
-    })?;
+    if let Some(exising_id) = existing_id {
+        stored_action
+            .create_or_update(exising_id, &tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to create or update action: {e}");
+                e
+            })?;
+    } else {
+        stored_action.save(&tx).await.map_err(|e| {
+            error!("Failed to store action: {e}");
+            e
+        })?;
+    }
     tx.commit().await?;
 
     Ok((local_output, stored_action.id.unwrap()))
 }
-
 /// Shared snippet to execute actions remotely.
 async fn execute_action_remote<T: Action>(
     shared: &Shared,

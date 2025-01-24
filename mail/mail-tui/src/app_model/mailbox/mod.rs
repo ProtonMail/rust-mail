@@ -105,6 +105,7 @@ pub enum ComposerMessage {
     Save,
     Send,
     Discard,
+    UpdateDraftSaveId(proton_action_queue::action::Id),
 }
 
 impl From<ComposerMessage> for Messages {

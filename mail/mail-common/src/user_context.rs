@@ -108,7 +108,7 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    pub async fn execute_all_actions(&self) -> QueuedResult<()> {
+    pub async fn execute_all_actions(&self) -> QueuedResult<usize> {
         self.exclusive.execute_all().await
     }
 
