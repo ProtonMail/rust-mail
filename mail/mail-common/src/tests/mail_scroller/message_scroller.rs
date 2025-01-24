@@ -7,6 +7,7 @@ use crate::models::{Message, ScrollData};
 use maplit::btreemap;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
+use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::db::new_test_connection;
@@ -472,4 +473,125 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
         .unwrap();
 
     assert_eq!(items, 5);
+}
+
+#[tokio::test]
+async fn allow_different_filter_types_to_be_stored_in_database() {
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection();
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut scroller_all = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::All)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let mut scroller_read = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Read)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let mut scroller_unread = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Unread)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let bond = tether.transaction().await.unwrap();
+
+    scroller_all.save(&bond).await.unwrap();
+    scroller_read.save(&bond).await.unwrap();
+    scroller_unread.save(&bond).await.unwrap();
+
+    bond.commit().await.unwrap();
+
+    let bond = tether.transaction().await.unwrap();
+
+    scroller_all.save(&bond).await.unwrap();
+    scroller_read.save(&bond).await.unwrap();
+    scroller_unread.save(&bond).await.unwrap();
+
+    bond.commit().await.unwrap();
+
+    let mut scroller_all = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::All)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let mut scroller_read = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Read)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let mut scroller_unread = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Unread)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0)
+        .display_order(0)
+        .build();
+
+    let bond = tether.transaction().await.unwrap();
+
+    scroller_all.save(&bond).await.unwrap();
+    scroller_read.save(&bond).await.unwrap();
+    scroller_unread.save(&bond).await.unwrap();
+
+    bond.commit().await.unwrap();
+
+    let mut scroller_all = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::All)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(1)
+        .display_order(2)
+        .build();
+
+    let mut scroller_read = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Read)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(1)
+        .display_order(2)
+        .build();
+
+    let mut scroller_unread = MessageScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(ReadFilter::Unread)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(1)
+        .display_order(2)
+        .build();
+
+    let bond = tether.transaction().await.unwrap();
+
+    scroller_all.save(&bond).await.unwrap();
+    scroller_read.save(&bond).await.unwrap();
+    scroller_unread.save(&bond).await.unwrap();
+
+    bond.commit().await.unwrap();
+
+    scroller_all.reload(&tether).await.unwrap();
+    scroller_read.reload(&tether).await.unwrap();
+    scroller_unread.reload(&tether).await.unwrap();
+
+    assert_eq!(scroller_all.message_time, 1);
+    assert_eq!(scroller_all.display_order, 2);
+    assert_eq!(scroller_read.message_time, 1);
+    assert_eq!(scroller_read.display_order, 2);
+    assert_eq!(scroller_unread.message_time, 1);
+    assert_eq!(scroller_unread.display_order, 2);
 }

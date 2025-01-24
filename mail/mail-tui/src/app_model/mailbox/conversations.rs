@@ -230,10 +230,13 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::HasMore => {
                         let paginator_clone = self.paginator.clone_paginator();
                         Command::task(async move {
-                            let has_more = paginator_clone.lock().await.has_more().await.unwrap();
+                            let paginator = paginator_clone.lock().await;
+                            let has_more = paginator.has_more().await.unwrap();
+                            let total = paginator.total();
+                            let seen = paginator.seen().await.unwrap();
                             Command::message(Messages::DisplayInfo(
                                 Some("Has more".to_owned()),
-                                has_more.to_string(),
+                                format!("Loaded: {seen}/{total}, Has more: {has_more}"),
                             ))
                         })
                     }

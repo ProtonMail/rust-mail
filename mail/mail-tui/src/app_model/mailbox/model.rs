@@ -538,9 +538,10 @@ impl AppStateHandler for Model {
                 (self.msg_counters.total, self.msg_counters.unread)
             };
             let counters = format!("T:{total:4} U:{unread:4}");
-            let [label_area, _, count_area, other_area] = Layout::horizontal([
+            let [label_area, _, count_area, filter_area, other_area] = Layout::horizontal([
                 Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
                 Constraint::Length(1),
+                Constraint::Length(13),
                 Constraint::Length(13),
                 Constraint::Percentage(100),
             ])
@@ -551,8 +552,8 @@ impl AppStateHandler for Model {
             frame.render_widget(text, label_area);
             frame.render_widget(Text::from(counters), count_area);
             frame.render_widget(
-                Text::from(format!(" | {:?}", self.filter).bold()),
-                other_area,
+                Text::from(format!(" | {:?} | ", self.filter).bold()),
+                filter_area,
             );
             if let State::Conversations(state) = &mut self.state {
                 state.draw_status_bar(frame, other_area);

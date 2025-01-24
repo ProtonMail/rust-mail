@@ -263,6 +263,10 @@ impl<T: MailScrollerSource> MailScroller<T> {
     pub fn total(&self) -> u64 {
         self.total
     }
+
+    pub async fn seen(&self) -> Result<u64, MailContextError> {
+        self.source.visible_items_total(&self.ctx).await
+    }
 }
 
 #[derive(Debug)]
