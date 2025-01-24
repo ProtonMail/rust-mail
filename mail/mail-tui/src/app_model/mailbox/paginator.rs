@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Paginator adapter.
+
 pub struct Paginator<T: MailScrollerSource + 'static> {
     paginator: Arc<Mutex<MailScroller<T>>>,
     _watch_handle: WatchHandle,
@@ -49,6 +50,10 @@ impl<T: MailScrollerSource> Paginator<T> {
             },
             background_command,
         ))
+    }
+
+    pub fn clone_paginator(&self) -> Arc<Mutex<MailScroller<T>>> {
+        Arc::clone(&self.paginator)
     }
 
     pub async fn fetch_more(&self) -> Result<Vec<T::Item>, MailContextError> {

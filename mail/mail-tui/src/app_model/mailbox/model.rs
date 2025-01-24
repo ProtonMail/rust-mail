@@ -550,6 +550,10 @@ impl AppStateHandler for Model {
             let text = Text::from(label_name);
             frame.render_widget(text, label_area);
             frame.render_widget(Text::from(counters), count_area);
+            frame.render_widget(
+                Text::from(format!(" | {:?}", self.filter).bold()),
+                other_area,
+            );
             if let State::Conversations(state) = &mut self.state {
                 state.draw_status_bar(frame, other_area);
             }

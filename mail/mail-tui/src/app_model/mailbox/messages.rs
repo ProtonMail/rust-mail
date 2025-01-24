@@ -524,6 +524,7 @@ impl StateHandler for MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('h') => Command::message(MessageMessage::HasMore.into()),
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
@@ -576,6 +577,28 @@ impl StateHandler for MessagesState {
                 return unstar_message(mbox, id);
             }
             MessageMessage::NextPage(messages) => self.messages.extend(messages),
+            MessageMessage::HasMore => {
+                if let Mode::Label(paginator) = &self.mode {
+                    let paginator_clone = paginator.clone_paginator();
+                    return Command::task(async move {
+                        let has_more = paginator_clone.lock().await.has_more().await.unwrap();
+                        Command::message(Messages::DisplayInfo(
+                            Some("Has more".to_owned()),
+                            has_more.to_string(),
+                        ))
+                    });
+                }
+                if let Mode::Search(paginator) = &self.mode {
+                    let paginator_clone = paginator.clone_paginator();
+                    return Command::task(async move {
+                        let has_more = paginator_clone.lock().await.has_more().await.unwrap();
+                        Command::message(Messages::DisplayInfo(
+                            Some("Has more".to_owned()),
+                            has_more.to_string(),
+                        ))
+                    });
+                }
+            }
         }
         Command::None
     }

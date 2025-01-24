@@ -67,6 +67,7 @@ pub enum ConversationMessage {
     OpenConversationFailed(anyhow::Error),
     Refreshed(Vec<ContextualConversation>),
     NextPage(Vec<ContextualConversation>),
+    HasMore,
     CloseConversation,
 }
 
@@ -90,6 +91,7 @@ pub enum MessageMessage {
     MarkMessageUnread(LocalMessageId),
     StarMessage(LocalMessageId),
     UnstarMessage(LocalMessageId),
+    HasMore,
 }
 
 impl From<MessageMessage> for Messages {

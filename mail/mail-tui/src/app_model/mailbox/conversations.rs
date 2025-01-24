@@ -48,6 +48,7 @@ impl ConversationsState {
             }
         })
     }
+
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
@@ -147,6 +148,7 @@ impl StateHandler for ConversationsState {
                 Command::None
             }
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('h') => Command::message(ConversationMessage::HasMore.into()),
             KeyCode::Char('u') => self
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::MarkConversationUnread(id).into()))
@@ -224,6 +226,16 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
                         Command::None
+                    }
+                    ConversationMessage::HasMore => {
+                        let paginator_clone = self.paginator.clone_paginator();
+                        Command::task(async move {
+                            let has_more = paginator_clone.lock().await.has_more().await.unwrap();
+                            Command::message(Messages::DisplayInfo(
+                                Some("Has more".to_owned()),
+                                has_more.to_string(),
+                            ))
+                        })
                     }
                     _ => Command::None,
                 }
