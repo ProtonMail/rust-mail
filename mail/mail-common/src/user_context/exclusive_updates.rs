@@ -99,7 +99,7 @@ impl MailUserContextExclusive {
     }
 
     /// Execute all pending actions in the queue.
-    pub(crate) async fn execute_pending_actions(&self) -> MailContextResult<()> {
+    pub(crate) async fn execute_pending_actions(&self) -> MailContextResult<usize> {
         let _lock = self.event_loop.read().await;
         Ok(self.action_queue.execute_all().await?)
     }
@@ -123,7 +123,7 @@ impl MailUserContextExclusive {
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
     ///
-    pub(crate) async fn execute_all(&self) -> QueuedResult<()> {
+    pub(crate) async fn execute_all(&self) -> QueuedResult<usize> {
         let _lock = self.event_loop.read().await;
         self.action_queue.execute_all().await
     }

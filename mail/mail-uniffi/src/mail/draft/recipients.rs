@@ -2,8 +2,6 @@ use crate::async_runtime;
 use crate::mail::draft::Draft;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
-use proton_action_queue::queue::ActionError;
-use proton_mail_common::actions::draft;
 use proton_mail_common::draft::recipients::{
     GroupRecipient, MaybeEmptyString, OnBackgroundValidationComplete, Recipient as RealRecipient,
     RecipientEntry, RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList,
@@ -202,24 +200,22 @@ impl ComposerRecipientList {
         })
     }
 
-    async fn save_draft(&self, ctx: &MailUserContext) -> Result<(), ActionError<draft::Save>> {
+    async fn save_draft(&self, ctx: &MailUserContext) -> Result<(), MailContextError> {
         let upgrade = self
             .draft
             .upgrade()
-            .ok_or(ActionError::Action(MailContextError::Other(
-                anyhow::anyhow!("Draft reference no longer valid"),
+            .ok_or(MailContextError::Other(anyhow::anyhow!(
+                "Draft reference no longer valid"
             )))?;
-        let action = {
-            let list = self.list.list();
-            let mut draft = upgrade.instance.write();
-            match self.list_type {
-                ComposerListType::To => draft.to_list = list,
-                ComposerListType::Cc => draft.cc_list = list,
-                ComposerListType::Bcc => draft.bcc_list = list,
-            }
-            draft.to_save_action()
-        };
-        ctx.with_queue(|queue| action.queue(queue)).await?;
+
+        let list = self.list.list();
+        let mut draft = upgrade.instance.write().await;
+        match self.list_type {
+            ComposerListType::To => draft.to_list = list,
+            ComposerListType::Cc => draft.cc_list = list,
+            ComposerListType::Bcc => draft.bcc_list = list,
+        }
+        ctx.with_queue(|queue| draft.save(queue)).await?;
         Ok(())
     }
 }

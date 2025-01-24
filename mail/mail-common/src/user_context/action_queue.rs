@@ -35,7 +35,7 @@ impl MailUserContext {
     }
 
     /// Execute all pending actions in the queue.
-    pub async fn execute_pending_actions(&self) -> MailContextResult<()> {
+    pub async fn execute_pending_actions(&self) -> MailContextResult<usize> {
         self.exclusive.execute_pending_actions().await
     }
 }
