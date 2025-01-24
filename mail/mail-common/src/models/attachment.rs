@@ -192,6 +192,9 @@ impl ModelIdExtension for Attachment {
 impl Attachment {
     /// Load attachment metadata for a given `conversation_id`.
     ///
+    /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
+    /// list we need to get the message body.
+
     /// # Errors
     ///
     /// Return error if the query failed.
@@ -199,14 +202,17 @@ impl Attachment {
         conversation_id: LocalConversationId,
         tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
-                params![conversation_id],
+        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?) AND disposition = ?",
+                params![conversation_id, Disposition::Attachment],
                    tether,
         )
         .await.map(|v| v.map_vec())
     }
 
     /// Load attachment metadata for a given `message_id`.
+    ///
+    /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
+    /// list we need to get the message body.
     ///
     /// # Errors
     ///
@@ -215,8 +221,8 @@ impl Attachment {
         message_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
-                   params![message_id],
+        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?) AND disposition = ?",
+                   params![message_id, Disposition::Attachment],
                    tether,
         )
         .await.map(|v| v.map_vec())

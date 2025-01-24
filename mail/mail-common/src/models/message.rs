@@ -1314,17 +1314,20 @@ impl Message {
 
             #[allow(trivial_casts)]
             bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    message_attachments
-                WHERE
-                    local_message_id = ?
-                    AND local_attachment_id NOT IN ({})
-                ",
+                formatdoc!("
+                    DELETE FROM message_attachments WHERE
+                            local_attachment_id IN (
+                                SELECT local_id FROM attachments
+                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
+                                    message_attachments.local_attachment_id = attachments.local_id
+                                WHERE attachments.disposition = ?
+                                AND attachments.local_id NOT IN ({})
+
+                            )",
                     stash::utils::placeholders(local_ids.len()),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>,
+                Box::new(Disposition::Attachment) as Box<dyn ToSql + Send>]
                     .into_iter()
                     .chain(
                         local_ids
@@ -1336,15 +1339,16 @@ impl Message {
             .await?;
         } else {
             bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    message_attachments
-                WHERE
-                    local_message_id = ?
-                ",
+                formatdoc!("
+                    DELETE FROM message_attachments WHERE
+                            local_attachment_id IN (
+                                SELECT local_id FROM attachments
+                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
+                                    message_attachments.local_attachment_id = attachments.local_id
+                                WHERE attachments.disposition = ?
+                            )"
                 ),
-                params![self.local_id],
+                params![self.local_id, Disposition::Attachment],
             )
             .await?;
         }
