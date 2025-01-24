@@ -35,11 +35,11 @@ pub struct ConversationsState {
 }
 
 impl ConversationsState {
-    pub(super) fn build(mbox: Mailbox, label: Label) -> Command<Messages> {
+    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
         let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
-            match Self::new_impl(ctx, label_id).await {
+            match Self::new_impl(ctx, label_id, filter).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state).into()),
                     background_command,
@@ -48,15 +48,17 @@ impl ConversationsState {
             }
         })
     }
+
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
+        filter: ReadFilter,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    MailScroller::conversations(context, label_id, ReadFilter::All, ITEM_LIMIT)
+                    MailScroller::conversations(context, label_id, filter, ITEM_LIMIT)
                         .await
                 }
                 .boxed()
@@ -146,6 +148,7 @@ impl StateHandler for ConversationsState {
                 Command::None
             }
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('h') => Command::message(ConversationMessage::HasMore.into()),
             KeyCode::Char('u') => self
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::MarkConversationUnread(id).into()))
@@ -223,6 +226,19 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
                         Command::None
+                    }
+                    ConversationMessage::HasMore => {
+                        let paginator_clone = self.paginator.clone_paginator();
+                        Command::task(async move {
+                            let paginator = paginator_clone.lock().await;
+                            let has_more = paginator.has_more().await.unwrap();
+                            let total = paginator.total();
+                            let seen = paginator.seen().await.unwrap();
+                            Command::message(Messages::DisplayInfo(
+                                Some("Has more".to_owned()),
+                                format!("Loaded: {seen}/{total}, Has more: {has_more}"),
+                            ))
+                        })
                     }
                     _ => Command::None,
                 }

@@ -114,10 +114,20 @@ pub struct MessageScrollData {
 impl MessageScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         // NOTE: save should always update existing records.
+        // But as long as we have no support for multiple records as a key
+        // we have to first delete the record and then save it.
         if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
             self.row_id = existing.row_id;
+            if self != &existing {
+                existing.delete(tx).await?;
+                self.row_id = None;
+                <Self as Model>::save(self, tx).await?;
+            }
+        } else {
+            <Self as Model>::save(self, tx).await?;
         }
-        <Self as Model>::save(self, tx).await
+
+        Ok(())
     }
 }
 
@@ -258,10 +268,20 @@ pub struct ConversationScrollData {
 impl ConversationScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         // NOTE: save should always update existing records.
+        // But as long as we have no support for multiple records as a key
+        // we have to first delete the record and then save it.
         if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
             self.row_id = existing.row_id;
+            if self != &existing {
+                existing.delete(tx).await?;
+                self.row_id = None;
+                <Self as Model>::save(self, tx).await?;
+            }
+        } else {
+            <Self as Model>::save(self, tx).await?;
         }
-        <Self as Model>::save(self, tx).await
+
+        Ok(())
     }
 }
 

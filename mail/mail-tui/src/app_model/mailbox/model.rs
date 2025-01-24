@@ -16,7 +16,7 @@ use futures::FutureExt;
 
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
-use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
+use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{
@@ -74,6 +74,7 @@ pub struct Model {
     composer: Option<Composer>,
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
+    filter: ReadFilter,
 }
 
 impl Model {
@@ -103,6 +104,7 @@ impl Model {
             composer: None,
             search: None,
             search_status: None,
+            filter: ReadFilter::All,
         })
     }
 
@@ -114,10 +116,11 @@ impl Model {
     #[must_use]
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
+        let filter = self.filter;
         // Create the background worker.
         Command::batch([
             self.create_background_worker(),
-            Command::task(async {
+            Command::task(async move {
                 let tether = mbox.user_context().user_stash().connection();
                 let label = match Label::find_by_id(mbox.label_id(), &tether).await {
                     Ok(l) => {
@@ -139,9 +142,9 @@ impl Model {
                     }
                 };
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(mbox, label)
+                    ConversationsState::build(mbox, label, filter)
                 } else {
-                    MessagesState::build(mbox, label)
+                    MessagesState::build(mbox, label, filter)
                 }
             }),
         ])
@@ -327,6 +330,18 @@ impl AppStateHandler for Model {
                 KeyCode::Char('c') => {
                     return Command::message(Message::OpenContacts.into());
                 }
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::Unread;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
+                KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::Read;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
+                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::All;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
                 _ => (),
             }
         }
@@ -459,6 +474,14 @@ impl AppStateHandler for Model {
             Span::from("Delete"),
             Span::from(" Crtl+N: ").bold(),
             Span::from("New Msg."),
+            Span::from(" Crtl+A: ").bold(),
+            Span::from("Filter All"),
+            Span::from(" Crtl+R: ").bold(),
+            Span::from("Filter Read"),
+            Span::from(" Crtl+U: ").bold(),
+            Span::from("Filter Unread"),
+            Span::from(" /: ").bold(),
+            Span::from("Search"),
         ];
         let line_2 = vec![
             Span::from(" Shift+▲: ").bold(),
@@ -515,9 +538,10 @@ impl AppStateHandler for Model {
                 (self.msg_counters.total, self.msg_counters.unread)
             };
             let counters = format!("T:{total:4} U:{unread:4}");
-            let [label_area, _, count_area, other_area] = Layout::horizontal([
+            let [label_area, _, count_area, filter_area, other_area] = Layout::horizontal([
                 Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
                 Constraint::Length(1),
+                Constraint::Length(13),
                 Constraint::Length(13),
                 Constraint::Percentage(100),
             ])
@@ -527,6 +551,10 @@ impl AppStateHandler for Model {
             let text = Text::from(label_name);
             frame.render_widget(text, label_area);
             frame.render_widget(Text::from(counters), count_area);
+            frame.render_widget(
+                Text::from(format!(" | {:?} | ", self.filter).bold()),
+                filter_area,
+            );
             if let State::Conversations(state) = &mut self.state {
                 state.draw_status_bar(frame, other_area);
             }
