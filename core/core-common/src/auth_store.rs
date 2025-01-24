@@ -14,7 +14,7 @@ use stash::orm::Model;
 use stash::stash::Stash;
 use std::ops::Deref;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
@@ -52,18 +52,25 @@ impl AuthStore {
     }
 
     async fn try_get_auth(&self) -> Result<Auth, StoreError> {
+        debug!("waht");
         let key = self.encryption_key()?;
+        debug!("key");
         let tether = self.stash.connection();
+        debug!("conn");
 
         let Some(account) = (if let Some(id) = &self.user_id {
+            debug!("Get account {}", id);
             CoreAccount::find_by_id(id.to_owned(), &tether).await?
         } else {
+            debug!("bruh");
             None
         }) else {
+            debug!("bruh2");
             return Ok(Auth::None);
         };
 
         let Some(session) = (if let Some(id) = &self.session_id {
+            debug!("Get session {}", id);
             CoreSession::find_by_id(id.to_owned(), &tether).await?
         } else {
             None
@@ -113,11 +120,13 @@ impl Store for AuthStore {
     async fn get_auth(&self) -> Auth {
         info!("getting auth from store");
 
-        self.try_get_auth()
-            .map_err(|e| format!("failed to get auth: {e}"))
-            .inspect_err(|e| error!(e))
-            .unwrap_or_else(|_| Auth::None)
-            .await
+        match self.try_get_auth().await {
+            Ok(auth) => auth,
+            Err(e) => {
+                error!("failed to get auth: {e}");
+                Auth::None
+            }
+        }
     }
 
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError> {

@@ -6,6 +6,7 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
 flume = { workspace = true }
 indoc = { workspace = true }
 parking_lot = { workspace = true }
@@ -23,9 +24,9 @@ sqlite-watcher = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]
-futures = { workspace = true }
 tempdir = { workspace = true }
 tempfile = { workspace = true }
+futures = { workspace = true }
 
 [features]
 default = []

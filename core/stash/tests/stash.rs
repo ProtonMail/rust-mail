@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use futures::executor::block_on;
 use rusqlite::hooks::Action;
 use stash::params;
 use stash::stash::{Bond, Stash, Tether};
@@ -62,7 +61,7 @@ async fn query_tx(tx: &Bond<'_>, value: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod concurrency_basic_sync {
-    use super::*;
+    use stash::stash::Stash;
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
@@ -405,35 +404,18 @@ mod concurrency_async_threads {
 
 #[cfg(test)]
 mod concurrency_std_threads {
+    use tokio::runtime::Runtime;
+
     use super::*;
-
-    #[tokio::test]
-    async fn basic_query_without_transactions() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let conn = stash.connection();
-
-        let result = spawn(move || {
-            block_on(async {
-                create_table(&conn).await;
-                insert(&conn, "test").await;
-                query(&conn, "test").await
-            })
-        })
-        .join()
-        .unwrap();
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "test".to_owned());
-    }
 
     #[tokio::test]
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        let rt = Runtime::new().unwrap();
 
         let result = spawn(move || {
-            block_on(async {
+            rt.block_on(async {
                 let mut conn = stash.connection();
                 let tx = conn
                     .transaction()
@@ -465,7 +447,8 @@ mod concurrency_std_threads {
 
         // First thread, with first transaction
         let handle1 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn1 = stash1.connection();
                 let tx1 = conn1
                     .transaction()
@@ -480,7 +463,8 @@ mod concurrency_std_threads {
 
         // Second thread, with second transaction
         let handle2 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn2 = stash2.connection();
                 let tx2 = conn2
                     .transaction()
@@ -536,7 +520,8 @@ mod concurrency_mixed {
 
         // First thread (std), with first transaction
         let handle1 = spawn(move || {
-            Runtime::new().unwrap().block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn1 = stash1.connection();
                 let tx1 = conn1
                     .transaction()
@@ -552,7 +537,8 @@ mod concurrency_mixed {
 
         // Second thread (std), with second transaction
         let handle2 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn2 = stash2.connection();
                 let tx2 = conn2
                     .transaction()

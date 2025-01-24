@@ -4523,7 +4523,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.35.1"
+version = "0.36.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5746,6 +5746,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 name = "stash"
 version = "0.2.0"
 dependencies = [
+ "anyhow",
  "fastrand",
  "flume",
  "futures",

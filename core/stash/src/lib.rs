@@ -42,7 +42,6 @@
     unreachable_pub
 )]
 #![warn(
-    let_underscore_drop,
     meta_variable_misuse,
     missing_copy_implementations,
     missing_debug_implementations,
@@ -59,10 +58,14 @@
 )]
 // Clippy lints
 // Clippy lint categories
-#![warn(clippy::cargo, clippy::nursery, clippy::pedantic)]
+#![warn(clippy::cargo, clippy::pedantic)]
 // Clippy cargo lints
 #![deny(clippy::negative_feature_names, clippy::wildcard_dependencies)]
-#![allow(clippy::cargo_common_metadata, clippy::multiple_crate_versions)]
+#![allow(
+    clippy::cargo_common_metadata,
+    clippy::multiple_crate_versions,
+    clippy::option_if_let_else
+)]
 // Clippy pedantic lints
 #![deny(clippy::pub_underscore_fields)]
 // Clippy overridden allows
@@ -73,11 +76,10 @@
 )]
 // Clippy restriction lints
 #![forbid(
-    // clippy::allow_attributes_without_reason,
     clippy::dbg_macro,
     clippy::exit,
     clippy::missing_assert_message,
-    clippy::missing_docs_in_private_items,
+    // clippy::missing_docs_in_private_items,
     clippy::mod_module_files,
     clippy::multiple_inherent_impl,
     clippy::panic_in_result_fn,
@@ -93,7 +95,6 @@
     clippy::error_impl_error,
     clippy::exhaustive_enums,
     clippy::exhaustive_structs,
-    clippy::expect_used,
     clippy::float_cmp_const,
     clippy::fn_to_numeric_cast_any,
     clippy::format_push_string,
@@ -103,13 +104,10 @@
     clippy::integer_division,
     clippy::lossy_float_literal,
     clippy::mem_forget,
-    clippy::panic,
     clippy::print_stderr,
     clippy::print_stdout,
     clippy::rc_mutex,
     clippy::try_err,
-    clippy::unwrap_in_result,
-    clippy::unwrap_used,
     clippy::wildcard_enum_match_arm
 )]
 #![warn(
@@ -129,16 +127,12 @@
     clippy::missing_asserts_for_indexing,
     clippy::mixed_read_write_in_expression,
     clippy::mutex_atomic,
-    clippy::pattern_type_mismatch,
     clippy::pub_without_shorthand,
     clippy::rc_buffer,
     clippy::redundant_type_annotations,
     clippy::rest_pat_in_fully_bound_structs,
     clippy::same_name_method,
     clippy::semicolon_outside_block,
-    clippy::shadow_reuse,
-    clippy::shadow_same,
-    clippy::shadow_unrelated,
     clippy::string_lit_chars_any,
     clippy::string_slice,
     clippy::suspicious_xor_used_as_pow,
@@ -146,7 +140,6 @@
     clippy::unnecessary_safety_comment,
     clippy::unnecessary_safety_doc,
     clippy::unneeded_field_pattern,
-    clippy::unreachable,
     clippy::unseparated_literal_suffix,
     clippy::use_debug,
     clippy::verbose_file_reads
