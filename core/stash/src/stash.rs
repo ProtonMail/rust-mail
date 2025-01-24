@@ -410,6 +410,7 @@ use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Weak};
 use std::thread::{spawn, JoinHandle};
 use std::time::Instant;
@@ -417,10 +418,6 @@ use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-#[cfg(feature = "stats_log")]
-use tokio::time::interval;
-#[cfg(feature = "stats_log")]
-use tracing::info;
 use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
@@ -690,7 +687,7 @@ pub enum StashError {
 struct Command {
     /// The unique global identifier of the command, relative to the [`Stash`]
     /// instance it is associated with.
-    id: u32,
+    id: u64,
 
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -722,18 +719,10 @@ impl Command {
     ///                   used just this once.
     ///
     fn new(
-        stash: &Stash,
         channel: Option<OneshotSender<Result<(), StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
     ) -> Self {
-        let mut stats = stash.stats.lock();
-        stats.active_command_count = stats.active_command_count.saturating_add(1);
-        stats.total_commands_run = stats.total_commands_run.saturating_add(1);
-        if stats.active_command_count > stats.max_command_count {
-            stats.max_command_count = stats.active_command_count;
-        }
-        let id = stats.total_commands_run;
-        drop(stats);
+        let id = TOTAL_COMMANDS_RUN.fetch_add(1, Ordering::Relaxed);
 
         Self {
             id,
@@ -743,6 +732,9 @@ impl Command {
         }
     }
 }
+
+/// This is used to assign ids to [`Command`]s
+pub static TOTAL_COMMANDS_RUN: AtomicU64 = AtomicU64::new(0);
 
 impl OperationLogic for Command {
     type Output = ();
@@ -792,7 +784,7 @@ impl OperationLogic for Command {
 struct Instruction {
     /// The unique global identifier of the instruction, relative to the
     /// [`Stash`] instance it is associated with.
-    id: u32,
+    id: u64,
 
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -815,9 +807,6 @@ struct Instruction {
 
     /// The time at which the operation started.
     start_time: Instant,
-
-    /// The associated [`Stash`] instance for the operation.
-    stash: Stash,
 }
 
 impl Instruction {
@@ -840,20 +829,12 @@ impl Instruction {
     ///                   trait objects that implement the [`ToSql`] trait, and
     ///                   are `Send` so that they can be sent between threads.
     fn new(
-        stash: Stash,
         channel: Option<OneshotSender<Result<usize, StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
         query: String,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Self {
-        let mut stats = stash.stats.lock();
-        stats.active_query_count = stats.active_query_count.saturating_add(1);
-        stats.total_queries_run = stats.total_queries_run.saturating_add(1);
-        if stats.active_query_count > stats.max_query_count {
-            stats.max_query_count = stats.active_query_count;
-        }
-        let id = stats.total_queries_run;
-        drop(stats);
+        let id = TOTAL_COMMANDS_RUN.fetch_add(1, Ordering::Relaxed);
 
         Self {
             id,
@@ -862,7 +843,6 @@ impl Instruction {
             params,
             query,
             start_time: Instant::now(),
-            stash,
         }
     }
 }
@@ -991,7 +971,7 @@ impl PartialEq for Notification {
 struct Query {
     /// The unique global identifier of the query, relative to the [`Stash`]
     /// instance it is associated with.
-    id: u32,
+    id: u64,
 
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -1019,9 +999,6 @@ struct Query {
 
     /// The time at which the operation started.
     start_time: Instant,
-
-    /// The associated [`Stash`] instance for the operation.
-    stash: Stash,
 }
 
 impl Query {
@@ -1049,21 +1026,13 @@ impl Query {
     ///                   library is not thread-safe.
     ///
     fn new(
-        stash: Stash,
         channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
         query: String,
         params: Vec<Box<dyn ToSql + Send>>,
         converter: Convertor,
     ) -> Self {
-        let mut stats = stash.stats.lock();
-        stats.active_query_count = stats.active_query_count.saturating_add(1);
-        stats.total_queries_run = stats.total_queries_run.saturating_add(1);
-        if stats.active_query_count > stats.max_query_count {
-            stats.max_query_count = stats.active_query_count;
-        }
-        let id = stats.total_queries_run;
-        drop(stats);
+        let id = TOTAL_COMMANDS_RUN.fetch_add(1, Ordering::Relaxed);
 
         Self {
             id,
@@ -1073,7 +1042,6 @@ impl Query {
             params,
             query,
             start_time: Instant::now(),
-            stash,
         }
     }
 }
@@ -1229,18 +1197,14 @@ pub struct Stash {
     /// real-time updates to any subscribers that have registered interest in
     /// changes to the database for given tables.
     watcher: Arc<Watcher>,
-
-    /// Statistics gathered over the lifetime of the [`Stash`].
-    stats: Arc<Mutex<Stats>>,
 }
 
 impl Debug for Stash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Stash")
-            .field("handle", &self.handle)
-            .field("queue", &self.queue)
-            .field("stats", &self.stats)
-            .finish_non_exhaustive()
+        let mut r = f.debug_struct("Stash");
+        _ = r.field("handle", &self.handle).field("queue", &self.queue);
+
+        r.finish_non_exhaustive()
     }
 }
 
@@ -1286,7 +1250,6 @@ impl Stash {
             handle: Arc::new(()),
             queue: sender,
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
-            stats: Arc::new(Mutex::new(Stats::default())),
         };
         Worker::start(path, receiver, stash.clone())?;
         Ok(stash)
@@ -1328,13 +1291,6 @@ impl Stash {
     pub fn connection(&self) -> Tether {
         let handle = Arc::new(AtomicU32::new(1));
         debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
-        let mut stats = self.stats.lock();
-        stats.active_tether_count = stats.active_tether_count.saturating_add(1);
-        stats.total_tethers_created = stats.total_tethers_created.saturating_add(1);
-        if stats.active_tether_count > stats.max_tether_count {
-            stats.max_tether_count = stats.active_tether_count;
-        }
-        drop(stats);
         Tether {
             handle,
             queue: self.queue.clone(),
@@ -1453,12 +1409,6 @@ impl Stash {
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
         Ok(receiver)
     }
-
-    /// Gets statistics gathered about the [`Stash`] instance.
-    #[must_use]
-    pub fn stats(&self) -> Stats {
-        self.stats.lock().clone()
-    }
 }
 
 impl Eq for Stash {}
@@ -1477,124 +1427,6 @@ pub struct WatcherHandle {
     pub receiver: flume::Receiver<()>,
     /// The handle to stop the watcher.
     pub handle: DropRemoveTableObserverHandle,
-}
-
-/// Statistics about the current state of the [`Stash`] instance.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-#[non_exhaustive]
-pub struct Stats {
-    /// The number of active commands, that is, commands sent and waiting for a
-    /// reply.
-    pub active_command_count: u32,
-
-    /// The number of active queries, that is, queries sent and waiting for a
-    /// reply.
-    pub active_query_count: u32,
-
-    /// The number of active subscribers to database change notifications.
-    pub active_subscriber_count: u32,
-
-    /// The number of active tethers, i.e. database connections. Note that these
-    /// may or may not be technically active. It includes those created and not
-    /// yet used, as well as those used and finished with and not yet
-    /// cleaned-up.
-    pub active_tether_count: u32,
-
-    /// A list of the currently-active transactions, with their unique IDs and
-    /// the time they were started in a tuple, stored against the tether handle.
-    /// This is used to track the lifetime of transactions. The tether handle
-    /// pointer values are stored here for matching purposes, but not actually
-    /// used for memory interaction (which would be unsafe, and require some
-    /// additional tracking). Note that to be thread-safe, the pointers are
-    /// stored as [`usize`] instead of `*const ()`. Note that the transactions
-    /// may or may not be technically active, because they may have been started
-    /// and are yet to do anything.
-    pub active_transactions: HashMap<usize, (u32, Instant)>,
-
-    /// The average amount of time that a command has taken to run.
-    pub average_command_runtime: Duration,
-
-    /// The average amount of time that a query has taken to run.
-    pub average_query_runtime: Duration,
-
-    /// The average amount of time that a tether has existed for.
-    pub average_tether_lifetime: Duration,
-
-    /// The average amount of time that a transaction has been open for.
-    pub average_transaction_lifetime: Duration,
-
-    /// The highest number of concurrent commands.
-    pub max_command_count: u32,
-
-    /// The longest amount of time that a command has taken to run, and the
-    /// command ID responsible.
-    pub max_command_runtime: (Duration, u32),
-
-    /// The highest number of concurrent queries.
-    pub max_query_count: u32,
-
-    /// The longest amount of time that a query has taken to run, and the query
-    /// ID responsible.
-    pub max_query_runtime: (Duration, u32),
-
-    /// The highest number of concurrent subscribers.
-    pub max_subscriber_count: u32,
-
-    /// The highest number of concurrent tethers.
-    pub max_tether_count: u32,
-
-    /// The longest amount of time that a tether has existed for, and the tether
-    /// ID responsible.
-    pub max_tether_lifetime: (Duration, usize),
-
-    /// The highest number of concurrent transactions.
-    pub max_transaction_count: u32,
-
-    /// The longest amount of time that a transaction has been open for, and the
-    /// tether ID responsible.
-    pub max_transaction_lifetime: (Duration, u32),
-
-    /// The number of commands executed since the [`Stash`] instance was
-    /// created. This is also used to give each command a unique ID for tracking
-    /// purposes.
-    pub total_commands_run: u32,
-
-    /// The total time spent executing commands since the [`Stash`] instance was
-    /// created.
-    pub total_command_time: Duration,
-
-    /// The number of notifications sent to subscribers since the [`Stash`]
-    /// instance was created.
-    pub total_notifications_sent: u32,
-
-    /// The number of queries executed since the [`Stash`] instance was created.
-    /// This is also used to give each query a unique ID for tracking purposes.
-    pub total_queries_run: u32,
-
-    /// The total time spent executing queries since the [`Stash`] instance was
-    /// created.
-    pub total_query_time: Duration,
-
-    /// The total number of subscribers created since the [`Stash`] instance was
-    /// created.
-    pub total_subscribers_created: u32,
-
-    /// The total number of tethers created since the [`Stash`] instance was
-    /// created.
-    pub total_tethers_created: u32,
-
-    /// The total time spent executing tethers since the [`Stash`] instance was
-    /// created.
-    pub total_tether_time: Duration,
-
-    /// The total number of transactions started since the [`Stash`] instance
-    /// was created. This is also used to give each transaction a unique ID for
-    /// tracking purposes.
-    pub total_transactions_started: u32,
-
-    /// The total time spent executing transactions since the [`Stash`] instance
-    /// was created.
-    pub total_transaction_time: Duration,
 }
 
 /// A subscription operation to be executed by the worker.
@@ -2087,7 +1919,6 @@ impl Tether {
     async fn transaction_(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
-            &self.stash,
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -2202,27 +2033,9 @@ impl Drop for Tether {
             // There are still other references to this Tether
             return;
         }
-        let time = self.start_time.elapsed();
-        let mut stats = self.stash.stats.lock();
-        stats.active_tether_count = stats.active_tether_count.saturating_sub(1);
-        stats.total_tether_time = stats.total_tether_time.saturating_add(time);
-        stats.average_tether_lifetime = stats
-            .total_tether_time
-            .checked_div(stats.total_tethers_created)
-            .unwrap_or_default();
-        if time > stats.max_tether_lifetime.0 {
-            stats.max_tether_lifetime = (time, Arc::downgrade(&self.handle).as_ptr() as usize);
-        }
-        drop(stats);
-        #[cfg(feature = "stats_log")]
-        debug!(
-            "Tether ({:p}): Drop (lived for {time:?})",
-            Arc::as_ptr(&self.handle)
-        );
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
-                &self.stash,
                 None,
                 Some(Arc::clone(&self.handle)),
             )))
@@ -2300,7 +2113,6 @@ impl<'tether> Bond<'tether> {
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
-            &self.tether.stash,
             Some(that_end),
             Some(Arc::clone(&self.tether.handle)),
         ));
@@ -2347,7 +2159,6 @@ impl<'tether> Bond<'tether> {
     pub async fn rollback(self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command::new(
-            &self.tether.stash,
             Some(that_end),
             Some(Arc::clone(&self.tether.handle)),
         ));
@@ -2380,7 +2191,6 @@ impl Drop for Bond<'_> {
         if self
             .queue
             .send(Operation::RollbackTransaction(Command::new(
-                &self.tether.stash,
                 None,
                 Some(Arc::clone(&self.tether.handle)),
             )))
@@ -2417,9 +2227,6 @@ struct TetheredWorker {
 
     /// The sender side of the tethered worker's queue.
     queue: QueueSender<Operation>,
-
-    /// The associated [`Stash`] instance.
-    stash: Stash,
 
     /// The join handle for the thread in which the tethered worker runs.
     thread_handle: Option<JoinHandle<()>>,
@@ -2487,49 +2294,12 @@ impl TetheredWorker {
                                 "Failed to send NotifyCommitTransaction operation to main queue"
                             );
                         }
-                        {
-                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
-                            let mut stats = stash.stats.lock();
-                            if let Some(info) = stats.active_transactions.remove(&handle_id) {
-                                let t_time = info.1.elapsed();
-                                stats.total_transaction_time =
-                                    stats.total_transaction_time.saturating_add(t_time);
-                                stats.average_transaction_lifetime = stats
-                                    .total_transaction_time
-                                    .checked_div(stats.total_transactions_started)
-                                    .unwrap_or_default();
-                                if t_time > stats.max_transaction_lifetime.0 {
-                                    stats.max_transaction_lifetime = (t_time, info.0);
-                                }
-                                drop(stats);
-                                #[cfg(feature = "stats_log")]
-                                debug!(
-                                    "Tether ({:p}): Transaction comitted (id: {}, lived for {}µs)",
-                                    conn_handle.as_ptr(),
-                                    info.0,
-                                    t_time.as_micros(),
-                                );
-                            }
-                        };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction), stash);
                     }
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
-                {
-                    let time = command.start_time().elapsed();
-                    let mut stats = stash.stats.lock();
-                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
-                    stats.total_command_time = stats.total_command_time.saturating_add(time);
-                    stats.average_command_runtime = stats
-                        .total_command_time
-                        .checked_div(stats.total_commands_run)
-                        .unwrap_or_default();
-                    if time > stats.max_command_runtime.0 {
-                        stats.max_command_runtime = (time, command.id);
-                    }
-                };
             }
             Operation::Instruct(mut instruction) => {
                 debug!(
@@ -2549,27 +2319,6 @@ impl TetheredWorker {
                     ),
                     stash,
                 );
-                {
-                    let time = instruction.start_time().elapsed();
-                    let mut stats = stash.stats.lock();
-                    stats.active_query_count = stats.active_query_count.saturating_sub(1);
-                    stats.total_query_time = stats.total_query_time.saturating_add(time);
-                    stats.average_query_runtime = stats
-                        .total_query_time
-                        .checked_div(stats.total_queries_run)
-                        .unwrap_or_default();
-                    if time > stats.max_query_runtime.0 {
-                        stats.max_query_runtime = (time, instruction.id);
-                    }
-                    drop(stats);
-                    #[cfg(feature = "stats_log")]
-                    debug!(
-                        "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
-                        instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
-                        instruction.id,
-                        time.as_micros(),
-                    );
-                }
             }
             Operation::Publish(_) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -2597,27 +2346,6 @@ impl TetheredWorker {
                     ),
                     stash,
                 );
-                {
-                    let time = query.start_time().elapsed();
-                    let mut stats = stash.stats.lock();
-                    stats.active_query_count = stats.active_query_count.saturating_sub(1);
-                    stats.total_query_time = stats.total_query_time.saturating_add(time);
-                    stats.average_query_runtime = stats
-                        .total_query_time
-                        .checked_div(stats.total_queries_run)
-                        .unwrap_or_default();
-                    if time > stats.max_query_runtime.0 {
-                        stats.max_query_runtime = (time, query.id);
-                    }
-                    drop(stats);
-                    #[cfg(feature = "stats_log")]
-                    debug!(
-                        "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
-                        query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
-                        query.id,
-                        time.as_micros(),
-                    );
-                }
             }
             Operation::RollbackTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
@@ -2641,49 +2369,12 @@ impl TetheredWorker {
                                 "Failed to send NotifyRollbackTransaction operation to main queue"
                             );
                         }
-                        {
-                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
-                            let mut stats = stash.stats.lock();
-                            if let Some(info) = stats.active_transactions.remove(&handle_id) {
-                                let t_time = info.1.elapsed();
-                                stats.total_transaction_time =
-                                    stats.total_transaction_time.saturating_add(t_time);
-                                stats.average_transaction_lifetime = stats
-                                    .total_transaction_time
-                                    .checked_div(stats.total_transactions_started)
-                                    .unwrap_or_default();
-                                if t_time > stats.max_transaction_lifetime.0 {
-                                    stats.max_transaction_lifetime = (t_time, info.0);
-                                }
-                                drop(stats);
-                                #[cfg(feature = "stats_log")]
-                                debug!(
-                                    "Tether ({:p}): Transaction rolled back (id: {}, lived for {}µs)",
-                                    conn_handle.as_ptr(),
-                                    info.0,
-                                    t_time.as_micros(),
-                                );
-                            }
-                        };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction), stash);
                     }
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
-                {
-                    let time = command.start_time().elapsed();
-                    let mut stats = stash.stats.lock();
-                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
-                    stats.total_command_time = stats.total_command_time.saturating_add(time);
-                    stats.average_command_runtime = stats
-                        .total_command_time
-                        .checked_div(stats.total_commands_run)
-                        .unwrap_or_default();
-                    if time > stats.max_command_runtime.0 {
-                        stats.max_command_runtime = (time, command.id);
-                    }
-                };
             }
             Operation::StartTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
@@ -2694,21 +2385,6 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if transaction.is_none() {
-                        {
-                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
-                            let mut stats = stash.stats.lock();
-                            stats.total_transactions_started =
-                                stats.total_transactions_started.saturating_add(1);
-                            let info = (stats.total_transactions_started, Instant::now());
-                            let _: Option<(u32, Instant)> =
-                                stats.active_transactions.insert(handle_id, info);
-                            #[allow(clippy::cast_possible_truncation)]
-                            if stats.active_transactions.len() as u32 > stats.max_transaction_count
-                            {
-                                stats.max_transaction_count =
-                                    stats.active_transactions.len() as u32;
-                            }
-                        };
                         // We call new_unchecked() here because new() requires a mutable borrow.
                         // Being unchecked does not matter, as we perform the necessary checks
                         // ourselves.
@@ -2780,19 +2456,6 @@ impl TetheredWorker {
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
-                {
-                    let time = command.start_time().elapsed();
-                    let mut stats = stash.stats.lock();
-                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
-                    stats.total_command_time = stats.total_command_time.saturating_add(time);
-                    stats.average_command_runtime = stats
-                        .total_command_time
-                        .checked_div(stats.total_commands_run)
-                        .unwrap_or_default();
-                    if time > stats.max_command_runtime.0 {
-                        stats.max_command_runtime = (time, command.id);
-                    }
-                };
             }
             Operation::Subscribe(mut subscription) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -2898,7 +2561,7 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    &stash_clone,
+                    &stash,
                     &queue,
                 );
             } else {
@@ -2948,7 +2611,6 @@ impl TetheredWorker {
         Self {
             conn_handle,
             queue: sender,
-            stash,
             thread_handle: Some(thread_handle),
         }
     }
@@ -2960,7 +2622,6 @@ impl Drop for TetheredWorker {
             if self
                 .queue
                 .send(Operation::CloseConnection(Command::new(
-                    &self.stash,
                     None,
                     Some(Arc::clone(&handle)),
                 )))
@@ -3168,32 +2829,12 @@ impl Worker {
                             spawn_blocking(move || {
                                 // Note: The query count got incremented when the Instruction was created.
                                 instruction.send_back(
-                                    instruction
-                                        .run(&AgnosticConnection::Unbound(&connection), stash.clone()), &stash,
+                                    instruction.run(
+                                        &AgnosticConnection::Unbound(&connection),
+                                        stash.clone(),
+                                    ),
+                                    &stash,
                                 );
-                                {
-                                    let time = instruction.start_time().elapsed();
-                                    let mut stats = instruction.stash.stats.lock();
-                                    stats.active_query_count =
-                                        stats.active_query_count.saturating_sub(1);
-                                    stats.total_query_time =
-                                        stats.total_query_time.saturating_add(time);
-                                    stats.average_query_runtime = stats
-                                        .total_query_time
-                                        .checked_div(stats.total_queries_run)
-                                        .unwrap_or_default();
-                                    if time > stats.max_query_runtime.0 {
-                                        stats.max_query_runtime = (time, instruction.id);
-                                    }
-                                    drop(stats);
-                                    #[cfg(feature = "stats_log")]
-                                    debug!(
-                                        "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
-                                        instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
-                                        instruction.id,
-                                        time.as_micros(),
-                                    );
-                                }
                             })
                             .await
                             .unwrap_or_else(|err| {
@@ -3263,29 +2904,6 @@ impl Worker {
                                     ),
                                     &stash,
                                 );
-                                {
-                                    let time = query.start_time().elapsed();
-                                    let mut stats = query.stash.stats.lock();
-                                    stats.active_query_count =
-                                        stats.active_query_count.saturating_sub(1);
-                                    stats.total_query_time =
-                                        stats.total_query_time.saturating_add(time);
-                                    stats.average_query_runtime = stats
-                                        .total_query_time
-                                        .checked_div(stats.total_queries_run)
-                                        .unwrap_or_default();
-                                    if time > stats.max_query_runtime.0 {
-                                        stats.max_query_runtime = (time, query.id);
-                                    }
-                                    drop(stats);
-                                    #[cfg(feature = "stats_log")]
-                                    debug!(
-                                        "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
-                                        query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
-                                        query.id,
-                                        time.as_micros(),
-                                    );
-                                }
                             })
                             .await
                             .unwrap_or_else(|err| {
@@ -3408,22 +3026,6 @@ impl Worker {
                 stash: stash.clone(),
                 tethers: HashMap::new(),
             };
-
-            #[cfg(feature = "stats_log")]
-            let _handle = worker.runtime.spawn(async move {
-                let mut last_stats = None;
-                let mut stats_interval = interval(Duration::from_secs(1));
-                #[allow(clippy::infinite_loop)]
-                #[allow(clippy::let_underscore_untyped)]
-                loop {
-                    let _ = stats_interval.tick().await;
-                    let current_stats = stash.stats();
-                    if last_stats.as_ref() != Some(&current_stats) {
-                        info!("Statistics: {:?}", current_stats);
-                        last_stats = Some(current_stats);
-                    }
-                }
-            });
 
             while let Ok(operation) = receiver.recv() {
                 let mut is_connection_close = false;
@@ -3633,10 +3235,6 @@ trait OperationLogic {
     ///
     #[allow(clippy::used_underscore_binding)]
     fn send_back(&mut self, result: Result<Self::Output, StashError>, _stash: &Stash) {
-        #[cfg(feature = "stats_log")]
-        if result.is_err() {
-            error!("Stats at time of error: {:?}", _stash.stats());
-        }
         if let Some(channel) = self.channel().take() {
             // If sending down the oneshot channel fails, send() returns the message to
             // us. It's not particularly interesting what that message is, as we never
@@ -3819,7 +3417,6 @@ async fn perform_execute<Q: Into<String> + Send>(
 ) -> Result<usize, StashError> {
     let (that_end, this_end) = oneshot::channel();
     let operation = Operation::Instruct(Instruction::new(
-        stash.clone(),
         Some(that_end),
         conn_handle,
         query.into(),
@@ -3918,7 +3515,6 @@ where
 {
     let (that_end, this_end) = oneshot::channel();
     let operation = Operation::Query(Query::new(
-        stash.clone(),
         Some(that_end),
         conn_handle,
         query.into(),
