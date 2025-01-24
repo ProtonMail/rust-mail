@@ -137,10 +137,12 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
         .await
         .unwrap();
-    let actual = scroller.all_items().await.unwrap();
     let expected = expected_conversations(page_size, REMOTE_LABEL_ID, &data).unwrap();
-
+    let actual = scroller.fetch_more().await.unwrap();
     assert_eq!(actual, expected);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual, expected);
+
     assert!(scroller.has_more().await.unwrap());
 
     let actual = scroller.fetch_more().await.unwrap();
@@ -174,8 +176,15 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
         .await
         .unwrap();
 
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items can be read only when we progress with `fetch_more`
+    let expected = scroller.fetch_more().await.unwrap();
     let mut actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 1);
+    assert_eq!(actual, expected);
     let actual = actual.pop().unwrap();
     assert_eq!(actual.remote_id, conv_id!("myconv"));
     assert!(!scroller.has_more().await.unwrap());
@@ -192,7 +201,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size, 3).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 4).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -210,7 +219,8 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
         MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
             .await
             .unwrap();
-
+    // Conversations can be accessed only when progressed.
+    scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
 
@@ -257,14 +267,13 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     );
     assert!(!scroller.has_more().await.unwrap());
 
-    // Cached - it will trigger one more background requests for pages as we fetch more
-    // This is because cursor have only two pages in cache, which means we will try to get new page while progressing
-    // to the second page.
+    // Cached - it will trigger two more background requests for pages as we fetch more
+    // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
     let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
         .await
         .unwrap();
-
+    scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
     let actual_rids = actual
@@ -343,7 +352,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     // At this point we have a scroller with one page loaded and one which may be yet loading.
     // There is a case in which there might be a race and notification will be sent before the second page is loaded.
     // This does not hurt anyone but we cannot be sure that we will receive the notification here.
-
+    scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
     let actual_rids = actual

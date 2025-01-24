@@ -44,6 +44,9 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         }
     }
 
+    /// Total number of items to load from the database.
+    /// Implementator should use underlying counters structure to deterimn
+    /// How many items in total are there to paginate over.
     fn total(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
@@ -51,20 +54,32 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     ) -> impl Future<Output = Result<u64, AppError>> + Send;
 
     /// Query to get the data of associated type Model from the database.
+    ///
+    /// # Arguments
+    /// * filter - determin the read/unread/all status of items to paginate over
+    /// * limit - limit the number of items to load
+    /// * require_remote_id - if the remote_id is required for the item
+    ///     this parameter ensures that remote_id is defined in database
+    ///     so the item can be used to request more pages
+    /// * offset - offset of the items to load, it is used for loading cached partial pages
+    ///
     fn query(
         filter: ReadFilter,
         limit: Option<usize>,
         require_remote_id: bool,
         offset: Option<u64>,
     ) -> String;
-    //TODO:
-    // fn params(&self) -> Vec<Box<dyn ToSql + Send>>;
+
     /// Conversion between associated types of Model and Item.
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
+
     /// Get the time of the item.
     fn time(item: &Self::Item) -> u64;
+
     /// Get the display order of the item.
     fn display_order(item: &Self::Item) -> u64;
+
+    /// List of tables that are watched by the scroll data.
     fn watched_tables() -> Vec<String>;
 }
 
@@ -581,14 +596,14 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// further to the end of the downloaded list of elements.
     ///
     pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.end = self.data(tether).await?.into();
+        self.end = self.scroll_data(tether).await?.into();
 
         Ok(())
     }
 
     /// Get the underlying "data" to which the end cursor points to.
     ///
-    pub async fn data(&self, tether: &Tether) -> Result<T, StashError> {
+    pub async fn scroll_data(&self, tether: &Tether) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as
         // they should be the same however `end` var is just shorter.
@@ -640,20 +655,25 @@ impl SearchScrollData {
         SearchScrollData::find_first("ORDER BY display_order DESC", vec![], tether).await
     }
 
-    pub async fn last_remote_message_id(tether: &Tether) -> Result<Option<MessageId>, StashError> {
+    pub async fn last_remote_message_id_and_time(
+        tether: &Tether,
+    ) -> Result<Option<(MessageId, u64)>, StashError> {
         let Some(last) = Self::last(tether).await? else {
             return Ok(None);
         };
 
-        last.remote_message_id(tether).await
+        let message = last.remote_message(tether).await?;
+        let retval = message
+            .and_then(|message| message.remote_id.map(|remote_id| (remote_id, message.time)));
+
+        debug_assert!(retval.is_some());
+
+        Ok(retval)
     }
 
-    pub async fn remote_message_id(
-        &self,
-        tether: &Tether,
-    ) -> Result<Option<MessageId>, StashError> {
+    pub async fn remote_message(&self, tether: &Tether) -> Result<Option<Message>, StashError> {
         let message = Message::find_by_id(self.local_message_id, tether).await?;
-        Ok(message.and_then(|m| m.remote_id))
+        Ok(message)
     }
 
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
@@ -726,20 +746,6 @@ impl SearchScrollData {
         let query = Self::query(limit, offset);
 
         Message::find(query, params![self.display_order], tether).await
-    }
-
-    /// TODO: Total is not exactly correct as it does not take into account the
-    ///      that search results will be subset of the total messages and its number is not entirely unknonw
-    pub async fn total(
-        &self,
-        local_label_id: LocalLabelId,
-        tether: &Tether,
-    ) -> Result<u64, AppError> {
-        let Some(counters) = MessageCounters::find_by_id(local_label_id, tether).await? else {
-            return Err(AppError::LocalLabelHasNoCounters(local_label_id));
-        };
-
-        Ok(counters.total(ReadFilter::All))
     }
 
     fn query(limit: Option<usize>, offset: Option<u64>) -> String {

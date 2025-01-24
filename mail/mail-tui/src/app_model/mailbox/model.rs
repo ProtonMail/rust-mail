@@ -1,3 +1,4 @@
+use super::search::{Search, SearchStatusBar};
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
@@ -71,6 +72,8 @@ pub struct Model {
     state: State,
     cancel_token: CancellationToken,
     composer: Option<Composer>,
+    search: Option<Search>,
+    search_status: Option<SearchStatusBar>,
 }
 
 impl Model {
@@ -98,6 +101,8 @@ impl Model {
             cancel_token: CancellationToken::new(),
             label_watcher: None,
             composer: None,
+            search: None,
+            search_status: None,
         })
     }
 
@@ -219,6 +224,12 @@ impl Model {
         self.build_item_count_query()
     }
 
+    fn open_search_view(&mut self, mbox: Mailbox, state: MessagesState) -> Command<Messages> {
+        self.mailbox = mbox;
+        self.state = State::Messages(state);
+        self.build_item_count_query()
+    }
+
     fn open_label_select_popup(&mut self) -> Command<Messages> {
         let ctx = self.mailbox.user_context();
         let label = self.label.clone();
@@ -320,6 +331,14 @@ impl AppStateHandler for Model {
             }
         }
 
+        if let Some(search) = &mut self.search {
+            return search.handle_event(&self.mailbox, event);
+        } else if let Event::Key(key) = &event {
+            if key.code == KeyCode::Char('/') {
+                return Command::Message(Message::SearchPopup(Search::new()).into());
+            }
+        }
+
         match &mut self.state {
             State::Syncing(_) => {
                 // Do nothing
@@ -344,6 +363,12 @@ impl AppStateHandler for Model {
             return composer.update(ctx, message, &self.mailbox, &self.mail_settings);
         }
 
+        if let Some(search) = &mut self.search {
+            let Message::CloseSearchPopup = message else {
+                return search.update(ctx, message, &self.mailbox, &self.mail_settings);
+            };
+        }
+
         match message {
             Message::Sync(mbox) => self.sync_mailbox(mbox),
             Message::OpenConversationView(mbox, label, state) => {
@@ -352,6 +377,7 @@ impl AppStateHandler for Model {
             Message::OpenMessageView(mbox, label, state) => {
                 self.open_message_view(mbox, label, state)
             }
+            Message::OpenSearchView(mbox, state) => self.open_search_view(mbox, state),
             Message::OpenLabelSelectPopup => self.open_label_select_popup(),
             Message::SelectLabel(label_id) => self.select_label(label_id),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
@@ -377,7 +403,23 @@ impl AppStateHandler for Model {
                 Command::None
             }
             Message::OpenContacts => self.open_contacts(),
-            Message::Composer(_) => Command::None,
+            Message::SearchPopup(search) => {
+                self.search = Some(search);
+                Command::None
+            }
+            Message::CloseSearchPopup => {
+                self.search = None;
+                Command::None
+            }
+            Message::SearchStatusBar(status) => {
+                self.search_status = Some(status);
+                Command::None
+            }
+            Message::ClearSearchStatusBar => {
+                self.search_status = None;
+                Command::None
+            }
+            Message::Composer(_) | Message::SearchSubmit(_) => Command::None,
         }
     }
 
@@ -385,6 +427,9 @@ impl AppStateHandler for Model {
         self.state.view(frame, area);
         if let Some(composer) = &mut self.composer {
             composer.view(frame, area);
+        }
+        if let Some(search) = &mut self.search {
+            search.view(frame, area);
         }
     }
 
@@ -443,31 +488,48 @@ impl AppStateHandler for Model {
     }
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
-        let label_name = self
-            .label
-            .path
-            .as_deref()
-            .unwrap_or(self.label.name.as_str());
+        if let Some(ref status) = self.search_status {
+            let [count_area, _, other_area] = Layout::horizontal([
+                Constraint::Length(16),
+                Constraint::Length(1),
+                Constraint::Percentage(100),
+            ])
+            .flex(Flex::Start)
+            .areas(area);
 
-        let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
-            (self.conv_counters.total, self.conv_counters.unread)
+            let count = format!("Search T:{total:4}", total = status.total);
+            frame.render_widget(Text::from(count), count_area);
+
+            let search = format!("phrase: `{}`, press ESC to go back.", status.search_phrase);
+            frame.render_widget(Text::from(search), other_area);
         } else {
-            (self.msg_counters.total, self.msg_counters.unread)
-        };
-        let counters = format!("T:{total:4} U:{unread:4}");
-        let [label_area, _, count_area, other_area] = Layout::horizontal([
-            Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
-            Constraint::Length(1),
-            Constraint::Length(13),
-            Constraint::Percentage(100),
-        ])
-        .flex(Flex::Start)
-        .areas(area);
-        let text = Text::from(label_name);
-        frame.render_widget(text, label_area);
-        frame.render_widget(Text::from(counters), count_area);
-        if let State::Conversations(state) = &mut self.state {
-            state.draw_status_bar(frame, other_area);
+            let label_name = self
+                .label
+                .path
+                .as_deref()
+                .unwrap_or(self.label.name.as_str());
+
+            let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
+                (self.conv_counters.total, self.conv_counters.unread)
+            } else {
+                (self.msg_counters.total, self.msg_counters.unread)
+            };
+            let counters = format!("T:{total:4} U:{unread:4}");
+            let [label_area, _, count_area, other_area] = Layout::horizontal([
+                Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
+                Constraint::Length(1),
+                Constraint::Length(13),
+                Constraint::Percentage(100),
+            ])
+            .flex(Flex::Start)
+            .areas(area);
+
+            let text = Text::from(label_name);
+            frame.render_widget(text, label_area);
+            frame.render_widget(Text::from(counters), count_area);
+            if let State::Conversations(state) = &mut self.state {
+                state.draw_status_bar(frame, other_area);
+            }
         }
     }
 }

@@ -72,7 +72,7 @@ impl ConversationsState {
         )
         .await?;
 
-        let conversations = paginator.all_items().await?;
+        let conversations = paginator.fetch_more().await?;
         Ok((
             Self {
                 paginator,

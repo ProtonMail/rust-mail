@@ -20,11 +20,11 @@ use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{
-    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter,
+    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::{MailSettings, Message as MailMessage, MessageScrollData};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
@@ -39,6 +39,7 @@ use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
 
+use super::search::SearchStatusBar;
 use super::LabelAs;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
@@ -53,6 +54,7 @@ pub struct MessagesState {
 #[allow(dead_code)] // Watcher handle is needed to keep state
 enum Mode {
     Label(Paginator<DataScrollerSource<MessageScrollData>>),
+    Search(Paginator<SearchScrollerSource>),
     Conversation(WatchHandle),
 }
 
@@ -95,7 +97,7 @@ impl MessagesState {
         )
         .await?;
 
-        let messages = paginator.all_items().await?;
+        let messages = paginator.fetch_more().await?;
 
         Ok((
             Self {
@@ -105,6 +107,71 @@ impl MessagesState {
                 mode: Mode::Label(paginator),
             },
             command,
+        ))
+    }
+
+    pub(super) fn from_search(mbox: Mailbox, search_phrase: String) -> Command<Messages> {
+        let ctx = mbox.user_context();
+        Command::task(async move {
+            match Self::from_search_impl(ctx, search_phrase).await {
+                Ok((state, background_command)) => Command::batch([
+                    Command::message(Message::OpenSearchView(mbox, state).into()),
+                    background_command,
+                ]),
+                Err(e) => Command::message(e.into()),
+            }
+        })
+    }
+
+    async fn from_search_impl(
+        ctx: Arc<MailUserContext>,
+        search_phrase: String,
+    ) -> MailboxResult<(Self, Command<Messages>)> {
+        let context = ctx.clone();
+        let search_phrase_clone = search_phrase.clone();
+        let (paginator, command) = Paginator::new(
+            || {
+                async move {
+                    MailScroller::search(
+                        context,
+                        SearchOptions::from(search_phrase_clone),
+                        ITEM_LIMIT,
+                    )
+                    .await
+                }
+                .boxed()
+            },
+            |result| match result {
+                Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                Err(e) => {
+                    let e = anyhow!("Message Reload Query error: {e}");
+                    tracing::error!("{e}");
+                    e.into()
+                }
+            },
+        )
+        .await?;
+
+        let messages = paginator.fetch_more().await?;
+        let total = paginator.total().await;
+
+        Ok((
+            Self {
+                messages,
+                table_state: ScrollableTableState::new(Some(0)),
+                open_message: DecryptedMessageStatus::None,
+                mode: Mode::Search(paginator),
+            },
+            Command::batch(vec![
+                Command::message(
+                    Message::SearchStatusBar(SearchStatusBar {
+                        search_phrase,
+                        total,
+                    })
+                    .into(),
+                ),
+                command,
+            ]),
         ))
     }
 
@@ -284,6 +351,17 @@ impl StateHandler for MessagesState {
             return Command::None;
         };
 
+        if matches!(self.mode, Mode::Search(_))
+            && matches!(self.open_message, DecryptedMessageStatus::None)
+            && key.code == KeyCode::Esc
+        {
+            return Command::batch(vec![
+                Command::message(Message::ClearSearchStatusBar.into()),
+                // TODO: For now its hard to go back in the previous state - fixme
+                Command::message(Message::Sync(mbox.clone()).into()),
+            ]);
+        }
+
         if matches!(
             self.open_message,
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
@@ -318,6 +396,15 @@ impl StateHandler for MessagesState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 if let Mode::Label(paginator) = &self.mode {
+                    if self.table_state.selected().unwrap_or_default()
+                        == self.messages.len().saturating_sub(1)
+                    {
+                        return paginator.next_page_command(|v| {
+                            Command::message(MessageMessage::NextPage(v).into())
+                        });
+                    }
+                }
+                if let Mode::Search(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
                     {

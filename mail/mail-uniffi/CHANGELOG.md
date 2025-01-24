@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-1633] Add async live query callback, use it for new `watch_accounts_async` and `watch_sessions_async` methods
 
+### Changed
+
+  - [ET-1685] `scroll_search` was renamed to `scroller_search`
+
 ## [0.36.0] - 2025-01-23
 
 ### Changed
