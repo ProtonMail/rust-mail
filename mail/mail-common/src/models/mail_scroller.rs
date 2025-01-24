@@ -663,13 +663,12 @@ impl SearchScrollData {
         };
 
         let message = last.remote_message(tether).await?;
+        let retval = message
+            .and_then(|message| message.remote_id.map(|remote_id| (remote_id, message.time)));
 
-        Ok(match message {
-            Some(message) if message.remote_id.is_some() => {
-                Some((message.remote_id.unwrap(), message.time))
-            }
-            _ => None,
-        })
+        debug_assert!(retval.is_some());
+
+        Ok(retval)
     }
 
     pub async fn remote_message(&self, tether: &Tether) -> Result<Option<Message>, StashError> {

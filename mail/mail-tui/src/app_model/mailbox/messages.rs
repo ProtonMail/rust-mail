@@ -357,6 +357,7 @@ impl StateHandler for MessagesState {
         {
             return Command::batch(vec![
                 Command::message(Message::ClearSearchStatusBar.into()),
+                // TODO: For now its hard to go back in the previous state - fixme
                 Command::message(Message::Sync(mbox.clone()).into()),
             ]);
         }

@@ -1277,7 +1277,6 @@ impl SearchScrollerSource {
 
         // Save all messages.
         for message in messages.iter_mut() {
-            tracing::warn!("Saving message {:?}", message.remote_id);
             message.save(&tx).await?;
             SearchScrollData::builder()
                 .local_message_id(message.local_id.unwrap())
