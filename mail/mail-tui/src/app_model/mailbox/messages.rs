@@ -61,11 +61,11 @@ enum Mode {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub(super) fn build(mbox: Mailbox, label: Label) -> Command<Messages> {
+    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
         let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
-            match Self::new_impl(ctx, label_id).await {
+            match Self::new_impl(ctx, label_id, filter).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state).into()),
                     background_command,
@@ -77,14 +77,13 @@ impl MessagesState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
+        filter: ReadFilter,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
-                async move {
-                    MailScroller::messages(context, label_id, ReadFilter::All, ITEM_LIMIT).await
-                }
-                .boxed()
+                async move { MailScroller::messages(context, label_id, filter, ITEM_LIMIT).await }
+                    .boxed()
             },
             |result| match result {
                 Ok(messages) => MessageMessage::Refreshed(messages).into(),

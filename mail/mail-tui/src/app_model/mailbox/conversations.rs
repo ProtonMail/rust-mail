@@ -35,11 +35,11 @@ pub struct ConversationsState {
 }
 
 impl ConversationsState {
-    pub(super) fn build(mbox: Mailbox, label: Label) -> Command<Messages> {
+    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
         let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
-            match Self::new_impl(ctx, label_id).await {
+            match Self::new_impl(ctx, label_id, filter).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenConversationView(mbox, label, state).into()),
                     background_command,
@@ -51,12 +51,13 @@ impl ConversationsState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
+        filter: ReadFilter,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    MailScroller::conversations(context, label_id, ReadFilter::All, ITEM_LIMIT)
+                    MailScroller::conversations(context, label_id, filter, ITEM_LIMIT)
                         .await
                 }
                 .boxed()
