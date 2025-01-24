@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.36.1] - 2025-01-24
+
+### Fixed
+
+  - [ET-1926]: Remote images and embedded images are always enabled, disregarding the setting.
+
 ### Added
 
   - [ET-1633] Add async live query callback, use it for new `watch_accounts_async` and `watch_sessions_async` methods

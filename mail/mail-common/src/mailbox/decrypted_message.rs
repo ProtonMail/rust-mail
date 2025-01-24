@@ -307,6 +307,16 @@ impl DecryptedMessageBody {
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
     pub async fn transformed(&self, ctx: &MailUserContext, opts: TransformOpts) -> BodyOutput {
+        // FIXME: We enable all views since there is no way yet in the clients to change the
+        // settings. Remove me when we can.
+        // https://protonag.atlassian.net/browse/ET-1926
+        let opts = TransformOpts {
+            show_block_quote: opts.show_block_quote,
+            hide_remote_images: Some(false),
+            hide_embedded_images: Some(false),
+            image_proxy: Some(false),
+        };
+
         let tether = ctx.user_stash().connection();
         let resolved = opts.resolve(&tether, ctx.session_id()).await;
         transform_html(&self.body, resolved, self.metadata.mime_type)
