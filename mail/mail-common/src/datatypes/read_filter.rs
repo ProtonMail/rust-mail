@@ -1,7 +1,9 @@
+use derive_more::derive::TryFrom;
 use stash::exports::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 
 /// Conversation and message read filter.
-#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy)]
+#[derive(Debug, Default, Clone, PartialEq, Hash, Eq, Copy, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ReadFilter {
     /// Return all messages/conversations.
@@ -45,11 +47,7 @@ impl ToSql for ReadFilter {
 
 impl FromSql for ReadFilter {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value.as_i64()? {
-            0 => Ok(ReadFilter::All),
-            1 => Ok(ReadFilter::Unread),
-            2 => Ok(ReadFilter::Read),
-            v => Err(FromSqlError::OutOfRange(v)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }

@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
+derive_more = { workspace = true, features = ["try_from"] }
 indoc = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

@@ -1,5 +1,6 @@
 use crate::db::StoredAction;
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
+use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::exports::{
@@ -64,7 +65,8 @@ impl Display for Type {
 }
 
 /// Defines the priority of a queued action.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum Priority {
     Highest = 0,
@@ -81,13 +83,8 @@ impl ToSql for Priority {
 
 impl FromSql for Priority {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match i64::column_result(value)? {
-            0 => Ok(Priority::Highest),
-            1 => Ok(Priority::High),
-            2 => Ok(Priority::Normal),
-            3 => Ok(Priority::Low),
-            v => Err(FromSqlError::OutOfRange(v)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 

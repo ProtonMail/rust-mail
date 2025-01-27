@@ -194,7 +194,7 @@ impl Attachment {
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
     /// list we need to get the message body.
-
+    ///
     /// # Errors
     ///
     /// Return error if the query failed.

@@ -1,5 +1,6 @@
 use std::io::Write;
 
+use derive_more::derive::TryFrom;
 use proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant, Encryptor,
     EncryptorDetachedSignatureWriter, EncryptorSync, PGPProviderSync, Signer, SignerSync,
@@ -27,7 +28,8 @@ crate::string_id! {
     EncryptedCard
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize_repr, Serialize_repr)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize_repr, Serialize_repr, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ContactCardType {
     /// The card is in cleartext.
@@ -50,15 +52,8 @@ impl ToSql for ContactCardType {
 #[cfg(feature = "sql")]
 impl FromSql for ContactCardType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let val = value.as_i64()?;
-
-        match val {
-            0 => Ok(ContactCardType::ClearText),
-            1 => Ok(ContactCardType::Encrypted),
-            2 => Ok(ContactCardType::Signed),
-            3 => Ok(ContactCardType::EncryptedAndSigned),
-            _ => Err(FromSqlError::OutOfRange(val)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
