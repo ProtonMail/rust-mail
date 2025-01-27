@@ -1,5 +1,5 @@
-use std::io::Error;
 use std::string::FromUtf8Error;
+use std::{io::Error, str::Utf8Error};
 
 use proton_crypto::{crypto::VerificationError, CryptoError};
 
@@ -87,4 +87,6 @@ pub enum CardCryptoError {
     SignatureVerificationError(#[from] VerificationError),
     #[error("No signature found for a signed card")]
     NoSignature,
+    #[error("Failed to decode card as utf-8")]
+    DecodeCard(#[from] Utf8Error),
 }
