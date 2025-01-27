@@ -211,6 +211,20 @@ impl From<ContactEmail> for ContactEmailItem {
     }
 }
 
+/// Device contact feeded by the mobile/web application.
+/// Used as an input for generating list of contact suggestions ([`ContactSuggestion`])
+/// 
+pub struct DeviceContact {
+    /// The field represents unique key identifier used by the user to distinguish elements in the array
+    pub key: String,
+   
+    /// The field represents the name of the contact
+    pub name: String,
+
+    /// List of email addresses assigned to the contact. That list has an arbitrary order given by the user
+    pub emails: Vec<String>
+}
+
 /// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
 /// Contrary to the [`ContactItemType`] it also might be a device contact
 /// 
@@ -226,6 +240,30 @@ pub struct ContactSuggestion {
 
     /// The kind of contact suggestion. Whether it is a native contact, proton contact or a group.
     pub kind: ContactSuggestionKind,
+}
+
+impl ContactSuggestion {
+    /// Build contact suggestion list that is sorted and deduplicated
+    /// 
+    /// # Contact groups
+    ///
+    /// Note, that the contact group is represented by [`Label`]. Currently, this function WON'T
+    /// assert if the label has type `ContactGroup`.
+    /// 
+    #[must_use]
+    pub fn from_contacts_and_device_contacts(
+        contacts: Vec<Contact>, 
+        contact_groups: Vec<Label>,
+        device_contacts: Vec<DeviceContact>
+    ) -> Vec<Self> {
+        debug_assert!(contact_groups
+            .iter()
+            .all(|group| group.label_type == LabelType::ContactGroup));
+
+        // TODO (ET-1971): Extend that implementation
+        let (_contacts, _contact_groups, _device_contacts) = (contacts, contact_groups, device_contacts);
+        vec![]
+    }
 }
 
 /// Kind of email suggestion
