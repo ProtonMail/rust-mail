@@ -314,9 +314,8 @@ impl Conversation {
     ) -> Result<ActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
             Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
-            Err(other) => Err(other),
+            other => other,
         }
     }
 

@@ -12,9 +12,9 @@ use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
-use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;
 use std::sync::Arc;
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar
@@ -154,7 +154,7 @@ impl Sidebar {
     ) -> Result<Arc<WatchHandle>, ActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            let handle = RealLabel::watch(sidebar.user_ctx.user_stash())?;
+            let handle = RealLabelWithCounters::watch(sidebar.user_ctx.user_stash())?;
             let handle = watch_channel(handle, callback);
 
             Result::<_, RealProtonMailError>::Ok(handle)

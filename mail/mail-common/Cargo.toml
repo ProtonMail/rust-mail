@@ -11,6 +11,7 @@ bitflags = { workspace = true }
 bytes = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
+derive_more = { workspace = true, features = ["try_from"]}
 email_address = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

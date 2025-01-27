@@ -49,8 +49,9 @@ pub use self::connection_status::ConnectionStatus;
 pub use self::contact_list::*;
 pub use self::system_label::*;
 
+use derive_more::derive::TryFrom;
 use itertools::Itertools;
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::IntoPrimitive;
 use proton_api_core::services::proton::common::{
     AddressId, ContactEmailId, ContactId, LabelId, LabelType as ApiLabelType,
     LightOrDarkMode as ApiLightOrDarkMode,
@@ -84,7 +85,8 @@ use tracing::warn;
 //==============================================================================
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum AddressStatus {
     /// TODO: Document this field.
@@ -109,12 +111,8 @@ impl From<ApiAddressStatus> for AddressStatus {
 
 impl FromSql for AddressStatus {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Disabled),
-            1 => Ok(Self::Enabled),
-            2 => Ok(Self::Deleting),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -125,7 +123,8 @@ impl ToSql for AddressStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum AddressType {
     /// TODO: Document this variant.
@@ -158,14 +157,8 @@ impl From<ApiAddressType> for AddressType {
 
 impl FromSql for AddressType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Original),
-            2 => Ok(Self::Alias),
-            3 => Ok(Self::Custom),
-            4 => Ok(Self::Premium),
-            5 => Ok(Self::External),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -176,7 +169,8 @@ impl ToSql for AddressType {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ContactSendingPreferences {
     /// TODO: Document this variant.
@@ -197,11 +191,8 @@ impl From<ApiContactSendingPreferences> for ContactSendingPreferences {
 
 impl FromSql for ContactSendingPreferences {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Custom),
-            1 => Ok(Self::Default),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -212,7 +203,8 @@ impl ToSql for ContactSendingPreferences {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum DateFormat {
     /// TODO: Document this variant.
@@ -241,13 +233,8 @@ impl From<ApiDateFormat> for DateFormat {
 
 impl FromSql for DateFormat {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Default),
-            1 => Ok(Self::DdMmYyyy),
-            2 => Ok(Self::MmDdYyyy),
-            3 => Ok(Self::YyyyMmDd),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -258,7 +245,8 @@ impl ToSql for DateFormat {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum Density {
     /// TODO: Document this variant.
@@ -279,11 +267,8 @@ impl From<ApiDensity> for Density {
 
 impl FromSql for Density {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Comfortable),
-            1 => Ok(Self::Compact),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -294,7 +279,8 @@ impl ToSql for Density {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum EarlyAccess {
     /// TODO: Document this variant.
@@ -315,11 +301,8 @@ impl From<ApiEarlyAccess> for EarlyAccess {
 
 impl FromSql for EarlyAccess {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Regular),
-            1 => Ok(Self::Beta),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -330,7 +313,8 @@ impl ToSql for EarlyAccess {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum LightOrDarkMode {
     /// TODO: Document this variant.
@@ -360,11 +344,8 @@ impl From<LightOrDarkMode> for ApiLightOrDarkMode {
 
 impl FromSql for LightOrDarkMode {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Light),
-            1 => Ok(Self::Dark),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -375,7 +356,8 @@ impl ToSql for LightOrDarkMode {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum LogAuth {
     /// TODO: Document this variant.
@@ -400,12 +382,8 @@ impl From<ApiLogAuth> for LogAuth {
 
 impl FromSql for LogAuth {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Disabled),
-            1 => Ok(Self::Basic),
-            2 => Ok(Self::Advanced),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -416,7 +394,8 @@ impl ToSql for LogAuth {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum TfaStatus {
     /// TODO: Document this variant.
@@ -476,13 +455,8 @@ impl From<TfaStatus> for ApiTfaStatus {
 
 impl FromSql for TfaStatus {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::None),
-            1 => Ok(Self::Totp),
-            2 => Ok(Self::Fido2),
-            3 => Ok(Self::TotpOrFido2),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -493,7 +467,8 @@ impl ToSql for TfaStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum TimeFormat {
     /// TODO: Document this variant.
@@ -518,12 +493,8 @@ impl From<ApiTimeFormat> for TimeFormat {
 
 impl FromSql for TimeFormat {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Default),
-            1 => Ok(Self::H24),
-            2 => Ok(Self::H12),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -534,7 +505,8 @@ impl ToSql for TimeFormat {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum UserMnemonicStatus {
     /// TODO: Document this variant.
@@ -567,14 +539,8 @@ impl From<ApiUserMnemonicStatus> for UserMnemonicStatus {
 
 impl FromSql for UserMnemonicStatus {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Disabled),
-            1 => Ok(Self::EnabledButNotSet),
-            2 => Ok(Self::EnabledNeedsReactivation),
-            3 => Ok(Self::EnabledAndSet),
-            4 => Ok(Self::Unknown),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -585,7 +551,8 @@ impl ToSql for UserMnemonicStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum UserType {
     /// TODO: Document this variant.
@@ -627,12 +594,8 @@ impl From<ApiUserType> for UserType {
 
 impl FromSql for UserType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Proton),
-            2 => Ok(Self::Managed),
-            3 => Ok(Self::External),
-            v => Ok(Self::Unknown(v)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -643,7 +606,8 @@ impl ToSql for UserType {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum WeekStart {
     /// TODO: Document this variant.
@@ -672,13 +636,8 @@ impl From<ApiWeekStart> for WeekStart {
 
 impl FromSql for WeekStart {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Default),
-            1 => Ok(Self::Monday),
-            6 => Ok(Self::Saturday),
-            7 => Ok(Self::Sunday),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -689,7 +648,8 @@ impl ToSql for WeekStart {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum LabelType {
     /// TODO: Document this field.
@@ -740,13 +700,8 @@ impl From<LabelType> for ApiLabelType {
 
 impl FromSql for LabelType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Label),
-            2 => Ok(Self::ContactGroup),
-            3 => Ok(Self::Folder),
-            4 => Ok(Self::System),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -1309,7 +1264,8 @@ sql_using_serde!(AuthScopes);
 
 /// A compat type for the [`ApiPasswordMode`] enum, enabling it to be used
 /// within the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum PasswordMode {
     One = 1,

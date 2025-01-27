@@ -2,6 +2,7 @@ use crate::cache::{CacheConfig, CacheError, CacheKey, CacheResource, CacheResult
 use crate::datatypes::LightOrDarkMode;
 use crate::models::ModelExtension;
 use anyhow::anyhow;
+use derive_more::derive::TryFrom;
 use futures::executor::block_on;
 use proton_api_core::services::proton::requests::GetImagesLogoOptions;
 use proton_sqlite3::rusqlite::types::{
@@ -325,7 +326,8 @@ impl CacheKey for SenderImage {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ReceivedFormat {
     Png = 1,
@@ -368,12 +370,8 @@ impl Display for ReceivedFormat {
 
 impl FromSql for ReceivedFormat {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Png),
-            2 => Ok(Self::Svg),
-            3 => Ok(Self::WebP),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
