@@ -159,6 +159,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
+                attachments.len() as u64,
                 action.subject.clone(),
             );
             conversation
@@ -187,7 +188,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 return Err(SaveOrSendError::AlreadySent.into());
             }
 
-            action.update_message(&address, &mut message, attachment_metadata, body_len, time);
+            action.update_message(
+                &address,
+                &mut message,
+                attachments.len() as u64,
+                attachment_metadata,
+                body_len,
+                time,
+            );
 
             message.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e}");
@@ -215,6 +223,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .inspect_err(|e| error!("Failed to get next message display order: {e}"))?;
             let mut message = action.create_new_message(
                 &address,
+                attachments.len() as u64,
                 attachment_metadata,
                 body_len,
                 time,
@@ -433,12 +442,15 @@ impl Save {
     fn create_new_message(
         &self,
         address: &Address,
+        total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
         time: u64,
         display_order: u64,
     ) -> Message {
-        let num_attachments = attachments.len();
+        debug_assert!(attachments
+            .iter()
+            .all(|v| v.disposition == Disposition::Attachment));
         Message {
             local_id: None,
             remote_id: None,
@@ -458,7 +470,7 @@ impl Save {
             is_replied: false,
             is_replied_all: false,
             label_ids: vec![],
-            num_attachments: num_attachments.try_into().unwrap_or_default(),
+            num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
             reply_tos: Default::default(),
             sender: MessageSender {
@@ -484,18 +496,18 @@ impl Save {
         &self,
         address: &Address,
         message: &mut Message,
+        total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
         time: u64,
     ) {
-        let num_attachments = attachments.len();
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
         message.to_list = self.to_list.to_message_recipients().into();
         message.cc_list = self.cc_list.to_message_recipients().into();
         message.bcc_list = self.bcc_list.to_message_recipients().into();
-        message.num_attachments = num_attachments.try_into().unwrap_or_default();
+        message.num_attachments = total_attachment_count.try_into().unwrap_or_default();
         message.sender = MessageSender {
             address: address.email.clone(),
             bimi_selector: None,
@@ -515,8 +527,12 @@ impl Save {
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
+        total_attachment_count: u64,
         subject: String,
     ) -> Conversation {
+        debug_assert!(attachments
+            .iter()
+            .all(|v| v.disposition == Disposition::Attachment));
         Conversation {
             local_id: None,
             remote_id: None,
@@ -527,7 +543,7 @@ impl Save {
             exclusive_location: None,
             expiration_time: 0,
             labels: vec![],
-            num_attachments: 0,
+            num_attachments: total_attachment_count,
             num_messages: 0,
             num_unread: 0,
             display_order,

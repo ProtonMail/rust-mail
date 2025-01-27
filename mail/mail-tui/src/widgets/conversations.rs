@@ -10,7 +10,7 @@ impl AsTable for Vec<ContextualConversation> {
         let rows = self.iter().map(|conv| {
             let starred = if conv.is_starred { "★" } else { " " };
             let date = utils::date_from_timestamp(conv.time);
-            let num_attachments = conv.attachments_metadata.len();
+            let num_attachments = conv.num_attachments;
             let num_labels = conv.custom_labels.len();
             let senders = format_senders(&conv.senders);
 
