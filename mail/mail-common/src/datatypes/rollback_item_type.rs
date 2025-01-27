@@ -1,8 +1,10 @@
+use derive_more::derive::TryFrom;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum RollbackItemType {
     Label = 1,
@@ -12,12 +14,8 @@ pub enum RollbackItemType {
 
 impl FromSql for RollbackItemType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Label),
-            2 => Ok(Self::Message),
-            3 => Ok(Self::Conversation),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 

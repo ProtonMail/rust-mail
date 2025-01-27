@@ -15,6 +15,7 @@ use crate::models::{
     MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
+use derive_more::derive::TryFrom;
 use futures::future::join3;
 use proton_action_queue::action::{Id, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
@@ -190,7 +191,8 @@ pub enum PackageError {
 }
 
 /// Draft reply mode.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ReplyMode {
     /// Reply only to the sender.
@@ -209,12 +211,8 @@ impl ToSql for ReplyMode {
 
 impl FromSql for ReplyMode {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value.as_i64()? {
-            0 => Ok(ReplyMode::Sender),
-            1 => Ok(ReplyMode::All),
-            2 => Ok(ReplyMode::Forward),
-            v => Err(FromSqlError::OutOfRange(v)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 

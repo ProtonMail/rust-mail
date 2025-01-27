@@ -99,15 +99,7 @@ impl PackageCryptoType {
 
     #[must_use]
     pub fn enum_of(value: u8) -> Option<PackageCryptoType> {
-        match value {
-            1 => Some(PackageCryptoType::ProtonMail),
-            2 => Some(PackageCryptoType::EncryptedOutside),
-            4 => Some(PackageCryptoType::Cleartext),
-            8 => Some(PackageCryptoType::PgpInline),
-            16 => Some(PackageCryptoType::PgpMime),
-            32 => Some(PackageCryptoType::ClearMime),
-            _ => None,
-        }
+        Self::try_from(value).ok()
     }
 
     #[must_use]

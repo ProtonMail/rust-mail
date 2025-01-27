@@ -6,6 +6,7 @@ use crate::errors::{DraftSaveSendErrorReason, MailErrorReason, ProtonMailError};
 use crate::models::Message;
 use crate::MailContextError;
 use chrono::Utc;
+use derive_more::derive::TryFrom;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -435,7 +436,8 @@ pub enum DraftSendFailure {
 sql_using_serde!(DraftSendFailure);
 
 /// Track the origin/context of this draft status
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Hash, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum DraftSendResultOrigin {
     /// We failed to update a draft body without sending the message
@@ -454,13 +456,8 @@ impl ToSql for DraftSendResultOrigin {
 
 impl FromSql for DraftSendResultOrigin {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let v = value.as_i64()?;
-        match v {
-            0 => Ok(Self::Save),
-            1 => Ok(Self::SaveBeforeSend),
-            2 => Ok(Self::Send),
-            v => Err(FromSqlError::OutOfRange(v)),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 

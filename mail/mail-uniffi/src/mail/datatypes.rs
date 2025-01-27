@@ -703,15 +703,16 @@ impl From<RealSpamAction> for SpamAction {
 
 /// See [`RealSwipeAction`]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
-#[repr(i8)]
 pub enum SwipeAction {
-    NoAction = -1,
-    Trash = 0,
-    Spam = 1,
-    Star = 2,
+    NoAction,
+    Trash,
+    Spam,
+    Star,
     #[default]
-    Archive = 3,
-    MarkAsRead = 4,
+    Archive,
+    MarkAsRead,
+    LabelAs,
+    MoveTo,
 }
 
 impl From<SwipeAction> for RealSwipeAction {
@@ -723,6 +724,8 @@ impl From<SwipeAction> for RealSwipeAction {
             SwipeAction::Star => RealSwipeAction::Star,
             SwipeAction::Archive => RealSwipeAction::Archive,
             SwipeAction::MarkAsRead => RealSwipeAction::MarkAsRead,
+            SwipeAction::LabelAs => RealSwipeAction::LabelAs,
+            SwipeAction::MoveTo => RealSwipeAction::MoveTo,
         }
     }
 }
@@ -736,6 +739,8 @@ impl From<RealSwipeAction> for SwipeAction {
             RealSwipeAction::Star => SwipeAction::Star,
             RealSwipeAction::Archive => SwipeAction::Archive,
             RealSwipeAction::MarkAsRead => SwipeAction::MarkAsRead,
+            RealSwipeAction::LabelAs => SwipeAction::LabelAs,
+            RealSwipeAction::MoveTo => SwipeAction::MoveTo,
         }
     }
 }

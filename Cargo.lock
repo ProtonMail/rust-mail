@@ -4095,6 +4095,7 @@ version = "0.7.29"
 dependencies = [
  "anyhow",
  "chrono",
+ "derive_more 1.0.0",
  "flume",
  "futures",
  "indoc",
@@ -4185,6 +4186,7 @@ dependencies = [
  "base64",
  "bytes",
  "clap",
+ "derive_more 1.0.0",
  "flume",
  "futures",
  "ical",
@@ -4289,6 +4291,7 @@ name = "proton-crypto-account"
 version = "0.8.2"
 dependencies = [
  "base64",
+ "derive_more 1.0.0",
  "futures",
  "hex",
  "proton-crypto",
@@ -4360,6 +4363,7 @@ dependencies = [
  "clap",
  "color-backtrace",
  "ctor",
+ "derive_more 1.0.0",
  "email_address",
  "flume",
  "function_name",
