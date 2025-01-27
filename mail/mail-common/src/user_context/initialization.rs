@@ -80,8 +80,8 @@ impl MailUserContext {
         let ctx_clone = ctx.clone();
         let event_loop = tokio::spawn(async move {
             ctx_clone
-                .exclusive
-                .initialize_event_loop(ctx_clone.as_ref(), ctx_clone.as_ref())
+                .event_loop
+                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
                 .await
         });
         let ctx_clone = ctx.clone();

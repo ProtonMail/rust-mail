@@ -119,8 +119,7 @@ async fn delete_contacts() {
 
     assert!(!contact.deleted);
 
-    user_ctx
-        .with_queue(|queue| Contact::action_delete(queue, vec![contact.local_id.unwrap()]))
+    Contact::action_delete(user_ctx.action_queue(), vec![contact.local_id.unwrap()])
         .await
         .unwrap();
 

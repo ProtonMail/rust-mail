@@ -153,12 +153,13 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    user_ctx
-        .with_queue(|queue| {
-            Conversation::action_mark_read(queue, inbox.local_id.unwrap(), conversation_ids)
-        })
-        .await
-        .unwrap();
+    Conversation::action_mark_read(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        conversation_ids,
+    )
+    .await
+    .unwrap();
 
     // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
@@ -225,12 +226,13 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    user_ctx
-        .with_queue(|queue| {
-            Conversation::action_mark_unread(queue, inbox.local_id.unwrap(), conversation_ids)
-        })
-        .await
-        .unwrap();
+    Conversation::action_mark_unread(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        conversation_ids,
+    )
+    .await
+    .unwrap();
 
     // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)

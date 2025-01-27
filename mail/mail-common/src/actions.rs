@@ -1,6 +1,7 @@
 mod available_action;
 pub mod conversations;
 pub mod draft;
+pub mod event_poll;
 pub mod labels;
 pub mod messages;
 
@@ -91,6 +92,7 @@ pub(crate) fn new_action_factory() -> Factory {
         .expect(ERR_MSG);
     factory.register::<draft::Discard>().expect(ERR_MSG);
     factory.register::<draft::UndoSend>().expect(ERR_MSG);
+    factory.register::<event_poll::EventPoll>().expect(ERR_MSG);
     factory
 }
 
