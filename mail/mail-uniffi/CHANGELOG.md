@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Added
+
+- [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+
 ## [0.37.3] - 2025-01-27
 
 ### Fixed
