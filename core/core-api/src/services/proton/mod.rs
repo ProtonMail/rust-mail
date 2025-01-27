@@ -52,7 +52,7 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use muon::client::middleware::{DisplayLogger, Tagger};
-use muon::common::IntoDyn;
+use muon::common::{IntoDyn, RetryPolicy};
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
 use muon::App;
@@ -79,6 +79,8 @@ pub mod request_data;
 pub mod requests;
 pub mod response_data;
 pub mod responses;
+
+pub use self::proton_impl::{ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, QUARTER_SECOND_TIMEOUT};
 
 mod proton_impl;
 
@@ -268,13 +270,17 @@ pub trait ProtonCore {
     ///
     async fn get_settings(&self) -> ApiServiceResult<GetSettingsResponse>;
 
-    /// TODO: Document this method.
+    /// The ping endpoint for testing connectivity.
     ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_tests_ping(&self) -> ApiServiceResult<()>;
+    async fn get_tests_ping(
+        &self,
+        timeout_ms: Option<u64>,
+        retry: Option<RetryPolicy>,
+    ) -> ApiServiceResult<()>;
 
     /// TODO: Document this method.
     ///

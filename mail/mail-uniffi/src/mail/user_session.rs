@@ -4,6 +4,7 @@ mod images;
 mod initialization;
 mod labels;
 
+use crate::core::datatypes::ConnectionStatus;
 use crate::errors::{ActionError, UserSessionError, VoidSessionResult};
 use crate::MapIntoResult;
 use crate::{
@@ -162,6 +163,28 @@ impl MailUserSession {
         })
         .await
         .map_into()
+    }
+
+    /// Get the connection status of the current user session.
+    ///
+    /// The method will return the current connection status of the user session.
+    /// Underlying it will ping the Proton server with one second timeout to check
+    /// if the connection can be established.
+    ///
+    /// The connection status can be one of the following:
+    /// - `ConnectionStatus::Online`: The application is online.
+    /// - `ConnectionStatus::Offline`: The application is offline.
+    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
+    ///
+    pub async fn connection_status(&self) -> Result<ConnectionStatus, UserSessionError> {
+        let ctx = self.ctx.clone();
+        uniffi_async(async move {
+            let status = ctx.connection_status().await.into();
+            // unfortunatelly there is join error here which need to be handled
+            Result::<ConnectionStatus, RealProtonMailError>::Ok(status)
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 }
 

@@ -14,3 +14,7 @@ pub mod store;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
 pub const SYNC_CONTACT_PAGE_SIZE: usize = 1000;
+
+pub mod exports {
+    pub use muon::common::RetryPolicy;
+}
