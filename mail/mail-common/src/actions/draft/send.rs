@@ -222,9 +222,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         tx.commit().await?;
 
-        // TODO(ET-1407): Load the metadata of the attached attachments.
-        let attachments = Vec::new();
-
+        // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
             &pgp_provider,
@@ -232,7 +230,9 @@ impl proton_action_queue::action::Handler for SendHandler {
             send_preferences,
             &message_body_metadata,
             &stored_message_body,
-            &attachments,
+            // Even though we are already passing in the message body metadata we
+            // leave this parameter here for when we handle the PGP embedded case.
+            &message_body_metadata.attachments,
         )
         .await
         .map_err(SaveOrSendError::SendMessage)
