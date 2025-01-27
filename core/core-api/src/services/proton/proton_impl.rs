@@ -33,26 +33,6 @@ pub const ONE_SECOND_TIMEOUT: u64 = 1000;
 pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 
 impl ProtonCore for Proton {
-    async fn ping(
-        &self,
-        timeout_ms: Option<u64>,
-        retry: Option<RetryPolicy>,
-    ) -> ApiServiceResult<()> {
-        let timeout = timeout_ms
-            .map(Duration::from_millis)
-            .or_else(|| Some(Duration::from_millis(ONE_MINUTE_TIMEOUT)))
-            .unwrap();
-        let mut request = GET!("{CORE_V4}/tests/ping").allowed_time(timeout);
-
-        if let Some(retry) = retry {
-            request = request.retry_policy(retry);
-        }
-
-        request.send_with(self).await?.ok()?;
-
-        Ok(())
-    }
-
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
         Ok(GET!("{CORE_V4}/addresses")
             .send_with(self)
@@ -183,8 +163,22 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn get_tests_ping(&self) -> ApiServiceResult<()> {
-        GET!("{CORE_V4}/tests/ping").send_with(self).await?.ok()?;
+    async fn get_tests_ping(
+        &self,
+        timeout_ms: Option<u64>,
+        retry: Option<RetryPolicy>,
+    ) -> ApiServiceResult<()> {
+        let timeout = timeout_ms.map(Duration::from_millis);
+        let mut request = GET!("{CORE_V4}/tests/ping");
+
+        if let Some(timeout) = timeout {
+            request = request.allowed_time(timeout);
+        }
+        if let Some(retry) = retry {
+            request = request.retry_policy(retry);
+        }
+
+        request.send_with(self).await?.ok()?;
 
         Ok(())
     }

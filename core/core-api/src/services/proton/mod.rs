@@ -127,18 +127,6 @@ pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, 
 
 #[allow(async_fn_in_trait)]
 pub trait ProtonCore {
-    /// The ping endpoint for testing connectivity.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
-    async fn ping(
-        &self,
-        timeout_ms: Option<u64>,
-        retry: Option<RetryPolicy>,
-    ) -> ApiServiceResult<()>;
-
     /// GETs a list of addresses.
     ///
     /// # Errors
@@ -282,13 +270,17 @@ pub trait ProtonCore {
     ///
     async fn get_settings(&self) -> ApiServiceResult<GetSettingsResponse>;
 
-    /// TODO: Document this method.
+    /// The ping endpoint for testing connectivity.
     ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_tests_ping(&self) -> ApiServiceResult<()>;
+    async fn get_tests_ping(
+        &self,
+        timeout_ms: Option<u64>,
+        retry: Option<RetryPolicy>,
+    ) -> ApiServiceResult<()>;
 
     /// TODO: Document this method.
     ///

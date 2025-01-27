@@ -172,7 +172,10 @@ impl UserContext {
         let session = self.session().clone();
 
         tokio::task::spawn(async move {
-            let response = session.api().ping(Some(ONE_SECOND_TIMEOUT), None).await;
+            let response = session
+                .api()
+                .get_tests_ping(Some(ONE_SECOND_TIMEOUT), None)
+                .await;
             let mut task_guard = status.lock().await;
 
             if response.is_err() {
