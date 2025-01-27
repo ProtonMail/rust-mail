@@ -1,7 +1,5 @@
 use crate::datatypes::{LabelColor, ViewMode};
-use crate::models::{
-    ConversationCounters, MailLabel, MailSettings, MessageCounters, MAIL_SETTINGS_ID,
-};
+use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
 use crate::AppError;
 use proton_core_common::models::{Label, ModelExtension};
 use stash::orm::Model;
@@ -56,9 +54,7 @@ pub async fn color_to_display(
     value: &Label,
     tether: &Tether,
 ) -> Result<Option<LabelColor>, AppError> {
-    let settings = MailSettings::load(MAIL_SETTINGS_ID, tether)
-        .await?
-        .expect("MailSettings in Stash");
+    let settings = MailSettings::get_or_default(tether).await;
 
     if settings.enable_folder_color {
         if settings.inherit_parent_folder_color {
