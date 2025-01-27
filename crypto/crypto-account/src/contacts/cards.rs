@@ -1,11 +1,15 @@
 use std::io::Write;
 
 use derive_more::derive::TryFrom;
-use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant, Encryptor,
-    EncryptorDetachedSignatureWriter, EncryptorSync, PGPProviderSync, Signer, SignerSync,
-    VerifiedData, Verifier, VerifierSync,
+use proton_crypto::{
+    crypto::{
+        AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
+        Encryptor, EncryptorDetachedSignatureWriter, EncryptorSync, PGPProviderSync, Signer,
+        SignerSync, VerifiedData, Verifier, VerifierSync,
+    },
+    utils::remove_trailing_spaces,
 };
+use std::str;
 
 #[cfg(feature = "sql")]
 use rusqlite::{
@@ -94,16 +98,17 @@ pub trait DecryptableVerifiableCard {
                 .map_err(CardCryptoError::DecryptionError)?
                 .into_vec()),
             ContactCardType::Signed => {
+                // Strip trailing spaces to verify legacy contacts.
+                let cleaned_data = remove_trailing_spaces(str::from_utf8(self.card_data())?);
                 provider
                     .new_verifier()
                     .with_verification_key_refs(verification_keys)
                     .verify_detached(
-                        self.card_data(),
+                        cleaned_data,
                         self.card_signature().ok_or(CardCryptoError::NoSignature)?,
                         DataEncoding::Armor,
                     )
                     .map_err(CardCryptoError::SignatureVerificationError)?;
-
                 Ok(self.card_data().to_owned())
             }
             ContactCardType::EncryptedAndSigned => {
@@ -188,10 +193,12 @@ pub trait EncryptableAndSignableCard {
         provider: &T,
         user_key: &UnlockedUserKey<T>,
     ) -> Result<CardSignature, CardCryptoError> {
+        // Strip trailing spaces for detached signing.
+        let cleaned_data = remove_trailing_spaces(str::from_utf8(self.plaintext_card_data())?);
         let signature = provider
             .new_signer()
             .with_signing_key(user_key.as_ref())
-            .sign_detached(self.plaintext_card_data(), DataEncoding::Armor)
+            .sign_detached(&cleaned_data, DataEncoding::Armor)
             .map_err(CardCryptoError::SigningError)?;
 
         Ok(CardSignature(
