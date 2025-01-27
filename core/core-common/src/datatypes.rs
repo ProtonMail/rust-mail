@@ -39,13 +39,11 @@
 
 mod account_details;
 mod avatar;
-mod connection_status;
 mod contact_list;
 mod system_label;
 
 pub use self::account_details::AccountDetails;
 pub use self::avatar::AvatarInformation;
-pub use self::connection_status::ConnectionStatus;
 pub use self::contact_list::*;
 pub use self::system_label::*;
 

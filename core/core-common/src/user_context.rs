@@ -1,13 +1,13 @@
 pub use self::keys::*;
 use crate::cache::ProtonCache;
-use crate::datatypes::{AccountDetails, ConnectionStatus};
+use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
+use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::common::{AuthId, UserId};
-use proton_api_core::services::proton::{ProtonCore, QUARTER_SECOND_TIMEOUT};
-use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::Stash;
@@ -159,23 +159,7 @@ impl UserContext {
     /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
     ///
     pub async fn connection_status(&self) -> ConnectionStatus {
-        let response = self
-            .session
-            .api()
-            .get_tests_ping(Some(QUARTER_SECOND_TIMEOUT), None)
-            .await;
-
-        if let Err(error) = response {
-            if error.is_server_unreachable() {
-                return ConnectionStatus::ServerUnreachable;
-            } else if error.is_network_failure() {
-                return ConnectionStatus::Offline;
-            }
-
-            tracing::error!("Error while pinging the server: {error}. This is most likely a bug.");
-        }
-
-        ConnectionStatus::Online
+        self.session.status().await
     }
 
     async fn new_user_db(

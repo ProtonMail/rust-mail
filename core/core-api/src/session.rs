@@ -2,12 +2,14 @@
 
 use muon::client::flow::ForkFlowResult;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::auth::UserKeySecret;
+use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
+use crate::status_watcher::StatusWatcher;
 use crate::store::{DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
@@ -66,6 +68,7 @@ impl Default for Config {
 pub struct Session {
     client: Proton,
     config: Arc<Config>,
+    status: StatusWatcher,
     store: DynStore,
 }
 
@@ -85,10 +88,12 @@ impl Session {
         let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
         let client = proton::build(Config::clone(&config), Arc::clone(&store))?;
         let config = Arc::new(config);
+        let status = StatusWatcher::new();
 
         Ok(Self {
             client,
             config,
+            status,
             store,
         })
     }
@@ -147,6 +152,10 @@ impl Session {
 
         Ok(())
     }
+
+    pub async fn status(&self) -> ConnectionStatus {
+        self.status.status(self.client.clone()).await
+    }
 }
 
 /// The parts of a session.
@@ -170,6 +179,7 @@ impl Session {
             client: parts.client,
             config: parts.config,
             store: parts.store,
+            status: StatusWatcher::new(),
         }
     }
 }

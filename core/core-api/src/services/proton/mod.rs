@@ -48,6 +48,7 @@
 //! other functionality, and would get saved to the database.
 //!
 
+use std::future::Future;
 use std::sync::Arc;
 
 use bytes::Bytes;
@@ -68,6 +69,7 @@ use crate::services::proton::proton_impl::{
     MuonStoreImpl, SetCryptoClockLayer, SetDefaultServiceTypeLayer, SetDefaultTimeoutLayer,
 };
 use crate::session::Config;
+use crate::status_watcher::StatusWatcher;
 use crate::store::Store;
 
 /// Re-export muon for downstream convenience.
@@ -120,6 +122,7 @@ pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, 
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
         .layer_back(DisplayLogger::debug())
+        .layer_back(StatusWatcher::new())
         .build()?;
 
     Ok(client)
@@ -276,11 +279,11 @@ pub trait ProtonCore {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_tests_ping(
+    fn get_tests_ping(
         &self,
         timeout_ms: Option<u64>,
         retry: Option<RetryPolicy>,
-    ) -> ApiServiceResult<()>;
+    ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 
     /// TODO: Document this method.
     ///
