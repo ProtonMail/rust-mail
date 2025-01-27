@@ -7,8 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.37.2] - 2025-01-27
+
 ### Fixed
 
+  - [ET-1932] Fix sending of forward/reply to messges with attachments.
+    - Does not yet handle PGP/MIME embedded content
   - [ET-1685] Scroller now is able to switch between filters without being stuck on infinite loading.
   - Conversation and Message attachments now only contain attachments with disposition attachment.
    - Use `numAttachments` to get the total attachment count for each type.
