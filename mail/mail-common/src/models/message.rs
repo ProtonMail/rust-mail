@@ -3292,4 +3292,34 @@ impl MessageCounters {
             unread: self.unread,
         })
     }
+
+    /// Watch message counter for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// # Errors
+    /// Returns error if the query failed
+    ///
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+    }
+}
+
+pub struct MessageCounterWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for MessageCounterWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![MessageCounters::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for MessageCounterWatcher: {e}")
+            })
+            .ok();
+    }
 }

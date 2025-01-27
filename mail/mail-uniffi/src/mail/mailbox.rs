@@ -9,7 +9,6 @@ use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::services::proton::Proton;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::ConversationCounters as RealConversationCounters;
 use stash::stash::Stash;
 use std::sync::Arc;
 use tracing::error;
@@ -140,9 +139,9 @@ impl Mailbox {
         &self,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, UserSessionError> {
-        let stash = self.mbox.user_context().user_stash().clone();
+        let mbox = self.mbox.clone();
         uniffi_async(async move {
-            let receiver = RealConversationCounters::watch(&stash)?;
+            let receiver = mbox.watch_unread_count().await?;
             let watcher = watch_channel(receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)

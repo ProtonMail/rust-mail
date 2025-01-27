@@ -3779,6 +3779,7 @@ impl ConversationCounters {
     /// # Errors
     ///
     /// Returns error if the query failed
+    ///
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(ConversationCounterWatcher { sender }))
     }
