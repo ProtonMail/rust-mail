@@ -6,6 +6,7 @@ use crate::services::proton::prelude::*;
 use crate::session::{Session, SessionParts};
 use crate::store::StoreError;
 use futures::{TryFuture, TryFutureExt};
+use muon::client::flow::LoginExtraInfo;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -128,13 +129,17 @@ impl Flow {
         ))
     }
 
-    /// Start login with credentials. The `human_verification` parameter only needs to be submitted
-    /// if during the login flow you catch a [`LoginError::HumanVerificationRequired`] error.
+    /// Start login with credentials while passing additional `extra_info`.
     ///
     /// # Errors
     /// Returns error if the login request or SRP proof calculations failed.
-    pub async fn login(&mut self, user: String, pass: String) -> Result<(), LoginError> {
-        self.transition(|s| s.login(user, pass)).await
+    pub async fn login(
+        &mut self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<(), LoginError> {
+        self.transition(|s| s.login(user, pass, extra_info)).await
     }
 
     /// Submit TOTP 2FA code.

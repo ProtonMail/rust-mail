@@ -1,3 +1,4 @@
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
@@ -39,7 +40,9 @@ async fn main() {
 
     let mut flow = context.new_login_flow().unwrap();
 
-    flow.login(user_email, user_password).await.unwrap();
+    flow.login(user_email, user_password, LoginExtraInfo::default())
+        .await
+        .unwrap();
 
     context
         .user_context_from_login_flow(&mut flow)
