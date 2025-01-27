@@ -3771,6 +3771,18 @@ impl ConversationCounters {
             unread: self.unread,
         })
     }
+
+    /// Watch conversation counter for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed
+    ///
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(ConversationCounterWatcher { sender }))
+    }
 }
 
 // TODO: Refactor this at 1.85 into an AsyncFnOnce
@@ -3793,5 +3805,24 @@ impl StoreLabelCounters {
         MessageLabelsCount::create_or_update_message_counts(self.1, &tx).await?;
         tx.commit().await?;
         Ok(())
+    }
+}
+
+pub struct ConversationCounterWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for ConversationCounterWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![ConversationCounters::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for ConversationCounterWatcher: {e}")
+            })
+            .ok();
     }
 }

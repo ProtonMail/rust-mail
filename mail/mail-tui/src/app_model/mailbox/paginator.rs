@@ -10,7 +10,6 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Paginator adapter.
-
 pub struct Paginator<T: MailScrollerSource + 'static> {
     paginator: Arc<Mutex<MailScroller<T>>>,
     _watch_handle: WatchHandle,
