@@ -6,7 +6,7 @@ use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::common::{AuthId, UserId};
-use proton_api_core::services::proton::{ProtonCore, ONE_SECOND_TIMEOUT};
+use proton_api_core::services::proton::{ProtonCore, QUARTER_SECOND_TIMEOUT};
 use proton_api_core::session::{CoreSession, Session};
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
@@ -14,7 +14,6 @@ use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::debug;
 
 pub mod images_logo;
@@ -45,7 +44,6 @@ pub struct UserContext {
     user_stash: Stash,
     user_id: UserId,
     session_id: AuthId,
-    status: Arc<Mutex<ConnectionStatus>>,
     pub(self) key_manager: Arc<CryptoKeyManager>,
     pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
 }
@@ -83,7 +81,6 @@ impl UserContext {
             user_stash,
             user_id,
             session_id,
-            status: Arc::new(Mutex::new(ConnectionStatus::Online)),
             key_manager: Arc::new(CryptoKeyManager::new()),
             images_logo_cache,
         }))
@@ -161,39 +158,24 @@ impl UserContext {
     /// - `ConnectionStatus::Offline`: The application is offline.
     /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
     ///
-    /// # Errors
-    /// When the connection status cannot be determined which in most cases would be a bug.
-    ///
     pub async fn connection_status(&self) -> ConnectionStatus {
-        let guard = self.status.lock().await;
-        let value = *guard;
-        drop(guard);
-        let status = Arc::clone(&self.status);
-        let session = self.session().clone();
+        let response = self
+            .session
+            .api()
+            .get_tests_ping(Some(QUARTER_SECOND_TIMEOUT), None)
+            .await;
 
-        tokio::task::spawn(async move {
-            let response = session
-                .api()
-                .get_tests_ping(Some(ONE_SECOND_TIMEOUT), None)
-                .await;
-            let mut task_guard = status.lock().await;
-
-            if response.is_err() {
-                let error = response.unwrap_err();
-
-                if error.is_server_unreachable() {
-                    *task_guard = ConnectionStatus::ServerUnreachable;
-                } else if error.is_network_failure() {
-                    *task_guard = ConnectionStatus::Offline;
-                } else {
-                    tracing::error!("Error while pinging the server: {error}");
-                }
-            } else {
-                *task_guard = ConnectionStatus::Online;
+        if let Err(error) = response {
+            if error.is_server_unreachable() {
+                return ConnectionStatus::ServerUnreachable;
+            } else if error.is_network_failure() {
+                return ConnectionStatus::Offline;
             }
-        });
 
-        value
+            tracing::error!("Error while pinging the server: {error}. This is most likely a bug.");
+        }
+
+        ConnectionStatus::Online
     }
 
     async fn new_user_db(

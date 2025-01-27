@@ -29,6 +29,7 @@ use crate::services::proton::{Proton, ProtonCore};
 use crate::services::proton::{CORE_V4, CORE_V5};
 use crate::store::Store;
 
+pub const QUARTER_SECOND_TIMEOUT: u64 = 250;
 pub const ONE_SECOND_TIMEOUT: u64 = 1000;
 pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 

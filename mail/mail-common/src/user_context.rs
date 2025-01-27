@@ -68,8 +68,6 @@ impl MailUserContext {
             .register_execution_context(Weak::clone(&this.this));
         this.exclusive.register_execution_context(user_context_weak);
 
-        // Update connection status with real value
-        this.connection_status().await;
         this.init_expiration_loop();
 
         Ok(this)

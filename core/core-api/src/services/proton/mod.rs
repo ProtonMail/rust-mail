@@ -80,7 +80,7 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-pub use self::proton_impl::{ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT};
+pub use self::proton_impl::{ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, QUARTER_SECOND_TIMEOUT};
 
 mod proton_impl;
 
