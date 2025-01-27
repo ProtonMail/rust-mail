@@ -210,3 +210,54 @@ impl From<ContactEmail> for ContactEmailItem {
         }
     }
 }
+
+/// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
+/// Contrary to the [`ContactItemType`] it also might be a device contact
+/// 
+pub struct ContactSuggestion {
+    /// The field represents unique key identifier used by the user to distinguish elements in the array
+    pub key: String,
+
+    /// The field represents the name of the contact
+    pub name: String,
+
+    /// The field represents the avatar information of the contact
+    pub avatar_information: AvatarInformation,
+
+    /// The kind of contact suggestion. Whether it is a native contact, proton contact or a group.
+    pub kind: ContactSuggestionKind,
+}
+
+/// Kind of email suggestion
+/// Note, variants of this enum are flat - that is, if one contact has assigned two emails, 
+/// it would be represented by two instances of [`ContactSuggestion`].
+/// 
+pub enum ContactSuggestionKind {
+    /// Proton contact, stored in the local cache and shared between user devices
+    ContactItem(ContactItemSuggestion),
+    /// A device, native contact, stored only locally on the current device.
+    DeviceContact(DeviceContactSuggestion),
+    /// Proton contact group, that consists only other proton contacts, and never device contact.
+    ContactGroup(ContactGroupSuggestion),
+}
+
+/// Proton contact, stored in the local cache and shared between user devices
+/// 
+pub struct ContactItemSuggestion {
+    /// The field represents the email address used in the proton contact
+    pub email: ContactEmailItem
+}
+
+/// A device, native contact, stored only locally on the current device.
+///
+pub struct DeviceContactSuggestion {
+    /// The field represents the email address used in the device contact
+    pub email: String
+}
+
+/// Proton contact group, that consists only other proton contacts, and never device contact.
+///
+pub struct ContactGroupSuggestion {
+    // TODO: I guess that should not be flat?
+    pub emails: Vec<ContactEmailItem>
+}
