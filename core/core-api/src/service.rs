@@ -177,8 +177,18 @@ impl ApiServiceError {
             ApiServiceError::Redirect(_, _)
             | ApiServiceError::Timeout(_)
             | ApiServiceError::NetworkError(_)
-            | ApiServiceError::ConnectionError(_)
-            | ApiServiceError::TooManyRequest(_, _)
+            | ApiServiceError::ConnectionError(_) => true,
+            _ => self.is_server_unreachable(),
+        }
+    }
+
+    /// Check if the error is the result of the server being unreachable.
+    ///
+    /// An error is considered a server unreachable when the server replies with 429/5xx HTTP status codes.
+    #[must_use]
+    pub fn is_server_unreachable(&self) -> bool {
+        match self {
+            ApiServiceError::TooManyRequest(_, _)
             | ApiServiceError::BadGateway(_, _)
             | ApiServiceError::NotImplemented(_, _)
             | ApiServiceError::ServiceUnavailable(_, _)

@@ -19,7 +19,7 @@ use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
+use proton_core_common::datatypes::{AccountDetails, ConnectionStatus, LocalAddressId};
 use proton_core_common::models::{Address, User};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
@@ -68,7 +68,10 @@ impl MailUserContext {
             .register_execution_context(Weak::clone(&this.this));
         this.exclusive.register_execution_context(user_context_weak);
 
+        // Update connection status with real value
+        this.connection_status().await;
         this.init_expiration_loop();
+
         Ok(this)
     }
 
@@ -331,6 +334,11 @@ impl MailUserContext {
     pub async fn ping(&self) -> MailContextResult<()> {
         self.user_context.session().api().get_tests_ping().await?;
         Ok(())
+    }
+
+    /// Get the connection status of the current user session.
+    pub async fn connection_status(&self) -> ConnectionStatus {
+        self.user_context.connection_status().await
     }
 }
 
