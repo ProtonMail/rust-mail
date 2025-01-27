@@ -6,6 +6,8 @@ use indoc::formatdoc;
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::Label;
+use sqlite_watcher::watcher::TableObserver;
+use stash::stash::{Stash, WatcherHandle};
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -240,5 +242,40 @@ impl LabelWithCounters {
             sticky,
             row_id,
         }
+    }
+
+    /// Watch labels with counters for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed
+    ///
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(LabelWithCountersWatcher { sender }))
+    }
+}
+
+pub struct LabelWithCountersWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for LabelWithCountersWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![
+            ConversationCounters::table_name().to_string(),
+            MessageCounters::table_name().to_string(),
+            Label::table_name().to_string(),
+        ]
+    }
+
+    fn on_tables_changed(&self, _tables: &std::collections::BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for LabelWithCountersWatcher: {e}")
+            })
+            .ok();
     }
 }
