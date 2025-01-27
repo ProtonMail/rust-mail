@@ -658,35 +658,39 @@ impl ToSql for SpamAction {
     }
 }
 
-/// TODO: Document this enum.
+/// Where to move or what to do with the item when the user swipes it.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-#[repr(u8)]
+#[repr(i8)]
 pub enum SwipeAction {
-    /// TODO: Document this variant.
+    NoAction = -1,
+
     Trash = 0,
 
-    /// TODO: Document this variant.
     Spam = 1,
 
-    /// TODO: Document this variant.
     Star = 2,
 
-    /// TODO: Document this variant.
     #[default]
     Archive = 3,
 
-    /// TODO: Document this variant.
     MarkAsRead = 4,
+
+    LabelAs = 5,
+
+    MoveTo = 6,
 }
 
 impl From<ApiSwipeAction> for SwipeAction {
     fn from(value: ApiSwipeAction) -> Self {
         match value {
+            ApiSwipeAction::NoAction => Self::NoAction,
             ApiSwipeAction::Trash => Self::Trash,
             ApiSwipeAction::Spam => Self::Spam,
             ApiSwipeAction::Star => Self::Star,
             ApiSwipeAction::Archive => Self::Archive,
             ApiSwipeAction::MarkAsRead => Self::MarkAsRead,
+            ApiSwipeAction::MoveTo => Self::MoveTo,
+            ApiSwipeAction::LabelAs => Self::LabelAs,
         }
     }
 }

@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-1863] Mailbox counter watchers are updated whenever user marks conversation/message as read/unread
   - [ET-1863] System labels (like Outbox) watchers are updated whenever labels change
 
+### Added
+
+- [ET-1944] `SwipeAction::{NoAction, LabelAs, MoveTo}` are now supported.
+
+
 ## [0.37.2] - 2025-01-27
 
 ### Fixed

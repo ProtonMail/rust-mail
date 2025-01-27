@@ -241,7 +241,7 @@ pub enum SpamAction {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
-#[repr(u8)]
+#[repr(i8)]
 pub enum SwipeAction {
     /// TODO: Document this variant.
     Trash = 0,

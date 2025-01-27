@@ -701,30 +701,23 @@ impl From<RealSpamAction> for SpamAction {
     }
 }
 
-/// TODO: Document this enum.
+/// See [`RealSwipeAction`]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
-#[repr(u8)]
+#[repr(i8)]
 pub enum SwipeAction {
-    /// TODO: Document this variant.
+    NoAction = -1,
     Trash = 0,
-
-    /// TODO: Document this variant.
     Spam = 1,
-
-    /// TODO: Document this variant.
     Star = 2,
-
-    /// TODO: Document this variant.
     #[default]
     Archive = 3,
-
-    /// TODO: Document this variant.
     MarkAsRead = 4,
 }
 
 impl From<SwipeAction> for RealSwipeAction {
     fn from(value: SwipeAction) -> Self {
         match value {
+            SwipeAction::NoAction => RealSwipeAction::NoAction,
             SwipeAction::Trash => RealSwipeAction::Trash,
             SwipeAction::Spam => RealSwipeAction::Spam,
             SwipeAction::Star => RealSwipeAction::Star,
@@ -737,6 +730,7 @@ impl From<SwipeAction> for RealSwipeAction {
 impl From<RealSwipeAction> for SwipeAction {
     fn from(value: RealSwipeAction) -> Self {
         match value {
+            RealSwipeAction::NoAction => SwipeAction::NoAction,
             RealSwipeAction::Trash => SwipeAction::Trash,
             RealSwipeAction::Spam => SwipeAction::Spam,
             RealSwipeAction::Star => SwipeAction::Star,
