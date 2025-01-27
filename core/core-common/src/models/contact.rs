@@ -4,7 +4,9 @@ use std::iter;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
-use crate::datatypes::{ContactSuggestion, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId};
+use crate::datatypes::{
+    ContactSuggestion, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
+};
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use futures::future::try_join;
@@ -419,20 +421,24 @@ impl Contact {
     }
 
     /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query.
-    /// 
+    ///
     /// # Parameters
-    /// 
+    ///
     /// * `query` - a plaintext string provided by the user that we need to complete
     /// * `device_contacts` - contacts stored in the device storage, not shared between proton clients.
     /// * `tether` - The database interface
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// when querying the database fails.
-    /// 
-    pub async fn contact_suggestions(query: &str, device_contacts: Vec<DeviceContact>, tether: &Tether) -> Result<Vec<ContactSuggestion>, StashError> {
+    ///
+    pub async fn contact_suggestions(
+        query: &str,
+        device_contacts: Vec<DeviceContact>,
+        tether: &Tether,
+    ) -> Result<Vec<ContactSuggestion>, StashError> {
         // TODO (ET-1971): Extend that implementation by using query to filter contacts, groups and device contacts
-        let _query = query;
+        let (_query,) = (query,);
 
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
@@ -443,7 +449,11 @@ impl Contact {
             contact.emails(tether).await?;
         }
 
-        Ok(ContactSuggestion::from_contacts_and_device_contacts(contacts, contact_groups, device_contacts))
+        Ok(ContactSuggestion::from_contacts_and_device_contacts(
+            contacts,
+            contact_groups,
+            device_contacts,
+        ))
     }
 
     pub async fn action_delete(
