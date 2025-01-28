@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
  - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
 
+### Fixed
+
+ - [ET-1987] Fix email address validation for `RecipientList`.
+
 ## [0.38.0] - 2025-01-28
 
 ### Added
