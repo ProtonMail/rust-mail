@@ -82,13 +82,16 @@ impl Session {
     /// # Panics
     ///
     /// Panics if the Proton client fails to build.
-    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, BuildError> {
+    pub fn new(
+        config: Config,
+        store: Option<Box<dyn Store>>,
+        status: StatusWatcher,
+    ) -> Result<Self, BuildError> {
         init_server_crypto_clock();
 
         let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
-        let client = proton::build(Config::clone(&config), Arc::clone(&store))?;
+        let client = proton::build(Config::clone(&config), Arc::clone(&store), status.clone())?;
         let config = Arc::new(config);
-        let status = StatusWatcher::new();
 
         Ok(Self {
             client,

@@ -75,7 +75,7 @@ async fn main() {
         .await
         .unwrap();
     let ctx2 = context
-        .user_context_from_session(&sessions[0])
+        .user_context_from_session(&sessions[0], None)
         .await
         .unwrap();
 

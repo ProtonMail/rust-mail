@@ -17,6 +17,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
@@ -470,7 +471,7 @@ impl Context {
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None)?;
+        let session = self.new_api_session(None, None)?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -500,13 +501,13 @@ impl Context {
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
-                self.new_api_session(Some(&session))?,
+                self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
-                self.new_api_session(Some(&session))?,
+                self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
             )),
@@ -548,6 +549,7 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
+        status: Option<StatusWatcher>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -566,7 +568,7 @@ impl Context {
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session))?;
+        let session = self.new_api_session(Some(session), status)?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -579,7 +581,7 @@ impl Context {
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
         for session in &self.get_account_sessions(user_id).await? {
             let Ok(api) = self
-                .new_api_session(Some(session))
+                .new_api_session(Some(session), None)
                 .inspect_err(|err| error!("failed to create API session: {err}"))
             else {
                 continue;
@@ -653,7 +655,11 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    fn new_api_session(&self, session: Option<&CoreSession>) -> CoreContextResult<ApiSession> {
+    fn new_api_session(
+        &self,
+        session: Option<&CoreSession>,
+        status: Option<StatusWatcher>,
+    ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let account_stash = self.account_stash();
@@ -661,7 +667,11 @@ impl Context {
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
         let config = self.api_config.clone();
 
-        Ok(ApiSession::new(config, Some(Box::new(store)))?)
+        Ok(ApiSession::new(
+            config,
+            Some(Box::new(store)),
+            status.unwrap_or_default(),
+        )?)
     }
 
     /// Get the stash in use

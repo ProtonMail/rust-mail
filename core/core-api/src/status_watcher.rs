@@ -100,6 +100,16 @@ impl StatusWatcher {
         }
     }
 
+    #[cfg(any(test, debug_assertions))]
+    #[must_use]
+    pub fn test() -> Self {
+        Self {
+            status: Arc::new(RwLock::new(ConnectionStatus::Online)),
+            last_check: Arc::new(RwLock::new(Instant::now())),
+            request: Arc::new(Mutex::new(None)),
+        }
+    }
+
     /// Get the current status of the connection.
     /// If the status is stale, it will ping the server to get the current status.
     /// If the status is `Offline`, it will start a background check.

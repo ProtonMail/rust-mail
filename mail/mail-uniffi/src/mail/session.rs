@@ -174,7 +174,7 @@ impl MailSession {
             .block_on(async move {
                 let ctx = self
                     .ctx
-                    .user_context_from_session(session.session())
+                    .user_context_from_session(session.session(), None)
                     .await?;
 
                 Result::<_, RealProtonMailError>::Ok(MailUserSession::new(ctx))

@@ -3,6 +3,7 @@ use clap::Parser;
 use proton_api_core::login::Flow;
 use proton_api_core::session::Config;
 use proton_api_core::session::Session;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_mail_common::errors::ProtonMailError;
 
 #[derive(Parser, Debug)]
@@ -18,7 +19,7 @@ struct Args {
 async fn main() {
     let Args { username, password } = Args::parse();
 
-    let session = Session::new(Config::default(), None).unwrap();
+    let session = Session::new(Config::default(), None, StatusWatcher::test()).unwrap();
     let mut login_flow = Flow::new(session);
     let result = login_flow.login(username, password).await;
 

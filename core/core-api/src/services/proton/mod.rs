@@ -108,7 +108,11 @@ pub enum BuildError {
 }
 
 /// Builds a new Proton client.
-pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, BuildError> {
+pub fn build<S: Store>(
+    config: Config,
+    store: Arc<RwLock<S>>,
+    status_watcher: StatusWatcher,
+) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
         App::new(config.app_version)?.with_user_agent(agent)
     } else {
@@ -122,7 +126,7 @@ pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, 
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
         .layer_back(DisplayLogger::debug())
-        .layer_back(StatusWatcher::new())
+        .layer_back(status_watcher)
         .build()?;
 
     Ok(client)
