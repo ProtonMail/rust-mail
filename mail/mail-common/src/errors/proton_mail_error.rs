@@ -75,6 +75,7 @@ impl From<LoginError> for ProtonMailError {
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
             LoginError::FlowLogin(api_service_error)
             | LoginError::FlowTotp(api_service_error)
+            | LoginError::FlowFido(api_service_error)
             | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
             LoginError::MissingPrimaryKey
             | LoginError::KeySecretAuthUpdate(_)

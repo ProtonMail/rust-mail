@@ -1,5 +1,6 @@
 #![allow(clippy::module_name_repetitions)]
 
+use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -62,7 +63,8 @@ impl Default for Config {
 }
 
 /// An API session, capable of making requests to the API on behalf of a user.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+#[debug("Session {{ client: {client:?}, config: {config:?} }}")]
 pub struct Session {
     client: Proton,
     config: Arc<Config>,
@@ -157,6 +159,10 @@ pub(crate) struct SessionParts {
 }
 
 impl Session {
+    pub(crate) fn to_parts(&self) -> SessionParts {
+        self.clone().into_parts()
+    }
+
     pub(crate) fn into_parts(self) -> SessionParts {
         SessionParts {
             client: self.client,

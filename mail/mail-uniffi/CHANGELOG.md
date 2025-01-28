@@ -9,12 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
- - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
+  - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
 
 ### Fixed
 
- - [ET-1987] Fix email address validation for `RecipientList`.
- - [ET-1923] Remove mail settings signature.
+  - [ET-1987] Fix email address validation for `RecipientList`.
+  - [ET-1923] Remove mail settings signature.
+  - [ET-1913] Support retrying of failed login flow stages
 
 ### Changed
 
