@@ -99,9 +99,9 @@ async fn make_another_request_when_timeout_and_channel_closed() {
     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
     // Status stale - another request
     sleep(Duration::from_secs(4)).await;
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+    assert_eq!(api.status().await, ConnectionStatus::Online);
 }
 
 #[tokio::test]
@@ -143,7 +143,7 @@ async fn very_bad_connection_responding_in_two_seconds() {
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
-        .expect(2)
+        .expect(3)
         .mount(&mock_server)
         .await;
 
@@ -154,12 +154,15 @@ async fn very_bad_connection_responding_in_two_seconds() {
     assert_eq!(api.status().await, ConnectionStatus::Offline);
     assert_eq!(api.status().await, ConnectionStatus::Offline);
     sleep(Duration::from_secs(6)).await;
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+    sleep(Duration::from_secs(6)).await;
     assert_eq!(api.status().await, ConnectionStatus::Offline);
     assert_eq!(api.status().await, ConnectionStatus::Offline);
 }
 
 #[tokio::test]
-async fn very_bad_connection_and_server_restart_simulation() {
+async fn terribly_bad_connection_and_server_restart_simulation() {
     let mock_server = MockServer::start().await;
     let api_config = Config {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
@@ -169,7 +172,7 @@ async fn very_bad_connection_and_server_restart_simulation() {
 
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(20)))
         .expect(2)
         .mount(&mock_server)
         .await;
@@ -186,7 +189,7 @@ async fn very_bad_connection_and_server_restart_simulation() {
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
-        .expect(1)
+        .expect(2)
         .mount(&mock_server)
         .await;
 
@@ -195,6 +198,39 @@ async fn very_bad_connection_and_server_restart_simulation() {
     sleep(Duration::from_secs(6)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
     assert_eq!(api.status().await, ConnectionStatus::Online);
+    sleep(Duration::from_secs(6)).await;
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+}
+
+#[tokio::test]
+async fn terribly_bad_connection_responding_in_twenty_seconds() {
+    let mock_server = MockServer::start().await;
+    let api_config = Config {
+        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
+        ..Default::default()
+    };
+    let api = Session::new(api_config.clone(), None, StatusWatcher::test()).unwrap();
+
+    Mock::given(method("GET"))
+        .and(path(r"/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(20)))
+        .expect(2)
+        .mount(&mock_server)
+        .await;
+
+    catch_all(&mock_server).await;
+    // Give some time for a server to start
+    sleep(Duration::from_secs(1)).await;
+
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    sleep(Duration::from_secs(6)).await;
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    sleep(Duration::from_secs(6)).await;
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
 }
 
 #[test_case(200, ConnectionStatus::Online; "TEST 1 - 200 Ok")]

@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::{
     connection_status::ConnectionStatus,
-    services::proton::{Proton, ProtonCore, ONE_SECOND_TIMEOUT},
+    services::proton::{Proton, ProtonCore, ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT},
 };
 
 type StatusJoinHandle = JoinHandle<()>;
@@ -36,12 +36,10 @@ impl StatusWatcher {
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
     {
-        dbg!(&req);
         let resp = inner.send(req).await;
 
         match resp {
             Err(error) => {
-                dbg!(&error);
                 match error.kind() {
                     ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
                         self.update(ConnectionStatus::Offline).await;
@@ -55,7 +53,6 @@ impl StatusWatcher {
                 Err(error)
             }
             Ok(resp) => {
-                dbg!(&resp);
                 if resp.is(404) || resp.is(429) || resp.status().is_server_error() {
                     self.update(ConnectionStatus::ServerUnreachable).await;
                 } else {
@@ -129,7 +126,7 @@ impl StatusWatcher {
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_up_to_date().await {
             drop(self.request.lock().await.take());
-            Self::ping(api.clone()).await;
+            Self::ping(api.clone(), ONE_SECOND_TIMEOUT).await;
         }
 
         let status = *self.status.read().await;
@@ -142,26 +139,26 @@ impl StatusWatcher {
     }
 
     async fn update(&self, status: ConnectionStatus) {
-        dbg!("UPDATE STATUS");
         *self.last_check.write().await = Instant::now();
         *self.status.write().await = status;
     }
 
-    async fn ping(api: Proton) {
-        let _ = api.get_tests_ping(Some(ONE_SECOND_TIMEOUT), None).await;
+    async fn ping(api: Proton, timeout: u64) {
+        let _ = api.get_tests_ping(Some(timeout), None).await;
     }
 
     #[allow(clippy::let_underscore_future)]
     async fn background_check(&self, api: Proton) {
         let mut request = self.request.lock().await;
         if request.is_none() {
-            let _ = request.insert(tokio::spawn(async move { Self::ping(api).await }));
+            let _ = request.insert(tokio::spawn(async move {
+                Self::ping(api, ONE_MINUTE_TIMEOUT).await;
+            }));
         }
     }
 
     async fn is_up_to_date(&self) -> bool {
-        dbg!("IS UP TO DATE");
-        dbg!(self.last_check.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS)
+        self.last_check.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS
     }
 }
 
