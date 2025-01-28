@@ -3,10 +3,10 @@ use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,
-    ContactGroupSuggestion as RealContactGroupSuggestion, ContactItem as RealContactItem,
-    ContactItemType as RealContactItemType, ContactSuggestion as RealContactSuggestion,
-    ContactSuggestionKind as RealContactSuggestionKind, DeviceContact as RealDeviceContact,
-    DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
+    ContactItem as RealContactItem, ContactItemType as RealContactItemType,
+    ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
+    DeviceContact as RealDeviceContact, DeviceContactSuggestion as RealDeviceContactSuggestion,
+    GroupedContacts as RealGroupedContacts,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -192,7 +192,7 @@ pub enum ContactSuggestionKind {
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
-    ContactGroup(ContactGroupSuggestion),
+    ContactGroup(Vec<ContactEmailItem>),
 }
 
 impl From<RealContactSuggestionKind> for ContactSuggestionKind {
@@ -205,7 +205,7 @@ impl From<RealContactSuggestionKind> for ContactSuggestionKind {
                 ContactSuggestionKind::DeviceContact(suggestion.into())
             }
             RealContactSuggestionKind::ContactGroup(suggestion) => {
-                ContactSuggestionKind::ContactGroup(suggestion.into())
+                ContactSuggestionKind::ContactGroup(suggestion.into_iter().map_into().collect())
             }
         }
     }
@@ -222,25 +222,5 @@ pub struct DeviceContactSuggestion {
 impl From<RealDeviceContactSuggestion> for DeviceContactSuggestion {
     fn from(value: RealDeviceContactSuggestion) -> Self {
         Self { email: value.email }
-    }
-}
-
-/// Proton contact group, that consists only other proton contacts, and never device contact.
-///
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct ContactGroupSuggestion {
-    // TODO: I guess that should not be flat?
-    pub emails: Vec<ContactEmailItem>,
-}
-
-impl From<RealContactGroupSuggestion> for ContactGroupSuggestion {
-    fn from(value: RealContactGroupSuggestion) -> Self {
-        Self {
-            emails: value
-                .emails
-                .into_iter()
-                .map_into::<ContactEmailItem>()
-                .collect(),
-        }
     }
 }

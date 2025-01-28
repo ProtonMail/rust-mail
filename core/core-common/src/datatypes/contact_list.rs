@@ -277,7 +277,7 @@ pub enum ContactSuggestionKind {
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
-    ContactGroup(ContactGroupSuggestion),
+    ContactGroup(Vec<ContactEmailItem>),
 }
 
 /// A device, native contact, stored only locally on the current device.
@@ -285,11 +285,4 @@ pub enum ContactSuggestionKind {
 pub struct DeviceContactSuggestion {
     /// The field represents the email address used in the device contact
     pub email: String,
-}
-
-/// Proton contact group, that consists only other proton contacts, and never device contact.
-///
-pub struct ContactGroupSuggestion {
-    // TODO: I guess that should not be flat?
-    pub emails: Vec<ContactEmailItem>,
 }
