@@ -80,6 +80,7 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for StatusWatcher {
 
 impl StatusWatcher {
     /// Create a new `StatusWatcher`.
+    ///
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
     ///
@@ -98,7 +99,16 @@ impl StatusWatcher {
             request: Arc::new(Mutex::new(None)),
         }
     }
-
+    /// Create a new test `StatusWatcher` without shared state.
+    ///
+    /// The status is initialized to `Online`.
+    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
+    ///
+    /// # Panics
+    ///
+    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
+    /// If it does, it's a bug.
+    ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn test() -> Self {
@@ -119,7 +129,7 @@ impl StatusWatcher {
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_up_to_date().await {
             drop(self.request.lock().await.take());
-            Self::ping(api.clone()).await
+            Self::ping(api.clone()).await;
         }
 
         let status = *self.status.read().await;
