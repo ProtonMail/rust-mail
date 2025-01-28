@@ -2,7 +2,7 @@
 
 use muon::client::flow::ForkFlowResult;
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;

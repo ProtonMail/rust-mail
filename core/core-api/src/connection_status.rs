@@ -9,9 +9,12 @@ pub enum ConnectionStatus {
 }
 
 impl ConnectionStatus {
+    #[must_use]
     pub fn is_online(&self) -> bool {
         matches!(self, ConnectionStatus::Online)
     }
+
+    #[must_use]
     pub fn is_offline(&self) -> bool {
         !self.is_online()
     }

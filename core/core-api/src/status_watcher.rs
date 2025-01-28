@@ -35,14 +35,24 @@ impl StatusWatcher {
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
     {
-        let resp = inner.send(req).await?.ok();
+        let resp = inner.send(req).await;
 
-        if let Err(error) = resp {
-            self.update(ConnectionStatus::Offline).await;
-            Err(error.into())
-        } else {
-            self.update(ConnectionStatus::Online).await;
-            resp.map_err(Into::into)
+        match resp {
+            Err(error) => {
+                self.update(ConnectionStatus::Offline).await;
+
+                Err(error)
+            }
+            Ok(resp) => {
+                let status = resp.status();
+                if status.is_client_error() || status.is_server_error() {
+                    self.update(ConnectionStatus::Offline).await;
+                } else {
+                    self.update(ConnectionStatus::Online).await;
+                }
+
+                Ok(resp)
+            }
         }
     }
 }
@@ -58,6 +68,15 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for StatusWatcher {
 }
 
 impl StatusWatcher {
+    /// Create a new `StatusWatcher`.
+    /// The status is initialized to `Online`.
+    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
+    ///
+    /// # Panics
+    ///
+    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
+    /// If it does, it's a bug.
+    ///
     pub fn new() -> Self {
         Self {
             status: STATUS.clone(),
@@ -70,12 +89,18 @@ impl StatusWatcher {
         }
     }
 
+    /// Get the current status of the connection.
+    /// If the status is stale, it will ping the server to get the current status.
+    /// If the status is `Offline`, it will start a background check.
+    ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_up_to_date().await {
             let opt_request = self.request.lock().await.take();
             if let Some(request) = opt_request {
-                if let Some(status) = request.await.ok() {
+                if let Ok(status) = request.await {
                     self.update(status).await;
+                } else {
+                    tracing::error!("Error while joining a future on status watcher. This is most likely a bug.");
                 }
             } else {
                 self.update(Self::ping(api.clone()).await).await;
@@ -84,13 +109,13 @@ impl StatusWatcher {
         let status = *self.status.read().await;
 
         if status.is_offline() {
-            self.background_check(api).await
+            self.background_check(api).await;
         }
 
         status
     }
 
-    pub async fn update(&self, status: ConnectionStatus) {
+    async fn update(&self, status: ConnectionStatus) {
         *self.last_check.write().await = Instant::now();
         *self.status.write().await = status;
     }
@@ -98,7 +123,7 @@ impl StatusWatcher {
     async fn ping(api: Proton) -> ConnectionStatus {
         let response = api.get_tests_ping(Some(ONE_SECOND_TIMEOUT), None).await;
         match response {
-            Ok(_) => ConnectionStatus::Online,
+            Ok(()) => ConnectionStatus::Online,
             Err(error) => {
                 if error.is_server_unreachable() {
                     ConnectionStatus::ServerUnreachable
@@ -114,16 +139,21 @@ impl StatusWatcher {
         }
     }
 
-    // TODO: Watch for going online
+    #[allow(clippy::let_underscore_future)]
     async fn background_check(&self, api: Proton) {
-        let _ = self
-            .request
-            .lock()
-            .await
-            .insert(tokio::spawn(async move { Self::ping(api).await }));
+        let mut request = self.request.lock().await;
+        if request.is_none() {
+            let _ = request.insert(tokio::spawn(async move { Self::ping(api).await }));
+        }
     }
 
     async fn is_up_to_date(&self) -> bool {
-        self.last_check.read().await.elapsed().as_secs() < 1
+        self.last_check.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS
+    }
+}
+
+impl Default for StatusWatcher {
+    fn default() -> Self {
+        Self::new()
     }
 }
