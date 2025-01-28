@@ -61,7 +61,8 @@ async fn draft_undo_send() {
     // Queue undo send action - The exposed API uses apply for faster reaction, but we
     // want to check intermediate state here.
     user_ctx
-        .with_queue(|queue| queue.queue_action(UndoSend::new(local_sent_message.local_id.unwrap())))
+        .action_queue()
+        .queue_action(UndoSend::new(local_sent_message.local_id.unwrap()))
         .await
         .unwrap();
 
@@ -122,9 +123,11 @@ async fn draft_undo_send_failure() {
     tx.commit().await.unwrap();
 
     // Que undo send action
-    let Err(err) = user_ctx
-        .with_queue(|queue| Draft::action_undo_send(queue, local_sent_message.local_id.unwrap()))
-        .await
+    let Err(err) = Draft::action_undo_send(
+        user_ctx.action_queue(),
+        local_sent_message.local_id.unwrap(),
+    )
+    .await
     else {
         panic!("Should have failed.")
     };

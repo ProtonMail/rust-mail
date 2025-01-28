@@ -727,11 +727,11 @@ async fn handle_draft_failure(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        let result_cmd = match ctx
-                            .with_queue(|queue| {
-                                Draft::action_undo_send(queue, result.local_message_id)
-                            })
-                            .await
+                        let result_cmd = match Draft::action_undo_send(
+                            ctx.action_queue(),
+                            result.local_message_id,
+                        )
+                        .await
                         {
                             // On success open composer, else display error
                             Ok(_) => Composer::open(Arc::clone(&ctx), result.local_message_id),

@@ -162,10 +162,13 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    user_ctx
-        .with_queue(|queue| Message::action_mark_read(queue, inbox.local_id.unwrap(), message_ids))
-        .await
-        .unwrap();
+    Message::action_mark_read(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        message_ids,
+    )
+    .await
+    .unwrap();
 
     // Validation
     let messages = Message::find("WHERE unread = ?", params![true], &tether)
@@ -228,12 +231,13 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_mark_unread(queue, inbox.local_id.unwrap(), message_ids)
-        })
-        .await
-        .unwrap();
+    Message::action_mark_unread(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        message_ids,
+    )
+    .await
+    .unwrap();
 
     // Validation
     let messages = Message::find("WHERE unread = ?", params![true], &tether)

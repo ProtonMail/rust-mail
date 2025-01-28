@@ -139,10 +139,7 @@ async fn basic_send_check() {
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Save at least once so we can retrieve the message id.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -150,10 +147,7 @@ async fn basic_send_check() {
     // get draft message id.
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
-    user_ctx
-        .with_queue(|queue| draft.send(queue))
-        .await
-        .unwrap();
+    draft.send(user_ctx.action_queue()).await.unwrap();
 
     // Check draft is in outbox.
     let draft_message = Message::load(draft_message_id, &tether)
@@ -313,10 +307,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    user_ctx
-        .with_queue(|queue| draft.send(queue))
-        .await
-        .unwrap();
+    draft.send(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap_err();
@@ -363,18 +354,12 @@ async fn save_after_send_is_an_error() {
             display_name: MaybeEmptyString(None),
         })
         .unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Save at least once so we can retrieve the message id.
-    user_ctx
-        .with_queue(|queue| draft.send(queue))
-        .await
-        .unwrap();
+    draft.send(user_ctx.action_queue()).await.unwrap();
 
-    let result = user_ctx.with_queue(|queue| draft.save(queue)).await;
+    let result = draft.save(user_ctx.action_queue()).await;
     assert!(matches!(
         result,
         Err(MailContextError::Draft(draft::Error::SaveOrSend(
@@ -447,10 +432,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         })
         .unwrap();
 
-    user_ctx
-        .with_queue(|queue| draft.send(queue))
-        .await
-        .unwrap();
+    draft.send(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     let err = user_ctx.execute_pending_actions().await.unwrap_err();

@@ -94,17 +94,14 @@ async fn move_between_folders() {
 
     // Action:
     // * move message in the other folder
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_move(
-                queue,
-                source.local_id.unwrap(),
-                destination.local_id.unwrap(),
-                vec![message.local_id.unwrap()],
-            )
-        })
-        .await
-        .unwrap();
+    Message::action_move(
+        user_ctx.action_queue(),
+        source.local_id.unwrap(),
+        destination.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
 
     // Validation:
     // * the message is in the second folder
@@ -172,17 +169,14 @@ async fn move_from_label_does_not_unlabel() {
 
     // Action:
     // * move message in the other label
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_move(
-                queue,
-                source.local_id.unwrap(),
-                destination.local_id.unwrap(),
-                vec![message.local_id.unwrap()],
-            )
-        })
-        .await
-        .unwrap();
+    Message::action_move(
+        user_ctx.action_queue(),
+        source.local_id.unwrap(),
+        destination.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
 
     // Validation:
     // * the message is in the second label
@@ -252,17 +246,14 @@ async fn move_into_trash_remove_label_and_mark_read() {
 
     // Action:
     // * move message in trash
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_move(
-                queue,
-                inbox.local_id.unwrap(),
-                trash.local_id.unwrap(),
-                vec![message.local_id.unwrap()],
-            )
-        })
-        .await
-        .unwrap();
+    Message::action_move(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        trash.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
 
     // Validation:
     // * the message only have `all_mail` label
@@ -331,17 +322,14 @@ async fn move_into_spam_remove_labels() {
 
     // Action:
     // * move message in spam
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_move(
-                queue,
-                custom.local_id.unwrap(),
-                spam.local_id.unwrap(),
-                vec![message.local_id.unwrap()],
-            )
-        })
-        .await
-        .unwrap();
+    Message::action_move(
+        user_ctx.action_queue(),
+        custom.local_id.unwrap(),
+        spam.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
 
     // Validation:
     // * the message only have `all_mail` label
@@ -408,17 +396,14 @@ async fn move_out_of_spam_set_almost_all_mail() {
 
     // Action:
     // * move message out of spam
-    user_ctx
-        .with_queue(|queue| {
-            Message::action_move(
-                queue,
-                spam.local_id.unwrap(),
-                inbox.local_id.unwrap(),
-                vec![message.local_id.unwrap()],
-            )
-        })
-        .await
-        .unwrap();
+    Message::action_move(
+        user_ctx.action_queue(),
+        spam.local_id.unwrap(),
+        inbox.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
 
     // Validation:
     // * the message have `almost_all_mail` label

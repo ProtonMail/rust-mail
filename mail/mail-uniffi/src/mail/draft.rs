@@ -270,13 +270,11 @@ impl Draft {
     /// Returns error if the query failed.
     pub async fn save(self: Arc<Self>) -> VoidDraftSaveSendResult {
         uniffi_async(async move {
-            let ctx = self.ctx.clone();
-            ctx.with_queue(move |queue| async move {
-                let mut instance = self.instance.write().await;
-                instance.save(queue).await
-            })
-            .await
-            .map_err(RealProtonMailError::from)?;
+            let mut instance = self.instance.write().await;
+            instance
+                .save(self.ctx.action_queue())
+                .await
+                .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
@@ -293,13 +291,11 @@ impl Draft {
     /// Returns error if the query failed.
     pub async fn send(self: Arc<Self>) -> VoidDraftSaveSendResult {
         uniffi_async(async move {
-            let ctx = self.ctx.clone();
-            ctx.with_queue(move |queue| async move {
-                let mut instance = self.instance.write().await;
-                instance.send(queue).await
-            })
-            .await
-            .map_err(RealProtonMailError::from)?;
+            let mut instance = self.instance.write().await;
+            instance
+                .send(self.ctx.action_queue())
+                .await
+                .map_err(RealProtonMailError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(())
         })
@@ -317,13 +313,11 @@ impl Draft {
     /// Returns error if the query failed.
     pub async fn discard(self: Arc<Self>) -> VoidDraftDiscardResult {
         uniffi_async(async move {
-            let ctx = self.ctx.clone();
-            ctx.with_queue(|queue| async {
-                let instance = self.instance.read().await;
-                instance.discard(queue).await
-            })
-            .await
-            .map_err(RealProtonMailError::from)?;
+            let instance = self.instance.read().await;
+            instance
+                .discard(self.ctx.action_queue())
+                .await
+                .map_err(RealProtonMailError::from)?;
 
             Result::<_, RealProtonMailError>::Ok(())
         })
@@ -340,8 +334,7 @@ impl Draft {
 pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftUndoSendResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        ctx.with_queue(|queue| RealDraft::action_undo_send(queue, message_id.into()))
-            .await?;
+        RealDraft::action_undo_send(ctx.action_queue(), message_id.into()).await?;
         Ok::<_, RealProtonMailError>(())
     })
     .await
@@ -350,7 +343,8 @@ pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidD
 }
 
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
-    ctx.with_queue(|queue| draft.save(queue))
+    draft
+        .save(ctx.action_queue())
         .await
         .map_err(MailContextError::from)?;
     Ok(())
