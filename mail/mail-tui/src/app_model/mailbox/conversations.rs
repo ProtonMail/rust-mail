@@ -298,10 +298,7 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command
     let ctx = mailbox.user_context();
     let local_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| Conversation::action_mark_read(queue, local_label_id, vec![id]))
-            .await
-        {
+        match Conversation::action_mark_read(ctx.action_queue(), local_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
@@ -316,9 +313,7 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Comma
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| Conversation::action_mark_unread(queue, current_label_id, vec![id]))
-            .await
+        match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
         {
             Ok(_) => Command::None,
             Err(e) => {
@@ -339,11 +334,12 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Me
             "Are you sure you wish to permanently delete the currently selected conversation?",
         )
         .on_accept(Command::task(async move {
-            match ctx
-                .with_queue(|queue| {
-                    Conversation::action_mark_deleted(queue, current_label_id, std::iter::once(id))
-                })
-                .await
+            match Conversation::action_mark_deleted(
+                ctx.action_queue(),
+                current_label_id,
+                std::iter::once(id),
+            )
+            .await
             {
                 Ok(_) => Command::None,
                 Err(e) => {
@@ -364,11 +360,13 @@ fn move_conversation(
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| {
-                Conversation::action_move(queue, current_label_id, label_id, vec![conversation_id])
-            })
-            .await
+        match Conversation::action_move(
+            ctx.action_queue(),
+            current_label_id,
+            label_id,
+            vec![conversation_id],
+        )
+        .await
         {
             Ok(_) => Command::None,
             Err(e) => {
@@ -383,10 +381,7 @@ fn move_conversation(
 fn star_conversation(mailbox: &Mailbox, conversation_id: LocalConversationId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| Conversation::action_star(queue, vec![conversation_id]))
-            .await
-        {
+        match Conversation::action_star(ctx.action_queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
@@ -403,10 +398,7 @@ fn unstar_conversation(
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| Conversation::action_unstar(queue, vec![conversation_id]))
-            .await
-        {
+        match Conversation::action_unstar(ctx.action_queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
@@ -429,18 +421,15 @@ fn label_conversation(
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| {
-                Conversation::action_label_as(
-                    queue,
-                    source_label_id,
-                    conversation_ids,
-                    selected_label_ids,
-                    partially_selected_label_ids,
-                    must_archive,
-                )
-            })
-            .await
+        match Conversation::action_label_as(
+            ctx.action_queue(),
+            source_label_id,
+            conversation_ids,
+            selected_label_ids,
+            partially_selected_label_ids,
+            must_archive,
+        )
+        .await
         {
             Ok(_) => Command::None,
             Err(e) => {

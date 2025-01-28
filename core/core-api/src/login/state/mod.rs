@@ -10,7 +10,7 @@ use crate::session::{Config, Session};
 use crate::store::DynStore;
 use derive_more::From;
 use futures::TryFutureExt;
-use muon::client::flow::LoginTwoFactorFlow;
+use muon::client::flow::{LoginExtraInfo, LoginTwoFactorFlow};
 use std::fmt::{Debug, Formatter, Result as FmtResult};
 use std::sync::Arc;
 
@@ -50,9 +50,14 @@ pub enum State {
 /// Public actions that can be taken on the state.
 impl State {
     /// Attempt to login with the provided credentials.
-    pub async fn login(self, user: String, pass: String) -> Result<Self, LoginError> {
+    pub async fn login(
+        self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<Self, LoginError> {
         let state = match self {
-            Self::WantLogin(state) => state.login(user, pass).await?,
+            Self::WantLogin(state) => state.login(user, pass, extra_info).await?,
 
             _ => return Err(LoginError::InvalidState),
         };

@@ -16,9 +16,14 @@ use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
 
-pub const MAIL_SETTINGS_ID: u64 = 1;
+const MAIL_SETTINGS_ID: u64 = 1;
 
-/// TODO: Document this struct.
+/// Mail related use settings.
+///
+/// # Remarks
+///
+/// To correctly use this class please use [`MailSettings::get()`] or
+/// [`MailSettings::get_or_default()`] to load the mail settings.
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("mail_settings")]

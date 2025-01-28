@@ -1,8 +1,11 @@
 use crate::{core::datatypes::AvatarInformation, core::datatypes::Id};
 use crate::{UniffiEnum, UniffiRecord};
+use itertools::Itertools;
 use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,
     ContactItem as RealContactItem, ContactItemType as RealContactItemType,
+    ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
+    DeviceContact as RealDeviceContact, DeviceContactSuggestion as RealDeviceContactSuggestion,
     GroupedContacts as RealGroupedContacts,
 };
 use proton_core_common::utils::MapVec as _;
@@ -121,5 +124,103 @@ impl From<RealContactEmailItem> for ContactEmailItem {
             is_proton: value.is_proton,
             last_used_time: value.last_used_time,
         }
+    }
+}
+
+/// Device contact feeded by the mobile/web application.
+/// Used as an input for generating list of contact suggestions ([`ContactSuggestion`])
+///
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct DeviceContact {
+    /// The field represents unique key identifier used by the user to distinguish elements in the array
+    pub key: String,
+
+    /// The field represents the name of the contact
+    pub name: String,
+
+    /// List of email addresses assigned to the contact. That list has an arbitrary order given by the user
+    pub emails: Vec<String>,
+}
+
+impl From<DeviceContact> for RealDeviceContact {
+    fn from(value: DeviceContact) -> Self {
+        Self {
+            key: value.key,
+            name: value.name,
+            emails: value.emails,
+        }
+    }
+}
+
+/// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
+/// Contrary to the [`ContactItemType`] it also might be a device contact
+///
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct ContactSuggestion {
+    /// The field represents unique key identifier used by the user to distinguish elements in the array
+    pub key: String,
+
+    /// The field represents the name of the contact
+    pub name: String,
+
+    /// The field represents the avatar information of the contact
+    pub avatar_information: AvatarInformation,
+
+    /// The kind of contact suggestion. Whether it is a native contact, proton contact or a group.
+    pub kind: ContactSuggestionKind,
+}
+
+impl From<RealContactSuggestion> for ContactSuggestion {
+    fn from(value: RealContactSuggestion) -> Self {
+        Self {
+            key: value.key,
+            name: value.name,
+            avatar_information: value.avatar_information.into(),
+            kind: value.kind.into(),
+        }
+    }
+}
+
+/// Kind of email suggestion
+/// Note, variants of this enum are flat - that is, if one contact has assigned two emails,
+/// it would be represented by two instances of [`ContactSuggestion`].
+///
+#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
+pub enum ContactSuggestionKind {
+    /// Proton contact, stored in the local cache and shared between user devices
+    ContactItem(ContactEmailItem),
+    /// A device, native contact, stored only locally on the current device.
+    DeviceContact(DeviceContactSuggestion),
+    /// Proton contact group, that consists only other proton contacts, and never device contact.
+    ContactGroup(Vec<ContactEmailItem>),
+}
+
+impl From<RealContactSuggestionKind> for ContactSuggestionKind {
+    fn from(value: RealContactSuggestionKind) -> Self {
+        match value {
+            RealContactSuggestionKind::ContactItem(suggestion) => {
+                ContactSuggestionKind::ContactItem(suggestion.into())
+            }
+            RealContactSuggestionKind::DeviceContact(suggestion) => {
+                ContactSuggestionKind::DeviceContact(suggestion.into())
+            }
+            RealContactSuggestionKind::ContactGroup(suggestion) => {
+                ContactSuggestionKind::ContactGroup(suggestion.into_iter().map_into().collect())
+            }
+        }
+    }
+}
+
+/// A device, native contact, stored only locally on the current device.
+///
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct DeviceContactSuggestion {
+    /// The field represents the email address used in the device contact
+    pub email: String,
+}
+
+impl From<RealDeviceContactSuggestion> for DeviceContactSuggestion {
+    fn from(value: RealDeviceContactSuggestion) -> Self {
+        Self { email: value.email }
     }
 }

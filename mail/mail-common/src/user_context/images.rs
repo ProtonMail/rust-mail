@@ -1,7 +1,6 @@
-use crate::models::{MailSettings, MAIL_SETTINGS_ID};
+use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use proton_core_common::datatypes::LightOrDarkMode;
-use stash::orm::Model;
 use std::path::PathBuf;
 
 impl MailUserContext {
@@ -37,9 +36,7 @@ impl MailUserContext {
         format: Option<String>,
     ) -> MailContextResult<Option<PathBuf>> {
         let tether = self.user_stash().connection();
-        let mail_settings = MailSettings::load(MAIL_SETTINGS_ID, &tether)
-            .await?
-            .unwrap_or_default();
+        let mail_settings = MailSettings::get_or_default(&tether).await;
 
         if mail_settings.hide_sender_images {
             // sender images are to be hidden, return nothing

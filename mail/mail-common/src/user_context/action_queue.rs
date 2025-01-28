@@ -14,7 +14,7 @@ impl MailUserContext {
         &self,
         action: T,
     ) -> MailContextResult<ActionOutput<T>> {
-        self.exclusive.execute_action(action).await
+        Ok(self.action_queue.apply_action(action).await?)
     }
 
     /// Queue an action for later execution.
@@ -26,17 +26,18 @@ impl MailUserContext {
         &self,
         action: T,
     ) -> MailContextResult<QueuedActionOutput<T>> {
-        self.exclusive.queue_action(action).await
+        Ok(self.action_queue.queue_action(action).await?)
     }
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        self.exclusive.execute_pending_action().await
+        self.action_queue.execute_one().await?;
+        Ok(())
     }
 
     /// Execute all pending actions in the queue.
     pub async fn execute_pending_actions(&self) -> MailContextResult<usize> {
-        self.exclusive.execute_pending_actions().await
+        Ok(self.action_queue.execute_all().await?)
     }
 }
 

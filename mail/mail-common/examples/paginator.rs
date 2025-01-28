@@ -1,5 +1,6 @@
 use clap::Parser;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
@@ -80,7 +81,9 @@ async fn main() {
 
     let mut flow = ctx.new_login_flow().unwrap();
 
-    flow.login(username, password).await.unwrap();
+    flow.login(username, password, LoginExtraInfo::default())
+        .await
+        .unwrap();
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 

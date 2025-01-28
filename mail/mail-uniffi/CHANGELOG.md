@@ -7,13 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+## [0.38.0] - 2025-01-28
+
 ### Added
 
-- [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+  - [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+  - [ET-1971] `contact_suggestions` function for the composer recipients autocompletion
+    - It has a dummy implementation that always return empty list for now.
+  - [ET-1956] `EventLoopErrorObserver` and `MailUserSession::obeserve_event_loop_errors`
+
+### Changed
+
+  - [ET-1956] `MailUserSession::poll_events` queues a poll event action. To get the real event loop
+    error one must pass an `EventLoopErrorObserver` to
+    `MailUserSession::obeserve_event_loop_errors`. Be sure to keep the returned handle alive.
 
 ## [0.37.3] - 2025-01-27
 
 ### Fixed
+
   - [ET-1863] Mailbox counter watchers are updated whenever user marks conversation/message as read/unread
   - [ET-1863] System labels (like Outbox) watchers are updated whenever labels change
 

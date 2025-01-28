@@ -1,14 +1,12 @@
 mod action_queue;
 pub mod cache;
 mod events;
-pub mod exclusive_updates;
 mod images;
 mod initialization;
 
 use crate::models::{Conversation, Message};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
-use crate::user_context::exclusive_updates::MailUserContextExclusive;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
@@ -42,7 +40,8 @@ pub struct MailUserContext {
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
     cache: Cache,
-    exclusive: MailUserContextExclusive,
+    event_loop: EventLoop,
+    action_queue: Queue,
 }
 
 impl MailUserContext {
@@ -56,18 +55,19 @@ impl MailUserContext {
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
-        let exclusive = MailUserContextExclusive::new(EventLoop::new(), action_queue);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             cache,
-            exclusive,
+            action_queue,
+            event_loop: EventLoop::new(),
         });
 
-        this.exclusive
+        this.action_queue
             .register_execution_context(Weak::clone(&this.this));
-        this.exclusive.register_execution_context(user_context_weak);
+        this.action_queue
+            .register_execution_context(user_context_weak);
 
         this.init_expiration_loop();
 
@@ -111,14 +111,11 @@ impl MailUserContext {
     }
 
     pub async fn execute_all_actions(&self) -> QueuedResult<usize> {
-        self.exclusive.execute_all().await
+        self.action_queue.execute_all().await
     }
 
-    pub async fn with_queue<'a, F, T>(&'a self, closure: impl FnOnce(&'a Queue) -> F) -> T
-    where
-        F: Future<Output = T> + 'a,
-    {
-        self.exclusive.with_queue(closure).await
+    pub fn action_queue(&self) -> &Queue {
+        &self.action_queue
     }
 
     /// Get the API service.

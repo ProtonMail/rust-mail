@@ -14,8 +14,11 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use flume::Sender;
 use futures::FutureExt;
 
+use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
+use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
+use proton_mail_common::actions::event_poll::EventPoll;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::Draft;
@@ -34,6 +37,7 @@ use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
 
@@ -75,6 +79,7 @@ pub struct Model {
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
     filter: ReadFilter,
+    background_worker_initialized: bool,
 }
 
 impl Model {
@@ -105,12 +110,18 @@ impl Model {
             search: None,
             search_status: None,
             filter: ReadFilter::All,
+            background_worker_initialized: false,
         })
     }
 
     fn create_background_worker(&mut self) -> Command<Messages> {
         let ctx = self.ctx.clone();
-        background_worker(ctx, self.cancel_token.clone())
+        if self.background_worker_initialized {
+            Command::none()
+        } else {
+            self.background_worker_initialized = true;
+            background_worker(ctx, self.cancel_token.clone())
+        }
     }
 
     #[must_use]
@@ -309,12 +320,17 @@ impl Model {
 impl AppStateHandler for Model {
     fn on_state_enter(&mut self) -> Command<Messages> {
         let ctx = self.mailbox.user_context();
+        let ctx_clone = Arc::clone(&ctx);
         let cancel_token = self.cancel_token.clone();
+        let cancel_token_clone = cancel_token.clone();
         Command::batch([
             self.create_background_worker(),
             Command::message(Message::Sync(self.mailbox.clone()).into()),
             Command::background_task(move |sender| {
                 observe_draft_action_errors(ctx, cancel_token, sender).boxed()
+            }),
+            Command::background_task(move |sender| {
+                observe_event_loop_errors(ctx_clone, cancel_token_clone, sender).boxed()
             }),
         ])
     }
@@ -720,11 +736,11 @@ async fn handle_draft_failure(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        let result_cmd = match ctx
-                            .with_queue(|queue| {
-                                Draft::action_undo_send(queue, result.local_message_id)
-                            })
-                            .await
+                        let result_cmd = match Draft::action_undo_send(
+                            ctx.action_queue(),
+                            result.local_message_id,
+                        )
+                        .await
                         {
                             // On success open composer, else display error
                             Ok(_) => Composer::open(Arc::clone(&ctx), result.local_message_id),
@@ -766,5 +782,53 @@ async fn handle_draft_failure(
                 .send_async(Command::batch([err_command, open_composer_command]))
                 .await;
         }
+    }
+}
+
+/// Observe event loop errors
+async fn observe_event_loop_errors(
+    ctx: Arc<MailUserContext>,
+    cancellation_token: CancellationToken,
+    sender: Sender<Command<Messages>>,
+) {
+    let mut oberserver = ActionFailureObserver::<EventPoll>::new(ctx.action_queue());
+
+    loop {
+        select! {
+            () = cancellation_token.cancelled() => {
+                return;
+            }
+
+            r = oberserver.next() => {
+                let Ok(v) = r else {
+                    return;
+                };
+                handle_event_loop_error(v, &sender).await;
+            }
+        }
+    }
+}
+
+// Convert the error into a user displayable message.
+async fn handle_event_loop_error(error: ActionFailureReason, sender: &Sender<Command<Messages>>) {
+    if let ActionFailureReason::Error(e, _) = error {
+        let cmd = if let Some(details) = e.as_action_error::<EventPoll>() {
+            match details {
+                ActionError::Action(e) => Command::message(Messages::DisplayError(
+                    Some("Event Loop".to_owned()),
+                    anyhow!("Event Poll Failure: {}", e.0),
+                )),
+                ActionError::Queue(e) => Command::message(Messages::DisplayError(
+                    Some("Event Loop".to_owned()),
+                    anyhow!("Queue Failure: {}", e),
+                )),
+            }
+        } else {
+            Command::message(Messages::DisplayError(
+                Some("Event Loop".to_owned()),
+                anyhow!("Failed to poll the event loop"),
+            ))
+        };
+        let _ = sender.send_async(cmd).await;
     }
 }

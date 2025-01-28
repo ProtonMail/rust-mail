@@ -13,7 +13,7 @@ use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
-use crate::models::{LabelWithCounters, MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{LabelWithCounters, MailSettings};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
 impl Sidebar {
@@ -28,9 +28,7 @@ impl Sidebar {
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<SystemLabel>> {
         let tether = self.user_ctx.user_stash().connection();
-        let settings = MailSettings::load(MAIL_SETTINGS_ID, &tether)
-            .await?
-            .unwrap_or_default();
+        let settings = MailSettings::get_or_default(&tether).await;
 
         let mut labels = vec![self.get_label(LabelId::inbox(), &tether).await?];
         if settings.show_moved == ShowMoved::KeepInDrafts

@@ -150,24 +150,21 @@ async fn label_as_without_archive() {
     assert_eq!(message4.custom_labels.len(), 3);
 
     // Action:
-    let action_result = user_ctx
-        .with_queue(|queue| {
-            Message::action_label_as(
-                queue,
-                inbox.local_id.unwrap(),
-                vec![
-                    message1.local_id.unwrap(),
-                    message2.local_id.unwrap(),
-                    message3.local_id.unwrap(),
-                    message4.local_id.unwrap(),
-                ],
-                vec![label1.local_id.unwrap()],
-                vec![label2.local_id.unwrap()],
-                false,
-            )
-        })
-        .await
-        .unwrap();
+    let action_result = Message::action_label_as(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        vec![
+            message1.local_id.unwrap(),
+            message2.local_id.unwrap(),
+            message3.local_id.unwrap(),
+            message4.local_id.unwrap(),
+        ],
+        vec![label1.local_id.unwrap()],
+        vec![label2.local_id.unwrap()],
+        false,
+    )
+    .await
+    .unwrap();
 
     // Validation:
     //   * All messages are in first label (=> 4)
@@ -311,19 +308,16 @@ async fn label_as_with_archive() {
     assert_eq!(message2.custom_labels.len(), 3);
 
     // Action:
-    let action_result = user_ctx
-        .with_queue(|queue| {
-            Message::action_label_as(
-                queue,
-                inbox.local_id.unwrap(),
-                vec![message1.local_id.unwrap(), message2.local_id.unwrap()],
-                vec![label1.local_id.unwrap()],
-                vec![label2.local_id.unwrap()],
-                true,
-            )
-        })
-        .await
-        .unwrap();
+    let action_result = Message::action_label_as(
+        user_ctx.action_queue(),
+        inbox.local_id.unwrap(),
+        vec![message1.local_id.unwrap(), message2.local_id.unwrap()],
+        vec![label1.local_id.unwrap()],
+        vec![label2.local_id.unwrap()],
+        true,
+    )
+    .await
+    .unwrap();
 
     // Validation:
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)

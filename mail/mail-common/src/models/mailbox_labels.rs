@@ -18,7 +18,7 @@ use stash::{
 
 use crate::datatypes::{SystemLabelId, ViewMode};
 
-use super::{MailSettings, MAIL_SETTINGS_ID};
+use super::MailSettings;
 
 /// Mailbox labels is an extension over labels, specific for mailbox only.
 /// That allows us to keep labels in core-common
@@ -107,10 +107,7 @@ impl MailLabel for Label {
                 return Ok(ViewMode::Messages);
             }
         }
-        Ok(MailSettings::load(MAIL_SETTINGS_ID, tether)
-            .await?
-            .unwrap_or_default()
-            .view_mode)
+        Ok(MailSettings::get_or_default(tether).await.view_mode)
     }
 
     fn is_applicable(&self) -> bool {
