@@ -758,3 +758,37 @@ async fn open_draft_sync_status_cached() {
     let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Cached);
 }
+
+#[tokio::test]
+async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_status() {
+    // Check that open draft reports cached status when we can't sync from server due to
+    // network failure.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft should work;
+    let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
+}
