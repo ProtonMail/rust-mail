@@ -323,7 +323,9 @@ impl Draft {
                 Err(e) => return Err(e),
             }
         } else {
-            (None, None, DraftSyncStatus::Cached)
+            // If we have no remote id do not return cached status. As this implies the
+            // draft was created locally and the save action has not yet executed.
+            (None, None, DraftSyncStatus::Synced)
         };
 
         // Load body metadata if not re-synced.
