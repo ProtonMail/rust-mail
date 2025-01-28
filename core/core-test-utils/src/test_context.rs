@@ -161,7 +161,7 @@ impl TestContext {
     ) -> Arc<Self> {
         drop(set_global_default(
             registry()
-                .with(EnvFilter::new("debug,stash=debug"))
+                .with(EnvFilter::new("debug,stash=info"))
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
 

@@ -96,8 +96,8 @@ async fn main() {
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
 
     draft.subject = subject;
-    body.push_str(&draft.body);
-    draft.body = body;
+    body.push_str(&draft.decrypted_body.body);
+    draft.decrypted_body.body = body;
     draft
         .to_list
         .add_single(RecipientEntry {

@@ -231,7 +231,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Update the draft
     draft.subject = new_subject.to_owned();
-    draft.body = new_body.to_owned();
+    draft.decrypted_body.body = new_body.to_owned();
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
@@ -243,7 +243,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Opening the draft and check if all the information is up to date
     let (draft, _) = Draft::open(user_ctx, draft_message_id).await.unwrap();
-    assert_eq!(draft.body, new_body);
+    assert_eq!(draft.decrypted_body.body, new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
     assert_eq!(draft.cc_list, new_cc_list);
@@ -587,9 +587,13 @@ async fn create_draft_reply_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
-        .await
-        .unwrap();
+    Message::force_sync_message_and_body(
+        user_ctx.clone(),
+        existing_message.remote_id.unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
 
     // Create draft.
     let mut draft = Draft::reply(

@@ -977,6 +977,7 @@ impl EncryptedMessageBody {
         ctx: Arc<MailUserContext>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
+        with_attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MessageError> {
         // TODO: Verify signature.
         let (decrypted_body, _) = self
@@ -984,25 +985,32 @@ impl EncryptedMessageBody {
             .inspect_err(|e| error!("Failed to decrypt message body: {e}"))?;
 
         match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody::new(
-                body,
-                self.metadata,
-                None,
-                None,
-                ctx,
-            )),
+            DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
+                DecryptedMessageBody::new(body, self.metadata, None, None, ctx)
+            } else {
+                DecryptedMessageBody::without_prefetch(body, self.metadata, None, None)
+            }),
             DecryptedBody::Mime(ProcessedMessage {
                 body,
                 attachments,
                 encrypted_subject,
                 ..
-            }) => Ok(DecryptedMessageBody::new(
-                body,
-                self.metadata,
-                Some(attachments),
-                encrypted_subject,
-                ctx,
-            )),
+            }) => Ok(if with_attachment_prefetch {
+                DecryptedMessageBody::new(
+                    body,
+                    self.metadata,
+                    Some(attachments),
+                    encrypted_subject,
+                    ctx,
+                )
+            } else {
+                DecryptedMessageBody::without_prefetch(
+                    body,
+                    self.metadata,
+                    Some(attachments),
+                    encrypted_subject,
+                )
+            }),
         }
     }
 }

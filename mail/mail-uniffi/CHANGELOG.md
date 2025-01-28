@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Added
+
+ - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
+
 ## [0.38.0] - 2025-01-28
 
 ### Added
