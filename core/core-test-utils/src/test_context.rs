@@ -1,4 +1,5 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
@@ -36,7 +37,6 @@ use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{registry, EnvFilter};
 use wiremock::MockServer;
-use wiremock::{matchers::any, Mock, Request};
 
 pub trait BaseTestContext {
     /// Generate a test UID.
@@ -271,27 +271,9 @@ impl TestContext {
     /// establish a catch-all in that way.
     ///
     /// # Panics
+    ///
     pub async fn catch_all(&self) {
-        // If there are any unconfigured calls, we will panic because it's not what
-        // we expect to happen, so the test should fail
-        Mock::given(any())
-            .respond_with(|request: &Request| {
-                panic!(
-                    "Received unexpected {} request\n  Path: {}\n  Headers:\n{}\n  Body: {}\n",
-                    request.method,
-                    request.url.path(),
-                    request
-                        .headers
-                        .iter()
-                        .map(|header| format!("    {}: {:?}", header.0, header.1))
-                        .collect::<Vec<String>>()
-                        .join("\n"),
-                    String::from_utf8(request.body.clone()).unwrap(),
-                );
-            })
-            .named("Catch all mock")
-            .mount(self.mock_server())
-            .await;
+        catch_all(self.mock_server()).await;
     }
 }
 
