@@ -75,6 +75,7 @@ pub struct Model {
     search: Option<Search>,
     search_status: Option<SearchStatusBar>,
     filter: ReadFilter,
+    background_worker_initialized: bool,
 }
 
 impl Model {
@@ -105,12 +106,18 @@ impl Model {
             search: None,
             search_status: None,
             filter: ReadFilter::All,
+            background_worker_initialized: false,
         })
     }
 
     fn create_background_worker(&mut self) -> Command<Messages> {
         let ctx = self.ctx.clone();
-        background_worker(ctx, self.cancel_token.clone())
+        if self.background_worker_initialized {
+            Command::none()
+        } else {
+            self.background_worker_initialized = true;
+            background_worker(ctx, self.cancel_token.clone())
+        }
     }
 
     #[must_use]
