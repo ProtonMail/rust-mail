@@ -78,11 +78,16 @@ impl StatusWatcher {
                     self.update(status).await;
                 }
             } else {
-                self.update(Self::ping(api).await).await;
+                self.update(Self::ping(api.clone()).await).await;
             }
         }
+        let status = *self.status.read().await;
 
-        *self.status.read().await
+        if status.is_offline() {
+            self.background_check(api).await
+        }
+
+        status
     }
 
     pub async fn update(&self, status: ConnectionStatus) {
@@ -110,14 +115,12 @@ impl StatusWatcher {
     }
 
     // TODO: Watch for going online
-    async fn check(&mut self, api: Proton) {
-        if self.is_up_to_date().await {
-            return;
-        }
-
-        self.request = Arc::new(Mutex::new(Some(tokio::spawn(async move {
-            Self::ping(api).await
-        }))));
+    async fn background_check(&self, api: Proton) {
+        let _ = self
+            .request
+            .lock()
+            .await
+            .insert(tokio::spawn(async move { Self::ping(api).await }));
     }
 
     async fn is_up_to_date(&self) -> bool {
