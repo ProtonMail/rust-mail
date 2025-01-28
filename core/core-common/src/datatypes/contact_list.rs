@@ -4,7 +4,8 @@ use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
-use std::collections::{BTreeMap, HashMap};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use unicode_segmentation::UnicodeSegmentation;
 
 const DEFAULT_GROUP: &str = "#";
@@ -185,7 +186,7 @@ pub struct ContactGroupItem {
 }
 
 /// This is the main data structure that is used to represent the contact email.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactEmailItem {
     /// The field represent the unique identifier of the contact email in the database
     pub local_id: LocalContactEmailId,
@@ -214,6 +215,7 @@ impl From<ContactEmail> for ContactEmailItem {
 /// Device contact feeded by the mobile/web application.
 /// Used as an input for generating list of contact suggestions ([`ContactSuggestion`])
 ///
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DeviceContact {
     /// The field represents unique key identifier used by the user to distinguish elements in the array
     pub key: String,
@@ -228,6 +230,7 @@ pub struct DeviceContact {
 /// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
 /// Contrary to the [`ContactItemType`] it also might be a device contact
 ///
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContactSuggestion {
     /// The field represents unique key identifier used by the user to distinguish elements in the array
     pub key: String,
@@ -250,6 +253,16 @@ impl ContactSuggestion {
     /// Note, that the contact group is represented by [`Label`]. Currently, this function WON'T
     /// assert if the label has type `ContactGroup`.
     ///
+    /// # Filtering
+    ///
+    /// This function does not filter the results. Make sure, that the filtering
+    /// does not exclude contacts that are part of contact group still matching the query.
+    ///
+    /// # Panics
+    ///
+    /// When contact has no local id (meaning it was not fetched from the database).
+    /// Or when contact group has no remote ID
+    ///
     #[must_use]
     pub fn from_contacts_and_device_contacts(
         contacts: Vec<Contact>,
@@ -260,10 +273,187 @@ impl ContactSuggestion {
             .iter()
             .all(|group| group.label_type == LabelType::ContactGroup));
 
-        // TODO (ET-1971): Extend that implementation
-        let (_contacts, _contact_groups, _device_contacts) =
-            (contacts, contact_groups, device_contacts);
-        vec![]
+        let label_ids = contacts
+            .iter()
+            .flat_map(|contact| {
+                contact.label_ids.iter().cloned().chain(
+                    contact
+                        .contact_emails
+                        .iter()
+                        .flat_map(|email| email.label_ids.iter().cloned()),
+                )
+            })
+            .collect::<HashSet<_>>();
+
+        let mut contact_groups: HashMap<LabelId, ContactGroup> = contact_groups
+            .into_iter()
+            .filter(|group| group.label_type == LabelType::ContactGroup)
+            .filter(|group| label_ids.contains(group.remote_id.as_ref().unwrap()))
+            .map(|group| {
+                (
+                    group.remote_id.unwrap(),
+                    ContactGroup {
+                        key: group.local_id.unwrap().to_string(),
+                        name: group.name.clone(),
+                        emails: vec![],
+                    },
+                )
+            })
+            .collect();
+
+        let proton_suggestions: Vec<_> = contacts
+            .into_iter()
+            .filter(|contact| !contact.deleted)
+            .flat_map(|contact| {
+                contact
+                    .clone()
+                    .contact_emails
+                    .into_iter()
+                    .map(move |email| (contact.clone(), email))
+            })
+            .sorted_by_key(|(_contact, email)| {
+                // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
+                // we ensure it is ordered by first proton mails and then by latest mails
+                // `last_used_time` is u64, to ensure that
+                (
+                    !email.is_proton,
+                    u64::MAX - email.last_used_time,
+                    email.email.unicode_words().collect::<String>(),
+                )
+            })
+            .map(|(contact, mut email)| {
+                let label_ids = std::mem::take(&mut email.label_ids);
+                let email = ContactEmailItem::from(email);
+                for label_id in label_ids.iter() {
+                    if let Some(group) = contact_groups.get_mut(label_id) {
+                        group.emails.push(email.clone());
+                    }
+                }
+                (contact, email)
+            })
+            .map(|(contact, email)| ContactSuggestion {
+                key: email.local_id.to_string(),
+                avatar_information: AvatarInformation::from(&contact.name),
+                name: contact.name,
+                kind: ContactSuggestionKind::ContactItem(email),
+            })
+            .collect();
+
+        let rest = contact_groups
+            .into_values()
+            .filter(|group| !group.emails.is_empty())
+            .map(|group| FollowingSuggestion {
+                source_key: group.key.clone(),
+                suggestion: ContactSuggestion {
+                    key: group.key,
+                    avatar_information: AvatarInformation::from(&group.name),
+                    name: group.name,
+                    kind: ContactSuggestionKind::ContactGroup(group.emails),
+                },
+            })
+            .chain(device_contacts.into_iter().flat_map(|contact| {
+                contact
+                    .emails
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(idx, email)| FollowingSuggestion {
+                        source_key: contact.key.clone(),
+                        suggestion: ContactSuggestion {
+                            key: format!("{}-{}", contact.key, idx),
+                            avatar_information: AvatarInformation::from(&contact.name),
+                            name: contact.name.clone(),
+                            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
+                                email,
+                            }),
+                        },
+                    })
+            }))
+            .sorted()
+            .map(|suggestion| suggestion.suggestion);
+        proton_suggestions.into_iter().chain(rest).collect()
+    }
+}
+
+struct ContactGroup {
+    key: String,
+    name: String,
+    emails: Vec<ContactEmailItem>,
+}
+
+/// A suggestion that is not based on the proton contact
+/// This type is required for some custom ordering logic
+///
+#[derive(PartialEq, Eq)]
+struct FollowingSuggestion {
+    source_key: String,
+    suggestion: ContactSuggestion,
+}
+impl Ord for FollowingSuggestion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // First sort by name
+        match self.lex_name().cmp(&other.lex_name()) {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+
+        // Then sort by kind
+        match self
+            .suggestion
+            .kind
+            .discriminant()
+            .cmp(&other.suggestion.kind.discriminant())
+        {
+            Ordering::Equal => {}
+            ord => return ord,
+        }
+
+        match &self.suggestion.kind {
+            ContactSuggestionKind::ContactItem(_) => {
+                unreachable!("Following suggestion should contain only device contacts and groups")
+            }
+            ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
+                // If there are two device contact email suggestions with the same name, first lets check
+                // if those suggestion come from the same contact.
+                match self.source_key.cmp(&other.source_key) {
+                    Ordering::Equal => {
+                        // If yes, then sort by key. That guarantees ordering provided by the user.
+                        // Reason:
+                        // If two emails come from the same device contact item, then we want to preserve order of the emails
+                        // as it was in the platform contact book. User might have ordered them on purpose
+                        self.suggestion.key.cmp(&other.suggestion.key)
+                    }
+                    _ => {
+                        // Otherwise, sort by email address.
+                        // Reason:
+                        // If there are two contacts named the same way, then we assume there is no arbitrary order of emails
+                        // so we order by email addresses lexically
+                        match &other.suggestion.kind {
+                            ContactSuggestionKind::DeviceContact(other_device_contact) => {
+                                let our_email: String = device_contact_suggestion.email.unicode_words().collect();
+                                let other_email: String = other_device_contact.email.unicode_words().collect();
+                                our_email.cmp(&other_email)
+                            }
+                            ContactSuggestionKind::ContactItem(_) |
+                            ContactSuggestionKind::ContactGroup(_) => unreachable!("We already asserted that both sides have the same kind, device contact"),
+                        }
+                    }
+                }
+            }
+            ContactSuggestionKind::ContactGroup(_) => {
+                // If there are two contact groups with the same name, we just keep stable order given from theirs IDs
+                self.suggestion.key.cmp(&other.suggestion.key)
+            }
+        }
+    }
+}
+impl PartialOrd for FollowingSuggestion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl FollowingSuggestion {
+    fn lex_name(&self) -> String {
+        self.suggestion.name.unicode_words().collect()
     }
 }
 
@@ -271,6 +461,7 @@ impl ContactSuggestion {
 /// Note, variants of this enum are flat - that is, if one contact has assigned two emails,
 /// it would be represented by two instances of [`ContactSuggestion`].
 ///
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContactSuggestionKind {
     /// Proton contact, stored in the local cache and shared between user devices
     ContactItem(ContactEmailItem),
@@ -280,8 +471,29 @@ pub enum ContactSuggestionKind {
     ContactGroup(Vec<ContactEmailItem>),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
+enum ContactSuggestionKindDiscriminant {
+    ContactItem,
+    DeviceContact,
+    ContactGroup,
+}
+impl ContactSuggestionKind {
+    fn discriminant(&self) -> ContactSuggestionKindDiscriminant {
+        match self {
+            ContactSuggestionKind::ContactItem(_) => ContactSuggestionKindDiscriminant::ContactItem,
+            ContactSuggestionKind::DeviceContact(_) => {
+                ContactSuggestionKindDiscriminant::DeviceContact
+            }
+            ContactSuggestionKind::ContactGroup(_) => {
+                ContactSuggestionKindDiscriminant::ContactGroup
+            }
+        }
+    }
+}
+
 /// A device, native contact, stored only locally on the current device.
 ///
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeviceContactSuggestion {
     /// The field represents the email address used in the device contact
     pub email: String,
