@@ -120,6 +120,14 @@ impl DecryptedMessage {
         })
     }
 
+    /// Load or fetch an embedded attachment with `cid` for this message.
+    ///
+    /// If the attachment is not in the cache it will be downloaded from the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the attachments can't be fetched from the server, retrieved
+    /// from the cache or the attachment with `cid` does not exist.
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,

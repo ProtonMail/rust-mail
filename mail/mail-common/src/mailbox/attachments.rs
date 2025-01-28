@@ -1,7 +1,9 @@
 use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{AttachmentMetadata, LocalAttachmentId};
 use crate::models::Attachment;
-use crate::{AppError, MailContextError, MailUserContext, MailboxError, MailboxResult};
+use crate::{
+    AppError, MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult,
+};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::{CacheData, CacheError, CacheResult};
@@ -93,7 +95,7 @@ impl MailUserContext {
     pub async fn get_attachment_content_data(
         &self,
         attachment: &Attachment,
-    ) -> MailboxResult<CacheData> {
+    ) -> MailContextResult<CacheData> {
         let cache = self.attachements_cache();
         let key = CacheAttachmentKey::from(attachment);
 

@@ -8,8 +8,9 @@ use crate::errors::{
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
+use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::MailUserSession;
-use crate::{async_runtime, uniffi_async};
+use crate::{async_runtime, uniffi_async, MapIntoResult};
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
@@ -177,7 +178,7 @@ impl Draft {
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        async_runtime().block_on(async { self.instance.read().await.body.clone() })
+        async_runtime().block_on(async { self.instance.read().await.decrypted_body.body.clone() })
     }
 
     /// Set the draft's `subject`.
@@ -199,7 +200,7 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
-                instance.body = body;
+                instance.decrypted_body.body = body;
                 save_draft(&self.ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
@@ -214,6 +215,8 @@ impl Draft {
             self.instance
                 .read()
                 .await
+                .decrypted_body
+                .metadata
                 .attachments
                 .clone()
                 .into_iter()
@@ -224,7 +227,15 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        async_runtime().block_on(async { self.instance.read().await.mime_type.into() })
+        async_runtime().block_on(async {
+            self.instance
+                .read()
+                .await
+                .decrypted_body
+                .metadata
+                .mime_type
+                .into()
+        })
     }
 
     /// Get the Draft's message id .
@@ -256,6 +267,37 @@ impl Draft {
                 .clone()
                 .map(Into::into)
         })
+    }
+}
+
+#[proton_uniffi_macros::export_result]
+impl Draft {
+    /// Load an embedded attachment in this draft message.
+    ///
+    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    pub async fn get_embedded_attachment(
+        self: Arc<Self>,
+        cid: String,
+    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+        uniffi_async(async move {
+            let draft = self.instance.read().await;
+            let att = draft
+                .get_embedded_attachment(&self.ctx, &cid)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+                data: att.data,
+                mime: att.mime,
+                height: att.height,
+                width: att.width,
+            })
+        })
+        .await
+        .map_into()
     }
 }
 

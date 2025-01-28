@@ -78,13 +78,15 @@ impl Save {
             } else {
                 draft.subject.clone()
             },
-            body: draft.body.clone(),
+            body: draft.decrypted_body.body.clone(),
             attachments: draft
+                .decrypted_body
+                .metadata
                 .attachments
                 .iter()
                 .map(|v| v.local_id.unwrap())
                 .collect(),
-            mime_type: draft.mime_type,
+            mime_type: draft.decrypted_body.metadata.mime_type,
             parent_id: None,
             reply_mode: None,
             save_origin,
