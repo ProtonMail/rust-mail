@@ -1,14 +1,51 @@
-use crate::errors::{EventError, VoidEventResult};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{EventError, EventErrorReason, ProtonError, VoidEventResult};
 use crate::mail::MailUserSession;
-use crate::uniffi_async;
+use crate::{spawn_async, uniffi_async};
+use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
+use proton_action_queue::queue::{ActionError, AsActionError};
+use proton_mail_common::actions::event_poll::EventPoll;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use std::sync::Arc;
+use tokio::task::AbortHandle;
+
+/// Event loop error observer callback.
+#[uniffi::export(with_foreign)]
+#[async_trait::async_trait]
+pub trait EventLoopErrorObserver: Send + Sync {
+    /// Invoked when the event loop runs into an error that prevents it from progressing.
+    async fn on_event_loop_error(&self, error: EventError);
+}
+
+/// Handle returned when observing event loop errors.
+///
+/// Keep this handle alive to maintain the callback alive.
+#[derive(uniffi::Object)]
+pub struct EventLoopErrorObserverHandle(AbortHandle);
+
+impl Drop for EventLoopErrorObserverHandle {
+    fn drop(&mut self) {
+        self.disconnect();
+    }
+}
+
+#[uniffi::export]
+impl EventLoopErrorObserverHandle {
+    /// Disconnect this observer and release all associated resources.
+    pub fn disconnect(&self) {
+        self.0.abort();
+    }
+}
 
 #[uniffi::export]
 impl MailUserSession {
-    /// Poll Event loop and apply events.
+    /// Queue an event loop poll action.
     ///
-    /// *NOTE*: do not call this function concurrently.
+    /// # Errors
+    ///
+    /// Errors returned here are only related to queuing of the action. To get information
+    /// about the event loop execution, please use [`MailUserSession::observe_event_loop_errors`].
     #[allow(clippy::unused_async)]
     pub async fn poll_events(&self) -> VoidEventResult {
         let ctx = self.ctx.clone();
@@ -21,5 +58,40 @@ impl MailUserSession {
         .await
         .map_err(EventError::from)
         .into()
+    }
+
+    /// Observe event loop errors.
+    ///
+    /// When an error occurs the `callback` is invoked.
+    ///
+    /// This method returns an [`EventLoopErrorObserverHandle`] which needs to be kept
+    /// alive. Once the handle is disconnected or dropped, the `callback` is removed.
+    pub fn observe_event_loop_errors(
+        &self,
+        callback: Arc<dyn EventLoopErrorObserver>,
+    ) -> Arc<EventLoopErrorObserverHandle> {
+        let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx().action_queue());
+        let handle = spawn_async(async move {
+            while let Ok(v) = observer.next().await {
+                if let ActionFailureReason::Error(err, _) = v {
+                    let err = if let Some(details) = err.as_action_error::<EventPoll>() {
+                        match details {
+                            ActionError::Action(_) => {
+                                EventError::Reason(EventErrorReason::Placeholder)
+                            }
+                            ActionError::Queue(_) => {
+                                EventError::Other(ProtonError::Unexpected(UnexpectedError::Queue))
+                            }
+                        }
+                    } else {
+                        EventError::Other(ProtonError::Unexpected(UnexpectedError::Unknown))
+                    };
+
+                    callback.on_event_loop_error(err).await;
+                }
+            }
+        });
+
+        Arc::new(EventLoopErrorObserverHandle(handle.abort_handle()))
     }
 }
