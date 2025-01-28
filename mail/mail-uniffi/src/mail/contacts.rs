@@ -1,10 +1,12 @@
 use super::MailUserSession;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::{
-    core::datatypes::{GroupedContacts, Id},
+    core::datatypes::{ContactSuggestion, DeviceContact, GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
 use crate::{watch_channel_inner, UniffiRecord};
+use itertools::Itertools;
+use proton_core_common::datatypes::DeviceContact as RealDeviceContact;
 use proton_core_common::models::Contact as RealContact;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -20,7 +22,6 @@ use tokio::{task, time::interval};
 
 /// Returns grouped contacts by the first grapheme of the name.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
@@ -39,7 +40,35 @@ pub async fn contact_list(
     .map_err(ActionError::from)
 }
 
-#[allow(clippy::missing_panics_doc)]
+/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query
+///
+#[proton_uniffi_macros::export_result]
+pub async fn contact_suggestions(
+    query: String,
+    device_contacts: Vec<DeviceContact>,
+    session: Arc<MailUserSession>,
+) -> Result<Vec<ContactSuggestion>, ActionError> {
+    uniffi_async(async move {
+        let tether = session.user_stash().connection();
+        Result::<_, RealProtonMailError>::Ok(
+            RealContact::contact_suggestions(
+                &query,
+                device_contacts
+                    .into_iter()
+                    .map_into::<RealDeviceContact>()
+                    .collect(),
+                &tether,
+            )
+            .await?
+            .into_iter()
+            .map_into::<ContactSuggestion>()
+            .collect(),
+        )
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
 #[uniffi::export]
 pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
     let user_context = session.ctx();

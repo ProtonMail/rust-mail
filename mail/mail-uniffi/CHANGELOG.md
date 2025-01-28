@@ -9,11 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+  - [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+  - [ET-1971] `contact_suggestions` function for the composer recipients autocompletion
+    - It has a dummy implementation that always return empty list for now.
 
 ## [0.37.3] - 2025-01-27
 
 ### Fixed
+
   - [ET-1863] Mailbox counter watchers are updated whenever user marks conversation/message as read/unread
   - [ET-1863] System labels (like Outbox) watchers are updated whenever labels change
 
