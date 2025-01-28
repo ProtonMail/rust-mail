@@ -29,6 +29,7 @@ pub struct StatusWatcher {
     status: Arc<RwLock<ConnectionStatus>>,
     last_check: Arc<RwLock<Instant>>,
     request: Arc<Mutex<Option<StatusJoinHandle>>>,
+    last_request: Arc<RwLock<Instant>>,
 }
 
 impl StatusWatcher {
@@ -97,6 +98,7 @@ impl StatusWatcher {
                     .unwrap(),
             )),
             request: Arc::new(Mutex::new(None)),
+            last_request: Arc::new(RwLock::new(Instant::now())),
         }
     }
 
@@ -107,6 +109,7 @@ impl StatusWatcher {
             status: Arc::new(RwLock::new(ConnectionStatus::Online)),
             last_check: Arc::new(RwLock::new(Instant::now())),
             request: Arc::new(Mutex::new(None)),
+            last_request: Arc::new(RwLock::new(Instant::now())),
         }
     }
 
@@ -115,7 +118,7 @@ impl StatusWatcher {
     /// If the status is `Offline`, it will start a background check.
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
-        if !self.is_up_to_date().await {
+        if !self.is_up_to_date().await && self.is_request_up_to_date().await {
             let opt_request = self.request.lock().await.take();
             if let Some(request) = opt_request {
                 if let Ok(status) = request.await {
@@ -126,7 +129,10 @@ impl StatusWatcher {
             } else {
                 self.update(Self::ping(api.clone()).await).await;
             }
+        } else {
+            self.update(Self::ping(api.clone()).await).await;
         }
+
         let status = *self.status.read().await;
 
         if status.is_offline() {
@@ -164,12 +170,17 @@ impl StatusWatcher {
     async fn background_check(&self, api: Proton) {
         let mut request = self.request.lock().await;
         if request.is_none() {
+            *self.last_request.write().await = Instant::now();
             let _ = request.insert(tokio::spawn(async move { Self::ping(api).await }));
         }
     }
 
     async fn is_up_to_date(&self) -> bool {
         self.last_check.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS
+    }
+
+    async fn is_request_up_to_date(&self) -> bool {
+        self.last_request.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS
     }
 }
 
