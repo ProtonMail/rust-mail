@@ -22,7 +22,6 @@ use tokio::{task, time::interval};
 
 /// Returns grouped contacts by the first grapheme of the name.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
@@ -43,7 +42,6 @@ pub async fn contact_list(
 
 /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query
 ///
-#[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
 pub async fn contact_suggestions(
     query: String,
@@ -71,7 +69,6 @@ pub async fn contact_suggestions(
     .map_err(ActionError::from)
 }
 
-#[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
 pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
     let user_context = session.ctx();
