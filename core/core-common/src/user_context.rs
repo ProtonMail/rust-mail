@@ -148,16 +148,6 @@ impl UserContext {
     }
 
     /// Get the connection status of the current user session.
-    ///
-    /// The method will return the current connection status of the user session.
-    /// Underlying it will ping the Proton server with one second timeout to check
-    /// if the connection can be established.
-    ///
-    /// The connection status can be one of the following:
-    /// - `ConnectionStatus::Online`: The application is online.
-    /// - `ConnectionStatus::Offline`: The application is offline.
-    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
-    ///
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.session.status().await
     }

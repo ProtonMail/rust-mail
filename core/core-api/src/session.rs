@@ -153,6 +153,17 @@ impl Session {
         Ok(())
     }
 
+    /// Get the connection status of the current session.
+    ///
+    /// Underlying it will ping the Proton server with one second timeout to check
+    /// if the connection can be established. The method will return the current
+    /// status if is fresh enough without making a new request.
+    ///
+    /// The connection status can be one of the following:
+    /// - `ConnectionStatus::Online`: The application is online and server is reachable.
+    /// - `ConnectionStatus::Offline`: The application is offline.
+    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
+    ///
     pub async fn status(&self) -> ConnectionStatus {
         self.status.status(self.client.clone()).await
     }
