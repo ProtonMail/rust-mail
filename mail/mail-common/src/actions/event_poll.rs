@@ -1,5 +1,6 @@
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
+use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -71,9 +72,19 @@ impl proton_action_queue::action::Handler for EventPollHandler {
         _: &mut Self::Action,
         _: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        context
-            .poll_event_loop_impl()
-            .await
-            .map_err(ActionEventLoopError)
+        if let Err(e) = context.poll_event_loop_impl().await {
+            if let EventLoopError::Provider(e)
+            | EventLoopError::Subscriber(_, SubscriberError::Api(e)) = &e
+            {
+                // We do not want to report network failure errors to the user so
+                // we pretend that this actually worked.
+                if e.is_network_failure() {
+                    return Ok(());
+                }
+            }
+
+            return Err(ActionEventLoopError(e));
+        }
+        Ok(())
     }
 }
