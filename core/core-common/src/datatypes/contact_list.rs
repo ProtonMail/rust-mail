@@ -273,18 +273,11 @@ impl ContactSuggestion {
 ///
 pub enum ContactSuggestionKind {
     /// Proton contact, stored in the local cache and shared between user devices
-    ContactItem(ContactItemSuggestion),
+    ContactItem(ContactEmailItem),
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
     ContactGroup(ContactGroupSuggestion),
-}
-
-/// Proton contact, stored in the local cache and shared between user devices
-///
-pub struct ContactItemSuggestion {
-    /// The field represents the email address used in the proton contact
-    pub email: ContactEmailItem,
 }
 
 /// A device, native contact, stored only locally on the current device.

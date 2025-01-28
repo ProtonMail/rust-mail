@@ -4,10 +4,9 @@ use itertools::Itertools;
 use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,
     ContactGroupSuggestion as RealContactGroupSuggestion, ContactItem as RealContactItem,
-    ContactItemSuggestion as RealContactItemSuggestion, ContactItemType as RealContactItemType,
-    ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
-    DeviceContact as RealDeviceContact, DeviceContactSuggestion as RealDeviceContactSuggestion,
-    GroupedContacts as RealGroupedContacts,
+    ContactItemType as RealContactItemType, ContactSuggestion as RealContactSuggestion,
+    ContactSuggestionKind as RealContactSuggestionKind, DeviceContact as RealDeviceContact,
+    DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -189,7 +188,7 @@ impl From<RealContactSuggestion> for ContactSuggestion {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
 pub enum ContactSuggestionKind {
     /// Proton contact, stored in the local cache and shared between user devices
-    ContactItem(ContactItemSuggestion),
+    ContactItem(ContactEmailItem),
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
@@ -208,22 +207,6 @@ impl From<RealContactSuggestionKind> for ContactSuggestionKind {
             RealContactSuggestionKind::ContactGroup(suggestion) => {
                 ContactSuggestionKind::ContactGroup(suggestion.into())
             }
-        }
-    }
-}
-
-/// Proton contact, stored in the local cache and shared between user devices
-///
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct ContactItemSuggestion {
-    /// The field represents the email address used in the proton contact
-    pub email: ContactEmailItem,
-}
-
-impl From<RealContactItemSuggestion> for ContactItemSuggestion {
-    fn from(value: RealContactItemSuggestion) -> Self {
-        Self {
-            email: value.email.into(),
         }
     }
 }
