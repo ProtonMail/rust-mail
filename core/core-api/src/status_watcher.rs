@@ -41,11 +41,11 @@ impl StatusWatcher {
         match resp {
             Err(error) => {
                 match error.kind() {
-                    ErrorKind::Connect | ErrorKind::Closed => {
-                        self.update(ConnectionStatus::ServerUnreachable).await;
-                    }
-                    ErrorKind::Send | ErrorKind::Resolve => {
+                    ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Connect => {
                         self.update(ConnectionStatus::Offline).await;
+                    }
+                    ErrorKind::Send | ErrorKind::Closed => {
+                        self.update(ConnectionStatus::ServerUnreachable).await;
                     }
                     _ => {}
                 }
@@ -54,8 +54,10 @@ impl StatusWatcher {
             }
             Ok(resp) => {
                 let status = resp.status();
-                if status.is_client_error() || status.is_server_error() {
+                if status.is_client_error() {
                     self.update(ConnectionStatus::Offline).await;
+                } else if status.is_server_error() {
+                    self.update(ConnectionStatus::ServerUnreachable).await;
                 } else {
                     self.update(ConnectionStatus::Online).await;
                 }
