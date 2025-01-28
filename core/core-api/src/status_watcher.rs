@@ -5,6 +5,7 @@ use std::{
 
 use muon::{
     common::{BoxFut, Sender, SenderLayer},
+    error::ErrorKind,
     ProtonRequest, ProtonResponse, Result as MuonResult,
 };
 use tokio::{
@@ -39,7 +40,15 @@ impl StatusWatcher {
 
         match resp {
             Err(error) => {
-                self.update(ConnectionStatus::Offline).await;
+                match error.kind() {
+                    ErrorKind::Connect | ErrorKind::Closed => {
+                        self.update(ConnectionStatus::ServerUnreachable).await;
+                    }
+                    ErrorKind::Send | ErrorKind::Resolve => {
+                        self.update(ConnectionStatus::Offline).await;
+                    }
+                    _ => {}
+                }
 
                 Err(error)
             }
