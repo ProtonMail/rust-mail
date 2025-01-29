@@ -286,3 +286,14 @@ body:not([class]) > pre:first-child  {
     background: var(--background-norm, Canvas);
     color: var(--text-norm, CanvasText);
 }
+
+img {
+    max-inline-size: 100% !important;
+    height: auto !important;
+}
+
+@media only screen and (max-width: 480px) {
+    table {
+        width: auto !important;
+    }
+}

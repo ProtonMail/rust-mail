@@ -1,6 +1,6 @@
 ---
-source: proton-mail-html-transformer/src/tests/transforms.rs
-expression: html
+source: mail/mail-html-transformer/src/tests/transforms.rs
+expression: html.to_string()
 ---
 <html><head>
    <style style="text/css">article,
@@ -290,6 +290,17 @@ body:not([class]) &gt; pre:first-child  {
     line-height: 1.5;
     background: var(--background-norm, Canvas);
     color: var(--text-norm, CanvasText);
+}
+
+img {
+    max-inline-size: 100% !important;
+    height: auto !important;
+}
+
+@media only screen and (max-width: 480px) {
+    table {
+        width: auto !important;
+    }
 }
 </style></head>
    <body>
