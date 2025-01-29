@@ -7,6 +7,7 @@ mod logging;
 mod login;
 pub mod mailbox;
 pub mod messages;
+pub mod prefetch;
 mod session;
 mod settings;
 mod sidebar;

@@ -8,7 +8,7 @@ pub mod errors;
 mod events;
 mod mailbox;
 pub mod models;
-mod prefetch;
+pub mod prefetch;
 pub mod sidebar;
 mod user_context;
 
