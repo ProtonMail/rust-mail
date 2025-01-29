@@ -42,7 +42,7 @@ async fn shared_status() {
     // Give some time for a server to start
     sleep(Duration::from_millis(200)).await;
 
-    // 404
+    // 429
     assert_eq!(api_1.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_2.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_3.status().await, ConnectionStatus::ServerUnreachable);
@@ -134,6 +134,44 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     assert_eq!(api.status().await, ConnectionStatus::Online);
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
+
+// #[tokio::test]
+// async fn offline_background_requests() {
+//     let mock_server = MockServer::start().await;
+//     let api_path = random_path();
+//     let api_config = Config {
+//         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
+//         ..Default::default()
+//     };
+//     let api = Session::new(
+//         api_config.clone(),
+//         None,
+//         StatusWatcher::test()
+//             .with_up_to_date(Duration::from_millis(1000))
+//             .await,
+//     )
+//     .unwrap();
+
+//     Mock::given(method("GET"))
+//         .and(path(format!("{api_path}/core/v4/tests/ping")))
+//         .respond_with(ResponseTemplate::new(500))
+//         .expect(5)
+//         .mount(&mock_server)
+//         .await;
+
+//     catch_all(&mock_server).await;
+//     // Give some time for a server to start
+//     sleep(Duration::from_millis(200)).await;
+
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+// }
 
 // TODO: Very unreliable tests in CI, needs to be fixed
 // #[tokio::test]

@@ -4126,6 +4126,7 @@ dependencies = [
  "bytes",
  "chrono",
  "derive_more 1.0.0",
+ "flume",
  "futures",
  "muon",
  "parking_lot",

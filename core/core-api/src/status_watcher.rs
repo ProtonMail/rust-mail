@@ -45,10 +45,16 @@ impl Deref for Status {
     }
 }
 
+#[derive(Debug)]
+struct BackgroundPing {
+    _request: StatusJoinHandle,
+    finished: flume::Receiver<()>,
+}
+
 #[derive(Clone, Debug)]
 pub struct StatusWatcher {
     status: Arc<RwLock<Status>>,
-    request: Arc<Mutex<Option<StatusJoinHandle>>>,
+    request: Arc<Mutex<Option<BackgroundPing>>>,
     up_to_date: Duration,
 }
 
@@ -166,7 +172,16 @@ impl StatusWatcher {
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_up_to_date().await {
-            drop(self.request.lock().await.take());
+            let mut request = self.request.lock().await;
+            if let Some(request_data) = request.as_ref() {
+                if !request_data.finished.is_empty()
+                    && request_data.finished.recv_async().await.is_ok()
+                {
+                    drop(request.take());
+                }
+            }
+            drop(request);
+
             Self::ping(api.clone(), ONE_SECOND_TIMEOUT).await;
         }
 
@@ -193,9 +208,14 @@ impl StatusWatcher {
     async fn background_check(&self, api: Proton) {
         let mut request = self.request.lock().await;
         if request.is_none() {
-            let _ = request.insert(tokio::spawn(async move {
-                Self::ping(api, ONE_MINUTE_TIMEOUT).await;
-            }));
+            let (sender, receiver) = flume::unbounded();
+            let _ = request.insert(BackgroundPing {
+                _request: tokio::spawn(async move {
+                    Self::ping(api, ONE_MINUTE_TIMEOUT).await;
+                    let _ = sender.send_async(()).await;
+                }),
+                finished: receiver,
+            });
         }
     }
 
