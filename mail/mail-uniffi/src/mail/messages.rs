@@ -18,9 +18,7 @@ use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{
-    spawn_async, uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle,
-};
+use crate::{spawn_async, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
@@ -120,6 +118,24 @@ impl DecryptedMessage {
         })
     }
 
+    /// This function merges the API attachments and PGP attachments into one for easier client
+    /// consumption.
+    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
+        self.body
+            .get_attachments()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+}
+
+export_typed_result!(
+    EmbeddedAttachmentInfoResult,
+    EmbeddedAttachmentInfo,
+    ProtonError
+);
+#[uniffi::export]
+impl DecryptedMessage {
     /// Load or fetch an embedded attachment with `cid` for this message.
     ///
     /// If the attachment is not in the cache it will be downloaded from the server.
@@ -128,10 +144,12 @@ impl DecryptedMessage {
     ///
     /// Returns error if the attachments can't be fetched from the server, retrieved
     /// from the cache or the attachment with `cid` does not exist.
+    //NOTE: iOS request we share the same result types between
+    // this function and the Draft equivalent.
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> EmbeddedAttachmentInfoResult {
         uniffi_async(async move {
             let att = self
                 .body
@@ -146,17 +164,8 @@ impl DecryptedMessage {
             })
         })
         .await
-        .map_into()
-    }
-
-    /// This function merges the API attachments and PGP attachments into one for easier client
-    /// consumption.
-    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
-        self.body
-            .get_attachments()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+        .map_err(ProtonError::from)
+        .into()
     }
 }
 
