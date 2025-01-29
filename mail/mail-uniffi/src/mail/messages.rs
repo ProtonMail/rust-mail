@@ -553,11 +553,9 @@ pub async fn available_actions_for_messages(
         let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions =
-            RealMessage::available_actions(view, ids.into_iter().map_into().collect(), &tether)
-                .await?;
+        let actions = RealMessage::available_actions(view, ids.map_vec(), &tether).await?;
 
-        Result::<_, RealProtonMailError>::Ok(MessageAvailableActions::from(actions))
+        Ok::<_, RealProtonMailError>(MessageAvailableActions::from(actions))
     })
     .await
     .map_err(ActionError::from)
@@ -616,15 +614,12 @@ pub async fn watch_available_label_as_actions_for_messages(
 ) -> Result<WatchedLabelAs, ActionError> {
     uniffi_async(async move {
         let tether = mailbox.stash().connection();
-        let (actions, handle) = RealMessage::watch_available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?;
-        let actions = actions.into_iter().map_into().collect_vec();
+        let (actions, handle) =
+            RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
+        let actions = actions.map_vec();
         let handle = watch_channel(handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
+        Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
     })
     .await
     .map_err(ActionError::from)
@@ -695,12 +690,12 @@ pub async fn all_available_bottom_bar_actions_for_messages(
         let tether = mailbox.stash().connection();
         let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
             mailbox.label_id().into(),
-            message_ids.into_iter().map_into().collect(),
+            message_ids.map_vec(),
             &tether,
         )
         .await?
         .into();
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)

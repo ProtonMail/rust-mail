@@ -1,7 +1,7 @@
 use super::GeneralActions;
 use crate::mail::datatypes::MoveItemAction;
 use crate::{UniffiEnum, UniffiRecord};
-use itertools::Itertools;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::ConversationAction as RealConversationAction;
 use proton_mail_common::actions::ConversationAvailableActions as RealConversationAvailableActions;
 
@@ -18,9 +18,9 @@ pub struct ConversationAvailableActions {
 impl From<RealConversationAvailableActions> for ConversationAvailableActions {
     fn from(value: RealConversationAvailableActions) -> Self {
         ConversationAvailableActions {
-            conversation_actions: value.conversation_actions.into_iter().map_into().collect(),
-            move_actions: value.move_actions.into_iter().map_into().collect(),
-            general_actions: value.general_actions.into_iter().map_into().collect(),
+            conversation_actions: value.conversation_actions.map_vec(),
+            move_actions: value.move_actions.map_vec(),
+            general_actions: value.general_actions.map_vec(),
         }
     }
 }

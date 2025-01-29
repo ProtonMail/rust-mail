@@ -3,6 +3,7 @@ use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::queue::ActionError;
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
@@ -86,7 +87,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let responses = Conversation::mark_multiple_as_unread_remote::<Proton>(
+        let responses = Conversation::mark_multiple_as_unread_remote(
             action.0.remote_target_ids.clone(),
             ctx.session().api(),
         )

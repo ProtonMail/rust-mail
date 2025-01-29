@@ -356,10 +356,11 @@ impl DecryptedMessageBody {
         // settings. Remove me when we can.
         // https://protonag.atlassian.net/browse/ET-1926
         let opts = TransformOpts {
-            show_block_quote: opts.show_block_quote,
             hide_remote_images: Some(false),
             hide_embedded_images: Some(false),
+            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
             image_proxy: Some(false),
+            ..opts
         };
 
         let tether = ctx.user_stash().connection();
@@ -592,11 +593,7 @@ pub fn transform_html(
         remote_images_disabled = transformer.disable_remote_content();
     } else if let Some(auth_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
-
-        // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
-        if false {
-            images_proxied = transformer.proxy_images(auth_id.as_ref());
-        }
+        images_proxied = transformer.proxy_images(auth_id.as_ref());
     }
 
     let had_blockquote = if !show_block_quote {
