@@ -455,13 +455,14 @@ mod contact_watcher {
 
 mod contact_suggestions {
     use crate::{
-        contact, contact_email,
+        ceid, cid, contact, contact_email,
         datatypes::{
             AvatarInformation, ContactEmailItem, ContactSuggestion, ContactSuggestionKind,
             DeviceContact, DeviceContactSuggestion, LabelType,
         },
         device_contact, label, label_id, labels, lid,
         models::{Contact, Label},
+        tests::common::new_core_test_connection,
     };
     use test_case::test_case;
 
@@ -1101,5 +1102,107 @@ mod contact_suggestions {
             test_case.contact_groups,
             test_case.device_contacts,
         )
+    }
+
+    fn pretty_assert_emails(expected: Vec<&'static str>) -> impl Fn(Vec<ContactSuggestion>) {
+        move |actual| {
+            let actual = actual
+                .into_iter()
+                .map(|suggestion| match suggestion.kind {
+                    ContactSuggestionKind::ContactItem(contact_email_item) => {
+                        format!("{} <{}>", suggestion.name, contact_email_item.email)
+                    }
+                    ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
+                        format!("{} <{}>", suggestion.name, device_contact_suggestion.email)
+                    }
+                    ContactSuggestionKind::ContactGroup(vec) => {
+                        format!("{} ({} emails)", suggestion.name, vec.len())
+                    }
+                })
+                .collect::<Vec<_>>();
+            pretty_assertions::assert_eq!(actual, expected)
+        }
+    }
+
+    fn empty_test_case() -> TestCase {
+        TestCase {
+            contacts: vec![],
+            contact_groups: vec![],
+            device_contacts: vec![],
+        }
+    }
+    fn filtering_test_case() -> TestCase {
+        TestCase {
+            contacts: vec![
+                contact!(name: "Barbara Lox".to_string(), remote_id: cid!("lox"), contact_emails: vec![
+                    contact_email!(remote_id: ceid!("123"), is_proton: true, email: "barbara@pm.me".to_string(), last_used_time: 1)
+                ]),
+                contact!(name: "Michael Scott".to_string(), remote_id: cid!("scott"), contact_emails: vec![
+                    contact_email!(remote_id: ceid!("234"), is_proton: true, email: "m.scott@pm.me".to_string(), last_used_time: 2, label_ids: labels!("m.schur.productions"))
+                ]),
+                contact!(name: "Jason Mendoza".to_string(), remote_id: cid!("mendoza"), contact_emails: vec![
+                    contact_email!(remote_id: ceid!("678"), is_proton: true, email: "jianyu.li@pm.me".to_string(), last_used_time: 2, label_ids: labels!("m.schur.productions"))
+                ]),
+                contact!(name: "Jake Peralta".to_string(), remote_id: cid!("peralta"), contact_emails: vec![
+                    contact_email!(remote_id: ceid!("456"), is_proton: false, email: "jake.peralta@99.com".to_string(), last_used_time: 3, label_ids: labels!("m.schur.productions")),
+                    contact_email!(remote_id: ceid!("112"), is_proton: false, email: "harvey@jp.com".to_string(), last_used_time: 1)
+                ]),
+            ],
+            contact_groups: vec![
+                label!(remote_id: Some(label_id!("m.schur.productions")), name: "M. Schur Productions".to_string(), label_type: LabelType::ContactGroup),
+            ],
+            device_contacts: vec![
+                device_contact!(key: "000".to_string(), name: "Aunt Molly".to_string(), emails: vec![
+                    "molly@family.com".to_string(),
+                ]),
+                device_contact!(key: "001".to_string(), name: "Molly".to_string(), emails: vec![
+                    "badass@aunt.com".to_string(),
+                ]),
+            ],
+        }
+    }
+
+    #[test_case("pe", empty_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0A - empty contact book")]
+    #[test_case("", empty_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0B - empty query")]
+    #[test_case("", filtering_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0C - empty query with non-empty contact book")]
+    #[test_case("Lox", filtering_test_case() => using pretty_assert_emails(vec![ "Barbara Lox <barbara@pm.me>" ]) ; "TEST 1 - filtering by name")]
+    #[test_case("lox", filtering_test_case() => using pretty_assert_emails(vec![ "Barbara Lox <barbara@pm.me>" ]) ; "TEST 2 - filtering case insensitive")]
+    #[test_case("jianyu", filtering_test_case() => using pretty_assert_emails(vec![ "Jason Mendoza <jianyu.li@pm.me>" ]) ; "TEST 3 - filtering by email")]
+    #[test_case("Jake", filtering_test_case() => using pretty_assert_emails(vec![ "Jake Peralta <jake.peralta@99.com>", "Jake Peralta <harvey@jp.com>" ]) ; "TEST 4 - filtering by name, contact has multiple emails")]
+    #[test_case("Schur", filtering_test_case() => using pretty_assert_emails(vec![ "M. Schur Productions (3 emails)"]) ; "TEST 5 - filtering by name, contact group returned")]
+    #[test_case("aunt", filtering_test_case() => using pretty_assert_emails(vec!["Molly <badass@aunt.com>", "Aunt Molly <molly@family.com>"]) ; "TEST 6 - device contacts filtered by both name and email")]
+    #[test_case("m", filtering_test_case() => using pretty_assert_emails(vec![
+        "Jason Mendoza <jianyu.li@pm.me>",
+        "Michael Scott <m.scott@pm.me>",
+        "Barbara Lox <barbara@pm.me>",
+        "Jake Peralta <jake.peralta@99.com>",
+        "Jake Peralta <harvey@jp.com>",
+        "Aunt Molly <molly@family.com>",
+        "M. Schur Productions (3 emails)",
+        "Molly <badass@aunt.com>",
+    ]) ; "TEST 7 - finding all")]
+    #[tokio::test]
+    async fn test_contact_suggestions_filtering(
+        query: &str,
+        mut test_case: TestCase,
+    ) -> Vec<ContactSuggestion> {
+        let mut tether = new_core_test_connection().await.connection();
+        let tx = tether.transaction().await.unwrap();
+        for contact in test_case.contacts.iter_mut() {
+            contact.save(&tx).await.unwrap();
+            for email in contact.contact_emails.iter_mut() {
+                email.remote_contact_id = contact.remote_id.clone();
+                email.save(&tx).await.unwrap();
+            }
+        }
+        for label in test_case.contact_groups.iter_mut() {
+            label.save(&tx).await.unwrap();
+        }
+
+        tx.commit().await.expect("commit failed");
+
+        Contact::contact_suggestions(query, test_case.device_contacts, &tether)
+            .await
+            .unwrap()
     }
 }

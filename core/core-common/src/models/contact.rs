@@ -1,5 +1,5 @@
 use crate::utils::MapVec as _;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::iter;
 use std::time::Instant;
@@ -12,6 +12,7 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension}
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use futures::future::try_join;
 use futures::try_join;
+use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
@@ -24,6 +25,7 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -451,28 +453,118 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
+    #[allow(trivial_casts)] // Box<dyn ToSql> cannot be infered
     pub async fn contact_suggestions(
         query: &str,
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
     ) -> Result<Vec<ContactSuggestion>, StashError> {
-        // TODO (ET-1971): Extend that implementation by using query to filter contacts, groups and device contacts
-        let (_query,) = (query,);
+        let query = query.trim();
+        let query = query.to_lowercase();
 
-        let (mut contacts, contact_groups) = try_join!(
-            Contact::find("WHERE deleted = 0", vec![], tether),
-            Label::find_by_kind(LabelType::ContactGroup, tether)
-        )?;
-
-        for contact in &mut contacts {
-            contact.emails(tether).await?;
+        // Early exit heurestic
+        if query.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(ContactSuggestion::from_contacts_and_device_contacts(
+        // 1. Get contact groups that are matching the query.
+        // That matching is case insensitive
+        let contact_groups = Label::find(
+            "WHERE label_type = ? AND name = ? COLLATE NOCASE ORDER BY display_order ASC",
+            params![LabelType::ContactGroup, query.to_string()],
+            tether,
+        )
+        .await?;
+
+        let group_label_ids = contact_groups
+            .iter()
+            .flat_map(|group| group.remote_id.clone())
+            .collect::<HashSet<_>>();
+
+        // 2. Get contact emails that are either matching query or are part of matched groups
+        let contact_emails: Vec<ContactEmail> = tether
+            .query(
+                formatdoc!(
+                    " 
+                SELECT DISTINCT {table}.* 
+                FROM {table},
+                json_each({table}.label_ids)
+                    WHERE {table}.email = ? COLLATE NOCASE
+                    OR json_each.value IN ({placeholders}) 
+            ",
+                    table = ContactEmail::table_name(),
+                    placeholders = stash::utils::placeholders(group_label_ids.len())
+                ),
+                vec![Box::new(query.to_string()) as Box<dyn ToSql + Send>]
+                    .into_iter()
+                    .chain(
+                        group_label_ids
+                            .into_iter()
+                            .map(|id| Box::new(id) as Box<dyn ToSql + Send>),
+                    )
+                    .collect(),
+            )
+            .await?;
+
+        let remote_contact_ids = contact_emails
+            .iter()
+            .flat_map(|contact_email| contact_email.remote_contact_id.clone())
+            .collect::<HashSet<_>>();
+
+        let mut contacts = Contact::find(
+            formatdoc!(
+                "WHERE deleted = 0 AND (
+           name = ? COLLATE NOCASE 
+           OR 
+           remote_id IN ({placeholders})
+        )",
+                placeholders = stash::utils::placeholders(remote_contact_ids.len())
+            ),
+            vec![Box::new(query.to_string()) as Box<dyn ToSql + Send>]
+                .into_iter()
+                .chain(
+                    remote_contact_ids
+                        .into_iter()
+                        .map(|id| Box::new(id) as Box<dyn ToSql + Send>),
+                )
+                .collect(),
+            tether,
+        )
+        .await?;
+
+        let mut contact_emails_by_contact = contact_emails.into_iter().fold(
+            HashMap::<ContactId, Vec<ContactEmail>>::new(),
+            |mut acc, email| {
+                let id = email.remote_contact_id.clone().unwrap();
+                acc.entry(id).or_default().push(email);
+                acc
+            },
+        );
+
+        for contact in &mut contacts {
+            contact.contact_emails = contact_emails_by_contact
+                .remove(contact.remote_id.as_ref().unwrap())
+                .unwrap_or_default();
+        }
+
+        let device_contacts = device_contacts
+            .into_iter()
+            .filter(|contact| {
+                contact.name.to_lowercase().contains(&query)
+                    || contact
+                        .emails
+                        .iter()
+                        .any(|email| email.to_lowercase().contains(&query))
+            })
+            .collect();
+
+        let suggestions = ContactSuggestion::from_contacts_and_device_contacts(
             contacts,
             contact_groups,
             device_contacts,
-        ))
+        );
+
+        Ok(suggestions)
     }
 
     pub async fn action_delete(
