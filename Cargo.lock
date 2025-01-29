@@ -4535,7 +4535,6 @@ version = "0.38.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "chrono",
  "flume",
  "itertools 0.13.0",
  "non-empty-string",

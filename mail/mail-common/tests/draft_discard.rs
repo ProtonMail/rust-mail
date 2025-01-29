@@ -4,8 +4,7 @@ use proton_api_core::consts::{General, Mail};
 use proton_api_core::services::proton::common::{LabelId, UserId};
 use proton_api_core::services::proton::prelude::ApiErrorInfo;
 use proton_api_mail::services::proton::prelude::{
-    DraftAction, DraftAttachmentKeyPackets, MessageFlags, OperationResult,
-    PutMessagesDeleteResponse,
+    DraftAttachmentKeyPackets, MessageFlags, OperationResult, PutMessagesDeleteResponse,
 };
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::SystemLabelId;
@@ -69,7 +68,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -495,7 +494,7 @@ async fn discard_draft_failure_undeletes_message() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),

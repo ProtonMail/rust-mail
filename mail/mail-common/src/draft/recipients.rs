@@ -1,6 +1,6 @@
 use crate::datatypes::MessageRecipient;
 use crate::MailUserContext;
-use email_address::EmailAddress;
+use email_address::{EmailAddress, Options};
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_api_core::service::ApiServiceError;
@@ -255,7 +255,14 @@ impl RecipientList {
             return Err(RecipientError::DuplicateAddress(entry.email));
         }
 
-        let state = if EmailAddress::from_str(&entry.email).is_err() {
+        let state = if EmailAddress::parse_with_options(
+            &entry.email,
+            Options::default()
+                .without_display_text()
+                .with_required_tld(),
+        )
+        .is_err()
+        {
             ValidationState::InvalidEmail
         } else {
             state

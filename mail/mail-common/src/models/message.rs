@@ -15,6 +15,7 @@ use crate::actions::{
 };
 use crate::models::*;
 use crate::{find_in_query, MailContextError};
+use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
@@ -702,14 +703,28 @@ impl Message {
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
-        let inbox = MovableSystemFolderAction::inbox(tether).await?;
-        let archive = MovableSystemFolderAction::archive(tether).await?;
-        let trash = MovableSystemFolderAction::trash(tether).await?;
-        let spam = MovableSystemFolderAction::spam(tether).await?;
+        let messages_fut = async {
+            Self::find_by_ids(message_ids.to_vec(), tether)
+                .await
+                .map_err(AppError::from)
+        };
 
-        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(tether).await?;
-        let messages = Self::find_by_ids(message_ids.to_vec(), tether).await?;
+        let current_label_fut = async {
+            Label::resolve_remote_label_id(current_label_id, tether)
+                .await
+                .map_err(AppError::from)
+        };
+
+        let (inbox, archive, trash, spam, bottom_bar_actions, current_label, messages) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileActions::bottom_bar_actions(tether),
+            current_label_fut,
+            messages_fut
+        )?;
+
         let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
             &current_label,
             &messages,
@@ -1297,7 +1312,10 @@ impl Message {
                     attachment.remote_address_id = Some(self.remote_address_id.clone());
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
-                    attachment.save(bond).await?;
+                    attachment
+                        .save(bond)
+                        .await
+                        .inspect_err(|e| error!("Failed to save attachment from message: {e}"))?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
@@ -1774,6 +1792,7 @@ impl Message {
             &self.remote_address_id,
             encrypted_body,
             tether,
+            true,
         )
         .await?;
 
@@ -2476,7 +2495,8 @@ impl Message {
     pub async fn force_sync_message_and_body(
         ctx: Arc<MailUserContext>,
         message_id: MessageId,
-    ) -> MailContextResult<(Message, MessageBodyMetadata, String)> {
+        with_attachment_prefetch: bool,
+    ) -> MailContextResult<(Message, DecryptedMessageBody)> {
         let mut tether = ctx.user_stash().connection();
 
         let (message, encrypted) =
@@ -2487,12 +2507,13 @@ impl Message {
             &message.remote_address_id,
             encrypted,
             &tether,
+            with_attachment_prefetch,
         )
         .await?;
 
         tokio::task::spawn_blocking(move || {
             Self::store_decrypted_message_body(&ctx, message.local_id.unwrap(), &decrypted)?;
-            Ok((message, decrypted.metadata, decrypted.body))
+            Ok((message, decrypted))
         })
         .await?
     }
@@ -2538,6 +2559,9 @@ impl Message {
 
     /// Decrypt an `encrypted_message_body` with a given `address_id` keys.
     ///
+    /// If `attachment_prefetch` is set to `true`, all the attachments will start prefetching
+    /// the moment the object is created.
+    ///
     /// # Errors
     ///
     /// Returns error if the decryption or loading addresses fails.
@@ -2546,6 +2570,7 @@ impl Message {
         address_id: &AddressId,
         encrypted_message_body: EncryptedMessageBody,
         tether: &Tether,
+        attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         let pgp_provider = proton_crypto::new_pgp_provider();
 
@@ -2553,7 +2578,7 @@ impl Message {
             .unlocked_address_keys(&pgp_provider, tether, address_id)
             .await?;
         encrypted_message_body
-            .into_decrypted_message(ctx, address_keys, pgp_provider)
+            .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e}");
                 MailContextError::Crypto
@@ -2630,6 +2655,37 @@ impl Message {
         let message = StorableMessageBody::from_reader(reader)?;
         Ok(Some(DecryptedMessageBody::from_storable(
             message, metadata, ctx,
+        )))
+    }
+
+    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the cache without
+    /// pre-loading all the attachments.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the db query or cache load fails.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    pub(crate) async fn load_decrypted_message_from_cache_without_attachment_preload(
+        ctx: &MailUserContext,
+        local_id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
+        let cache_key = CacheMessageKey::from(local_id);
+
+        let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
+            .await
+            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+        else {
+            return Ok(None);
+        };
+
+        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
+            return Ok(None);
+        };
+
+        let message = StorableMessageBody::from_reader(reader)?;
+        Ok(Some(DecryptedMessageBody::from_storable_without_preload(
+            message, metadata,
         )))
     }
 

@@ -289,9 +289,11 @@ impl Conversation {
     ) -> Result<ActionOutput<MarkRead>, QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
         match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
-            Err(other) => Err(other),
+            Err(QueueActionError::Action(ActionError::NoInput)) => {
+                warn!("Action mark read with no actionable input");
+                Ok(ActionOutput::default())
+            }
+            other => other,
         }
     }
 
@@ -314,12 +316,15 @@ impl Conversation {
     ) -> Result<ActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         match queue.apply_action(action).await {
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+            Err(QueueActionError::Action(ActionError::NoInput)) => {
+                warn!("Action mark read with no actionable input");
+                Ok(ActionOutput::default())
+            }
             other => other,
         }
     }
 
-    /// Mark multiple conversations as read.
+    /// Delete multiple conversations.
     ///
     /// # Parameters
     ///
@@ -1630,7 +1635,12 @@ impl Conversation {
 
                     attachment.local_conversation_id = self.local_id;
                     attachment.remote_conversation_id = self.remote_id.clone();
-                    attachment.save(bond).await?;
+                    attachment.save(bond).await.inspect_err(|e| {
+                        error!(
+                            "Failed to updated attachment from conversation: {}",
+                            e.to_string()
+                        )
+                    })?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
@@ -1952,9 +1962,9 @@ impl Conversation {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn mark_multiple_as_unread_remote<PM: ProtonMail>(
+    pub async fn mark_multiple_as_unread_remote(
         ids: Vec<ConversationId>,
-        api: &PM,
+        api: &impl ProtonMail,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
         let request = |ids: Vec<ConversationId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
@@ -2917,6 +2927,7 @@ impl Conversation {
         endpoint: F,
     ) -> Result<Vec<OperationResult<T>>, ApiServiceError>
     where
+        // TODO: Change me for an AsyncFn
         F: Fn(Vec<T>) -> Fut,
         Fut: Future<Output = Result<Vec<OperationResult<T>>, ApiServiceError>>,
         T: ProtonIdMarker,

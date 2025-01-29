@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -40,7 +40,7 @@ async fn create_empty_draft() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -203,7 +203,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -231,7 +231,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Update the draft
     draft.subject = new_subject.to_owned();
-    draft.body = new_body.to_owned();
+    draft.decrypted_body.body = new_body.to_owned();
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
@@ -243,7 +243,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Opening the draft and check if all the information is up to date
     let (draft, _) = Draft::open(user_ctx, draft_message_id).await.unwrap();
-    assert_eq!(draft.body, new_body);
+    assert_eq!(draft.decrypted_body.body, new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
     assert_eq!(draft.cc_list, new_cc_list);
@@ -447,7 +447,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft_failure(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         None,
         DraftAttachmentKeyPackets::new(),
         CoreBundle::AppVersionInvalid as u32,
@@ -570,7 +570,7 @@ async fn create_draft_reply_impl(
     .await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::from(reply_mode),
+        Some(DraftAction::from(reply_mode)),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap()),
         key_packets,
@@ -587,9 +587,13 @@ async fn create_draft_reply_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
-        .await
-        .unwrap();
+    Message::force_sync_message_and_body(
+        user_ctx.clone(),
+        existing_message.remote_id.unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
 
     // Create draft.
     let mut draft = Draft::reply(
@@ -614,7 +618,25 @@ async fn create_draft_reply_impl(
         .await
         .unwrap()
         .expect("failed to load message");
+
+    let sender_address = Address::find_by_remote_id(existing_message.remote_address_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+
+    // Sender address should not be repeated in replies or forward.
+    assert!(!draft_message
+        .to_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
+    assert!(!draft_message
+        .cc_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
 
     // Local conversation id match the source message,
     assert_eq!(
@@ -673,7 +695,7 @@ async fn open_draft_sync_status_success() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -723,7 +745,7 @@ async fn open_draft_sync_status_cached() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -757,4 +779,38 @@ async fn open_draft_sync_status_cached() {
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Cached);
+}
+
+#[tokio::test]
+async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_status() {
+    // Check that open draft reports cached status when we can't sync from server due to
+    // network failure.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft should work;
+    let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
 }

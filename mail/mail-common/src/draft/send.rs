@@ -208,7 +208,7 @@ pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
     let body_data = if body_metadata.mime_type == MimeType::TextPlain {
         &body.body
     } else {
-        text_body = html_to_text(body.body.to_owned());
+        text_body = html_to_text(&body.body);
         &text_body
     };
     let package_body = package_body_encrypt(
@@ -236,7 +236,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     // Generate the multipart/mime message body.
     let text_body: String;
     if body_metadata.mime_type == MimeType::TextHtml {
-        text_body = html_to_text(body.body.to_owned());
+        text_body = html_to_text(&body.body);
         builder = builder
             .html_body(body.body.as_bytes())
             .text_body(&text_body);

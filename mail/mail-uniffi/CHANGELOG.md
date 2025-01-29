@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Added
+
+  - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
+
+### Fixed
+
+  - [ET-1987] Fix email address validation for `RecipientList`.
+  - [ET-1923] Remove mail settings signature.
+  - [ET-1913] Support retrying of failed login flow stages
+  - Fix sender address repeated in To and CC on draft reply.
+  - [ET-1978] New drafts are not marked as being replies.
+
+### Changed
+
+  - The log file will be append only.
+
 ## [0.38.0] - 2025-01-28
 
 ### Added

@@ -500,13 +500,13 @@ impl Context {
         };
 
         match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
+            CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
                 self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
             )),
 
-            CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
+            CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
                 self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,

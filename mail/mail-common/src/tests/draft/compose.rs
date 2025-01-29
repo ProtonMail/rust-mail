@@ -4,6 +4,7 @@ use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
+use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
@@ -35,7 +36,10 @@ async fn reply_draft_message_creation() {
     assert!(draft.to_list.contains_email(&source_message.sender.address));
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
-    assert_eq!(draft.attachments, vec![inline_attachment()])
+    assert_eq!(
+        draft.decrypted_body.metadata.attachments,
+        vec![inline_attachment()]
+    )
 }
 
 #[tokio::test]
@@ -50,7 +54,10 @@ async fn reply_all_draft_message_creation() {
         .cc_list
         .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address)));
     assert!(draft.bcc_list.is_empty());
-    assert_eq!(draft.attachments, vec![inline_attachment()])
+    assert_eq!(
+        draft.decrypted_body.metadata.attachments,
+        vec![inline_attachment()]
+    )
 }
 
 #[tokio::test]
@@ -64,7 +71,7 @@ async fn forward_draft_message_creation() {
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
     assert_eq!(
-        draft.attachments,
+        draft.decrypted_body.metadata.attachments,
         vec![inline_attachment(), normal_attachment()]
     )
 }
@@ -86,6 +93,7 @@ fn message_signature_with_signature_only() {
 
 #[test]
 fn message_signature_with_mail_settings_signature_only() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature("");
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
@@ -94,6 +102,7 @@ fn message_signature_with_mail_settings_signature_only() {
 
 #[test]
 fn message_signature_with_address_and_mail_settings_signature() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
@@ -102,6 +111,7 @@ fn message_signature_with_address_and_mail_settings_signature() {
 
 #[test]
 fn message_signature_with_all_signatures() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature_and_pm_signautre();
     let signature = get_signature(&address, &mail_settings);
@@ -114,6 +124,13 @@ async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
     let mail_settings = MailSettings::default();
+    let source_body = DecryptedMessageBody {
+        body: source_body,
+        metadata: source_body_metadata,
+        pgp_attachments: None,
+        pgp_subject: None,
+        in_flight: Default::default(),
+    };
 
     let resolver = NullContactGroupResolver {};
     (
@@ -124,7 +141,6 @@ async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
             &address,
             &mail_settings,
             &source_message,
-            source_body_metadata,
             source_body,
             true,
         )

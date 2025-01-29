@@ -9,6 +9,7 @@ use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipien
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -25,6 +26,7 @@ pub(super) async fn patch_draft_with_reply_mode(
     draft: &mut Draft,
     source_message: &Message,
     reply_mode: ReplyMode,
+    sender_address: &Address,
 ) {
     // Copy over the addresses based on reply mode
     match reply_mode {
@@ -39,13 +41,24 @@ pub(super) async fn patch_draft_with_reply_mode(
         ReplyMode::All => {
             draft.to_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
-                std::iter::once(source_message.sender.clone().into())
-                    .chain(source_message.to_list.value.clone()),
+                std::iter::once(source_message.sender.clone().into()).chain(
+                    source_message
+                        .to_list
+                        .value
+                        .iter()
+                        .filter(|v| v.address != sender_address.email)
+                        .cloned(),
+                ),
             )
             .await;
             draft.cc_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
-                source_message.cc_list.value.clone(),
+                source_message
+                    .cc_list
+                    .value
+                    .iter()
+                    .filter(|v| v.address != sender_address.email)
+                    .cloned(),
             )
             .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
@@ -86,16 +99,7 @@ pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> 
     } else {
         "\n"
     };
-    let mut signature = if mail_settings.signature.is_empty() {
-        address.signature.clone()
-    } else if address.signature.is_empty() {
-        mail_settings.signature.clone()
-    } else {
-        format!(
-            "{}{line_break}{line_break}{}",
-            address.signature, mail_settings.signature
-        )
-    };
+    let mut signature = address.signature.clone();
 
     if mail_settings.pm_signature != PmSignature::Disabled {
         signature.push_str(line_break);
@@ -202,13 +206,14 @@ pub(super) fn prepare_html_reply(
 pub(super) fn prepare_plain_text_reply(
     output: &mut String,
     message: &Message,
-    mut original_body: String,
+    original_body: &str,
     original_body_mime_type: MimeType,
     use_utc: bool,
 ) {
+    let mut original_body = Cow::Borrowed(original_body);
     // Convert body to text if source is html
     if original_body_mime_type == MimeType::TextHtml {
-        original_body = html_to_text(original_body);
+        original_body = Cow::Owned(html_to_text(original_body.as_ref()));
     }
 
     let sender_reply = generate_sender_reply(
@@ -228,14 +233,15 @@ pub(super) fn prepare_plain_text_reply(
 
 /// Converts htm to plain text. If an error occurs the original messages
 /// is returned.
-pub fn html_to_text(input: String) -> String {
-    let cursor = io::Cursor::new(&input);
+pub fn html_to_text(input: impl AsRef<str>) -> String {
+    let input = input.as_ref();
+    let cursor = io::Cursor::new(input);
     let config = html2text::config::plain();
     match config.string_from_read(cursor, 80) {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e}");
-            input
+            input.to_owned()
         }
     }
 }

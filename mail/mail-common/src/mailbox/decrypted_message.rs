@@ -5,7 +5,7 @@
 use crate::datatypes::attachment::MimeType as AttachmentMimeType;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
-use crate::{AppError, MailUserContext};
+use crate::{AppError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_api_core::services::proton::common::AuthId;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{self, ProcessedAttachment};
@@ -21,8 +21,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
-
-use super::MailboxResult;
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -125,7 +123,7 @@ pub enum ParsedHeaderValue {
     Array(Vec<String>),
 }
 
-type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailboxResult<Vec<u8>>>>;
+type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailContextResult<Vec<u8>>>>;
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
@@ -154,6 +152,8 @@ pub struct DecryptedMessageBody {
 }
 
 impl DecryptedMessageBody {
+    /// Create a new instance that immediately starts to pre-download all attachments for this
+    /// message.
     pub fn new(
         body: String,
         metadata: MessageBodyMetadata,
@@ -168,6 +168,43 @@ impl DecryptedMessageBody {
             pgp_attachments,
             pgp_subject,
             in_flight,
+        }
+    }
+
+    /// Create a new instance which does not start to pre-download all attachments for this
+    /// message.
+    pub fn without_prefetch(
+        body: String,
+        metadata: MessageBodyMetadata,
+        pgp_attachments: Option<Vec<ProcessedAttachment>>,
+        pgp_subject: Option<String>,
+    ) -> Self {
+        Self {
+            body,
+            metadata,
+            pgp_attachments,
+            pgp_subject,
+            in_flight: Default::default(),
+        }
+    }
+
+    /// Create a new decrypted message body that corresponds to an empty draft with
+    /// the given `body` and `mime_type`.
+    pub fn new_draft(body: String, mime_type: MimeType) -> Self {
+        Self {
+            body,
+            metadata: MessageBodyMetadata {
+                local_message_id: None,
+                remote_message_id: None,
+                header: "".to_string(),
+                mime_type,
+                parsed_headers: Default::default(),
+                attachments: vec![],
+                row_id: None,
+            },
+            pgp_attachments: None,
+            pgp_subject: None,
+            in_flight: Default::default(),
         }
     }
 
@@ -193,11 +230,19 @@ impl DecryptedMessageBody {
             .collect()
     }
 
+    /// Load or fetch an embedded attachment with `cid` for this message.
+    ///
+    /// If the attachment is not in the cache it will be downloaded from the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the attachments can't be fetched from the server, retrieved
+    /// from the cache or the attachment with `cid` does not exist.
     pub async fn get_embedded_attachment(
         &self,
         ctx: &MailUserContext,
         cid: &str,
-    ) -> MailboxResult<EmbeddedAttachmentInfo> {
+    ) -> MailContextResult<EmbeddedAttachmentInfo> {
         // We use this for logging if no embedded image was found.
         let mut available_cids = vec![];
         let mut cid_match = |x: &str| {
@@ -311,10 +356,11 @@ impl DecryptedMessageBody {
         // settings. Remove me when we can.
         // https://protonag.atlassian.net/browse/ET-1926
         let opts = TransformOpts {
-            show_block_quote: opts.show_block_quote,
             hide_remote_images: Some(false),
             hide_embedded_images: Some(false),
+            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
             image_proxy: Some(false),
+            ..opts
         };
 
         let tether = ctx.user_stash().connection();
@@ -334,6 +380,21 @@ impl DecryptedMessageBody {
             stored.pgp_attachments,
             stored.pgp_subject,
             ctx,
+        )
+    }
+
+    /// Create `DecryptedMessageBody` from a `StorableMessageBody` and a `MessageBodyMetadata`.
+    ///
+    /// Unlike, [`from_storable`] this version does not pre-fetch all attachments.
+    pub(crate) fn from_storable_without_preload(
+        stored: StorableMessageBody,
+        metadata: MessageBodyMetadata,
+    ) -> Self {
+        Self::without_prefetch(
+            stored.body,
+            metadata,
+            stored.pgp_attachments,
+            stored.pgp_subject,
         )
     }
 
@@ -532,11 +593,7 @@ pub fn transform_html(
         remote_images_disabled = transformer.disable_remote_content();
     } else if let Some(auth_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
-
-        // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
-        if false {
-            images_proxied = transformer.proxy_images(auth_id.as_ref());
-        }
+        images_proxied = transformer.proxy_images(auth_id.as_ref());
     }
 
     let had_blockquote = if !show_block_quote {
