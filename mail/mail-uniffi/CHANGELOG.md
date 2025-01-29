@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-1923] Remove mail settings signature.
   - [ET-1913] Support retrying of failed login flow stages
   - Fix sender address repeated in To and CC on draft reply.
+  - [ET-1978] New drafts are not marked as being replies.
 
 ### Changed
 

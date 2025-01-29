@@ -8,7 +8,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::GetKeysAllResponse;
 use proton_api_mail::services::proton::request_data::{
-    DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
+    DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
@@ -93,7 +93,7 @@ async fn basic_send_check() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params.clone(),
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -289,7 +289,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft_failure(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         None,
         DraftAttachmentKeyPackets::new(),
         CoreBundle::AppVersionInvalid as u32,
@@ -402,7 +402,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params.clone(),
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),

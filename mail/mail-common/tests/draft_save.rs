@@ -40,7 +40,7 @@ async fn create_empty_draft() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -203,7 +203,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -447,7 +447,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft_failure(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         None,
         DraftAttachmentKeyPackets::new(),
         CoreBundle::AppVersionInvalid as u32,
@@ -570,7 +570,7 @@ async fn create_draft_reply_impl(
     .await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::from(reply_mode),
+        Some(DraftAction::from(reply_mode)),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap()),
         key_packets,
@@ -695,7 +695,7 @@ async fn open_draft_sync_status_success() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -745,7 +745,7 @@ async fn open_draft_sync_status_cached() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),

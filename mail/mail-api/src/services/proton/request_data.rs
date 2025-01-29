@@ -17,7 +17,7 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::AttachmentId;
+use crate::services::proton::common::{AttachmentId, MessageId};
 use crate::services::proton::response_data::MimeType;
 use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, KeyPackets};
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
@@ -54,6 +54,14 @@ pub enum DraftAction {
     ReplyAll = 1,
     /// Forward to antoher recipient.
     Forward = 2,
+}
+
+/// Parameters required to submit when forwarding or replying to a draft message.
+pub struct DraftReplyOrForwardParams {
+    /// Id of the message we are replying to or forwarding from.
+    pub parent_id: MessageId,
+    /// Nature of the action.
+    pub action: DraftAction,
 }
 
 /// Represents an email address.
