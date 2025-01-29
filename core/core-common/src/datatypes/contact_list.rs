@@ -308,7 +308,7 @@ impl ContactSuggestion {
                 (
                     group.remote_id.unwrap(),
                     ContactGroup {
-                        key: group.local_id.unwrap().to_string(),
+                        key: format!("group/{}", group.local_id.unwrap()),
                         name: group.name.clone(),
                         emails: vec![],
                     },
@@ -347,7 +347,7 @@ impl ContactSuggestion {
                 (contact, email)
             })
             .map(|(contact, email)| ContactSuggestion {
-                key: email.local_id.to_string(),
+                key: format!("contact/{}", email.local_id),
                 avatar_information: AvatarInformation::from(&contact.name),
                 name: contact.name,
                 kind: ContactSuggestionKind::ContactItem(email),
@@ -372,9 +372,9 @@ impl ContactSuggestion {
                     .into_iter()
                     .enumerate()
                     .map(move |(idx, email)| FollowingSuggestion {
-                        source_key: contact.key.clone(),
+                        source_key: format!("device-contact/{}", contact.key),
                         suggestion: ContactSuggestion {
-                            key: format!("{}-{}", contact.key, idx),
+                            key: format!("device-contact-email/{}-{}", contact.key, idx),
                             avatar_information: AvatarInformation::from(&contact.name),
                             name: contact.name.clone(),
                             kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {

@@ -485,7 +485,7 @@ mod contact_suggestions {
         device_contacts: vec![]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -512,7 +512,7 @@ mod contact_suggestions {
         device_contacts: vec![]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -526,7 +526,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -557,7 +557,7 @@ mod contact_suggestions {
         device_contacts: vec![]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -571,7 +571,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -585,7 +585,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "456".to_string(),
+            key: "contact/456".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -618,7 +618,7 @@ mod contact_suggestions {
         device_contacts: vec![]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "678".to_string(),
+            key: "contact/678".to_string(),
             name: "Jason Mendoza".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -632,7 +632,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -646,7 +646,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -660,7 +660,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "456".to_string(),
+            key: "contact/456".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -697,7 +697,7 @@ mod contact_suggestions {
         device_contacts: vec![]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "678".to_string(),
+            key: "contact/678".to_string(),
             name: "Jason Mendoza".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -711,7 +711,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -725,7 +725,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -739,7 +739,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "456".to_string(),
+            key: "contact/456".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -753,7 +753,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "112".to_string(),
+            key: "contact/112".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -767,7 +767,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "910".to_string(),
+            key: "group/910".to_string(),
             name: "M. Schur Productions".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -823,7 +823,7 @@ mod contact_suggestions {
         ]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "678".to_string(),
+            key: "contact/678".to_string(),
             name: "Jason Mendoza".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -837,7 +837,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -851,7 +851,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -865,7 +865,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "456".to_string(),
+            key: "contact/456".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -879,7 +879,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "112".to_string(),
+            key: "contact/112".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -893,7 +893,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "000-0".to_string(),
+            key: "device-contact-email/000-0".to_string(),
             name: "Aunt Molly".to_string(),
             avatar_information: AvatarInformation {
                 text: "A".to_string(),
@@ -905,7 +905,7 @@ mod contact_suggestions {
         },
         // Device contact emails are not sorted by email address
         ContactSuggestion {
-            key: "000-1".to_string(),
+            key: "device-contact-email/000-1".to_string(),
             name: "Aunt Molly".to_string(),
             avatar_information: AvatarInformation {
                 text: "A".to_string(),
@@ -916,7 +916,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "910".to_string(),
+            key: "group/910".to_string(),
             name: "M. Schur Productions".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -974,7 +974,7 @@ mod contact_suggestions {
         ]
      } => using pretty_assert(vec![
         ContactSuggestion {
-            key: "678".to_string(),
+            key: "contact/678".to_string(),
             name: "Jason Mendoza".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -988,7 +988,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "234".to_string(),
+            key: "contact/234".to_string(),
             name: "Michael Scott".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
@@ -1002,7 +1002,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "123".to_string(),
+            key: "contact/123".to_string(),
             name: "Barbara Lox".to_string(),
             avatar_information: AvatarInformation {
                 text: "B".to_string(),
@@ -1016,7 +1016,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "456".to_string(),
+            key: "contact/456".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -1030,7 +1030,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "112".to_string(),
+            key: "contact/112".to_string(),
             name: "Jake Peralta".to_string(),
             avatar_information: AvatarInformation {
                 text: "J".to_string(),
@@ -1046,7 +1046,7 @@ mod contact_suggestions {
         // (Look at the previous test)
         // .. unless emails are not coming from the same contact
         ContactSuggestion {
-            key: "001-0".to_string(),
+            key: "device-contact-email/001-0".to_string(),
             name: "Aunt Molly".to_string(),
             avatar_information: AvatarInformation {
                 text: "A".to_string(),
@@ -1057,7 +1057,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "000-0".to_string(),
+            key: "device-contact-email/000-0".to_string(),
             name: "Aunt Molly".to_string(),
             avatar_information: AvatarInformation {
                 text: "A".to_string(),
@@ -1068,7 +1068,7 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "910".to_string(),
+            key: "group/910".to_string(),
             name: "M. Schur Productions".to_string(),
             avatar_information: AvatarInformation {
                 text: "M".to_string(),
