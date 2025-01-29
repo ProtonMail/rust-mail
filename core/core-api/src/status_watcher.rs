@@ -122,6 +122,16 @@ impl StatusWatcher {
         }
     }
 
+    /// Sets the number of seconds before the status is considered stale.
+    ///
+    /// The status is initialized to `Online`.
+    /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
+    ///
+    /// # Panics
+    ///
+    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
+    /// If it does, it's a bug.
+    ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn with_up_to_date_sec(self, up_to_date_sec: u64) -> Self {
