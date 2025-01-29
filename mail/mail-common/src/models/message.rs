@@ -1297,7 +1297,10 @@ impl Message {
                     attachment.remote_address_id = Some(self.remote_address_id.clone());
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
-                    attachment.save(bond).await?;
+                    attachment
+                        .save(bond)
+                        .await
+                        .inspect_err(|e| error!("Failed to save attachment from message: {e}"))?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
