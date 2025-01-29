@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
  - [ET-1987] Fix email address validation for `RecipientList`.
+ - [ET-1923] Remove mail settings signature.
 
 ### Changed
 

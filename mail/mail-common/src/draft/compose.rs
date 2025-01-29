@@ -87,16 +87,7 @@ pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> 
     } else {
         "\n"
     };
-    let mut signature = if mail_settings.signature.is_empty() {
-        address.signature.clone()
-    } else if address.signature.is_empty() {
-        mail_settings.signature.clone()
-    } else {
-        format!(
-            "{}{line_break}{line_break}{}",
-            address.signature, mail_settings.signature
-        )
-    };
+    let mut signature = address.signature.clone();
 
     if mail_settings.pm_signature != PmSignature::Disabled {
         signature.push_str(line_break);
