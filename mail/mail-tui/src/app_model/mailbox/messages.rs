@@ -292,6 +292,7 @@ impl MessagesState {
                     );
                     temp_dir.push(escaped_subject);
 
+                    fs::create_dir_all(&temp_dir).unwrap();
                     let before = temp_dir.join("before.html");
                     fs::write(&before, &decrypted.body).unwrap();
 

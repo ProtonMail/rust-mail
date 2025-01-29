@@ -1,6 +1,6 @@
 use crate::mail::datatypes::MovableSystemFolderAction;
 use crate::{UniffiEnum, UniffiRecord};
-use itertools::Itertools;
+use proton_core_common::utils::MapVec as _;
 use proton_mail_common::actions::{
     AllBottomBarMessageActions as RealAllBottomBarMessageActions,
     BottomBarActions as RealBottomBarActions,
@@ -19,16 +19,8 @@ pub struct AllBottomBarMessageActions {
 impl From<RealAllBottomBarMessageActions> for AllBottomBarMessageActions {
     fn from(value: RealAllBottomBarMessageActions) -> Self {
         Self {
-            hidden_bottom_bar_actions: value
-                .hidden_bottom_bar_actions
-                .into_iter()
-                .map_into()
-                .collect(),
-            visible_bottom_bar_actions: value
-                .visible_bottom_bar_actions
-                .into_iter()
-                .map_into()
-                .collect(),
+            hidden_bottom_bar_actions: value.hidden_bottom_bar_actions.map_vec(),
+            visible_bottom_bar_actions: value.visible_bottom_bar_actions.map_vec(),
         }
     }
 }

@@ -15,6 +15,7 @@ use crate::actions::{
 };
 use crate::models::*;
 use crate::{find_in_query, MailContextError};
+use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
@@ -702,14 +703,28 @@ impl Message {
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
-        let inbox = MovableSystemFolderAction::inbox(tether).await?;
-        let archive = MovableSystemFolderAction::archive(tether).await?;
-        let trash = MovableSystemFolderAction::trash(tether).await?;
-        let spam = MovableSystemFolderAction::spam(tether).await?;
+        let messages_fut = async {
+            Self::find_by_ids(message_ids.to_vec(), tether)
+                .await
+                .map_err(AppError::from)
+        };
 
-        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(tether).await?;
-        let messages = Self::find_by_ids(message_ids.to_vec(), tether).await?;
+        let current_label_fut = async {
+            Label::resolve_remote_label_id(current_label_id, tether)
+                .await
+                .map_err(AppError::from)
+        };
+
+        let (inbox, archive, trash, spam, bottom_bar_actions, current_label, messages) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileActions::bottom_bar_actions(tether),
+            current_label_fut,
+            messages_fut
+        )?;
+
         let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
             &current_label,
             &messages,
