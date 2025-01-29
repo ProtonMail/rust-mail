@@ -1120,7 +1120,7 @@ mod contact_suggestions {
                     }
                 })
                 .collect::<Vec<_>>();
-            pretty_assertions::assert_eq!(actual, expected)
+            pretty_assertions::assert_eq!(actual, expected);
         }
     }
 
@@ -1191,14 +1191,14 @@ mod contact_suggestions {
     ) -> Vec<ContactSuggestion> {
         let mut tether = new_core_test_connection().await.connection();
         let tx = tether.transaction().await.unwrap();
-        for contact in test_case.contacts.iter_mut() {
+        for contact in &mut test_case.contacts {
             contact.save(&tx).await.unwrap();
-            for email in contact.contact_emails.iter_mut() {
+            for email in &mut contact.contact_emails {
                 email.remote_contact_id = contact.remote_id.clone();
                 email.save(&tx).await.unwrap();
             }
         }
-        for label in test_case.contact_groups.iter_mut() {
+        for label in &mut test_case.contact_groups {
             label.save(&tx).await.unwrap();
         }
 
