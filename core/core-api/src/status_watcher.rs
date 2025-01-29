@@ -29,6 +29,7 @@ pub struct StatusWatcher {
     status: Arc<RwLock<ConnectionStatus>>,
     last_check: Arc<RwLock<Instant>>,
     request: Arc<Mutex<Option<StatusJoinHandle>>>,
+    up_to_date_sec: u64,
 }
 
 impl StatusWatcher {
@@ -94,6 +95,7 @@ impl StatusWatcher {
             status: STATUS.clone(),
             last_check: Arc::new(RwLock::new(stale_instant)),
             request: Arc::new(Mutex::new(None)),
+            up_to_date_sec: UP_TO_DATE_SECONDS,
         }
     }
     /// Create a new test `StatusWatcher` without shared state.
@@ -116,6 +118,20 @@ impl StatusWatcher {
             status: Arc::new(RwLock::new(ConnectionStatus::Online)),
             last_check: Arc::new(RwLock::new(stale_instant)),
             request: Arc::new(Mutex::new(None)),
+            up_to_date_sec: UP_TO_DATE_SECONDS,
+        }
+    }
+
+    #[cfg(any(test, debug_assertions))]
+    #[must_use]
+    pub fn with_up_to_date_sec(self, up_to_date_sec: u64) -> Self {
+        let stale_instant = Instant::now()
+            .checked_sub(Duration::from_secs(up_to_date_sec + 1))
+            .unwrap();
+        Self {
+            up_to_date_sec,
+            last_check: Arc::new(RwLock::new(stale_instant)),
+            ..self
         }
     }
 
@@ -158,7 +174,7 @@ impl StatusWatcher {
     }
 
     async fn is_up_to_date(&self) -> bool {
-        self.last_check.read().await.elapsed().as_secs() < UP_TO_DATE_SECONDS
+        self.last_check.read().await.elapsed().as_secs() < self.up_to_date_sec
     }
 }
 

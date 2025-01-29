@@ -48,6 +48,7 @@ tempfile = { workspace = true }
 wiremock = { workspace = true }
 proton-core-test-utils = { workspace = true }
 clap = { workspace = true }
+rand = { workspace = true }
 
 [lints]
 workspace = true

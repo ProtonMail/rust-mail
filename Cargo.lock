@@ -4204,6 +4204,7 @@ dependencies = [
  "proton-sqlite3",
  "proton-vcard",
  "quick_cache",
+ "rand 0.8.5",
  "secrecy",
  "serde",
  "sqlite-watcher",
