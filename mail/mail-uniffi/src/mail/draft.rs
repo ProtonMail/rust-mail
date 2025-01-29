@@ -8,9 +8,9 @@ use crate::errors::{
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::messages::{EmbeddedAttachmentInfo, EmbeddedAttachmentInfoResult};
 use crate::mail::MailUserSession;
-use crate::{async_runtime, uniffi_async, MapIntoResult};
+use crate::{async_runtime, uniffi_async};
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
@@ -268,10 +268,7 @@ impl Draft {
                 .map(Into::into)
         })
     }
-}
 
-#[proton_uniffi_macros::export_result]
-impl Draft {
     /// Load an embedded attachment in this draft message.
     ///
     /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
@@ -279,10 +276,12 @@ impl Draft {
     /// # Errors
     ///
     /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    //NOTE: iOS request we share the same result types between
+    // this function and the DecryptedMessageBody equivalent.
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> EmbeddedAttachmentInfoResult {
         uniffi_async(async move {
             let draft = self.instance.read().await;
             let att = draft
@@ -297,7 +296,8 @@ impl Draft {
             })
         })
         .await
-        .map_into()
+        .map_err(ProtonError::from)
+        .into()
     }
 }
 
