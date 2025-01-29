@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -618,7 +618,25 @@ async fn create_draft_reply_impl(
         .await
         .unwrap()
         .expect("failed to load message");
+
+    let sender_address = Address::find_by_remote_id(existing_message.remote_address_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+
+    // Sender address should not be repeated in replies or forward.
+    assert!(!draft_message
+        .to_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
+    assert!(!draft_message
+        .cc_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
 
     // Local conversation id match the source message,
     assert_eq!(
