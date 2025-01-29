@@ -125,8 +125,8 @@ pub fn build<S: Store>(
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
-        .layer_back(DisplayLogger::debug())
         .layer_back(status_watcher)
+        .layer_back(DisplayLogger::debug())
         .build()?;
 
     Ok(client)
