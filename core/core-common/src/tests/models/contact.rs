@@ -1170,7 +1170,10 @@ mod contact_suggestions {
     #[test_case("jianyu", filtering_test_case() => using pretty_assert_emails(vec![ "Jason Mendoza <jianyu.li@pm.me>" ]) ; "TEST 3 - filtering by email")]
     #[test_case("Jake", filtering_test_case() => using pretty_assert_emails(vec![ "Jake Peralta <jake.peralta@99.com>", "Jake Peralta <harvey@jp.com>" ]) ; "TEST 4 - filtering by name, contact has multiple emails")]
     #[test_case("Schur", filtering_test_case() => using pretty_assert_emails(vec![ "M. Schur Productions (3 emails)"]) ; "TEST 5 - filtering by name, contact group returned")]
-    #[test_case("aunt", filtering_test_case() => using pretty_assert_emails(vec!["Molly <badass@aunt.com>", "Aunt Molly <molly@family.com>"]) ; "TEST 6 - device contacts filtered by both name and email")]
+    #[test_case("aunt", filtering_test_case() => using pretty_assert_emails(vec![
+        "Aunt Molly <molly@family.com>",
+        "Molly <badass@aunt.com>",
+    ]) ; "TEST 6 - device contacts filtered by both name and email")]
     #[test_case("m", filtering_test_case() => using pretty_assert_emails(vec![
         "Jason Mendoza <jianyu.li@pm.me>",
         "Michael Scott <m.scott@pm.me>",

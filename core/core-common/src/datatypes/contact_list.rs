@@ -246,6 +246,21 @@ pub struct ContactSuggestion {
 }
 
 impl ContactSuggestion {
+    /// Returns an email linked to the suggestion. If it suggests contact group, it returns `None`
+    ///
+    #[must_use]
+    pub fn email(&self) -> Option<&str> {
+        match &self.kind {
+            ContactSuggestionKind::ContactItem(contact_email_item) => {
+                Some(contact_email_item.email.as_str())
+            }
+            ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
+                Some(device_contact_suggestion.email.as_str())
+            }
+            ContactSuggestionKind::ContactGroup(_) => None,
+        }
+    }
+
     /// Build contact suggestion list that is sorted and deduplicated
     ///
     /// # Contact groups

@@ -25,7 +25,6 @@ use proton_api_core::services::proton::response_data::{
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -453,6 +452,10 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
+    /// # Panics
+    ///
+    /// This function panics if remote ID of the contact is missing.
+    ///
     #[allow(trivial_casts)] // Box<dyn ToSql> cannot be infered
     pub async fn contact_suggestions(
         query: &str,
@@ -469,82 +472,62 @@ impl Contact {
 
         // 1. Get contact groups that are matching the query.
         // That matching is case insensitive
+        // TODO (ET-1971): Filter by name in SQL
         let contact_groups = Label::find(
-            "WHERE label_type = ? AND name = ? COLLATE NOCASE ORDER BY display_order ASC",
-            params![LabelType::ContactGroup, query.to_string()],
+            "WHERE label_type = ? ORDER BY display_order ASC",
+            params![LabelType::ContactGroup],
             tether,
         )
-        .await?;
+        .await?
+        .into_iter()
+        .filter(|group| group.name.to_lowercase().contains(&query))
+        .collect::<Vec<_>>();
 
         let group_label_ids = contact_groups
             .iter()
-            .flat_map(|group| group.remote_id.clone())
+            .filter_map(|group| group.remote_id.clone())
             .collect::<HashSet<_>>();
 
         // 2. Get contact emails that are either matching query or are part of matched groups
-        let contact_emails: Vec<ContactEmail> = tether
-            .query(
-                formatdoc!(
-                    " 
-                SELECT DISTINCT {table}.* 
-                FROM {table},
-                json_each({table}.label_ids)
-                    WHERE {table}.email = ? COLLATE NOCASE
-                    OR json_each.value IN ({placeholders}) 
-            ",
-                    table = ContactEmail::table_name(),
-                    placeholders = stash::utils::placeholders(group_label_ids.len())
-                ),
-                vec![Box::new(query.to_string()) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        group_label_ids
-                            .into_iter()
-                            .map(|id| Box::new(id) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
-            )
-            .await?;
+        // TODO (ET-1971): Filter by name in SQL
+        let contact_emails: Vec<ContactEmail> = ContactEmail::all(tether)
+            .await?
+            .into_iter()
+            .filter(|email: &ContactEmail| {
+                // We have to repeat the filter from SQL and add name.
+                email.name.as_str().to_lowercase().contains(&query)
+                    || email.email.as_str().to_lowercase().contains(&query)
+                    || email
+                        .label_ids
+                        .iter()
+                        .any(|id| group_label_ids.contains(id))
+            })
+            .collect();
 
         let remote_contact_ids = contact_emails
             .iter()
-            .flat_map(|contact_email| contact_email.remote_contact_id.clone())
+            .filter_map(|contact_email| contact_email.remote_contact_id.clone())
             .collect::<HashSet<_>>();
 
-        let mut contacts = Contact::find(
-            formatdoc!(
-                "WHERE deleted = 0 AND (
-           name = ? COLLATE NOCASE 
-           OR 
-           remote_id IN ({placeholders})
-        )",
-                placeholders = stash::utils::placeholders(remote_contact_ids.len())
-            ),
-            vec![Box::new(query.to_string()) as Box<dyn ToSql + Send>]
-                .into_iter()
-                .chain(
-                    remote_contact_ids
-                        .into_iter()
-                        .map(|id| Box::new(id) as Box<dyn ToSql + Send>),
-                )
-                .collect(),
-            tether,
-        )
-        .await?;
-
-        let mut contact_emails_by_contact = contact_emails.into_iter().fold(
-            HashMap::<ContactId, Vec<ContactEmail>>::new(),
-            |mut acc, email| {
-                let id = email.remote_contact_id.clone().unwrap();
-                acc.entry(id).or_default().push(email);
-                acc
-            },
-        );
+        // TODO (ET-1971): Filter contacts in SQLite
+        let mut contacts = Contact::find(formatdoc!("WHERE deleted = 0 ",), vec![], tether)
+            .await?
+            .into_iter()
+            .filter(|contact: &Contact| {
+                contact.name.to_lowercase().contains(&query)
+                    || remote_contact_ids.contains(contact.remote_id.as_ref().unwrap())
+            })
+            .collect::<Vec<Contact>>();
 
         for contact in &mut contacts {
-            contact.contact_emails = contact_emails_by_contact
-                .remove(contact.remote_id.as_ref().unwrap())
-                .unwrap_or_default();
+            // TODO (ET-1971): Even though we just loaded contact emails,
+            // we already filtered them.
+            // However, there is a case where contact emails did not match query, but contact name did.
+            // In that case we still need to load contact email.
+            // That double fetching could go away if we fetch ConctactEmail by using custom SQL query with
+            // some inner join, but it has to wait for proper unicode filtering in SQLite.
+            // For now its better to be correct but inefficient
+            contact.emails(tether).await?;
         }
 
         let device_contacts = device_contacts
@@ -562,7 +545,17 @@ impl Contact {
             contacts,
             contact_groups,
             device_contacts,
-        );
+        )
+        .into_iter()
+        // If we are searching for contact group, we don't want to necessairly show
+        // all members of given group
+        .filter(|suggestion| {
+            suggestion.name.to_lowercase().contains(&query)
+                || suggestion
+                    .email()
+                    .is_some_and(|email| email.to_lowercase().contains(&query))
+        })
+        .collect();
 
         Ok(suggestions)
     }
