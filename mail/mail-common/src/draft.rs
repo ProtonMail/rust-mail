@@ -614,6 +614,7 @@ impl Draft {
             &mut draft,
             source_message,
             reply_mode,
+            address,
         )
         .await;
 

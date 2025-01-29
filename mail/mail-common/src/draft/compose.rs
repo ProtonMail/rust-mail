@@ -26,6 +26,7 @@ pub(super) async fn patch_draft_with_reply_mode(
     draft: &mut Draft,
     source_message: &Message,
     reply_mode: ReplyMode,
+    sender_address: &Address,
 ) {
     // Copy over the addresses based on reply mode
     match reply_mode {
@@ -40,13 +41,24 @@ pub(super) async fn patch_draft_with_reply_mode(
         ReplyMode::All => {
             draft.to_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
-                std::iter::once(source_message.sender.clone().into())
-                    .chain(source_message.to_list.value.clone()),
+                std::iter::once(source_message.sender.clone().into()).chain(
+                    source_message
+                        .to_list
+                        .value
+                        .iter()
+                        .filter(|v| v.address != sender_address.email)
+                        .cloned(),
+                ),
             )
             .await;
             draft.cc_list = RecipientList::from_message_recipients(
                 contact_group_resolver,
-                source_message.cc_list.value.clone(),
+                source_message
+                    .cc_list
+                    .value
+                    .iter()
+                    .filter(|v| v.address != sender_address.email)
+                    .cloned(),
             )
             .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
