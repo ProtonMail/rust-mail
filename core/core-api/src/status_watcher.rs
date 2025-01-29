@@ -1,4 +1,5 @@
 use std::{
+    ops::Deref,
     sync::{Arc, LazyLock},
     time::{Duration, Instant},
 };
@@ -21,15 +22,34 @@ use crate::{
 type StatusJoinHandle = JoinHandle<()>;
 
 const UP_TO_DATE_SECONDS: u64 = 5;
-static STATUS: LazyLock<Arc<RwLock<ConnectionStatus>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(ConnectionStatus::Online)));
+static STATUS: LazyLock<Arc<RwLock<Status>>> = LazyLock::new(|| {
+    Arc::new(RwLock::new(Status {
+        status: ConnectionStatus::Online,
+        last_check: Instant::now()
+            .checked_sub(Duration::from_secs(UP_TO_DATE_SECONDS + 1))
+            .unwrap(),
+    }))
+});
+
+#[derive(Clone, Debug)]
+struct Status {
+    status: ConnectionStatus,
+    last_check: Instant,
+}
+
+impl Deref for Status {
+    type Target = ConnectionStatus;
+
+    fn deref(&self) -> &Self::Target {
+        &self.status
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct StatusWatcher {
-    status: Arc<RwLock<ConnectionStatus>>,
-    last_check: Arc<RwLock<Instant>>,
+    status: Arc<RwLock<Status>>,
     request: Arc<Mutex<Option<StatusJoinHandle>>>,
-    up_to_date_sec: u64,
+    up_to_date: Duration,
 }
 
 impl StatusWatcher {
@@ -88,14 +108,10 @@ impl StatusWatcher {
     /// If it does, it's a bug.
     ///
     pub fn new() -> Self {
-        let stale_instant = Instant::now()
-            .checked_sub(Duration::from_secs(UP_TO_DATE_SECONDS + 1))
-            .unwrap();
         Self {
             status: STATUS.clone(),
-            last_check: Arc::new(RwLock::new(stale_instant)),
             request: Arc::new(Mutex::new(None)),
-            up_to_date_sec: UP_TO_DATE_SECONDS,
+            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
         }
     }
     /// Create a new test `StatusWatcher` without shared state.
@@ -115,10 +131,12 @@ impl StatusWatcher {
             .checked_sub(Duration::from_secs(UP_TO_DATE_SECONDS + 1))
             .unwrap();
         Self {
-            status: Arc::new(RwLock::new(ConnectionStatus::Online)),
-            last_check: Arc::new(RwLock::new(stale_instant)),
+            status: Arc::new(RwLock::new(Status {
+                status: ConnectionStatus::Online,
+                last_check: stale_instant,
+            })),
             request: Arc::new(Mutex::new(None)),
-            up_to_date_sec: UP_TO_DATE_SECONDS,
+            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
         }
     }
 
@@ -134,15 +152,12 @@ impl StatusWatcher {
     ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub fn with_up_to_date_sec(self, up_to_date_sec: u64) -> Self {
+    pub async fn with_up_to_date(self, up_to_date: Duration) -> Self {
         let stale_instant = Instant::now()
-            .checked_sub(Duration::from_secs(up_to_date_sec + 1))
+            .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
             .unwrap();
-        Self {
-            up_to_date_sec,
-            last_check: Arc::new(RwLock::new(stale_instant)),
-            ..self
-        }
+        self.status.write().await.last_check = stale_instant;
+        Self { up_to_date, ..self }
     }
 
     /// Get the current status of the connection.
@@ -155,18 +170,19 @@ impl StatusWatcher {
             Self::ping(api.clone(), ONE_SECOND_TIMEOUT).await;
         }
 
-        let status = *self.status.read().await;
+        let status = self.status.read().await;
 
         if status.is_offline() {
             self.background_check(api).await;
         }
 
-        status
+        status.status
     }
 
     async fn update(&self, status: ConnectionStatus) {
-        *self.last_check.write().await = Instant::now();
-        *self.status.write().await = status;
+        let mut self_status = self.status.write().await;
+        self_status.last_check = Instant::now();
+        self_status.status = status;
     }
 
     async fn ping(api: Proton, timeout: u64) {
@@ -184,7 +200,7 @@ impl StatusWatcher {
     }
 
     async fn is_up_to_date(&self) -> bool {
-        self.last_check.read().await.elapsed().as_secs() < self.up_to_date_sec
+        self.status.read().await.last_check.elapsed() < self.up_to_date
     }
 }
 
