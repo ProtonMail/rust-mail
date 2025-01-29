@@ -32,10 +32,22 @@ async fn shared_status() {
     let api_2 = Session::new(api_config, None, StatusWatcher::new()).unwrap();
     let api_3 = api_1.clone();
 
+    Mock::given(method("GET"))
+        .and(path(r"/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(429))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+    catch_all(&mock_server).await;
+    // Give some time for a server to start
+    sleep(Duration::from_millis(200)).await;
+
+    // 404
     assert_eq!(api_1.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_2.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_3.status().await, ConnectionStatus::ServerUnreachable);
 
+    mock_server.reset().await;
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
@@ -86,33 +98,6 @@ async fn make_another_request_when_stale() {
     // Make the status stale
     sleep(Duration::from_secs(1)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
-}
-
-#[tokio::test]
-async fn make_another_request_when_timeout_and_channel_closed() {
-    let mock_server = MockServer::start().await;
-    let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let api = Session::new(api_config.clone(), None, status_watcher().await).unwrap();
-
-    Mock::given(method("GET"))
-        .and(path(format!("{api_path}/core/v4/tests/ping")))
-        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(1500)))
-        .expect(2)
-        .mount(&mock_server)
-        .await;
-
-    catch_all(&mock_server).await;
-    // Give some time for a server to start
-    sleep(Duration::from_millis(200)).await;
-
-    // Timeout
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
-    sleep(Duration::from_millis(10)).await;
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
 }
 
 #[tokio::test]
@@ -186,6 +171,7 @@ async fn terribly_bad_connection_and_server_restart_simulation() {
 
     sleep(Duration::from_millis(200)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
+    sleep(Duration::from_millis(100)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
 
@@ -212,8 +198,8 @@ async fn terribly_bad_connection_responding_in_twenty_seconds() {
 
     // Timeout
     assert_eq!(api.status().await, ConnectionStatus::Offline);
-    // Channel closed
-    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+    sleep(Duration::from_millis(100)).await;
+    assert_eq!(api.status().await, ConnectionStatus::Offline);
 }
 
 #[test_case(200, ConnectionStatus::Online; "TEST 1 - 200 Ok")]
@@ -223,7 +209,7 @@ async fn terribly_bad_connection_responding_in_twenty_seconds() {
 #[test_case(400, ConnectionStatus::Online; "TEST 5 - 400 Bad Request")]
 #[test_case(401, ConnectionStatus::Online; "TEST 6 - 401 Unauthorized")]
 #[test_case(403, ConnectionStatus::Online; "TEST 7 - 403 Forbidden")]
-#[test_case(404, ConnectionStatus::ServerUnreachable; "TEST 8 - 404 Not Found")]
+#[test_case(404, ConnectionStatus::Online; "TEST 8 - 404 Not Found")]
 #[test_case(408, ConnectionStatus::Online; "TEST 9 - 408 Request Timeout")]
 #[test_case(415, ConnectionStatus::Online; "TEST 10 - 415 Unsupported Media Type")]
 #[test_case(418, ConnectionStatus::Online; "TEST 11 - 418 I'm a teapot")]

@@ -74,7 +74,7 @@ impl StatusWatcher {
                 Err(error)
             }
             Ok(resp) => {
-                if resp.is(404) || resp.is(429) || resp.status().is_server_error() {
+                if resp.is(429) || resp.status().is_server_error() {
                     self.update(ConnectionStatus::ServerUnreachable).await;
                 } else {
                     self.update(ConnectionStatus::Online).await;
