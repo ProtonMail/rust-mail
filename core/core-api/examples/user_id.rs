@@ -5,6 +5,7 @@ use proton_api_core::login::Flow;
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::status_watcher::StatusWatcher;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -34,7 +35,7 @@ async fn main() {
         ..Default::default()
     };
 
-    let session = Session::new(api_env_config, None).unwrap();
+    let session = Session::new(api_env_config, None, StatusWatcher::test()).unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow

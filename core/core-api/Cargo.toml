@@ -26,6 +26,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 stash = { workspace = true, optional = true }
+flume = { workspace = true }
 
 [features]
 default = []

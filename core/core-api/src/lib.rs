@@ -3,6 +3,7 @@
 //! Rust bindings for the REST API for Proton
 
 pub mod auth;
+pub mod connection_status;
 pub mod consts;
 pub mod crypto_clock;
 pub mod human_verification;
@@ -10,6 +11,7 @@ pub mod login;
 pub mod service;
 pub mod services;
 pub mod session;
+pub mod status_watcher;
 pub mod store;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
