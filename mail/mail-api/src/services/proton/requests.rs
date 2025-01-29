@@ -360,7 +360,8 @@ pub struct PostCreateDraftRequest {
     pub message: DraftParams,
 
     /// Draft action used for the request.
-    pub action: DraftAction,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<DraftAction>,
 
     /// Map of attachment id to encoded key packet.
     pub attachment_key_packets: DraftAttachmentKeyPackets,

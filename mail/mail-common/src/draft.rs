@@ -22,7 +22,7 @@ use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
 use proton_api_mail::services::proton::ProtonMail;
@@ -641,11 +641,10 @@ impl Draft {
         context: &MailUserContext,
         session: &Session,
         address_id: AddressId,
-        action: DraftAction,
         message: &Message,
         message_body_metadata: &MessageBodyMetadata,
         message_body: &str,
-        parent_id: Option<MessageId>,
+        draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = crate_draft_params(message, message_body_metadata, encrypted);
@@ -671,9 +670,8 @@ impl Draft {
             .api()
             .create_draft(
                 params,
-                action,
                 attachment_key_packets,
-                parent_id.map(Into::into),
+                draft_reply_or_forward_params,
             )
             .await?;
         Ok(response.message)

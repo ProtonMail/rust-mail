@@ -13,7 +13,7 @@ use crate::models::{
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_api_mail::services::proton::request_data::DraftAction;
+use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
@@ -348,6 +348,17 @@ impl proton_action_queue::action::Handler for SaveHandler {
             None
         };
 
+        let draft_reply_or_forward_params = if let (Some(remote_parent_id), Some(reply_mode)) =
+            (remote_parent_id, action.reply_mode)
+        {
+            Some(DraftReplyOrForwardParams {
+                parent_id: remote_parent_id,
+                action: reply_mode.into(),
+            })
+        } else {
+            None
+        };
+
         // Load body.
         let Some(message_body) =
             Message::load_decrypted_message_body_from_cache(ctx, message.local_id.unwrap())?
@@ -361,11 +372,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 ctx,
                 session,
                 action.address_id.clone(),
-                action.reply_mode.map_or(DraftAction::Reply, Into::into),
                 &message,
                 &message_body_metadata,
                 &message_body.body,
-                remote_parent_id,
+                draft_reply_or_forward_params,
             )
             .await
             .inspect_err(|e| {

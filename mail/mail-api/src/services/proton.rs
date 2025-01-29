@@ -344,10 +344,10 @@ pub trait ProtonMail {
     ///
     /// # Params
     ///
-    ///  * `message`     - Draft message details
-    ///  * `action`      - The draft's action.
-    ///  * `attachments` - Map of attachment id to attachment to base64 encoded
-    ///                    key packet.
+    ///  * `message`                 - Draft message details
+    ///  * `attachments`             - Map of attachment id to attachment to base64 encoded
+    ///                                key packet.
+    ///  * `reply_or_forward_params` - Required parameters when replying of forwarding a message.
     ///
     /// # Errors
     ///
@@ -355,9 +355,8 @@ pub trait ProtonMail {
     async fn create_draft(
         &self,
         message: DraftParams,
-        action: DraftAction,
         attachments: DraftAttachmentKeyPackets,
-        parent_id: Option<MessageId>,
+        reply_or_forward_params: Option<DraftReplyOrForwardParams>,
     ) -> ApiServiceResult<PostCreateDraftResponse>;
 
     /// This method will update a draft message on the server.

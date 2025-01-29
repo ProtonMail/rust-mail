@@ -341,7 +341,7 @@ impl MailTestContext {
     pub async fn mock_create_draft(
         &self,
         params: DraftParams,
-        action: DraftAction,
+        action: Option<DraftAction>,
         reply: ApiMessage,
         parent_id: Option<MessageId>,
         attachment_key_packets: DraftAttachmentKeyPackets,
@@ -382,7 +382,7 @@ impl MailTestContext {
     pub async fn mock_create_draft_failure(
         &self,
         params: DraftParams,
-        action: DraftAction,
+        action: Option<DraftAction>,
         parent_id: Option<MessageId>,
         attachment_key_packets: DraftAttachmentKeyPackets,
         error_code: u32,
@@ -598,7 +598,8 @@ impl From<DraftParams> for TestDraftParams {
 /// which does not include the body.
 pub struct TestCreateDraftRequest {
     pub message: TestDraftParams,
-    pub action: DraftAction,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<DraftAction>,
     pub attachment_key_packets: DraftAttachmentKeyPackets,
     #[serde(rename = "ParentID")]
     #[serde(skip_serializing_if = "Option::is_none")]
