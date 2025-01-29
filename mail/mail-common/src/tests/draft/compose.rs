@@ -93,6 +93,7 @@ fn message_signature_with_signature_only() {
 
 #[test]
 fn message_signature_with_mail_settings_signature_only() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature("");
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
@@ -101,6 +102,7 @@ fn message_signature_with_mail_settings_signature_only() {
 
 #[test]
 fn message_signature_with_address_and_mail_settings_signature() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
@@ -109,6 +111,7 @@ fn message_signature_with_address_and_mail_settings_signature() {
 
 #[test]
 fn message_signature_with_all_signatures() {
+    // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature_and_pm_signautre();
     let signature = get_signature(&address, &mail_settings);
