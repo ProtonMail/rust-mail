@@ -1,49 +1,71 @@
+use crate::auth::UserKeySecret;
 use crate::login::state::complete::Complete;
-use crate::login::state::want_mbp::WantMboxPass;
-use crate::login::state::want_resume_mbp::WantResumeMboxPass;
-use crate::login::state::want_resume_tfa::WantResumeTfa;
-use crate::login::state::want_tfa::WantTfa;
-use crate::login::{state::want_login::WantLogin, LoginError};
+use crate::login::state::want_login::WantLogin;
+use crate::login::state::want_mbp::WantMbp;
+use crate::login::state::want_tfa::{TfaFlow, WantTfa};
+use crate::login::LoginError;
 use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
-use crate::session::{Config, Session};
+use crate::services::proton::ProtonCore;
+use crate::session::{Config, Session, SessionParts};
 use crate::store::DynStore;
-use derive_more::From;
+use crate::store::UserData;
+use derive_more::Into;
+use derive_more::{Debug, From};
 use futures::TryFutureExt;
-use muon::client::flow::{LoginExtraInfo, LoginTwoFactorFlow};
-use std::fmt::{Debug, Formatter, Result as FmtResult};
+use muon::client::flow::{AuthFlow, LoginExtraInfo};
+use proton_crypto_account::keys::{LockedKey, UserKeys};
+use proton_crypto_account::proton_crypto;
+use proton_crypto_account::salts::{Salt, Salts};
 use std::sync::Arc;
 
 mod complete;
 mod want_login;
 mod want_mbp;
-mod want_resume_mbp;
-mod want_resume_tfa;
 mod want_tfa;
 
 /// Represents the possible states that the login flow can be in,
 /// ensuring only valid transitions between states are possible.
-#[derive(From)]
+#[derive(Debug, From)]
 pub enum State {
     /// The flow is waiting for the user to provide their login credentials.
+    #[debug("WantLogin")]
     WantLogin(WantLogin),
 
+    /// An error occurred during the `WantLogin` state.
+    #[debug("LoginError")]
+    LoginError,
+
     /// The flow is waiting for the user to provide a 2FA token.
+    #[debug("WantTfa")]
     WantTfa(WantTfa),
 
-    /// The flow is waiting for the user to provide a 2FA token (resumed).
-    WantTfaResume(WantResumeTfa),
+    /// A recoverable error occurred during the `WantTfa` state.
+    #[debug("TfaRetry")]
+    TfaRetry(UserId, AuthId, Option<String>),
+
+    /// An error occurred during the `WantTfa` state.
+    #[debug("TfaError")]
+    TfaError,
 
     /// The flow is waiting for the user to provide their mailbox password.
-    WantMbp(WantMboxPass),
+    #[debug("WantMbp")]
+    WantMbp(WantMbp),
 
-    /// The flow is waiting for the user to provide their mailbox password (resumed).
-    WantMbpResume(WantResumeMboxPass),
+    /// A recoverable error occurred during the `WantMbp` state.
+    #[debug("MbpRetry")]
+    MbpRetry(UserId, AuthId),
 
-    /// The flow has been completed.
+    /// An error occurred during the `WantMbp` state.
+    #[debug("MbpError")]
+    MbpError,
+
+    /// The flow is complete.
+    #[debug("Complete")]
     Complete(Complete),
 
     /// Invalid state, cannot be used.
+    #[debug("Invalid")]
     Invalid,
 }
 
@@ -55,61 +77,49 @@ impl State {
         user: String,
         pass: String,
         extra_info: LoginExtraInfo,
-    ) -> Result<Self, LoginError> {
-        let state = match self {
-            Self::WantLogin(state) => state.login(user, pass, extra_info).await?,
-
-            _ => return Err(LoginError::InvalidState),
-        };
-
-        Ok(state)
+    ) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantLogin(state) = self {
+            Ok(state.login(user, pass, extra_info).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
     }
 
     /// Attempt to submit a TOTP code.
-    pub async fn submit_totp(self, code: String) -> Result<Self, LoginError> {
-        let state = match self {
-            Self::WantTfa(state) => state.submit_totp(code).await?,
-            Self::WantTfaResume(state) => state.submit_totp(code).await?,
-
-            _ => return Err(LoginError::InvalidState),
-        };
-
-        Ok(state)
+    pub async fn submit_totp(self, code: String) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantTfa(state) = self {
+            Ok(state.submit_totp(code).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
     }
 
     /// Attempt to submit a FIDO code.
     #[allow(unused)]
-    pub async fn submit_fido(self, code: String) -> Result<Self, LoginError> {
-        let state = match self {
-            Self::WantTfa(state) => state.submit_fido(code).await?,
-            Self::WantTfaResume(state) => state.submit_fido(code).await?,
-
-            _ => return Err(LoginError::InvalidState),
-        };
-
-        Ok(state)
+    pub async fn submit_fido(self, code: String) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantTfa(state) = self {
+            Ok(state.submit_fido(code).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
     }
 
     /// Attempt to submit a mailbox password.
-    pub async fn submit_mbp(self, pass: String) -> Result<Self, LoginError> {
-        let state = match self {
-            Self::WantMbp(state) => state.submit_mbp(pass).await?,
-            Self::WantMbpResume(state) => state.submit_mbp(pass).await?,
-
-            _ => return Err(LoginError::InvalidState),
-        };
-
-        Ok(state)
+    pub async fn submit_mbp(self, pass: String) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantMbp(state) = self {
+            Ok(state.submit_mbp(pass).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
     }
 
     /// Attempt to take the completed session from the flow.
     pub fn into_session(self) -> Result<Session, LoginError> {
-        let session = match self {
-            Self::Complete(state) => state.into_session(),
-            _ => return Err(LoginError::InvalidState),
-        };
-
-        Ok(session)
+        if let Self::Complete(state) = self {
+            Ok(state.into_session())
+        } else {
+            Err(LoginError::InvalidState)
+        }
     }
 
     /// Get the user ID of the user that has (or is in the process of) logging in.
@@ -142,76 +152,109 @@ impl State {
 /// Public entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    pub fn want_login(client: Proton, config: Arc<Config>, store: DynStore) -> Self {
-        WantLogin::new(client, config, store).into()
+    pub fn new(parts: SessionParts) -> Self {
+        Self::want_login(parts.client.auth(), parts.config, parts.store)
     }
 
-    /// Create a `WantResumeTfa` state.
-    pub fn want_resume_tfa(
-        client: Proton,
-        config: Arc<Config>,
-        store: DynStore,
+    /// Create a `WantTfa` state from a resumed login flow.
+    pub fn new_from_tfa(
+        parts: SessionParts,
         user_id: UserId,
         auth_id: AuthId,
+        pass: Option<String>,
     ) -> Self {
         let data = StateData {
-            config,
-            store,
+            config: parts.config,
+            store: parts.store,
             user_id,
             auth_id,
         };
 
-        WantResumeTfa::new(client, data).into()
+        Self::want_tfa(parts.client.auth().into(), data, pass)
     }
 
-    /// Create a `WantResumeMboxPass` state.
-    pub fn want_resume_mbp(
-        client: Proton,
-        config: Arc<Config>,
-        store: DynStore,
-        user_id: UserId,
-        auth_id: AuthId,
-    ) -> Self {
+    /// Create a `WantMbp` state from a resumed login flow.
+    pub fn new_from_mbp(parts: SessionParts, user_id: UserId, auth_id: AuthId) -> Self {
         let data = StateData {
-            config,
-            store,
+            config: parts.config,
+            store: parts.store,
             user_id,
             auth_id,
         };
 
-        WantResumeMboxPass::new(client, data).into()
+        Self::want_mbp(parts.client, data)
     }
 }
 
 /// Private entrypoints for creating new states.
 impl State {
+    /// Create a `WantLogin` state.
+    fn want_login(auth: AuthFlow, config: Arc<Config>, store: DynStore) -> Self {
+        WantLogin::new(auth, config, store).into()
+    }
+
     /// Create a `WantTfa` state.
-    fn want_tfa(flow: LoginTwoFactorFlow, data: StateData, pass: Option<String>) -> Self {
+    fn want_tfa(flow: TfaFlow, data: StateData, pass: Option<String>) -> Self {
         WantTfa::new(flow, data, pass).into()
     }
 
     /// Create a `WantMbp` state.
     fn want_mbp(client: Proton, data: StateData) -> Self {
-        WantMboxPass::new(client, data).into()
+        WantMbp::new(client, data).into()
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
     async fn finalize(client: Proton, data: StateData, pass: String) -> Result<Self, LoginError> {
-        Complete::new(client, data, pass).ok_into().await
-    }
-}
+        // Initialize the crypto providers.
+        let srp = proton_crypto::new_srp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
 
-impl Debug for State {
-    fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        match self {
-            Self::WantLogin(_) => write!(f, "WantLogin"),
-            Self::WantTfa(_) => write!(f, "WantTfa"),
-            Self::WantTfaResume(_) => write!(f, "WantTfaResume"),
-            Self::WantMbp(_) => write!(f, "WantMbp"),
-            Self::WantMbpResume(_) => write!(f, "WantMbpResume"),
-            Self::Complete(_) => write!(f, "Complete"),
-            Self::Invalid => write!(f, "Invalid"),
-        }
+        // Fetch user info to trigger HV.
+        let user = client
+            .get_users()
+            .map_ok(|res| res.user)
+            .map_err(LoginError::UserFetch)
+            .await?;
+
+        // Fetch the user's key salts.
+        let salts = client
+            .get_keys_salts()
+            .map_ok(|res| res.key_salts)
+            .map_err(LoginError::KeySecretSaltFetch)
+            .await?;
+
+        // Build the salts object.
+        let salts = Salts::new(salts.into_iter().map(|salt| Salt {
+            id: salt.id.into_inner().into(),
+            key_salt: salt.key_salt.map(Into::into),
+        }));
+
+        // Derive the key secret to unlock the user keys.
+        let secret = if let Some(key) = user.keys.primary() {
+            (salts.salt_for_key(&srp, &key.id, pass.as_bytes()))
+                .map_err(LoginError::KeySecretDerivation)?
+        } else {
+            return Err(LoginError::MissingPrimaryKey);
+        };
+
+        // Check if the key secret can unlock the user keys.
+        let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
+            return Err(LoginError::KeySecretDecryption);
+        } else {
+            UserKeySecret(secret)
+        };
+
+        // Save the derived user data in the auth store.
+        (data.store.write().await)
+            .set_user_data(UserData {
+                username: user.name.unwrap_or_default(),
+                display_name: user.display_name.unwrap_or_default(),
+                primary_addr: user.email,
+                key_secret: secret,
+            })
+            .await?;
+
+        Ok(Complete::new(client, data).into())
     }
 }
 
@@ -232,18 +275,13 @@ trait HasAuthId {
     fn auth_id(&self) -> &AuthId;
 }
 
-/// A trait for states that can accept a 2FA code.
-trait SubmitTotp {
-    async fn submit_totp(self, code: String) -> Result<State, LoginError>;
+/// A helper trait for working with user keys.
+trait UserKeysExt {
+    fn primary(&self) -> Option<&LockedKey>;
 }
 
-/// A trait for states that can accept a FIDO code.
-#[allow(unused)]
-trait SubmitFido {
-    async fn submit_fido(self, code: String) -> Result<State, LoginError>;
-}
-
-/// A trait for states that can accept a mailbox password.
-trait SubmitMbp {
-    async fn submit_mbp(self, pass: String) -> Result<State, LoginError>;
+impl UserKeysExt for UserKeys {
+    fn primary(&self) -> Option<&LockedKey> {
+        self.as_ref().iter().find(|&key| key.primary)
+    }
 }
