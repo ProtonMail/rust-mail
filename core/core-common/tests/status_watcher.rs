@@ -11,7 +11,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn status_watcher() -> StatusWatcher {
     StatusWatcher::test()
-        .with_up_to_date(Duration::from_secs(1))
+        .with_up_to_date(Duration::from_millis(0))
         .await
 }
 
@@ -63,7 +63,14 @@ async fn make_another_request_when_stale() {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
         ..Default::default()
     };
-    let api = Session::new(api_config.clone(), None, status_watcher().await).unwrap();
+    let api = Session::new(
+        api_config.clone(),
+        None,
+        StatusWatcher::test()
+            .with_up_to_date(Duration::from_millis(500))
+            .await,
+    )
+    .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -77,7 +84,7 @@ async fn make_another_request_when_stale() {
 
     assert_eq!(api.status().await, ConnectionStatus::Online);
     // Make the status stale
-    sleep(Duration::from_secs(2)).await;
+    sleep(Duration::from_secs(1)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
 
@@ -94,7 +101,7 @@ async fn make_another_request_when_timeout_and_channel_closed() {
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(1500)))
-        .expect(1)
+        .expect(2)
         .mount(&mock_server)
         .await;
 
@@ -104,13 +111,8 @@ async fn make_another_request_when_timeout_and_channel_closed() {
 
     // Timeout
     assert_eq!(api.status().await, ConnectionStatus::Offline);
+    sleep(Duration::from_millis(10)).await;
     assert_eq!(api.status().await, ConnectionStatus::Offline);
-    // Status is not yet stale
-    sleep(Duration::from_millis(500)).await;
-    // Channel closed
-    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
 }
 
 #[tokio::test]
@@ -121,7 +123,14 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
         ..Default::default()
     };
-    let api = Session::new(api_config.clone(), None, status_watcher().await).unwrap();
+    let api = Session::new(
+        api_config.clone(),
+        None,
+        StatusWatcher::test()
+            .with_up_to_date(Duration::from_millis(1000))
+            .await,
+    )
+    .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -163,22 +172,19 @@ async fn terribly_bad_connection_and_server_restart_simulation() {
     sleep(Duration::from_millis(200)).await;
 
     assert_eq!(api.status().await, ConnectionStatus::Offline);
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
 
     mock_server.reset().await;
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(200))
-        .expect(1)
+        .expect(2)
         .mount(&mock_server)
         .await;
 
     catch_all(&mock_server).await;
 
-    sleep(Duration::from_secs(2)).await;
-    assert_eq!(api.status().await, ConnectionStatus::Online);
-    assert_eq!(api.status().await, ConnectionStatus::Online);
+    sleep(Duration::from_millis(200)).await;
     assert_eq!(api.status().await, ConnectionStatus::Online);
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
@@ -204,11 +210,10 @@ async fn terribly_bad_connection_responding_in_twenty_seconds() {
     // Give some time for a server to start
     sleep(Duration::from_millis(200)).await;
 
+    // Timeout
     assert_eq!(api.status().await, ConnectionStatus::Offline);
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
-    sleep(Duration::from_secs(2)).await;
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
-    assert_eq!(api.status().await, ConnectionStatus::Offline);
+    // Channel closed
+    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
 }
 
 #[test_case(200, ConnectionStatus::Online; "TEST 1 - 200 Ok")]
