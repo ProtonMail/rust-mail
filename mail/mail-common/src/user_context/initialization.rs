@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
-use futures::future::{join, try_join};
+use futures::future::try_join;
 use futures::try_join;
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::{Address, Contact, Label, User};
@@ -77,35 +77,15 @@ impl MailUserContext {
                 }
             }
         }
-        // Since contact syncing is the slowest part let's leave it downloading while we
-        // setup all of the rest of the futures.
-        let ctx_clone = ctx.clone();
-        let contact_sync_dl_fut = tokio::spawn(async move {
-            Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
-        });
-
-        let ctx_clone = ctx.clone();
-        let event_loop = tokio::spawn(async move {
-            ctx_clone
-                .event_loop
-                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
-                .await
-        });
-        let ctx_clone = ctx.clone();
-        let user_settings = tokio::spawn(async move {
-            User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
-        });
-        let ctx_clone = ctx.clone();
-        let mail_settings = tokio::spawn(async move {
-            MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
-                .await
-        });
-        let ctx_clone = ctx.clone();
-        let addresses = tokio::spawn(async move {
-            Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
-        });
         let ctx_clone = ctx.clone();
         let labels_and_contacts = tokio::spawn(async move {
+            // Since contact syncing is the slowest part let's leave it downloading in parallel while we
+            // setup all of the rest of the futures.
+            let ctx_clone2 = ctx_clone.clone();
+            let contact_sync_dl_fut = tokio::spawn(async move {
+                Contact::sync(ctx_clone2.session().api(), ctx_clone2.user_stash()).await
+            });
+
             let labels = Label::all_labels(ctx_clone.session().api()).await?;
 
             let api = ctx_clone.session().api().to_owned();
@@ -132,16 +112,37 @@ impl MailUserContext {
             Ok::<_, MailContextError>(())
         });
 
+        let ctx_clone = ctx.clone();
+        let event_loop = tokio::spawn(async move {
+            ctx_clone
+                .event_loop
+                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
+                .await
+        });
+        let ctx_clone = ctx.clone();
+        let user_settings = tokio::spawn(async move {
+            User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+        let ctx_clone = ctx.clone();
+        let mail_settings = tokio::spawn(async move {
+            MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
+                .await
+        });
+        let ctx_clone = ctx.clone();
+        let addresses = tokio::spawn(async move {
+            Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+
         try_join!(
-            initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
             initial_sync_for(
                 MailUserContextLoadingStage::LabelsAndContacts,
                 labels_and_contacts,
                 cb
             ),
+            initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
+            initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
+            initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
+            initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
         )?;
 
         debug!("Syncing Complete");
