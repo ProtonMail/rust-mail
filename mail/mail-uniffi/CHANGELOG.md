@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
+  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
 
 ### Fixed
 

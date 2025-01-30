@@ -30,7 +30,7 @@ use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
 use tracing::error;
@@ -42,6 +42,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
+    prefetch: OnceLock<flume::Sender<()>>,
 }
 
 impl MailUserContext {
@@ -62,6 +63,7 @@ impl MailUserContext {
             cache,
             action_queue,
             event_loop: EventLoop::new(),
+            prefetch: OnceLock::new(),
         });
 
         this.action_queue
@@ -339,6 +341,28 @@ impl MailUserContext {
     /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.user_context.connection_status().await
+    }
+
+    /// Prefetch key locations in the background.
+    ///
+    /// Following priority locations are prefetched:
+    /// - Inbox
+    /// - Sent
+    /// - AllSent
+    /// - Drafts
+    /// - AllDrafts
+    pub fn prefetch(&self) -> MailContextResult<()> {
+        if let Some(sender) = self.prefetch.get() {
+            sender.send(()).map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+            })?;
+
+            Ok(())
+        } else {
+            Err(MailContextError::Other(anyhow!(
+                "Prefetcher is not initialized"
+            )))
+        }
     }
 }
 
