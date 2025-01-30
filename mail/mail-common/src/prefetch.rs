@@ -45,7 +45,7 @@ impl Prefetch {
     /// but the task will be executed only once per cycle.
     /// Meaning that if the task is already running, it will not be started again.
     ///
-    /// If MailUserContext is dropped
+    /// If MailUserContext is dropped the background task will die.
     pub async fn initialize(ctx: Arc<MailUserContext>, reciever: Receiver<()>) {
         let prefetch_count = 10;
         let tether = ctx.user_stash().connection();
@@ -93,23 +93,21 @@ impl Prefetch {
             yield_now().await;
             match location {
                 Location::Conversations(label_id) => {
-                    tracing::debug!("Prefetching conversations for label {:?}", label_id);
+                    tracing::debug!("Prefetching conversations for label {label_id}");
                     if let Err(error) = self
                         .prefetch_conversations(*label_id, &mut tether, &ctx)
                         .await
                     {
                         tracing::error!(
-                            "Failed to prefetch conversations for label {:?}, {error}",
-                            label_id
+                            "Failed to prefetch conversations for label {label_id}, {error}",
                         );
                     }
                 }
                 Location::Messages(label_id) => {
-                    tracing::debug!("Prefetching messages for label {:?}", label_id);
+                    tracing::debug!("Prefetching messages for label {label_id}");
                     if let Err(error) = self.prefetch_messages(*label_id, &ctx).await {
                         tracing::error!(
-                            "Failed to prefetch messages for label {:?}, {error}",
-                            label_id
+                            "Failed to prefetch messages for label {label_id}, {error}",
                         );
                     }
                 }
@@ -155,9 +153,8 @@ impl Prefetch {
             };
             yield_now().await;
             tracing::debug!(
-                "Prefetching message {:?} body for conversation {:?}",
-                message_id_to_open,
-                item.local_id
+                "Prefetching message {message_id_to_open} body for conversation {local_id}",
+                local_id = item.local_id
             );
             let _ = Message::message_body(ctx.clone(), message_id_to_open).await;
             yield_now().await;
@@ -184,8 +181,9 @@ impl Prefetch {
         let items = scroller.fetch_more().await?;
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
-            tracing::debug!("Prefetching message {:?} body", item.local_id);
-            let _ = Message::message_body(ctx.clone(), item.local_id.unwrap()).await;
+            let local_id = item.local_id.unwrap();
+            tracing::debug!("Prefetching message {local_id} body",);
+            let _ = Message::message_body(ctx.clone(), local_id).await;
             yield_now().await;
         }
 

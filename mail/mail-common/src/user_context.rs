@@ -30,10 +30,9 @@ use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
-use tokio::sync::Mutex;
 use tracing::error;
 
 pub struct MailUserContext {
@@ -43,7 +42,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
-    prefetch: Mutex<Option<flume::Sender<()>>>,
+    prefetch: OnceLock<flume::Sender<()>>,
 }
 
 impl MailUserContext {
@@ -64,7 +63,7 @@ impl MailUserContext {
             cache,
             action_queue,
             event_loop: EventLoop::new(),
-            prefetch: Mutex::new(None),
+            prefetch: OnceLock::new(),
         });
 
         this.action_queue
@@ -344,8 +343,16 @@ impl MailUserContext {
         self.user_context.connection_status().await
     }
 
-    pub async fn prefetch(&self) {
-        if let Some(sender) = self.prefetch.lock().await.as_ref() {
+    /// Prefetch key locations in the background.
+    ///
+    /// Following priority locations are prefetched:
+    /// - Inbox
+    /// - Sent
+    /// - AllSent
+    /// - Drafts
+    /// - AllDrafts
+    pub fn prefetch(&self) {
+        if let Some(sender) = self.prefetch.get() {
             let _ = sender
                 .send(())
                 .inspect_err(|_| tracing::error!("Failed to send prefetch signal to prefetcher"));

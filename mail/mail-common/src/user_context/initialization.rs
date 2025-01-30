@@ -138,7 +138,9 @@ impl MailUserContext {
         cb.on_stage(MailUserContextLoadingStage::Finished);
 
         let (sender, receiver) = flume::unbounded();
-        *ctx.prefetch.lock().await = Some(sender);
+        let _ = ctx.prefetch.set(sender).inspect_err(|e| {
+            error!("Failed to set prefetch sender: {e:?}");
+        });
         Prefetch::initialize(ctx.clone(), receiver).await;
 
         Ok(())
