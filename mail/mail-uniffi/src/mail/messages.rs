@@ -714,7 +714,7 @@ pub async fn get_message_body(
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
         let body = models::Message::message_body(ctx.clone(), id.into()).await?;
-        Result::<_, RealProtonMailError>::Ok(Arc::new(DecryptedMessage { ctx, body }))
+        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
     .map_err(ActionError::from)

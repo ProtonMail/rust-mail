@@ -303,15 +303,13 @@ async fn get_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
-    let conn = mailbox.stash().clone();
-    let session = mailbox.mbox().user_context().session().clone();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(
+        Ok::<_, RealProtonMailError>(
             ContextualConversation::conversation_and_messages(
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
-                &conn,
-                &session,
+                mailbox.stash(),
+                mailbox.context().session(),
             )
             .await?
             .map(Into::into),
