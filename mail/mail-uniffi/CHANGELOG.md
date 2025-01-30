@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Fixed
+
+  - Newline delimiter in HTML draft replies/forward.
+
 ## [0.39.0] - 2025-01-29
 
 ### Added
