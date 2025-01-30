@@ -5,6 +5,7 @@ mod images;
 mod initialization;
 
 use crate::models::{Conversation, Message};
+use crate::prefetch::Prefetch;
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -42,6 +43,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
+    prefetch: flume::Sender<()>,
 }
 
 impl MailUserContext {
@@ -55,6 +57,7 @@ impl MailUserContext {
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
+        let (sender, receiver) = flume::unbounded();
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -62,7 +65,9 @@ impl MailUserContext {
             cache,
             action_queue,
             event_loop: EventLoop::new(),
+            prefetch: sender,
         });
+        Prefetch::initialize(this.clone(), receiver).await;
 
         this.action_queue
             .register_execution_context(Weak::clone(&this.this));
@@ -339,6 +344,13 @@ impl MailUserContext {
     /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.user_context.connection_status().await
+    }
+
+    pub async fn prefetch(&self) {
+        let _ = self
+            .prefetch
+            .send(())
+            .inspect_err(|_| tracing::error!("Failed to send prefetch signal to prefetcher"));
     }
 }
 

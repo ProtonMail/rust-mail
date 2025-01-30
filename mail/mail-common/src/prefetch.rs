@@ -1,12 +1,13 @@
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
+use flume::Receiver;
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelIdExtension},
 };
 use stash::{orm::Model, stash::Tether};
-use tokio::{sync::Notify, task::yield_now};
+use tokio::task::yield_now;
 use tracing::instrument;
 
 use crate::{
@@ -16,11 +17,8 @@ use crate::{
     MailContextError, MailUserContext,
 };
 
-static PERMIT: Notify = Notify::const_new();
-
 /// Prefetch component for downloading messages and conversations in the background.
 pub struct Prefetch {
-    ctx: Arc<MailUserContext>,
     prefetch_count: usize,
     prefetch_locations: Vec<Location>,
 }
@@ -36,19 +34,15 @@ enum LocationKind {
 }
 
 impl Prefetch {
-    /// Notify background task to start prefetching messages and conversations.
+    /// Start background task to prefetch messages and conversations
     ///
     /// It is looped and waiting for notification to start prefetching
     /// every call of this function will notify the task to start prefetching
     /// but the task will be executed only once per cycle.
     /// Meaning that if the task is already running, it will not be started again.
     ///
-    pub fn key_locations() {
-        PERMIT.notify_one();
-    }
-
-    /// Start background task to prefetch messages and conversations
-    pub async fn initialize(ctx: Arc<MailUserContext>) {
+    /// If MailUserContext is dropped
+    pub async fn initialize(ctx: Arc<MailUserContext>, reciever: Receiver<()>) {
         let tether = ctx.user_stash().connection();
         let Ok(Some(mail_settings)) = MailSettings::get(&tether).await else {
             tracing::error!("Failed to get mail settings");
@@ -84,30 +78,37 @@ impl Prefetch {
         ];
 
         let this = Self {
-            ctx,
             prefetch_count,
             prefetch_locations: locations,
         };
 
         tokio::spawn(async move {
+            let ctx = Arc::downgrade(&ctx);
             loop {
-                PERMIT.notified().await;
-                let _ = this.prefetch().await;
+                if reciever.recv_async().await.is_err() {
+                    break;
+                }
+                let _ = this.prefetch(&ctx).await;
+                drop(reciever.drain());
             }
         });
     }
 
     /// Prefetch all defined locations one by one.
-    #[instrument(skip(self))]
-    async fn prefetch(&self) -> Result<(), MailContextError> {
-        let mut tether = self.ctx.user_stash().connection();
+    #[instrument(skip(self, ctx))]
+    async fn prefetch(&self, ctx: &Weak<MailUserContext>) -> Result<(), MailContextError> {
+        let ctx = ctx.upgrade().unwrap();
+        let mut tether = ctx.user_stash().connection();
 
         for Location { label_id, location } in &self.prefetch_locations {
             yield_now().await;
             match location {
                 LocationKind::Conversations => {
                     tracing::debug!("Prefetching conversations for label {:?}", label_id);
-                    if let Err(error) = self.prefetch_conversations(label_id, &mut tether).await {
+                    if let Err(error) = self
+                        .prefetch_conversations(label_id, &mut tether, &ctx)
+                        .await
+                    {
                         tracing::error!(
                             "Failed to prefetch conversations for label {:?}, {error}",
                             label_id
@@ -116,7 +117,7 @@ impl Prefetch {
                 }
                 LocationKind::Messages => {
                     tracing::debug!("Prefetching messages for label {:?}", label_id);
-                    if let Err(error) = self.prefetch_messages(label_id, &mut tether).await {
+                    if let Err(error) = self.prefetch_messages(label_id, &mut tether, &ctx).await {
                         tracing::error!(
                             "Failed to prefetch messages for label {:?}, {error}",
                             label_id
@@ -132,19 +133,19 @@ impl Prefetch {
     ///
     /// It fetches conversations from the given label and prefetches all message metadata
     /// tied to it and finally downloads the message to open body for each conversation.
-    #[instrument(skip(self, tether))]
+    #[instrument(skip(self, tether, ctx))]
     async fn prefetch_conversations(
         &self,
         label_id: &LabelId,
         tether: &mut Tether,
+        ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
         let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
         else {
             return Ok(());
         };
         let Ok(mut scroller) =
-            MailScroller::conversations(self.ctx.clone(), local_label_id, ReadFilter::All, 50)
-                .await
+            MailScroller::conversations(ctx.clone(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
@@ -154,7 +155,7 @@ impl Prefetch {
 
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
-            let api = self.ctx.api();
+            let api = ctx.api();
             let _ = Conversation::sync_conversation_messages(item.local_id, tether, api).await;
             yield_now().await;
             let messages = Message::in_conversation(item.local_id, tether).await?;
@@ -173,7 +174,7 @@ impl Prefetch {
                 message_id_to_open,
                 item.local_id
             );
-            let _ = Message::message_body(self.ctx.clone(), message_id_to_open).await;
+            let _ = Message::message_body(ctx.clone(), message_id_to_open).await;
             yield_now().await;
         }
 
@@ -183,18 +184,19 @@ impl Prefetch {
     /// Prefetch messages for the given label.
     ///
     /// It fetches messages from the given label and prefetches the message body for each message.
-    #[instrument(skip(self, tether))]
+    #[instrument(skip(self, tether, ctx))]
     async fn prefetch_messages(
         &self,
         label_id: &LabelId,
         tether: &mut Tether,
+        ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
         let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
         else {
             return Ok(());
         };
         let Ok(mut scroller) =
-            MailScroller::messages(self.ctx.clone(), local_label_id, ReadFilter::All, 50).await
+            MailScroller::messages(ctx.clone(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
@@ -203,7 +205,7 @@ impl Prefetch {
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
             tracing::debug!("Prefetching message {:?} body", item.local_id);
-            let _ = Message::message_body(self.ctx.clone(), item.local_id.unwrap()).await;
+            let _ = Message::message_body(ctx.clone(), item.local_id.unwrap()).await;
             yield_now().await;
         }
 
