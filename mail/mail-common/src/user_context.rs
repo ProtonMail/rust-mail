@@ -351,11 +351,17 @@ impl MailUserContext {
     /// - AllSent
     /// - Drafts
     /// - AllDrafts
-    pub fn prefetch(&self) {
+    pub fn prefetch(&self) -> MailContextResult<()> {
         if let Some(sender) = self.prefetch.get() {
-            let _ = sender
-                .send(())
-                .inspect_err(|_| tracing::error!("Failed to send prefetch signal to prefetcher"));
+            sender.send(()).map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+            })?;
+
+            Ok(())
+        } else {
+            Err(MailContextError::Other(anyhow!(
+                "Prefetcher is not initialized"
+            )))
         }
     }
 }
