@@ -7,6 +7,7 @@ mod logging;
 mod login;
 pub mod mailbox;
 pub mod messages;
+#[allow(clippy::used_underscore_binding)]
 pub mod prefetch;
 mod session;
 mod settings;

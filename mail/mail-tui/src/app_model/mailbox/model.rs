@@ -87,7 +87,7 @@ impl Model {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
         let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
 
-        Prefetch::key_locations(ctx.clone()).await;
+        Prefetch::key_locations();
 
         let tether = ctx.user_stash().connection();
         let label = Label::find_by_id(mailbox.label_id(), &tether)

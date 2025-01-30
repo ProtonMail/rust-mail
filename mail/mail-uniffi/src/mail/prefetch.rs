@@ -13,10 +13,9 @@ use super::MailUserSession;
 /// The bacground task will be spawned only once. Subsequent calls to this function will
 /// notify the task to start prefetching but the task will be executed only once per whole cycle.
 #[proton_uniffi_macros::export_result]
-async fn prefetch(session: Arc<MailUserSession>) -> Result<(), ActionError> {
-    let ctx = session.ctx();
+async fn prefetch(_session: Arc<MailUserSession>) -> Result<(), ActionError> {
     uniffi_async(async move {
-        Prefetch::key_locations(ctx).await;
+        Prefetch::key_locations();
         Result::<_, RealProtonMailError>::Ok(())
     })
     .await

@@ -1,7 +1,4 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::{
@@ -20,7 +17,6 @@ use crate::{
 };
 
 static PERMIT: Notify = Notify::const_new();
-static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Prefetch component for downloading messages and conversations in the background.
 pub struct Prefetch {
@@ -47,12 +43,8 @@ impl Prefetch {
     /// but the task will be executed only once per cycle.
     /// Meaning that if the task is already running, it will not be started again.
     ///
-    pub async fn key_locations(ctx: Arc<MailUserContext>) {
+    pub fn key_locations() {
         PERMIT.notify_one();
-
-        if !INITIALIZED.swap(true, Ordering::Relaxed) {
-            Self::initialize(ctx).await;
-        }
     }
 
     /// Start background task to prefetch messages and conversations
