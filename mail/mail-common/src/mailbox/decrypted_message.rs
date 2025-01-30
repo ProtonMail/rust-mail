@@ -21,7 +21,7 @@ use std::io::Read;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -545,12 +545,18 @@ pub struct BodyOutput {
     pub body_banners: BodyBanners,
 }
 
-#[tracing::instrument(skip(html))]
+#[tracing::instrument(skip_all)]
 pub fn transform_html(
     html: &str,
     opts: TransformOptsResolved<'_>,
     mime_type: MimeType,
 ) -> BodyOutput {
+    trace!(
+        "\
+Beginning html transform:
+opts: {opts:#?}
+mime_type: {mime_type:?}"
+    );
     // The order at which we run the transforms is not random, it's been chosen for maximum
     // efficiency.
 
@@ -613,6 +619,7 @@ pub fn transform_html(
         transform_opts: opts.into(),
         body_banners: BodyBanners::new(opts, had_blockquote),
     };
-    debug!("Transform done. Output: {output:#?}");
+    debug!("HTML Transform done");
+    trace!("BodyOutput: {output:#?}");
     output
 }

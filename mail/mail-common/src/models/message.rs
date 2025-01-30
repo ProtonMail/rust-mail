@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -1773,6 +1773,7 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn fetch_message_body(
         &self,
         ctx: Arc<MailUserContext>,
@@ -1785,8 +1786,10 @@ impl Message {
         )
         .await?
         {
+            debug!("Found message body in cache.");
             return Ok(decrypted);
         }
+        trace!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
             return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
@@ -1800,6 +1803,7 @@ impl Message {
         }
 
         let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
+        trace!("Message successfully downloaded. Decrypting...");
 
         let decrypted = Self::decrypt_message_body(
             Arc::clone(&ctx),
@@ -1809,9 +1813,11 @@ impl Message {
             true,
         )
         .await?;
+        trace!("Message successfully decrypted. Caching...");
 
         Self::store_decrypted_message_body(&ctx, self.local_id.unwrap(), &decrypted)?;
 
+        debug!("Message successfully synced.");
         Ok(decrypted)
     }
 

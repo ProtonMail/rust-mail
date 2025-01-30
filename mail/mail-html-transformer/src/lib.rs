@@ -107,7 +107,7 @@ impl Transformer {
     ///
     /// See [`utm::strip()`] for more details.
     /// Returns how many tracking codes it removed.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn strip_utm(&mut self) -> u64 {
         utm::strip(self.document.clone())
     }
@@ -115,7 +115,7 @@ impl Transformer {
     /// Disables remote content.
     ///
     /// See [`remote_content::disable_remote_content()`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn disable_remote_content(&mut self) -> u64 {
         remote_content::disable_remote_content(&self.document)
     }
@@ -123,7 +123,7 @@ impl Transformer {
     /// If true, inject metadata for iOS web view.
     ///
     /// See [`ios::inject_content_size()`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_ios_content_size(&mut self) {
         ios::inject_content_size(self.document.clone());
     }
@@ -131,13 +131,13 @@ impl Transformer {
     /// This function removes disallowed tags and attributes.
     ///
     /// See [`sanitizer::strip_whitelist`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn strip_whitelist(&mut self) -> u64 {
         sanitizer::strip_whitelist(self.document.clone())
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_style(&mut self) {
         transforms::inject_style(self.document.clone());
     }
@@ -146,38 +146,38 @@ impl Transformer {
     /// See [`transforms::add_noreferrer`] for more details.
     ///
     /// This requires an [`InsertLinkToken`]
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn add_noreferrer(&mut self) -> InsertLinkToken {
         transforms::add_noreferrer(self.document.clone());
         InsertLinkToken(())
     }
 
     /// Proxies all images through proton's proxy.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, user_session_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn proxy_images(&mut self, user_session_id: &str) -> u64 {
         transforms::proxy_images(self.document(), user_session_id)
     }
 
     /// Disables embedded images
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn disable_embedded_images(&mut self) -> u64 {
         transforms::disable_embedded_images(self.document())
     }
 
     /// Inserts `<a>` elements in plain text links
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, _token))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn insert_links(&mut self, _token: InsertLinkToken) {
         transforms::insert_links(self.document.clone());
     }
 
     /// Removes the blockquote from the html
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn strip_blockquote(&mut self) -> bool {
         message_detector::strip_blockquote(self.document().clone())
     }
 
     /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn extract_blockquote(&mut self) -> SplitDoc {
         message_detector::locate_blockquote(self.document().clone())
     }
