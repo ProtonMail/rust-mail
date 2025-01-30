@@ -28,16 +28,23 @@ macro_rules! export_void_result {
             Error($type),
         }
 
-        impl<T, E: Into<$type>> From<Result<T, E>> for $name {
-            fn from(value: Result<T, E>) -> Self {
+        #[automatically_derived]
+        impl<T, E> From<::std::result::Result<T, E>> for $name
+        where
+            E: Into<$type> + ::std::fmt::Debug,
+        {
+            fn from(value: ::std::result::Result<T, E>) -> Self {
                 match value {
-                    Ok(_) => Self::Ok,
-                    Err(error) => Self::Error(error.into()),
+                    Ok(val) => Self::Ok,
+                    Err(error) => {
+                        ::tracing::error!("{error:?}");
+                        Self::Error(error.into())
+                    }
                 }
             }
         }
 
-        impl<E: Into<$type>> From<E> for $name {
+        impl<E: Into<$type> + ::std::fmt::Debug> From<E> for $name {
             fn from(error: E) -> Self {
                 Self::Error(error.into())
             }
@@ -56,11 +63,19 @@ macro_rules! export_typed_result {
             Error($err_type),
         }
 
-        impl<T: Into<$ok_type>, E: Into<$err_type>> From<Result<T, E>> for $name {
-            fn from(value: Result<T, E>) -> Self {
+        #[automatically_derived]
+        impl<T, E> From<::std::result::Result<T, E>> for $name
+        where
+            T: Into<$ok_type>,
+            E: Into<$err_type> + ::std::fmt::Debug,
+        {
+            fn from(value: ::std::result::Result<T, E>) -> Self {
                 match value {
                     Ok(val) => Self::Ok(val.into()),
-                    Err(error) => Self::Error(error.into()),
+                    Err(error) => {
+                        ::tracing::error!("{error:?}");
+                        Self::Error(error.into())
+                    }
                 }
             }
         }
