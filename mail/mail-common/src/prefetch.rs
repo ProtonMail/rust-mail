@@ -9,15 +9,15 @@ use stash::orm::Model;
 use tokio::task::yield_now;
 
 use crate::{
-    datatypes::ReadFilter,
+    datatypes::{ReadFilter, ViewMode},
     mail_scroller::MailScroller,
-    models::{Conversation, Message},
+    models::{Conversation, MailSettings, Message},
     MailContextError, MailUserContext,
 };
 
 pub struct Prefetch {
     ctx: Arc<MailUserContext>,
-    prefetch_count: u64,
+    prefetch_count: usize,
     prefetch_locations: Vec<Location>,
 }
 
@@ -32,12 +32,22 @@ enum LocationKind {
 }
 
 impl Prefetch {
-    pub fn key_locations(ctx: Arc<MailUserContext>) {
+    pub async fn key_locations(ctx: Arc<MailUserContext>) {
+        let tether = ctx.user_stash().connection();
+        let Ok(Some(mail_settings)) = MailSettings::get(&tether).await else {
+            tracing::error!("Failed to get mail settings");
+            return;
+        };
+
+        let inbox_location = match mail_settings.view_mode {
+            ViewMode::Conversations => LocationKind::Conversations,
+            ViewMode::Messages => LocationKind::Messages,
+        };
         let prefetch_count = 10;
         let locations = vec![
             Location {
                 label_id: SystemLabel::Inbox.remote_id(),
-                location: LocationKind::Conversations,
+                location: inbox_location,
             },
             Location {
                 label_id: SystemLabel::Sent.remote_id(),
@@ -95,7 +105,7 @@ impl Prefetch {
                     let items = scroller.fetch_more().await?;
 
                     yield_now().await;
-                    for item in items.into_iter().take(self.prefetch_count as usize) {
+                    for item in items.into_iter().take(self.prefetch_count) {
                         let api = self.ctx.api();
                         let _ = Conversation::sync_conversation_messages(
                             item.local_id,
@@ -139,7 +149,7 @@ impl Prefetch {
                     yield_now().await;
                     let items = scroller.fetch_more().await?;
                     yield_now().await;
-                    for item in items.into_iter().take(self.prefetch_count as usize) {
+                    for item in items.into_iter().take(self.prefetch_count) {
                         let _ =
                             Message::message_body(self.ctx.clone(), item.local_id.unwrap()).await;
                         yield_now().await;
