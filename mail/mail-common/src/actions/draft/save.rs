@@ -1,4 +1,6 @@
-use crate::actions::draft::local_draft_label_id;
+use crate::actions::draft::{
+    local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
+};
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
     MessageSenders, MimeType, SystemLabelId,
@@ -123,6 +125,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
         tether: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_id = local_draft_label_id(tether).await?;
+        let local_all_draft_id = local_all_draft_label_id(tether).await?;
+        let local_all_mail_id = local_all_mail_label_id(tether).await?;
 
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tether)
             .await
@@ -260,6 +264,26 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .await
             .inspect_err(|e| {
                 error!("Failed to apply draft label to new message: {e}");
+            })?;
+
+            Message::apply_label(
+                local_all_draft_id,
+                std::iter::once(message.local_id.unwrap()),
+                tether,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to apply all_draft label to new message: {e}");
+            })?;
+
+            Message::apply_label(
+                local_all_mail_id,
+                std::iter::once(message.local_id.unwrap()),
+                tether,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to apply all_mail label to new message: {e}");
             })?;
 
             message

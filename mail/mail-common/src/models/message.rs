@@ -2707,6 +2707,14 @@ impl Message {
         let message = StorableMessageBody::from_reader(reader)?;
         Ok(Some(message))
     }
+
+    /// Whether this message is a draft.
+    ///
+    /// A message is considered a draft when it has the AllDrafts label assigned.
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
+    }
 }
 
 pub struct MessageWatcher {

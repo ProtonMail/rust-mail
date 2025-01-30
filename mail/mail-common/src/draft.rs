@@ -297,7 +297,7 @@ impl Draft {
             return Err(AppError::MessageMissing(message_id).into());
         }
 
-        if !message.flags.is_draft() {
+        if !message.is_draft() {
             error!("Opened a non-draft message as a draft");
             return Err(OpenError::MessageNotADraft(message_id).into());
         }

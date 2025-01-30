@@ -157,6 +157,7 @@ async fn basic_send_check() {
 
     assert!(draft_message.label_ids.contains(&LabelId::outbox()));
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -262,6 +263,8 @@ async fn send_fail_puts_message_back_in_drafts() {
             .await
             .unwrap()
             .unwrap();
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
     assert!(!draft_message.label_ids.contains(&LabelId::sent()));

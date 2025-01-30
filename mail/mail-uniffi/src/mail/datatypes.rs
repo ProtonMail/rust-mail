@@ -1529,12 +1529,16 @@ pub struct Message {
 
     /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
+
+    /// Whether this message is a draft.
+    pub is_draft: bool,
 }
 
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
         let starred = value.is_starred();
         let avatar = RealAvatarInformation::from(&value.sender);
+        let is_draft = value.is_draft();
         Message {
             id: value.local_id.unwrap().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
@@ -1583,6 +1587,7 @@ impl From<RealMessage> for Message {
                 .collect(),
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
+            is_draft,
             starred,
             avatar: avatar.into(),
         }

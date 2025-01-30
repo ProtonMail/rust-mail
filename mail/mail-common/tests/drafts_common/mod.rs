@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -16,7 +16,7 @@ use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
-use proton_mail_common::datatypes::MimeType;
+use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
 use proton_mail_common::draft::ReplyMode;
@@ -148,7 +148,7 @@ pub fn expected_create_reply_draft_params(
 }
 
 pub fn draft_message_with_attachments() -> ApiMessage {
-    let mut remote_existing_message = message_body_test_message_simple();
+    let mut remote_existing_message = draft_message();
     let normal_attchment = gen_normal_attachment();
     remote_existing_message.body.attachments =
         vec![gen_inline_attachment(), normal_attchment.clone()];
@@ -214,4 +214,14 @@ pub fn new_recipient_list_with_single_address(email: String) -> RecipientList {
     })
     .unwrap();
     list
+}
+
+pub fn draft_message() -> ApiMessage {
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.extend([
+        LabelId::all_drafts(),
+        LabelId::drafts(),
+        LabelId::all_mail(),
+    ]);
+    message
 }

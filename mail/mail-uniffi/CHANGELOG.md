@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Added
+
+  - [ET-1999] `Message::is_draft` property.
+
 ### Fixed
 
   - Newline delimiter in HTML draft replies/forward.
+  - [ET-1999] Apply `AllDraft` label and `AllMail` to drafts.
+
 
 ## [0.39.0] - 2025-01-29
 

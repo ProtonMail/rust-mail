@@ -1,4 +1,6 @@
-use crate::actions::draft::{local_draft_label_id, local_outbox_label_id, local_sent_label_id};
+use crate::actions::draft::{
+    local_all_draft_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
+};
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
     build_packages, load_all_recipients, load_send_preferences_for_recipients,
@@ -64,6 +66,7 @@ impl proton_action_queue::action::Handler for SendHandler {
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
+        let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
 
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
@@ -96,6 +99,9 @@ impl proton_action_queue::action::Handler for SendHandler {
         Message::remove_label(local_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+        Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove all draft label: {e}"))?;
         Message::apply_label(local_outbox_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply outbox label: {e}"))?;
@@ -114,6 +120,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
+        let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
@@ -134,6 +141,9 @@ impl proton_action_queue::action::Handler for SendHandler {
         Message::apply_label(local_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
+        Message::apply_label(local_all_draft_label_id, [local_message_id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply all draft label: {e}"))?;
 
         Ok(())
     }

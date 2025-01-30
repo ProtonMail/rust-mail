@@ -32,8 +32,7 @@ async fn create_empty_draft() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
+    let message = draft_message();
 
     let expected_draft_params = expected_create_draft_params();
 
@@ -56,14 +55,26 @@ async fn create_empty_draft() {
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
     draft.save(user_ctx.action_queue()).await.unwrap();
 
-    // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
-
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    // Check the draft has the draft label.
+    // We check this here as the message will be overridden by what the server returns.
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
+    assert!(draft_message.is_draft());
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -77,9 +88,6 @@ async fn create_empty_draft() {
         draft_conversation_id,
         draft_message.local_conversation_id.unwrap(),
     );
-
-    // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
     let message_body_metadata =
@@ -124,7 +132,7 @@ async fn create_empty_draft_and_save_twice() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let new_subject = "My New Subject";
@@ -358,7 +366,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
@@ -539,7 +547,7 @@ async fn create_draft_reply_impl(
 
     let expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.body.attachments = remote_existing_message.body.attachments.clone();
     if reply_mode != ReplyMode::Forward {
         message
@@ -547,7 +555,6 @@ async fn create_draft_reply_impl(
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
     }
-    message.metadata.label_ids.push(LabelId::drafts());
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
         remote_existing_message
@@ -687,8 +694,7 @@ async fn open_draft_sync_status_success() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
+    let message = draft_message();
 
     let expected_draft_params = expected_create_draft_params();
 
@@ -737,7 +743,7 @@ async fn open_draft_sync_status_cached() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
