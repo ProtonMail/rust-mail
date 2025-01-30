@@ -326,63 +326,23 @@ impl ContactSuggestion {
                     .into_iter()
                     .map(move |email| (contact.clone(), email))
             })
-            .sorted_by_key(|(contact, email)| {
-                // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
-                // we ensure it is ordered by first proton mails and then by latest mails
-                // `last_used_time` is u64, to ensure that
-                (
-                    !email.is_proton,
-                    u64::MAX - email.last_used_time,
-                    email.email.unicode_words().collect::<String>(),
-                    contact.name.clone(),
-                )
+            .sorted_by_key(|(contact, email)| Self::sort_proton_contacts_by_key(contact, email))
+            .map(|(contact, email)| {
+                Self::aggregate_emails_to_groups(&mut contact_groups, contact, email)
             })
-            .map(|(contact, mut email)| {
-                let label_ids = std::mem::take(&mut email.label_ids);
-                let email = ContactEmailItem::from(email);
-                for label_id in label_ids.iter() {
-                    if let Some(group) = contact_groups.get_mut(label_id) {
-                        group.emails.push(email.clone());
-                    }
-                }
-                (contact, email)
-            })
-            .map(|(contact, email)| ContactSuggestion {
-                key: format!("contact/{}", email.local_id),
-                avatar_information: AvatarInformation::from(&contact.name),
-                name: contact.name,
-                kind: ContactSuggestionKind::ContactItem(email),
-            })
+            .map(|(contact, email)| Self::new_contact(contact, email))
             .collect();
 
         let rest = contact_groups
             .into_values()
             .filter(|group| !group.emails.is_empty())
-            .map(|group| FollowingSuggestion {
-                source_key: group.key.clone(),
-                suggestion: ContactSuggestion {
-                    key: group.key,
-                    avatar_information: AvatarInformation::from(&group.name),
-                    name: group.name,
-                    kind: ContactSuggestionKind::ContactGroup(group.emails),
-                },
-            })
-            .chain(device_contacts.into_iter().flat_map(|contact| {
-                contact
-                    .emails
+            .map(Self::new_group)
+            .chain(device_contacts.into_iter().flat_map(|mut contact| {
+                let emails = std::mem::take(&mut contact.emails);
+                emails
                     .into_iter()
                     .enumerate()
-                    .map(move |(idx, email)| FollowingSuggestion {
-                        source_key: format!("device-contact/{}", contact.key),
-                        suggestion: ContactSuggestion {
-                            key: format!("device-contact-email/{}-{}", contact.key, idx),
-                            avatar_information: AvatarInformation::from(&contact.name),
-                            name: contact.name.clone(),
-                            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                                email,
-                            }),
-                        },
-                    })
+                    .map(move |(idx, email)| Self::new_device_contact(&contact, idx, email))
             }))
             .sorted()
             .map(|suggestion| suggestion.suggestion);
@@ -397,6 +357,70 @@ impl ContactSuggestion {
                     .map_or_else(|| suggestion.key.clone(), |email| email.to_lowercase())
             })
             .collect()
+    }
+
+    fn new_group(group: ContactGroup) -> FollowingSuggestion {
+        FollowingSuggestion {
+            source_key: group.key.clone(),
+            suggestion: Self {
+                key: group.key,
+                avatar_information: AvatarInformation::from(&group.name),
+                name: group.name,
+                kind: ContactSuggestionKind::ContactGroup(group.emails),
+            },
+        }
+    }
+
+    fn new_contact(contact: Contact, email: ContactEmailItem) -> Self {
+        Self {
+            key: format!("contact/{}", email.local_id),
+            avatar_information: AvatarInformation::from(&contact.name),
+            name: contact.name,
+            kind: ContactSuggestionKind::ContactItem(email),
+        }
+    }
+
+    fn new_device_contact(
+        contact: &DeviceContact,
+        idx: usize,
+        email: String,
+    ) -> FollowingSuggestion {
+        FollowingSuggestion {
+            source_key: format!("device-contact/{}", contact.key),
+            suggestion: Self {
+                key: format!("device-contact-email/{}-{}", contact.key, idx),
+                avatar_information: AvatarInformation::from(&contact.name),
+                name: contact.name.clone(),
+                kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion { email }),
+            },
+        }
+    }
+
+    fn sort_proton_contacts_by_key(contact: &Contact, email: &ContactEmail) -> impl Ord {
+        // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
+        // we ensure it is ordered by first proton mails and then by latest mails
+        // `last_used_time` is u64, to ensure that
+        (
+            !email.is_proton,
+            u64::MAX - email.last_used_time,
+            email.email.unicode_words().collect::<String>(),
+            contact.name.clone(),
+        )
+    }
+
+    fn aggregate_emails_to_groups(
+        contact_groups: &mut HashMap<LabelId, ContactGroup>,
+        contact: Contact,
+        mut email: ContactEmail,
+    ) -> (Contact, ContactEmailItem) {
+        let label_ids = std::mem::take(&mut email.label_ids);
+        let email = ContactEmailItem::from(email);
+        for label_id in label_ids.iter() {
+            if let Some(group) = contact_groups.get_mut(label_id) {
+                group.emails.push(email.clone());
+            }
+        }
+        (contact, email)
     }
 }
 
