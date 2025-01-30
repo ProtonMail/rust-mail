@@ -1,5 +1,6 @@
 use crate::utils::MapVec as _;
 use std::collections::{BTreeSet, HashMap};
+use std::future::Future;
 use std::iter;
 use std::time::Instant;
 
@@ -206,7 +207,11 @@ impl Contact {
 
     /// Updates all user contacts including their emails without their cards.
     ///
-    /// The update includes a reset of the database.
+    /// You might have noticed that this function returns another future. This future, when polled
+    /// will reset the database AND store all of the contacts.
+    ///
+    /// This future MUST ONLY be polled after syncing contact labels.
+    /// FIXME: Assert this invariant via the type system in 1.85
     ///
     /// # Parameters
     ///
@@ -219,7 +224,11 @@ impl Contact {
     ///
     #[tracing::instrument(skip(api, stash))]
     #[allow(clippy::too_many_lines)]
-    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+    #[must_use]
+    pub async fn sync(
+        api: &Proton,
+        stash: &Stash,
+    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>>> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.
@@ -291,58 +300,68 @@ impl Contact {
         let emails = emails_joinset.join_all().await;
         let emails = iter::once(Ok(first_emails.contact_emails)).chain(emails);
 
-        // Let's start with a clean database
+        debug!("Downloaded all contacts in {:?}", t0.elapsed());
+
         let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
-        tx.execute("DELETE FROM contacts", vec![]).await?;
-        tx.execute("DELETE FROM contact_emails", vec![]).await?;
-        tx.execute("DELETE FROM contact_cards", vec![]).await?;
-        tx.execute("DELETE FROM contact_email_labels", vec![])
-            .await?;
+        // We are splitting the store and download functions in two so that it's faster.
+        Ok(async move {
+            // Let's start with a clean database
+            let tx = tether.transaction().await?;
+            tx.execute("DELETE FROM contacts", vec![]).await?;
+            tx.execute("DELETE FROM contact_emails", vec![]).await?;
+            tx.execute("DELETE FROM contact_cards", vec![]).await?;
+            tx.execute("DELETE FROM contact_email_labels", vec![])
+                .await?;
 
-        // We will use this to map the contact_emails to the contacts without having to
-        // query the db each time we instert one.
-        // We require this to happen since the contact_emails need the local id of its contact.
-        let mut id_map = HashMap::new();
+            // We will use this to map the contact_emails to the contacts without having to
+            // query the db each time we instert one.
+            // We require this to happen since the contact_emails need the local id of its contact.
+            let mut id_map = HashMap::new();
 
-        let t = Instant::now();
-        for (page, contact_page) in contacts.enumerate() {
-            debug!("storing contacts page {page}");
-            for contact in contact_page? {
-                let mut contact = Contact::from(contact);
-                <Contact as Model>::save(&mut contact, &tx).await?;
-                id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
+            let t = Instant::now();
+            for (page, contact_page) in contacts.enumerate() {
+                let t_inner = Instant::now();
+                for contact in contact_page? {
+                    let mut contact = Contact::from(contact);
+                    <Contact as Model>::save(&mut contact, &tx).await?;
+                    id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
+                }
+                debug!("stored contacts page {page} in {:?}", t_inner.elapsed());
             }
-        }
-        debug!(
-            "Stored {} contacts to the db in {:?}",
-            id_map.len(),
-            t.elapsed()
-        );
+            debug!(
+                "Stored {} contacts to the db in {:?}",
+                id_map.len(),
+                t.elapsed()
+            );
 
-        let mut count = 0;
-        let t = Instant::now();
-        for (page, email_page) in emails.enumerate() {
-            debug!("storing contact_emails page {page}");
-            for em in email_page? {
-                let Some(local_id) = id_map.get(&em.contact_id) else {
-                    error!("a contact_email has no contact");
-                    continue;
-                };
-                count += 1;
-                let mut email = ContactEmail::from(em);
-                email.local_contact_id = Some(*local_id);
-                <ContactEmail as Model>::save(&mut email, &tx).await?;
+            let mut count = 0;
+            let t = Instant::now();
+            for (page, email_page) in emails.enumerate() {
+                let t_inner = Instant::now();
+                for em in email_page? {
+                    let Some(local_id) = id_map.get(&em.contact_id) else {
+                        error!("a contact_email has no contact");
+                        continue;
+                    };
+                    count += 1;
+                    let mut email = ContactEmail::from(em);
+                    email.local_contact_id = Some(*local_id);
+                    <ContactEmail as Model>::save(&mut email, &tx).await?;
+                }
+                debug!(
+                    "stored contact_emails page {page} in {:?}",
+                    t_inner.elapsed()
+                );
             }
-        }
 
-        debug!(
-            "Stored {count} contacts_emails to the db in {:?}",
-            t.elapsed()
-        );
-        tx.commit().await?;
-        debug!("Synced all contacts in {:?}", t0.elapsed());
-        Ok(())
+            debug!(
+                "Stored {count} contacts_emails to the db in {:?}",
+                t.elapsed()
+            );
+            tx.commit().await?;
+            debug!("Synced all contacts in {:?}", t0.elapsed());
+            Ok::<(), CoreContextError>(())
+        })
     }
 
     /// Updates the full contact with the given ID including its emails and
