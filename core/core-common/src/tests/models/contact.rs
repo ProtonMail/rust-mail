@@ -1096,6 +1096,166 @@ mod contact_suggestions {
             ])
         }
      ]) ; "TEST 7 - Device Contacts are sorted by name and emails")]
+    #[test_case(TestCase {
+        contacts: vec![
+            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+                contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".to_string(), last_used_time: 1)
+            ]),
+            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+                contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".to_string(), last_used_time: 2, label_ids: labels!("m.schur.productions"))
+            ]),
+            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+                contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".to_string(), last_used_time: 2, label_ids: labels!("m.schur.productions"))
+            ]),
+            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+                contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".to_string(), last_used_time: 3, label_ids: labels!("m.schur.productions")),
+                contact_email!(local_id: lid!(112), is_proton: false, email: "harvey@jp.com".to_string(), last_used_time: 1)
+            ]),
+            contact!(name: "Detective Peralta".to_string(), contact_emails: vec![
+                // User has two contacts pointing to the same email
+                contact_email!(local_id: lid!(999), is_proton: false, email: "jake.peralta@99.com".to_string(), last_used_time: 3)
+            ])
+        ],
+        contact_groups: vec![
+            label!(local_id: lid!(910), remote_id: Some(label_id!("m.schur.productions")), name: "M. Schur Productions".to_string(), label_type: LabelType::ContactGroup),
+        ],
+        device_contacts: vec![
+            device_contact!(key: "000".to_string(), name: "Aunt Molly".to_string(), emails: vec![
+                "molly@family.com".to_string(),
+            ]),
+            device_contact!(key: "001".to_string(), name: "Aunt Molly".to_string(), emails: vec![
+                "badass@aunt.com".to_string(),
+            ]),
+            // User has also a device contact that duplicates proton contact
+            device_contact!(key: "002".to_string(), name: "Boss".to_string(), emails: vec![
+                "m.scott@pm.me".to_string()
+            ]),
+            device_contact!(key: "003".to_string(), name: "Aunt Molly (Copy)".to_string(), emails: vec![
+                "badass@aunt.com".to_string(),
+            ]),
+        ]
+     } => using pretty_assert(vec![
+        ContactSuggestion {
+            key: "contact/678".to_string(),
+            name: "Jason Mendoza".to_string(),
+            avatar_information: AvatarInformation {
+                text: "J".to_string(),
+                color: "#3CBB3A".to_string()
+            },
+            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                local_id: 678.into(),
+                email: "jianyu.li@pm.me".to_string(),
+                is_proton: true,
+                last_used_time: 2
+            })
+        },
+        ContactSuggestion {
+            key: "contact/234".to_string(),
+            name: "Michael Scott".to_string(),
+            avatar_information: AvatarInformation {
+                text: "M".to_string(),
+                color: "#213474".to_string()
+            },
+            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                local_id: 234.into(),
+                email: "m.scott@pm.me".to_string(),
+                is_proton: true,
+                last_used_time: 2
+            })
+        },
+        ContactSuggestion {
+            key: "contact/123".to_string(),
+            name: "Barbara Lox".to_string(),
+            avatar_information: AvatarInformation {
+                text: "B".to_string(),
+                color: "#A839A4".to_string()
+            },
+            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                local_id: 123.into(),
+                email: "barbara@pm.me".to_string(),
+                is_proton: true,
+                last_used_time: 1
+            })
+        },
+        ContactSuggestion {
+            key: "contact/999".to_string(),
+            name: "Detective Peralta".to_string(),
+            avatar_information: AvatarInformation {
+                text: "D".to_string(),
+                color: "#415DF0".to_string()
+            },
+            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                local_id: 999.into(),
+                email: "jake.peralta@99.com".to_string(),
+                is_proton: false,
+                last_used_time: 3
+            })
+        },
+        ContactSuggestion {
+            key: "contact/112".to_string(),
+            name: "Jake Peralta".to_string(),
+            avatar_information: AvatarInformation {
+                text: "J".to_string(),
+                color: "#9C89FF".to_string()
+            },
+            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                local_id: 112.into(),
+                email: "harvey@jp.com".to_string(),
+                is_proton: false,
+                last_used_time: 1
+            })
+        },
+        ContactSuggestion {
+            key: "device-contact-email/001-0".to_string(),
+            name: "Aunt Molly".to_string(),
+            avatar_information: AvatarInformation {
+                text: "A".to_string(),
+                color: "#52006A".to_string(),
+            },
+            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
+                email: "badass@aunt.com".to_string()
+            })
+        },
+        ContactSuggestion {
+            key: "device-contact-email/000-0".to_string(),
+            name: "Aunt Molly".to_string(),
+            avatar_information: AvatarInformation {
+                text: "A".to_string(),
+                color: "#52006A".to_string(),
+            },
+            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
+                email: "molly@family.com".to_string()
+            })
+        },
+        ContactSuggestion {
+            key: "group/910".to_string(),
+            name: "M. Schur Productions".to_string(),
+            avatar_information: AvatarInformation {
+                text: "M".to_string(),
+                color: "#52006A".to_string()
+            },
+            kind: ContactSuggestionKind::ContactGroup(vec![
+                ContactEmailItem {
+                    local_id: 678.into(),
+                    email: "jianyu.li@pm.me".to_string(),
+                    is_proton: true,
+                    last_used_time: 2
+                },
+                ContactEmailItem {
+                    local_id: 234.into(),
+                    email: "m.scott@pm.me".to_string(),
+                    is_proton: true,
+                    last_used_time: 2
+                },
+                ContactEmailItem {
+                    local_id: 456.into(),
+                    email: "jake.peralta@99.com".to_string(),
+                    is_proton: false,
+                    last_used_time: 3
+                },
+            ])
+        }
+     ]) ; "TEST 8 - contacts are deduplicated")]
     fn test_contact_suggestions(test_case: TestCase) -> Vec<ContactSuggestion> {
         ContactSuggestion::from_contacts_and_device_contacts(
             test_case.contacts,

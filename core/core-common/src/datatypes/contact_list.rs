@@ -326,7 +326,7 @@ impl ContactSuggestion {
                     .into_iter()
                     .map(move |email| (contact.clone(), email))
             })
-            .sorted_by_key(|(_contact, email)| {
+            .sorted_by_key(|(contact, email)| {
                 // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
                 // we ensure it is ordered by first proton mails and then by latest mails
                 // `last_used_time` is u64, to ensure that
@@ -334,6 +334,7 @@ impl ContactSuggestion {
                     !email.is_proton,
                     u64::MAX - email.last_used_time,
                     email.email.unicode_words().collect::<String>(),
+                    contact.name.clone(),
                 )
             })
             .map(|(contact, mut email)| {
@@ -385,7 +386,17 @@ impl ContactSuggestion {
             }))
             .sorted()
             .map(|suggestion| suggestion.suggestion);
-        proton_suggestions.into_iter().chain(rest).collect()
+
+        proton_suggestions
+            .into_iter()
+            .chain(rest)
+            .unique_by(|suggestion| {
+                suggestion
+                    .email()
+                    .map(ToOwned::to_owned)
+                    .map_or_else(|| suggestion.key.clone(), |email| email.to_lowercase())
+            })
+            .collect()
     }
 }
 
