@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
+use futures::future::{join, try_join};
 use futures::try_join;
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::{Address, Contact, Label, User};
@@ -76,6 +77,12 @@ impl MailUserContext {
                 }
             }
         }
+        // Since contact syncing is the slowest part let's leave it downloading while we
+        // setup all of the rest of the futures.
+        let ctx_clone = ctx.clone();
+        let contact_sync_dl_fut = tokio::spawn(async move {
+            Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
 
         let ctx_clone = ctx.clone();
         let event_loop = tokio::spawn(async move {
@@ -113,11 +120,15 @@ impl MailUserContext {
 
             tx.commit().await?;
 
-            let counters = counters.await.expect("Can't fail to join")?;
-            counters.store(ctx_clone.user_stash()).await?;
+            let (contact_fut, counters) = try_join(contact_sync_dl_fut, counters)
+                .await
+                .expect("Can't fail to join");
+
             // FIXME:(perf): This should be a different future that requests contact
             // group labels
-            Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await?;
+            contact_fut?.await?;
+            counters?.store(ctx_clone.user_stash()).await?;
+
             Ok::<_, MailContextError>(())
         });
 
