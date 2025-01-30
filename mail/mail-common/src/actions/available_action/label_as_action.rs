@@ -99,9 +99,9 @@ impl LabelAsActionMap {
                     return None;
                 }
 
-                let is_selected = actions.iter().all(|x| x.is_selected.unwrap_or(false));
+                let all_are_selected = actions.iter().all(|x| x.is_selected.unwrap_or(false));
 
-                if is_selected {
+                if all_are_selected {
                     actions.pop()
                 } else {
                     let is_partially_selected =

@@ -2368,6 +2368,7 @@ impl Conversation {
     /// * empty list of conversations is provided
     /// * conversation is not in the view
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_actions(
         view: Label,
         conversation_ids: Vec<LocalConversationId>,
@@ -2398,11 +2399,13 @@ impl Conversation {
 
         let general_actions = vec![GeneralActions::SaveAsPdf, GeneralActions::Print];
 
-        Ok(ConversationAvailableActions::builder()
+        let res = ConversationAvailableActions::builder()
             .conversation_actions(conversation_actions)
             .move_actions(move_actions)
             .general_actions(general_actions)
-            .build())
+            .build();
+        debug!("available actions for conversations: {res:?}");
+        Ok(res)
     }
 
     /// Get the available `label as` actions for conversations
@@ -2416,6 +2419,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
         tether: &Tether,
@@ -2443,7 +2447,7 @@ impl Conversation {
             )
             .await?;
         let res = Message::available_label_as_actions(message_ids, tether).await?;
-
+        debug!("Available label_as actions for conversations: {res:?}");
         Ok(res)
     }
 
@@ -2459,6 +2463,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
         tether: &Tether,
@@ -2473,20 +2478,19 @@ impl Conversation {
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
             <Conversation as ModelExtension>::find_by_ids(local_ids, tether).await?;
-        let all_label_as_actions = conversations
-            .iter()
-            .flat_map(|conversation| {
-                LabelAsAction::vec(all_label_as.iter(), |label| {
-                    conversation
-                        .custom_labels
-                        .iter()
-                        .map(|label| Some(label.local_id))
-                        .contains(&label.local_id)
-                })
+        let all_label_as_actions = conversations.iter().flat_map(|conversation| {
+            LabelAsAction::vec(all_label_as.iter(), |label| {
+                conversation
+                    .custom_labels
+                    .iter()
+                    .map(|label| Some(label.local_id))
+                    .contains(&label.local_id)
             })
-            .collect_vec();
+        });
 
-        Ok((LabelAsAction::finalize(all_label_as_actions), handle))
+        let res = LabelAsAction::finalize(all_label_as_actions);
+        debug!("watch available label_as actions for conversations: {res:?}");
+        Ok((res, handle))
     }
 
     /// Get the available move actions for conversations
@@ -2501,6 +2505,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_move_to_actions(
         view: Label,
         local_ids: Vec<LocalConversationId>,
@@ -2548,7 +2553,9 @@ impl Conversation {
                 .chain(all_custom_folders.iter()),
         );
 
-        MoveAction::finalize(all_move_to_actions, tether).await
+        let res = MoveAction::finalize(all_move_to_actions, tether).await?;
+        debug!("available move_to actions: {res:?}");
+        Ok(res)
     }
 
     /// Finds all the messages from this conversation
