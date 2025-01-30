@@ -9,6 +9,7 @@ use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
 use tempdir::TempDir;
+use tracing::info;
 use wiremock::matchers::any;
 use wiremock::MockServer;
 use wiremock::{Mock, Request};
@@ -73,6 +74,7 @@ impl MailTestContext {
         };
 
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
+        info!("MAIL TMP DIR = {:?}", tmp_dir.path());
         let mail_cache_path = tmp_dir.path().join("mail-cache");
         let mail_cache_size = 2 << 29; // 512MiB
 

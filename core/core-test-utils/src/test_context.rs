@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
-use tracing::Level;
+use tracing::{info, Level};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
@@ -168,6 +168,7 @@ impl TestContext {
 
         let mock_web_server = Arc::new(MockServer::start().await);
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+        info!("CORE TMP DIR = {:?}", tmp_dir.path());
         let keychain: Arc<InMemoryKeyChain> = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
         let key = Self::encryption_key();
