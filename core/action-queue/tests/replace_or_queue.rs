@@ -6,6 +6,7 @@ use common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler, MetadataBuilder, Type,
 };
+use proton_action_queue::db::StoredAction;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 
@@ -73,6 +74,41 @@ async fn replace_updates_queues_if_action_no_longer_present() {
     // Execute the action.
     let executed = queue.execute_all().await.unwrap();
     assert_eq!(executed, 1);
+}
+
+#[tokio::test]
+async fn replace_updates_queues_if_action_is_executing() {
+    // When attempting to replace an action that does not exist, it will be
+    // queued instead.
+    let queue = new_queue(new_factory::<TestAction>()).await;
+
+    // Check direct execution.
+    let queued_output = queue
+        .queue_action(TestAction {
+            v: ACTION_VALUE_AFTER_LOCAL_APPLY,
+        })
+        .await
+        .unwrap();
+
+    // simulate action executing
+    let mut tether = queue.stash().connection();
+    let tx = tether.transaction().await.unwrap();
+    StoredAction::mark_as_executing(queued_output.id, &tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    // queue replacement
+    let replaced_output = queue
+        .replace_or_queue_action(
+            queued_output.id,
+            TestAction {
+                v: ACTION_VALUE_AFTER_REPLACE,
+            },
+        )
+        .await
+        .unwrap();
+    assert_ne!(replaced_output.id, queued_output.id);
 }
 
 #[tokio::test]

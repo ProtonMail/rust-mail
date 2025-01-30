@@ -59,6 +59,10 @@ pub struct StoredAction {
     #[DbField]
     pub version: u32,
 
+    #[DbField]
+    /// Whether this action has been picked up by the queue.
+    pub executing: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -88,6 +92,7 @@ impl StoredAction {
             state: serialized_state,
             version: T::VERSION,
             row_id: None,
+            executing: false,
         })
     }
 
@@ -283,7 +288,10 @@ impl StoredAction {
             StoredAction::find_first("WHERE id = ?", params![existing_id], bond).await?
         {
             // Only update if the action types are the same.
-            if existing.action_type == self.action_type {
+            // NOTE: the executing check works since we guarantee immediate locking in sqlite
+            // transactions so that there is only ever one writer so this value will always be
+            // up to date.
+            if existing.action_type == self.action_type && !existing.executing {
                 self.id = existing.id;
                 self.row_id = existing.row_id;
                 // failsafe, filter out any dependencies on self.
@@ -293,6 +301,16 @@ impl StoredAction {
         }
 
         self.save(bond).await
+    }
+
+    /// Mark an action as executing by the queue.
+    pub async fn mark_as_executing(id: Id, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.execute(
+            format!("UPDATE {} SET executing=? WHERE id =?", Self::table_name()),
+            params![true, id],
+        )
+        .await?;
+        Ok(())
     }
 }
 
@@ -333,7 +351,8 @@ impl Migration for MigrationV1 {
                 created INTEGER DEFAULT (datetime('now')),
                 scheduled INTEGER DEFAULT (datetime('now')),
                 state BLOB NOT NULL,
-                debug_string TEXT DEFAULT NULL
+                debug_string TEXT DEFAULT NULL,
+                executing INTEGER NOT NULL DEFAULT 0
             )
         "};
 
