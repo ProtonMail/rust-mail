@@ -1,10 +1,9 @@
 use std::sync::{Arc, Weak};
 
 use flume::Receiver;
-use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::{
-    datatypes::SystemLabel,
-    models::{Label, ModelIdExtension},
+    datatypes::{LocalLabelId, SystemLabel},
+    models::Label,
 };
 use stash::{orm::Model, stash::Tether};
 use tokio::task::yield_now;
@@ -23,14 +22,19 @@ pub struct Prefetch {
     prefetch_locations: Vec<Location>,
 }
 
-struct Location {
-    label_id: LabelId,
-    location: LocationKind,
+enum Location {
+    Conversations(LocalLabelId),
+    Messages(LocalLabelId),
 }
 
-enum LocationKind {
-    Conversations,
-    Messages,
+macro_rules! label_local_id {
+    ($label:ident, $tether:expr) => {{
+        let Ok(Some(local_id)) = SystemLabel::$label.local_id($tether).await else {
+            tracing::error!("Failed to get local id for label {:?}", SystemLabel::$label);
+            return;
+        };
+        local_id
+    }};
 }
 
 impl Prefetch {
@@ -43,38 +47,23 @@ impl Prefetch {
     ///
     /// If MailUserContext is dropped
     pub async fn initialize(ctx: Arc<MailUserContext>, reciever: Receiver<()>) {
+        let prefetch_count = 10;
         let tether = ctx.user_stash().connection();
+
         let Ok(Some(mail_settings)) = MailSettings::get(&tether).await else {
             tracing::error!("Failed to get mail settings");
             return;
         };
 
-        let inbox_location = match mail_settings.view_mode {
-            ViewMode::Conversations => LocationKind::Conversations,
-            ViewMode::Messages => LocationKind::Messages,
-        };
-        let prefetch_count = 10;
         let locations = vec![
-            Location {
-                label_id: SystemLabel::Inbox.remote_id(),
-                location: inbox_location,
+            match mail_settings.view_mode {
+                ViewMode::Conversations => Location::Conversations(label_local_id!(Inbox, &tether)),
+                ViewMode::Messages => Location::Messages(label_local_id!(Inbox, &tether)),
             },
-            Location {
-                label_id: SystemLabel::Sent.remote_id(),
-                location: LocationKind::Messages,
-            },
-            Location {
-                label_id: SystemLabel::AllSent.remote_id(),
-                location: LocationKind::Messages,
-            },
-            Location {
-                label_id: SystemLabel::Drafts.remote_id(),
-                location: LocationKind::Messages,
-            },
-            Location {
-                label_id: SystemLabel::AllDrafts.remote_id(),
-                location: LocationKind::Messages,
-            },
+            Location::Messages(label_local_id!(Sent, &tether)),
+            Location::Messages(label_local_id!(AllSent, &tether)),
+            Location::Messages(label_local_id!(Drafts, &tether)),
+            Location::Messages(label_local_id!(AllDrafts, &tether)),
         ];
 
         let this = Self {
@@ -100,13 +89,13 @@ impl Prefetch {
         let ctx = ctx.upgrade().unwrap();
         let mut tether = ctx.user_stash().connection();
 
-        for Location { label_id, location } in &self.prefetch_locations {
+        for location in &self.prefetch_locations {
             yield_now().await;
             match location {
-                LocationKind::Conversations => {
+                Location::Conversations(label_id) => {
                     tracing::debug!("Prefetching conversations for label {:?}", label_id);
                     if let Err(error) = self
-                        .prefetch_conversations(label_id, &mut tether, &ctx)
+                        .prefetch_conversations(*label_id, &mut tether, &ctx)
                         .await
                     {
                         tracing::error!(
@@ -115,9 +104,9 @@ impl Prefetch {
                         );
                     }
                 }
-                LocationKind::Messages => {
+                Location::Messages(label_id) => {
                     tracing::debug!("Prefetching messages for label {:?}", label_id);
-                    if let Err(error) = self.prefetch_messages(label_id, &mut tether, &ctx).await {
+                    if let Err(error) = self.prefetch_messages(*label_id, &ctx).await {
                         tracing::error!(
                             "Failed to prefetch messages for label {:?}, {error}",
                             label_id
@@ -136,14 +125,10 @@ impl Prefetch {
     #[instrument(skip(self, tether, ctx))]
     async fn prefetch_conversations(
         &self,
-        label_id: &LabelId,
+        local_label_id: LocalLabelId,
         tether: &mut Tether,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
-        else {
-            return Ok(());
-        };
         let Ok(mut scroller) =
             MailScroller::conversations(ctx.clone(), local_label_id, ReadFilter::All, 50).await
         else {
@@ -184,17 +169,12 @@ impl Prefetch {
     /// Prefetch messages for the given label.
     ///
     /// It fetches messages from the given label and prefetches the message body for each message.
-    #[instrument(skip(self, tether, ctx))]
+    #[instrument(skip(self, ctx))]
     async fn prefetch_messages(
         &self,
-        label_id: &LabelId,
-        tether: &mut Tether,
+        local_label_id: LocalLabelId,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
-        else {
-            return Ok(());
-        };
         let Ok(mut scroller) =
             MailScroller::messages(ctx.clone(), local_label_id, ReadFilter::All, 50).await
         else {

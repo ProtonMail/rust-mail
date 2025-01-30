@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
+use crate::prefetch::Prefetch;
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
 use proton_api_core::session::CoreSession;
@@ -135,6 +136,10 @@ impl MailUserContext {
 
         debug!("Syncing Complete");
         cb.on_stage(MailUserContextLoadingStage::Finished);
+
+        let (sender, receiver) = flume::unbounded();
+        *ctx.prefetch.lock().await = Some(sender);
+        Prefetch::initialize(ctx.clone(), receiver).await;
 
         Ok(())
     }
