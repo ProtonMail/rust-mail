@@ -5,7 +5,7 @@ use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelIdExtension},
 };
-use stash::orm::Model;
+use stash::{orm::Model, stash::Tether};
 use tokio::task::yield_now;
 
 use crate::{
@@ -85,77 +85,80 @@ impl Prefetch {
             yield_now().await;
             match location {
                 LocationKind::Conversations => {
-                    let Some(local_label_id) =
-                        Label::remote_id_counterpart(label_id.clone(), &tether).await?
-                    else {
-                        continue;
-                    };
-                    let Ok(mut scroller) = MailScroller::conversations(
-                        self.ctx.clone(),
-                        local_label_id,
-                        ReadFilter::All,
-                        50,
-                    )
-                    .await
-                    else {
-                        continue;
-                    };
-                    yield_now().await;
-
-                    let items = scroller.fetch_more().await?;
-
-                    yield_now().await;
-                    for item in items.into_iter().take(self.prefetch_count) {
-                        let api = self.ctx.api();
-                        let _ = Conversation::sync_conversation_messages(
-                            item.local_id,
-                            &mut tether,
-                            api,
-                        )
-                        .await;
-                        yield_now().await;
-                        let messages = Message::in_conversation(item.local_id, &tether).await?;
-                        yield_now().await;
-                        let Some(label) = Label::load(local_label_id, &tether).await? else {
-                            continue;
-                        };
-                        let Ok(message_id_to_open) =
-                            Conversation::message_id_to_open(item.local_id, &label, &messages)
-                        else {
-                            continue;
-                        };
-                        yield_now().await;
-
-                        let _ = Message::message_body(self.ctx.clone(), message_id_to_open).await;
-                        yield_now().await;
-                    }
+                    self.prefetch_conversations(label_id, &mut tether).await?;
                 }
                 LocationKind::Messages => {
-                    let Some(local_label_id) =
-                        Label::remote_id_counterpart(label_id.clone(), &tether).await?
-                    else {
-                        continue;
-                    };
-                    let Ok(mut scroller) = MailScroller::messages(
-                        self.ctx.clone(),
-                        local_label_id,
-                        ReadFilter::All,
-                        50,
-                    )
-                    .await
-                    else {
-                        continue;
-                    };
-                    yield_now().await;
-                    let items = scroller.fetch_more().await?;
-                    yield_now().await;
-                    for item in items.into_iter().take(self.prefetch_count) {
-                        let _ =
-                            Message::message_body(self.ctx.clone(), item.local_id.unwrap()).await;
-                        yield_now().await;
-                    }
+                    self.prefetch_messages(label_id, &mut tether).await?;
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    async fn prefetch_conversations(
+        &self,
+        label_id: &LabelId,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
+        else {
+            return Ok(());
+        };
+        let Ok(mut scroller) =
+            MailScroller::conversations(self.ctx.clone(), local_label_id, ReadFilter::All, 50)
+                .await
+        else {
+            return Ok(());
+        };
+        yield_now().await;
+
+        let items = scroller.fetch_more().await?;
+
+        yield_now().await;
+        for item in items.into_iter().take(self.prefetch_count) {
+            let api = self.ctx.api();
+            let _ = Conversation::sync_conversation_messages(item.local_id, tether, api).await;
+            yield_now().await;
+            let messages = Message::in_conversation(item.local_id, tether).await?;
+            yield_now().await;
+            let Some(label) = Label::load(local_label_id, tether).await? else {
+                continue;
+            };
+            let Ok(message_id_to_open) =
+                Conversation::message_id_to_open(item.local_id, &label, &messages)
+            else {
+                continue;
+            };
+            yield_now().await;
+
+            let _ = Message::message_body(self.ctx.clone(), message_id_to_open).await;
+            yield_now().await;
+        }
+
+        Ok(())
+    }
+
+    async fn prefetch_messages(
+        &self,
+        label_id: &LabelId,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        let Some(local_label_id) = Label::remote_id_counterpart(label_id.clone(), tether).await?
+        else {
+            return Ok(());
+        };
+        let Ok(mut scroller) =
+            MailScroller::messages(self.ctx.clone(), local_label_id, ReadFilter::All, 50).await
+        else {
+            return Ok(());
+        };
+        yield_now().await;
+        let items = scroller.fetch_more().await?;
+        yield_now().await;
+        for item in items.into_iter().take(self.prefetch_count) {
+            let _ = Message::message_body(self.ctx.clone(), item.local_id.unwrap()).await;
+            yield_now().await;
         }
 
         Ok(())
