@@ -1044,19 +1044,6 @@ mod contact_suggestions {
                 last_used_time: 1
             })
         },
-        // (Look at the previous test)
-        // .. unless emails are not coming from the same contact
-        ContactSuggestion {
-            key: "device-contact-email/001-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "badass@aunt.com".to_string()
-            })
-        },
         ContactSuggestion {
             key: "device-contact-email/000-0".to_string(),
             name: "Aunt Molly".to_string(),
@@ -1066,6 +1053,17 @@ mod contact_suggestions {
             },
             kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
                 email: "molly@family.com".to_string()
+            })
+        },
+        ContactSuggestion {
+            key: "device-contact-email/001-0".to_string(),
+            name: "Aunt Molly".to_string(),
+            avatar_information: AvatarInformation {
+                text: "A".to_string(),
+                color: "#52006A".to_string(),
+            },
+            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
+                email: "badass@aunt.com".to_string()
             })
         },
         ContactSuggestion {
@@ -1096,7 +1094,7 @@ mod contact_suggestions {
                 },
             ])
         }
-     ]) ; "TEST 7 - Device Contacts are sorted by name and emails")]
+     ]) ; "TEST 7 - Device Contacts are sorted by name and ids")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -1207,17 +1205,6 @@ mod contact_suggestions {
             })
         },
         ContactSuggestion {
-            key: "device-contact-email/001-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "badass@aunt.com".to_string()
-            })
-        },
-        ContactSuggestion {
             key: "device-contact-email/000-0".to_string(),
             name: "Aunt Molly".to_string(),
             avatar_information: AvatarInformation {
@@ -1226,6 +1213,17 @@ mod contact_suggestions {
             },
             kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
                 email: "molly@family.com".to_string()
+            })
+        },
+        ContactSuggestion {
+            key: "device-contact-email/001-0".to_string(),
+            name: "Aunt Molly".to_string(),
+            avatar_information: AvatarInformation {
+                text: "A".to_string(),
+                color: "#52006A".to_string(),
+            },
+            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
+                email: "badass@aunt.com".to_string()
             })
         },
         ContactSuggestion {
