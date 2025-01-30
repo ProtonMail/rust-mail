@@ -69,9 +69,13 @@ impl DecryptedMessage {
     /// or if the message doesn't exist.
     #[allow(clippy::missing_panics_doc)]
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> BodyOutput {
-        let this = self.clone();
         async_runtime()
-            .spawn(async move { this.body.transformed(&this.ctx, opts).await })
+            .spawn(async move {
+                let tether = self.ctx.user_stash().connection();
+                self.body
+                    .transformed(opts, self.ctx.session_id(), &tether)
+                    .await
+            })
             .await
             .expect("Transformed is infailable.")
     }
