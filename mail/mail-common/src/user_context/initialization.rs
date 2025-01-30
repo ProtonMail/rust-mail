@@ -27,6 +27,40 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 }
 
 impl MailUserContext {
+    /// Initialize a component.
+    #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
+    async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
+        stage: MailUserContextLoadingStage,
+        handle: JoinHandle<Result<(), E>>,
+        cb: &dyn MailUserContextInitializationCallback,
+    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        let t = Instant::now();
+        debug!("Begin syncing for {stage:?}");
+
+        let result = handle.await;
+        let elapsed = t.elapsed();
+        if elapsed > Duration::from_secs(1) {
+            warn!("Slow sync for {stage:?}: {elapsed:?}");
+        } else {
+            debug!("Syncing {stage:?} took {elapsed:?}");
+        }
+
+        cb.on_stage(stage);
+        match result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => {
+                let e = e.into();
+                error!("Failed to sync {stage:?}: {e}");
+                Err((stage, e))
+            }
+            Err(e) => {
+                let e = e.into();
+                error!("Panicked while syncing {stage:?}: {e}");
+                Err((stage, e))
+            }
+        }
+    }
+
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
@@ -45,38 +79,6 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-        async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
-            stage: MailUserContextLoadingStage,
-            handle: JoinHandle<Result<(), E>>,
-            cb: &dyn MailUserContextInitializationCallback,
-        ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-            let t = Instant::now();
-            debug!("Begin syncing for {stage:?}");
-
-            let result = handle.await;
-            let elapsed = t.elapsed();
-            if elapsed > Duration::from_secs(1) {
-                warn!("Slow sync for {stage:?}: {elapsed:?}");
-            } else {
-                debug!("Syncing {stage:?} took {elapsed:?}");
-            }
-
-            cb.on_stage(stage);
-            match result {
-                Ok(Ok(())) => Ok(()),
-                Ok(Err(e)) => {
-                    let e = e.into();
-                    error!("Failed to sync {stage:?}: {e}");
-                    Err((stage, e))
-                }
-                Err(e) => {
-                    let e = e.into();
-                    error!("Panicked while syncing {stage:?}: {e}");
-                    Err((stage, e))
-                }
-            }
-        }
         let ctx_clone = ctx.clone();
         let labels_and_contacts = tokio::spawn(async move {
             // Since contact syncing is the slowest part let's leave it downloading in parallel while we
@@ -134,15 +136,15 @@ impl MailUserContext {
         });
 
         try_join!(
-            initial_sync_for(
+            Self::initial_sync_for(
                 MailUserContextLoadingStage::LabelsAndContacts,
                 labels_and_contacts,
                 cb
             ),
-            initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
         )?;
 
         debug!("Syncing Complete");
