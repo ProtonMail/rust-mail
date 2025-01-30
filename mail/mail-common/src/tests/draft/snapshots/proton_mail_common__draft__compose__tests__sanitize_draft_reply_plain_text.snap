@@ -1,0 +1,15 @@
+---
+source: mail/mail-common/src/draft/../tests/draft/compose.rs
+expression: draft.decrypted_body.body
+snapshot_kind: text
+---
+-------- Original Message --------
+On Thursday, 01/01/70 at 00:00 Send InToVoid <sender@void.org> wrote:
+[Alll][1] [Alll][2]
+Alll
+Alll
+
+Example style that caused regexps to crash
+
+[1]: lol-image.jpg
+[2]: jeanne-image.jpg

@@ -136,7 +136,7 @@ async fn create_empty_draft_and_save_twice() {
     message.metadata.label_ids.push(LabelId::drafts());
 
     let new_subject = "My New Subject";
-    let new_body = "Hello world";
+    let new_body = "<html><head></head><body>Hello world</body></html>";
     let new_to_list = new_recipient_list_with_single_address("to@list.info".to_owned());
     let new_cc_list = new_recipient_list_with_single_address("cc@list.info".to_owned());
     let new_bcc_list = new_recipient_list_with_single_address("bcc@list.info".to_owned());
