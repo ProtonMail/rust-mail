@@ -26,6 +26,7 @@ use proton_mail_common::models::{
     ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
     MessageCounters,
 };
+use proton_mail_common::prefetch::Prefetch;
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
@@ -85,6 +86,9 @@ pub struct Model {
 impl Model {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
         let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
+
+        Prefetch::key_locations(ctx.clone()).await;
+
         let tether = ctx.user_stash().connection();
         let label = Label::find_by_id(mailbox.label_id(), &tether)
             .await?

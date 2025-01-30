@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::{
@@ -6,7 +9,8 @@ use proton_core_common::{
     models::{Label, ModelIdExtension},
 };
 use stash::{orm::Model, stash::Tether};
-use tokio::task::yield_now;
+use tokio::{sync::Notify, task::yield_now};
+use tracing::instrument;
 
 use crate::{
     datatypes::{ReadFilter, ViewMode},
@@ -15,6 +19,10 @@ use crate::{
     MailContextError, MailUserContext,
 };
 
+static PERMIT: Notify = Notify::const_new();
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Prefetch component for downloading messages and conversations in the background.
 pub struct Prefetch {
     ctx: Arc<MailUserContext>,
     prefetch_count: usize,
@@ -32,7 +40,23 @@ enum LocationKind {
 }
 
 impl Prefetch {
+    /// Notify background task to start prefetching messages and conversations.
+    ///
+    /// It is looped and waiting for notification to start prefetching
+    /// every call of this function will notify the task to start prefetching
+    /// but the task will be executed only once per cycle.
+    /// Meaning that if the task is already running, it will not be started again.
+    ///
     pub async fn key_locations(ctx: Arc<MailUserContext>) {
+        PERMIT.notify_one();
+
+        if !INITIALIZED.swap(true, Ordering::Relaxed) {
+            Self::initialize(ctx).await;
+        }
+    }
+
+    /// Start background task to prefetch messages and conversations
+    pub async fn initialize(ctx: Arc<MailUserContext>) {
         let tether = ctx.user_stash().connection();
         let Ok(Some(mail_settings)) = MailSettings::get(&tether).await else {
             tracing::error!("Failed to get mail settings");
@@ -74,28 +98,49 @@ impl Prefetch {
         };
 
         tokio::spawn(async move {
-            let _ = this.prefetch().await;
+            loop {
+                PERMIT.notified().await;
+                let _ = this.prefetch().await;
+            }
         });
     }
 
-    async fn prefetch(self) -> Result<(), MailContextError> {
+    /// Prefetch all defined locations one by one.
+    #[instrument(skip(self))]
+    async fn prefetch(&self) -> Result<(), MailContextError> {
         let mut tether = self.ctx.user_stash().connection();
 
         for Location { label_id, location } in &self.prefetch_locations {
             yield_now().await;
             match location {
                 LocationKind::Conversations => {
-                    self.prefetch_conversations(label_id, &mut tether).await?;
+                    tracing::debug!("Prefetching conversations for label {:?}", label_id);
+                    if let Err(error) = self.prefetch_conversations(label_id, &mut tether).await {
+                        tracing::error!(
+                            "Failed to prefetch conversations for label {:?}, {error}",
+                            label_id
+                        );
+                    }
                 }
                 LocationKind::Messages => {
-                    self.prefetch_messages(label_id, &mut tether).await?;
+                    tracing::debug!("Prefetching messages for label {:?}", label_id);
+                    if let Err(error) = self.prefetch_messages(label_id, &mut tether).await {
+                        tracing::error!(
+                            "Failed to prefetch messages for label {:?}, {error}",
+                            label_id
+                        );
+                    }
                 }
             }
         }
-
         Ok(())
     }
 
+    /// Prefetch conversations for the given label.
+    ///
+    /// It fetches conversations from the given label and prefetches all message metadata
+    /// tied to it and finally downloads the message to open body for each conversation.
+    #[instrument(skip(self, tether))]
     async fn prefetch_conversations(
         &self,
         label_id: &LabelId,
@@ -131,7 +176,11 @@ impl Prefetch {
                 continue;
             };
             yield_now().await;
-
+            tracing::debug!(
+                "Prefetching message {:?} body for conversation {:?}",
+                message_id_to_open,
+                item.local_id
+            );
             let _ = Message::message_body(self.ctx.clone(), message_id_to_open).await;
             yield_now().await;
         }
@@ -139,6 +188,10 @@ impl Prefetch {
         Ok(())
     }
 
+    /// Prefetch messages for the given label.
+    ///
+    /// It fetches messages from the given label and prefetches the message body for each message.
+    #[instrument(skip(self, tether))]
     async fn prefetch_messages(
         &self,
         label_id: &LabelId,
@@ -157,6 +210,7 @@ impl Prefetch {
         let items = scroller.fetch_more().await?;
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
+            tracing::debug!("Prefetching message {:?} body", item.local_id);
             let _ = Message::message_body(self.ctx.clone(), item.local_id.unwrap()).await;
             yield_now().await;
         }
