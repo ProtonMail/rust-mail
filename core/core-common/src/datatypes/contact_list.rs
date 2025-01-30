@@ -303,6 +303,8 @@ impl ContactSuggestion {
         let mut contact_groups: HashMap<LabelId, ContactGroup> = contact_groups
             .into_iter()
             .filter(|group| group.label_type == LabelType::ContactGroup)
+            // TODO(ET-1971): We should not reference groups by remote ids, instead we should use local ids
+            // This is to ensure the offline mode works with contacts and contact groups not synced with API
             .filter(|group| label_ids.contains(group.remote_id.as_ref().unwrap()))
             .map(|group| {
                 (
@@ -321,8 +323,8 @@ impl ContactSuggestion {
             .filter(|contact| !contact.deleted)
             .flat_map(|contact| {
                 contact
-                    .clone()
                     .contact_emails
+                    .clone()
                     .into_iter()
                     .map(move |email| (contact.clone(), email))
             })

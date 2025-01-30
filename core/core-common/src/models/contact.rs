@@ -515,6 +515,13 @@ impl Contact {
             .into_iter()
             .filter(|contact: &Contact| {
                 contact.name.to_lowercase().contains(&query)
+                // Even if the contact doesn't match the query, the email address associated with the contact might
+                // Example:
+                // Contact: "Bar" <foo@pm.me>
+                //
+                // I search for "foo"
+                //
+                // "Bar" isn't matched but "foo@pm.me" is.
                     || remote_contact_ids.contains(contact.remote_id.as_ref().unwrap())
             })
             .collect::<Vec<Contact>>();
