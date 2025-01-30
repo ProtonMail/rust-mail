@@ -1364,8 +1364,10 @@ mod contact_suggestions {
 
         tx.commit().await.expect("commit failed");
 
-        Contact::contact_suggestions(query, test_case.device_contacts, &tether)
+        let suggestions = Contact::contact_suggestions(test_case.device_contacts, &tether)
             .await
-            .unwrap()
+            .unwrap();
+
+        Contact::filter_suggestions(query, suggestions)
     }
 }

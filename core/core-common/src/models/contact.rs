@@ -1,5 +1,5 @@
 use crate::utils::MapVec as _;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::iter;
 use std::time::Instant;
@@ -12,7 +12,6 @@ use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension}
 use crate::{ContactError, CoreContextError, CoreContextResult};
 use futures::future::try_join;
 use futures::try_join;
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::consts::General;
@@ -440,11 +439,10 @@ impl Contact {
         ))
     }
 
-    /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query.
+    /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query.
     ///
     /// # Parameters
     ///
-    /// * `query` - a plaintext string provided by the user that we need to complete
     /// * `device_contacts` - contacts stored in the device storage, not shared between proton clients.
     /// * `tether` - The database interface
     ///
@@ -458,113 +456,53 @@ impl Contact {
     ///
     #[allow(trivial_casts)] // Box<dyn ToSql> cannot be infered
     pub async fn contact_suggestions(
-        query: &str,
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
     ) -> Result<Vec<ContactSuggestion>, StashError> {
+        let (mut contacts, contact_groups) = try_join!(
+            Contact::find("WHERE deleted = 0", vec![], tether),
+            Label::find_by_kind(LabelType::ContactGroup, tether)
+        )?;
+
+        for contact in &mut contacts {
+            contact.emails(tether).await?;
+        }
+
+        Ok(ContactSuggestion::from_contacts_and_device_contacts(
+            contacts,
+            contact_groups,
+            device_contacts,
+        ))
+    }
+
+    /// Filter contact suggestions by the query.
+    ///
+    /// # Parameters
+    ///
+    /// * `query` - a plaintext string provided by the user that we need to complete
+    ///
+    #[must_use]
+    pub fn filter_suggestions(
+        query: &str,
+        suggestions: Vec<ContactSuggestion>,
+    ) -> Vec<ContactSuggestion> {
         let query = query.trim();
         let query = query.to_lowercase();
 
         // Early exit heurestic
         if query.is_empty() {
-            return Ok(Vec::new());
+            return Vec::new();
         }
 
-        // 1. Get contact groups that are matching the query.
-        // That matching is case insensitive
-        // TODO (ET-1971): Filter by name in SQL
-        let contact_groups = Label::find(
-            "WHERE label_type = ? ORDER BY display_order ASC",
-            params![LabelType::ContactGroup],
-            tether,
-        )
-        .await?
-        .into_iter()
-        .filter(|group| group.name.to_lowercase().contains(&query))
-        .collect::<Vec<_>>();
-
-        let group_label_ids = contact_groups
-            .iter()
-            .filter_map(|group| group.remote_id.clone())
-            .collect::<HashSet<_>>();
-
-        // 2. Get contact emails that are either matching query or are part of matched groups
-        // TODO (ET-1971): Filter by name in SQL
-        let contact_emails: Vec<ContactEmail> = ContactEmail::all(tether)
-            .await?
+        suggestions
             .into_iter()
-            .filter(|email: &ContactEmail| {
-                // We have to repeat the filter from SQL and add name.
-                email.name.as_str().to_lowercase().contains(&query)
-                    || email.email.as_str().to_lowercase().contains(&query)
-                    || email
-                        .label_ids
-                        .iter()
-                        .any(|id| group_label_ids.contains(id))
+            .filter(|suggestion| {
+                suggestion.name.to_lowercase().contains(&query)
+                    || suggestion
+                        .email()
+                        .is_some_and(|email| email.to_lowercase().contains(&query))
             })
-            .collect();
-
-        let remote_contact_ids = contact_emails
-            .iter()
-            .filter_map(|contact_email| contact_email.remote_contact_id.clone())
-            .collect::<HashSet<_>>();
-
-        // TODO (ET-1971): Filter contacts in SQLite
-        let mut contacts = Contact::find(formatdoc!("WHERE deleted = 0 ",), vec![], tether)
-            .await?
-            .into_iter()
-            .filter(|contact: &Contact| {
-                contact.name.to_lowercase().contains(&query)
-                // Even if the contact doesn't match the query, the email address associated with the contact might
-                // Example:
-                // Contact: "Bar" <foo@pm.me>
-                //
-                // I search for "foo"
-                //
-                // "Bar" isn't matched but "foo@pm.me" is.
-                    || remote_contact_ids.contains(contact.remote_id.as_ref().unwrap())
-            })
-            .collect::<Vec<Contact>>();
-
-        for contact in &mut contacts {
-            // TODO (ET-1971): Even though we just loaded contact emails,
-            // we already filtered them.
-            // However, there is a case where contact emails did not match query, but contact name did.
-            // In that case we still need to load contact email.
-            // That double fetching could go away if we fetch ConctactEmail by using custom SQL query with
-            // some inner join, but it has to wait for proper unicode filtering in SQLite.
-            // For now its better to be correct but inefficient
-            contact.emails(tether).await?;
-        }
-
-        let device_contacts = device_contacts
-            .into_iter()
-            .filter(|contact| {
-                contact.name.to_lowercase().contains(&query)
-                    || contact
-                        .emails
-                        .iter()
-                        .any(|email| email.to_lowercase().contains(&query))
-            })
-            .collect();
-
-        let suggestions = ContactSuggestion::from_contacts_and_device_contacts(
-            contacts,
-            contact_groups,
-            device_contacts,
-        )
-        .into_iter()
-        // If we are searching for contact group, we don't want to necessairly show
-        // all members of given group
-        .filter(|suggestion| {
-            suggestion.name.to_lowercase().contains(&query)
-                || suggestion
-                    .email()
-                    .is_some_and(|email| email.to_lowercase().contains(&query))
-        })
-        .collect();
-
-        Ok(suggestions)
+            .collect()
     }
 
     pub async fn action_delete(

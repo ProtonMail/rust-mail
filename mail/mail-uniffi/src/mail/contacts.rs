@@ -40,11 +40,10 @@ pub async fn contact_list(
     .map_err(ActionError::from)
 }
 
-/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query
+/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query
 ///
 #[proton_uniffi_macros::export_result]
 pub async fn contact_suggestions(
-    query: String,
     device_contacts: Vec<DeviceContact>,
     session: Arc<MailUserSession>,
 ) -> Result<Vec<ContactSuggestion>, ActionError> {
@@ -52,7 +51,6 @@ pub async fn contact_suggestions(
         let tether = session.user_stash().connection();
         Result::<_, RealProtonMailError>::Ok(
             RealContact::contact_suggestions(
-                &query,
                 device_contacts
                     .into_iter()
                     .map_into::<RealDeviceContact>()
@@ -67,6 +65,19 @@ pub async fn contact_suggestions(
     })
     .await
     .map_err(ActionError::from)
+}
+
+/// Filter contact suggestions by the query.
+///
+#[uniffi::export]
+pub fn filter_suggestions(
+    query: &str,
+    suggestions: Vec<ContactSuggestion>,
+) -> Vec<ContactSuggestion> {
+    RealContact::filter_suggestions(query, suggestions.into_iter().map_into().collect())
+        .into_iter()
+        .map_into::<ContactSuggestion>()
+        .collect()
 }
 
 #[uniffi::export]

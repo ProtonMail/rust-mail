@@ -127,6 +127,17 @@ impl From<RealContactEmailItem> for ContactEmailItem {
     }
 }
 
+impl From<ContactEmailItem> for RealContactEmailItem {
+    fn from(value: ContactEmailItem) -> Self {
+        Self {
+            local_id: value.id.into(),
+            email: value.email,
+            is_proton: value.is_proton,
+            last_used_time: value.last_used_time,
+        }
+    }
+}
+
 /// Device contact feeded by the mobile/web application.
 /// Used as an input for generating list of contact suggestions ([`ContactSuggestion`])
 ///
@@ -181,6 +192,17 @@ impl From<RealContactSuggestion> for ContactSuggestion {
     }
 }
 
+impl From<ContactSuggestion> for RealContactSuggestion {
+    fn from(value: ContactSuggestion) -> Self {
+        Self {
+            key: value.key,
+            name: value.name,
+            avatar_information: value.avatar_information.into(),
+            kind: value.kind.into(),
+        }
+    }
+}
+
 /// Kind of email suggestion
 /// Note, variants of this enum are flat - that is, if one contact has assigned two emails,
 /// it would be represented by two instances of [`ContactSuggestion`].
@@ -211,6 +233,22 @@ impl From<RealContactSuggestionKind> for ContactSuggestionKind {
     }
 }
 
+impl From<ContactSuggestionKind> for RealContactSuggestionKind {
+    fn from(value: ContactSuggestionKind) -> Self {
+        match value {
+            ContactSuggestionKind::ContactItem(suggestion) => {
+                RealContactSuggestionKind::ContactItem(suggestion.into())
+            }
+            ContactSuggestionKind::DeviceContact(suggestion) => {
+                RealContactSuggestionKind::DeviceContact(suggestion.into())
+            }
+            ContactSuggestionKind::ContactGroup(suggestion) => {
+                RealContactSuggestionKind::ContactGroup(suggestion.into_iter().map_into().collect())
+            }
+        }
+    }
+}
+
 /// A device, native contact, stored only locally on the current device.
 ///
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
@@ -221,6 +259,12 @@ pub struct DeviceContactSuggestion {
 
 impl From<RealDeviceContactSuggestion> for DeviceContactSuggestion {
     fn from(value: RealDeviceContactSuggestion) -> Self {
+        Self { email: value.email }
+    }
+}
+
+impl From<DeviceContactSuggestion> for RealDeviceContactSuggestion {
+    fn from(value: DeviceContactSuggestion) -> Self {
         Self { email: value.email }
     }
 }

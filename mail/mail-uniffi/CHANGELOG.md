@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1999] `Message::is_draft` property.
+  - [ET-1971] `filter_suggestions` is filtering suggestions based on the query
 
 ### Fixed
 
@@ -18,7 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - [ET-1971] `contact_suggestions` is loading contacts, filtering sorting them
+  - [ET-1971] `contact_suggestions` is loading contacts, sorting and deduplicating them
+    - It no longer takes `query` parameter, in order to fetch the data only once and not with every keystroke.
+    - See `filter_suggestions` function for that feature
 
 ## [0.39.0] - 2025-01-29
 
