@@ -1,4 +1,4 @@
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 
 use flume::Receiver;
 use proton_core_common::{
@@ -74,10 +74,13 @@ impl Prefetch {
         tokio::spawn(async move {
             let ctx = Arc::downgrade(&ctx);
             loop {
+                let Some(ctx) = ctx.upgrade() else {
+                    break;
+                };
                 if reciever.recv_async().await.is_err() {
                     break;
                 }
-                let _ = this.prefetch(&ctx).await;
+                let _ = this.prefetch(ctx).await;
                 drop(reciever.drain());
             }
         });
@@ -85,8 +88,7 @@ impl Prefetch {
 
     /// Prefetch all defined locations one by one.
     #[instrument(skip(self, ctx))]
-    async fn prefetch(&self, ctx: &Weak<MailUserContext>) -> Result<(), MailContextError> {
-        let ctx = ctx.upgrade().unwrap();
+    async fn prefetch(&self, ctx: Arc<MailUserContext>) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
 
         for location in &self.prefetch_locations {
