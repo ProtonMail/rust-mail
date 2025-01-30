@@ -297,7 +297,7 @@ pub const BEGIN_QUOTE: &str = "<div class=\"protonmail_quote\">";
 pub const BEGIN_BLOCKQUOTE: &str = "<blockquote class=\"protonmail_quote\">";
 pub const CLOSE_QUOTE: &str = "</div>";
 pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
-pub const HTML_LINE_BREAK: &str = "<br>";
+pub const HTML_LINE_BREAK: &str = "<br/>";
 
 const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
 
