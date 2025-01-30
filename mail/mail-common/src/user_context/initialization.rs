@@ -79,6 +79,7 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        let t0 = Instant::now();
         let ctx_clone = ctx.clone();
         let labels_and_contacts = tokio::spawn(async move {
             // Since contact syncing is the slowest part let's leave it downloading in parallel while we
@@ -147,7 +148,7 @@ impl MailUserContext {
             Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
         )?;
 
-        debug!("Syncing Complete");
+        debug!("Syncing Complete in {:?}", t0.elapsed());
         cb.on_stage(MailUserContextLoadingStage::Finished);
         Ok(())
     }
