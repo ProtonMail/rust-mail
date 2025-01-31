@@ -79,6 +79,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum EventLoopError {
+    #[error("We were asked to refresh, but this is not implemented")]
+    Refresh,
     #[error("Failed to read from store: {0}")]
     StoreRead(AnyhowError),
     #[error("Failed to write store: {0}")]
@@ -106,4 +108,7 @@ pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
 
     /// Check if the event has more data.
     fn has_more(&self) -> bool;
+
+    /// Whether this was a refresh event.
+    fn is_refresh(&self) -> bool;
 }

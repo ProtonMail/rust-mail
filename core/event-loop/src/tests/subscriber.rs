@@ -32,6 +32,10 @@ impl Event for TestEvent {
     fn has_more(&self) -> bool {
         self.has_more
     }
+
+    fn is_refresh(&self) -> bool {
+        false
+    }
 }
 
 impl GetEventResponse for TestEvent {}

@@ -323,6 +323,10 @@ impl Event for TestCoreEvent {
     fn has_more(&self) -> bool {
         false
     }
+
+    fn is_refresh(&self) -> bool {
+        false
+    }
 }
 
 impl From<TestApiCoreEvent> for TestCoreEvent {
