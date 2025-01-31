@@ -1,7 +1,8 @@
 use super::MailUserSession;
+use crate::core::datatypes::ContactSuggestions;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::{
-    core::datatypes::{ContactSuggestion, DeviceContact, GroupedContacts, Id},
+    core::datatypes::{DeviceContact, GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
 use crate::{watch_channel_inner, UniffiRecord};
@@ -46,10 +47,10 @@ pub async fn contact_list(
 pub async fn contact_suggestions(
     device_contacts: Vec<DeviceContact>,
     session: Arc<MailUserSession>,
-) -> Result<Vec<ContactSuggestion>, ActionError> {
+) -> Result<Arc<ContactSuggestions>, ActionError> {
     uniffi_async(async move {
         let tether = session.user_stash().connection();
-        Result::<_, RealProtonMailError>::Ok(
+        Result::<_, RealProtonMailError>::Ok(Arc::new(
             RealContact::contact_suggestions(
                 device_contacts
                     .into_iter()
@@ -58,26 +59,11 @@ pub async fn contact_suggestions(
                 &tether,
             )
             .await?
-            .into_iter()
-            .map_into::<ContactSuggestion>()
-            .collect(),
-        )
+            .into(),
+        ))
     })
     .await
     .map_err(ActionError::from)
-}
-
-/// Filter contact suggestions by the query.
-///
-#[uniffi::export]
-pub fn filter_suggestions(
-    query: &str,
-    suggestions: Vec<ContactSuggestion>,
-) -> Vec<ContactSuggestion> {
-    RealContact::filter_suggestions(query, suggestions.into_iter().map_into().collect())
-        .into_iter()
-        .map_into::<ContactSuggestion>()
-        .collect()
 }
 
 #[uniffi::export]

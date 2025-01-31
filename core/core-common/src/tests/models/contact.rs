@@ -458,7 +458,7 @@ mod contact_suggestions {
         ceid, cid, contact, contact_email,
         datatypes::{
             AvatarInformation, ContactEmailItem, ContactSuggestion, ContactSuggestionKind,
-            DeviceContact, DeviceContactSuggestion, LabelType,
+            ContactSuggestions, DeviceContact, DeviceContactSuggestion, LabelType,
         },
         device_contact, label, label_id, labels, lid,
         models::{Contact, Label},
@@ -1257,11 +1257,13 @@ mod contact_suggestions {
         }
      ]) ; "TEST 8 - contacts are deduplicated")]
     fn test_contact_suggestions(test_case: TestCase) -> Vec<ContactSuggestion> {
-        ContactSuggestion::from_contacts_and_device_contacts(
+        ContactSuggestions::from_contacts_and_device_contacts(
             test_case.contacts,
             test_case.contact_groups,
             test_case.device_contacts,
         )
+        .all()
+        .to_vec()
     }
 
     fn pretty_assert_emails(expected: Vec<&'static str>) -> impl Fn(Vec<ContactSuggestion>) {
@@ -1368,6 +1370,6 @@ mod contact_suggestions {
             .await
             .unwrap();
 
-        Contact::filter_suggestions(query, suggestions)
+        suggestions.filtered(query)
     }
 }

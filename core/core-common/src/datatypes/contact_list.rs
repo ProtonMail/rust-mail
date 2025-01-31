@@ -227,40 +227,13 @@ pub struct DeviceContact {
     pub emails: Vec<String>,
 }
 
-/// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
-/// Contrary to the [`ContactItemType`] it also might be a device contact
-///
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ContactSuggestion {
-    /// The field represents unique key identifier used by the user to distinguish elements in the array
-    pub key: String,
-
-    /// The field represents the name of the contact
-    pub name: String,
-
-    /// The field represents the avatar information of the contact
-    pub avatar_information: AvatarInformation,
-
-    /// The kind of contact suggestion. Whether it is a native contact, proton contact or a group.
-    pub kind: ContactSuggestionKind,
+/// Collection of sorted contact suggestions
+pub struct ContactSuggestions {
+    /// Sorted and deduplicated suggestions
+    suggestions: Vec<ContactSuggestion>,
 }
 
-impl ContactSuggestion {
-    /// Returns an email linked to the suggestion. If it suggests contact group, it returns `None`
-    ///
-    #[must_use]
-    pub fn email(&self) -> Option<&str> {
-        match &self.kind {
-            ContactSuggestionKind::ContactItem(contact_email_item) => {
-                Some(contact_email_item.email.as_str())
-            }
-            ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
-                Some(device_contact_suggestion.email.as_str())
-            }
-            ContactSuggestionKind::ContactGroup(_) => None,
-        }
-    }
-
+impl ContactSuggestions {
     /// Build contact suggestion list that is sorted and deduplicated
     ///
     /// # Contact groups
@@ -283,7 +256,7 @@ impl ContactSuggestion {
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
         device_contacts: Vec<DeviceContact>,
-    ) -> Vec<Self> {
+    ) -> Self {
         debug_assert!(contact_groups
             .iter()
             .all(|group| group.label_type == LabelType::ContactGroup));
@@ -332,33 +305,127 @@ impl ContactSuggestion {
             .map(|(contact, email)| {
                 Self::aggregate_emails_to_groups(&mut contact_groups, contact, email)
             })
-            .map(|(contact, email)| Self::new_contact(contact, email))
+            .map(|(contact, email)| ContactSuggestion::new_contact(contact, email))
             .collect();
 
         let rest = contact_groups
             .into_values()
             .filter(|group| !group.emails.is_empty())
-            .map(Self::new_group)
+            .map(ContactSuggestion::new_group)
             .chain(device_contacts.into_iter().flat_map(|mut contact| {
                 let emails = std::mem::take(&mut contact.emails);
-                emails
-                    .into_iter()
-                    .enumerate()
-                    .map(move |(idx, email)| Self::new_device_contact(&contact, idx, email))
+                emails.into_iter().enumerate().map(move |(idx, email)| {
+                    ContactSuggestion::new_device_contact(&contact, idx, email)
+                })
             }))
             .sorted()
             .map(|suggestion| suggestion.suggestion);
 
-        proton_suggestions
-            .into_iter()
-            .chain(rest)
-            .unique_by(|suggestion| {
-                suggestion
-                    .email()
-                    .map(ToOwned::to_owned)
-                    .map_or_else(|| suggestion.key.clone(), |email| email.to_lowercase())
+        Self {
+            suggestions: proton_suggestions
+                .into_iter()
+                .chain(rest)
+                .unique_by(|suggestion| {
+                    suggestion
+                        .email()
+                        .map(ToOwned::to_owned)
+                        .map_or_else(|| suggestion.key.clone(), |email| email.to_lowercase())
+                })
+                .collect(),
+        }
+    }
+
+    /// Return all contact suggestions
+    ///
+    #[must_use]
+    pub fn all(&self) -> &[ContactSuggestion] {
+        &self.suggestions
+    }
+
+    /// Return suggestions filtered by the query.
+    ///
+    #[must_use]
+    pub fn filtered(&self, query: &str) -> Vec<ContactSuggestion> {
+        let query = query.trim();
+        let query = query.to_lowercase();
+
+        // Early exit heurestic
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        self.suggestions
+            .iter()
+            .filter(|suggestion| {
+                suggestion.name.to_lowercase().contains(&query)
+                    || suggestion
+                        .email()
+                        .is_some_and(|email| email.to_lowercase().contains(&query))
             })
+            .cloned()
             .collect()
+    }
+
+    fn sort_proton_contacts_by_key(contact: &Contact, email: &ContactEmail) -> impl Ord {
+        // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
+        // we ensure it is ordered by first proton mails and then by latest mails
+        // `last_used_time` is u64, to ensure that
+        (
+            !email.is_proton,
+            u64::MAX - email.last_used_time,
+            email.email.unicode_words().collect::<String>(),
+            contact.name.clone(),
+        )
+    }
+
+    fn aggregate_emails_to_groups(
+        contact_groups: &mut HashMap<LabelId, ContactGroup>,
+        contact: Contact,
+        mut email: ContactEmail,
+    ) -> (Contact, ContactEmailItem) {
+        let label_ids = std::mem::take(&mut email.label_ids);
+        let email = ContactEmailItem::from(email);
+        for label_id in label_ids.iter() {
+            if let Some(group) = contact_groups.get_mut(label_id) {
+                group.emails.push(email.clone());
+            }
+        }
+        (contact, email)
+    }
+}
+
+/// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
+/// Contrary to the [`ContactItemType`] it also might be a device contact
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContactSuggestion {
+    /// The field represents unique key identifier used by the user to distinguish elements in the array
+    pub key: String,
+
+    /// The field represents the name of the contact
+    pub name: String,
+
+    /// The field represents the avatar information of the contact
+    pub avatar_information: AvatarInformation,
+
+    /// The kind of contact suggestion. Whether it is a native contact, proton contact or a group.
+    pub kind: ContactSuggestionKind,
+}
+
+impl ContactSuggestion {
+    /// Returns an email linked to the suggestion. If it suggests contact group, it returns `None`
+    ///
+    #[must_use]
+    pub fn email(&self) -> Option<&str> {
+        match &self.kind {
+            ContactSuggestionKind::ContactItem(contact_email_item) => {
+                Some(contact_email_item.email.as_str())
+            }
+            ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
+                Some(device_contact_suggestion.email.as_str())
+            }
+            ContactSuggestionKind::ContactGroup(_) => None,
+        }
     }
 
     fn new_group(group: ContactGroup) -> FollowingSuggestion {
@@ -396,33 +463,6 @@ impl ContactSuggestion {
                 kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion { email }),
             },
         }
-    }
-
-    fn sort_proton_contacts_by_key(contact: &Contact, email: &ContactEmail) -> impl Ord {
-        // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
-        // we ensure it is ordered by first proton mails and then by latest mails
-        // `last_used_time` is u64, to ensure that
-        (
-            !email.is_proton,
-            u64::MAX - email.last_used_time,
-            email.email.unicode_words().collect::<String>(),
-            contact.name.clone(),
-        )
-    }
-
-    fn aggregate_emails_to_groups(
-        contact_groups: &mut HashMap<LabelId, ContactGroup>,
-        contact: Contact,
-        mut email: ContactEmail,
-    ) -> (Contact, ContactEmailItem) {
-        let label_ids = std::mem::take(&mut email.label_ids);
-        let email = ContactEmailItem::from(email);
-        for label_id in label_ids.iter() {
-            if let Some(group) = contact_groups.get_mut(label_id) {
-                group.emails.push(email.clone());
-            }
-        }
-        (contact, email)
     }
 }
 

@@ -5,8 +5,8 @@ use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,
     ContactItem as RealContactItem, ContactItemType as RealContactItemType,
     ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
-    DeviceContact as RealDeviceContact, DeviceContactSuggestion as RealDeviceContactSuggestion,
-    GroupedContacts as RealGroupedContacts,
+    ContactSuggestions as RealContactSuggestions, DeviceContact as RealDeviceContact,
+    DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -163,6 +163,39 @@ impl From<DeviceContact> for RealDeviceContact {
     }
 }
 
+/// Collection of sorted contact suggestions
+#[derive(uniffi::Object)]
+pub struct ContactSuggestions {
+    suggestions: RealContactSuggestions,
+}
+
+impl From<RealContactSuggestions> for ContactSuggestions {
+    fn from(suggestions: RealContactSuggestions) -> Self {
+        Self { suggestions }
+    }
+}
+
+#[uniffi::export]
+impl ContactSuggestions {
+    /// Returns all contact suggestions
+    ///
+    #[must_use]
+    pub fn all(&self) -> Vec<ContactSuggestion> {
+        self.suggestions.all().iter().cloned().map_into().collect()
+    }
+
+    /// Returns suggestions filtered by the query
+    ///
+    #[must_use]
+    pub fn filtered(&self, query: &str) -> Vec<ContactSuggestion> {
+        self.suggestions
+            .filtered(query)
+            .into_iter()
+            .map_into()
+            .collect()
+    }
+}
+
 /// Used in the composer to suggest email addresses based on the user input (To:, CC: etc fields)
 /// Contrary to the [`ContactItemType`] it also might be a device contact
 ///
@@ -183,17 +216,6 @@ pub struct ContactSuggestion {
 
 impl From<RealContactSuggestion> for ContactSuggestion {
     fn from(value: RealContactSuggestion) -> Self {
-        Self {
-            key: value.key,
-            name: value.name,
-            avatar_information: value.avatar_information.into(),
-            kind: value.kind.into(),
-        }
-    }
-}
-
-impl From<ContactSuggestion> for RealContactSuggestion {
-    fn from(value: ContactSuggestion) -> Self {
         Self {
             key: value.key,
             name: value.name,
@@ -233,22 +255,6 @@ impl From<RealContactSuggestionKind> for ContactSuggestionKind {
     }
 }
 
-impl From<ContactSuggestionKind> for RealContactSuggestionKind {
-    fn from(value: ContactSuggestionKind) -> Self {
-        match value {
-            ContactSuggestionKind::ContactItem(suggestion) => {
-                RealContactSuggestionKind::ContactItem(suggestion.into())
-            }
-            ContactSuggestionKind::DeviceContact(suggestion) => {
-                RealContactSuggestionKind::DeviceContact(suggestion.into())
-            }
-            ContactSuggestionKind::ContactGroup(suggestion) => {
-                RealContactSuggestionKind::ContactGroup(suggestion.into_iter().map_into().collect())
-            }
-        }
-    }
-}
-
 /// A device, native contact, stored only locally on the current device.
 ///
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
@@ -259,12 +265,6 @@ pub struct DeviceContactSuggestion {
 
 impl From<RealDeviceContactSuggestion> for DeviceContactSuggestion {
     fn from(value: RealDeviceContactSuggestion) -> Self {
-        Self { email: value.email }
-    }
-}
-
-impl From<DeviceContactSuggestion> for RealDeviceContactSuggestion {
-    fn from(value: DeviceContactSuggestion) -> Self {
         Self { email: value.email }
     }
 }

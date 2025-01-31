@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestion, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
+    ContactSuggestions, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
@@ -458,7 +458,7 @@ impl Contact {
     pub async fn contact_suggestions(
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
-    ) -> Result<Vec<ContactSuggestion>, StashError> {
+    ) -> Result<ContactSuggestions, StashError> {
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
@@ -468,41 +468,11 @@ impl Contact {
             contact.emails(tether).await?;
         }
 
-        Ok(ContactSuggestion::from_contacts_and_device_contacts(
+        Ok(ContactSuggestions::from_contacts_and_device_contacts(
             contacts,
             contact_groups,
             device_contacts,
         ))
-    }
-
-    /// Filter contact suggestions by the query.
-    ///
-    /// # Parameters
-    ///
-    /// * `query` - a plaintext string provided by the user that we need to complete
-    ///
-    #[must_use]
-    pub fn filter_suggestions(
-        query: &str,
-        suggestions: Vec<ContactSuggestion>,
-    ) -> Vec<ContactSuggestion> {
-        let query = query.trim();
-        let query = query.to_lowercase();
-
-        // Early exit heurestic
-        if query.is_empty() {
-            return Vec::new();
-        }
-
-        suggestions
-            .into_iter()
-            .filter(|suggestion| {
-                suggestion.name.to_lowercase().contains(&query)
-                    || suggestion
-                        .email()
-                        .is_some_and(|email| email.to_lowercase().contains(&query))
-            })
-            .collect()
     }
 
     pub async fn action_delete(
