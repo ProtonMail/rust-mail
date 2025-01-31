@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use topological_sort::TopologicalSort;
-use tracing::{debug, debug_span, error, Instrument, Level};
+use tracing::{debug, error, Level};
 
 /// Execution context errors
 #[derive(Debug, thiserror::Error)]
@@ -572,52 +572,27 @@ impl Queue {
             .resolve_execution_context::<T>()
             .map_err(|e| ActionError::Queue(e.into()))?;
 
-        let (sender, receiver) = oneshot::channel();
-
         let shared = Arc::clone(&self.shared);
 
-        let future = async move {
-            let r = async {
-                let (local_output, id) = execute_action_local(
-                    &shared,
-                    context.as_ref(),
-                    &handler,
-                    &mut action,
-                    metadata,
-                    Some(existing_id),
-                )
-                .await?;
-                if existing_id == id {
-                    debug!("Action has been updated");
-                } else {
-                    debug!("Action queued with id={id}");
-                }
-
-                Ok(QueuedActionOutput {
-                    local: local_output,
-                    id,
-                })
-            }
-            .instrument(debug_span!(
-                "Queue::replace_or_queue_action",
-                id = ?existing_id
-            ))
-            .await;
-
-            let _ = sender.send(r);
+        let (local_output, id) = execute_action_local(
+            &shared,
+            context.as_ref(),
+            &handler,
+            &mut action,
+            metadata,
+            Some(existing_id),
+        )
+        .await?;
+        if existing_id == id {
+            debug!("Action has been updated");
+        } else {
+            debug!("Action queued with id={id}");
         }
-        .boxed();
 
-        // This command needs to be deferred to ensure that the executor is not executing this
-        // action while we attempt to replace it.
-        self.sender
-            .send_async(Command::ReplaceOrQueue(future))
-            .await
-            .map_err(|_| Error::WorkerChannel)?;
-
-        receiver
-            .await
-            .map_err(|_| ActionError::Queue(Error::WorkerChannel))?
+        Ok(QueuedActionOutput {
+            local: local_output,
+            id,
+        })
     }
 
     /// Execute an `action` immediately.
@@ -934,8 +909,6 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 enum Command {
     /// Run immediate action
     Apply(BoxFuture<'static, ()>),
-    /// Replace or queue an action
-    ReplaceOrQueue(BoxFuture<'static, ()>),
     /// Execute one queued action
     ExecuteOne(oneshot::Sender<QueuedResult<Option<Id>>>),
     /// Execute all queued actions
@@ -963,9 +936,6 @@ impl Debug for Command {
             }
             Command::Delete(id, _) => {
                 write!(f, "Command::Delete({id})")
-            }
-            Command::ReplaceOrQueue(_) => {
-                write!(f, "Command::ReplaceOrQueue")
             }
         }
     }
@@ -1023,8 +993,8 @@ impl BackgroundWorker {
                 }
                 Command::ExecuteOne(tx) => {
                     self.wait_on_tasks().await;
-                    let tether = self.shared.stash.connection();
-                    let r = self.execute_impl(&tether).await;
+                    let mut tether = self.shared.stash.connection();
+                    let r = self.execute_impl(&mut tether).await;
 
                     if tx
                         .send(r.map(|v| {
@@ -1056,10 +1026,6 @@ impl BackgroundWorker {
                         error!("Failed to send delete result back to callee");
                     }
                 }
-                Command::ReplaceOrQueue(task) => {
-                    self.wait_on_tasks().await;
-                    task.await;
-                }
             }
         }
         debug!("Terminating action queue background worker");
@@ -1070,7 +1036,7 @@ impl BackgroundWorker {
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
     #[tracing::instrument(level = Level::DEBUG, skip(self, tether))]
-    async fn execute_impl(&self, tether: &Tether) -> QueuedResult<Option<QueuedActionState>> {
+    async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some(action) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
             e
@@ -1087,6 +1053,20 @@ impl BackgroundWorker {
             action.short_dbg_str()
         );
         let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
+
+        // mark the action as executing so it can't be replaced.
+        // NOTE: This only works because sqlite transactions are being serialized into
+        // a single writer. Because we are forcing immediate locking mode this will
+        // work correctly.
+        // NOTE2: If this action is marked as executing multiple times there is currently
+        // no harm as the only side effect is that some action which uses
+        // replace_or_queue will sometimes duplicate. This is a tradeoff to prevent
+        // a long running action from blocking the queuing o new actions.
+        let tx = tether.transaction().await?;
+        StoredAction::mark_as_executing(action_id, &tx)
+            .await
+            .inspect_err(|e| error!("Failed to mark as executing: {e}"))?;
+        tx.commit().await?;
 
         let exec_output = decoded
             .execute(&self.shared, metadata)
@@ -1112,9 +1092,9 @@ impl BackgroundWorker {
 
     /// See [`Queue::execute_all()`] for more details.
     async fn execute_all(&self) -> QueuedResult<usize> {
-        let tether = self.shared.stash.connection();
+        let mut tether = self.shared.stash.connection();
         let mut counter = 0;
-        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&tether).await? {
+        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&mut tether).await? {
             counter += 1;
         }
         Ok(counter)
