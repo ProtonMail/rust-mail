@@ -95,13 +95,16 @@ pub struct BodyBanners {
     pub enable_show_remote_images: bool,
     /// Whether to show the "enable embedded images" banner
     pub enable_show_embedded_images: bool,
+    /// Whether to show the "show blockquote" banner
+    pub enable_show_blockquote: bool,
 }
 
 impl BodyBanners {
-    fn new(opts: TransformOptsResolved<'_>) -> Self {
+    fn new(opts: TransformOptsResolved<'_>, stripped_blockquote: bool) -> Self {
         Self {
-            enable_show_remote_images: !opts.hide_remote_images,
-            enable_show_embedded_images: !opts.hide_embedded_images,
+            enable_show_remote_images: opts.hide_remote_images,
+            enable_show_embedded_images: opts.hide_embedded_images,
+            enable_show_blockquote: stripped_blockquote,
         }
     }
 }
@@ -504,10 +507,11 @@ impl<'r> StorableMessageBodyRef<'r> {
 /// The result of transforming the message body.
 /// It will have more things in the future
 #[non_exhaustive]
-#[derive(Clone)]
+#[derive(Clone, derive_more::derive::Debug)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BodyOutput {
     /// The transformed html of the message.
+    #[debug("{}", body.len())]
     pub body: String,
 
     /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
@@ -533,22 +537,6 @@ pub struct BodyOutput {
 
     /// This instructs the client on what banners they should show.
     pub body_banners: BodyBanners,
-}
-
-impl std::fmt::Debug for BodyOutput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("BodyOutput")
-            .field("body", &(format!("{} bytes", self.body.len())))
-            .field("had_blockquote", &self.had_blockquote)
-            .field("tags_stripped", &self.tags_stripped)
-            .field("utm_stripped", &self.utm_stripped)
-            .field("remote_images_disabled", &self.remote_images_disabled)
-            .field("embedded_images_disabled", &self.embedded_images_disabled)
-            .field("images_proxied", &self.images_proxied)
-            .field("transform_opts", &self.transform_opts)
-            .field("body_banners", &self.body_banners)
-            .finish()
-    }
 }
 
 #[tracing::instrument(skip(html))]
@@ -617,7 +605,7 @@ pub fn transform_html(
         embedded_images_disabled,
         images_proxied,
         transform_opts: opts.into(),
-        body_banners: BodyBanners::new(opts),
+        body_banners: BodyBanners::new(opts, had_blockquote),
     };
     debug!("Transform done. Output: {output:#?}");
     output
