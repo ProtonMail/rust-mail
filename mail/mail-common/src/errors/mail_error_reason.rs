@@ -188,7 +188,8 @@ pub enum DraftDiscardErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum EventErrorReason {
-    Placeholder,
+    Refresh,
+    Subscriber,
 }
 
 /// Specific Reason for error occurrence within the application.

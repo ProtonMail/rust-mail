@@ -33,6 +33,10 @@ impl Event for LoopEvent {
     fn has_more(&self) -> bool {
         self.has_more
     }
+
+    fn is_refresh(&self) -> bool {
+        false
+    }
 }
 
 impl GetEventResponse for LoopEvent {}

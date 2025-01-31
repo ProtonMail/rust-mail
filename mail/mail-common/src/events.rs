@@ -144,6 +144,9 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    /// Indicates whether we should refresh our data.
+    pub refresh: u8,
 }
 
 impl CoreEvent for MailEvent {
@@ -206,6 +209,10 @@ impl Event for MailEvent {
     fn has_more(&self) -> bool {
         self.has_more
     }
+
+    fn is_refresh(&self) -> bool {
+        self.refresh != 0
+    }
 }
 
 impl From<ApiMailEvent> for MailEvent {
@@ -246,6 +253,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(ContactEmailEvent::from)
                     .collect()
             }),
+            refresh: value.refresh,
         }
     }
 }

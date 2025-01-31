@@ -609,6 +609,9 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    /// Indicates whether to refresh.
+    pub refresh: u8,
 }
 
 impl GetEventResponse for MailEvent {}

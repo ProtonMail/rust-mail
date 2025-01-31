@@ -324,6 +324,9 @@ impl From<EventLoopError> for ProtonMailError {
             }
             EventLoopError::Provider(api_service_error) => Self::from(api_service_error),
             EventLoopError::Subscriber(_string, subscriber_error) => Self::from(subscriber_error),
+            EventLoopError::Refresh => {
+                Self::Reason(MailErrorReason::EventReason(EventErrorReason::Refresh))
+            }
         }
     }
 }
@@ -332,7 +335,9 @@ impl From<SubscriberError> for ProtonMailError {
     fn from(error: SubscriberError) -> Self {
         match error {
             SubscriberError::Api(api_service_error) => Self::from(api_service_error),
-            SubscriberError::Other(anyhow) => Self::from(anyhow),
+            SubscriberError::Other(_) => {
+                Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
+            }
             SubscriberError::Send | SubscriberError::Receive => {
                 Self::Unexpected(Unexpected::Internal)
             }
