@@ -322,7 +322,7 @@ async fn get_conversation(
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
                 &conn,
-                session.api(),
+                &session,
             )
             .await?
             .map(Into::into),

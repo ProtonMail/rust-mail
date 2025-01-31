@@ -142,8 +142,8 @@ impl Prefetch {
 
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
-            let api = ctx.api();
-            let _ = Conversation::sync_conversation_messages(item.local_id, tether, api).await;
+            let session = ctx.session();
+            let _ = Conversation::sync_conversation_messages(item.local_id, tether, session).await;
             yield_now().await;
             let messages = Message::in_conversation(item.local_id, tether).await?;
             yield_now().await;

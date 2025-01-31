@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [unreleased] - 2025-01-xx
+
+### Fixed
+
+  -[ET-2032] function `conversation` now early returns when app is offline.
+  -[ET-2032] function `get_message_body` now early returns when app is offline.
+
 ## [0.40.1] - 2025-01-31
 
 ### Fixed

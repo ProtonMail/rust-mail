@@ -361,11 +361,11 @@ impl MailUserContext {
             Ok(())
         } else {
             let (sender, receiver) = flume::unbounded();
-            let _ = self.prefetch.set(sender).inspect_err(|e| {
-                error!("Failed to set prefetch sender: {e:?}");
-            });
-            Prefetch::initialize(self.clone(), receiver).await;
 
+            self.prefetch.set(sender).map_err(|e| {
+                MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
+            })?;
+            Prefetch::initialize(self.clone(), receiver).await;
             self.prefetch.get().unwrap().send(()).map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
             })?;

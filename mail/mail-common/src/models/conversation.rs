@@ -2759,14 +2759,11 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the queries failed or if the server request failed.
-    pub async fn sync_conversation_messages<PM>(
+    pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
         tether: &mut Tether,
-        api: &PM,
-    ) -> Result<(), AppError>
-    where
-        PM: ProtonMail,
-    {
+        session: &Session,
+    ) -> Result<(), AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tether).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
@@ -2776,7 +2773,15 @@ impl Conversation {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
-            let conversation_response = api.get_conversation(rid).await.map_err(|e| {
+
+            if session.status().await.is_offline() {
+                debug!("No connection, skipping sync");
+                return Err(AppError::API(ApiServiceError::NetworkError(
+                    "No connection".to_owned(),
+                )));
+            }
+
+            let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
                 error!("failed to download conversation messages: {e}");
                 AppError::from(e)
             })?;
