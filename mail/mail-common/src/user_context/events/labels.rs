@@ -1,4 +1,5 @@
 use crate::events::LabelEvent;
+use crate::models::{ConversationCounters, MessageCounters};
 use proton_core_common::events::Action;
 use stash::params;
 use stash::stash::{Bond, StashError};
@@ -20,6 +21,9 @@ pub async fn handle_label_events(
             Action::Create => {
                 if let Some(mut label) = label_event.label.clone() {
                     label.save(tx).await?;
+                    let label_id = label.local_id.expect("Local ID after a save");
+                    MessageCounters::new(label_id).save(tx).await?;
+                    ConversationCounters::new(label_id).save(tx).await?;
                 } else {
                     warn!("Received label create without label");
                 }
