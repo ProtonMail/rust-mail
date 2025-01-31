@@ -16,7 +16,7 @@ use super::MailUserSession;
 async fn prefetch(session: Arc<MailUserSession>) -> Result<(), ActionError> {
     let ctx = session.ctx();
     uniffi_async(async move {
-        ctx.prefetch()?;
+        ctx.prefetch().await?;
         Result::<_, RealProtonMailError>::Ok(())
     })
     .await

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use flume::Receiver;
 use proton_core_common::{
@@ -15,6 +15,8 @@ use crate::{
     models::{Conversation, MailSettings, Message},
     MailContextError, MailUserContext,
 };
+
+pub type PrefetchNotify = OnceLock<flume::Sender<()>>;
 
 /// Prefetch component for downloading messages and conversations in the background.
 pub struct Prefetch {
@@ -74,12 +76,12 @@ impl Prefetch {
         tokio::spawn(async move {
             let ctx = Arc::downgrade(&ctx);
             loop {
-                let Some(ctx) = ctx.upgrade() else {
-                    break;
-                };
                 if reciever.recv_async().await.is_err() {
                     break;
                 }
+                let Some(ctx) = ctx.upgrade() else {
+                    break;
+                };
                 let _ = this.prefetch(ctx).await;
                 drop(reciever.drain());
             }

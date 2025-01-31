@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-XX
 
+### Fixed
+
+  - [ET-1953] Fix prefetch not working after closing the app
+
 ## [0.40.0] - 2025-01-31
 
 ### Added
 
   - [ET-1999] `Message::is_draft` property.
   - `EventError` now reports refresh error.
+  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
 
 ### Fixed
 
@@ -25,7 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
-  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
 
 ### Fixed
 
