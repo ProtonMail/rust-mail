@@ -5,8 +5,8 @@ use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,
     ContactItem as RealContactItem, ContactItemType as RealContactItemType,
     ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
-    DeviceContact as RealDeviceContact, DeviceContactSuggestion as RealDeviceContactSuggestion,
-    GroupedContacts as RealGroupedContacts,
+    ContactSuggestions as RealContactSuggestions, DeviceContact as RealDeviceContact,
+    DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -127,6 +127,17 @@ impl From<RealContactEmailItem> for ContactEmailItem {
     }
 }
 
+impl From<ContactEmailItem> for RealContactEmailItem {
+    fn from(value: ContactEmailItem) -> Self {
+        Self {
+            local_id: value.id.into(),
+            email: value.email,
+            is_proton: value.is_proton,
+            last_used_time: value.last_used_time,
+        }
+    }
+}
+
 /// Device contact feeded by the mobile/web application.
 /// Used as an input for generating list of contact suggestions ([`ContactSuggestion`])
 ///
@@ -149,6 +160,39 @@ impl From<DeviceContact> for RealDeviceContact {
             name: value.name,
             emails: value.emails,
         }
+    }
+}
+
+/// Collection of sorted contact suggestions
+#[derive(uniffi::Object)]
+pub struct ContactSuggestions {
+    suggestions: RealContactSuggestions,
+}
+
+impl From<RealContactSuggestions> for ContactSuggestions {
+    fn from(suggestions: RealContactSuggestions) -> Self {
+        Self { suggestions }
+    }
+}
+
+#[uniffi::export]
+impl ContactSuggestions {
+    /// Returns all contact suggestions
+    ///
+    #[must_use]
+    pub fn all(&self) -> Vec<ContactSuggestion> {
+        self.suggestions.all().iter().cloned().map_into().collect()
+    }
+
+    /// Returns suggestions filtered by the query
+    ///
+    #[must_use]
+    pub fn filtered(&self, query: &str) -> Vec<ContactSuggestion> {
+        self.suggestions
+            .filtered(query)
+            .into_iter()
+            .map_into()
+            .collect()
     }
 }
 

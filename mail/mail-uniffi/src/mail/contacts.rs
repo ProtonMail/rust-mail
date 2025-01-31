@@ -1,7 +1,8 @@
 use super::MailUserSession;
+use crate::core::datatypes::ContactSuggestions;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::{
-    core::datatypes::{ContactSuggestion, DeviceContact, GroupedContacts, Id},
+    core::datatypes::{DeviceContact, GroupedContacts, Id},
     uniffi_async, WatchHandle,
 };
 use crate::{watch_channel_inner, UniffiRecord};
@@ -40,19 +41,17 @@ pub async fn contact_list(
     .map_err(ActionError::from)
 }
 
-/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query
+/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query
 ///
 #[proton_uniffi_macros::export_result]
 pub async fn contact_suggestions(
-    query: String,
     device_contacts: Vec<DeviceContact>,
     session: Arc<MailUserSession>,
-) -> Result<Vec<ContactSuggestion>, ActionError> {
+) -> Result<Arc<ContactSuggestions>, ActionError> {
     uniffi_async(async move {
         let tether = session.user_stash().connection();
-        Result::<_, RealProtonMailError>::Ok(
+        Result::<_, RealProtonMailError>::Ok(Arc::new(
             RealContact::contact_suggestions(
-                &query,
                 device_contacts
                     .into_iter()
                     .map_into::<RealDeviceContact>()
@@ -60,10 +59,8 @@ pub async fn contact_suggestions(
                 &tether,
             )
             .await?
-            .into_iter()
-            .map_into::<ContactSuggestion>()
-            .collect(),
-        )
+            .into(),
+        ))
     })
     .await
     .map_err(ActionError::from)

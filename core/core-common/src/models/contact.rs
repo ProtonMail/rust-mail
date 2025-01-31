@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestion, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
+    ContactSuggestions, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
@@ -424,6 +424,7 @@ impl Contact {
     /// when querying the database fails.
     ///
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
+        // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
@@ -439,11 +440,10 @@ impl Contact {
         ))
     }
 
-    /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated and filtered by the query.
+    /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query.
     ///
     /// # Parameters
     ///
-    /// * `query` - a plaintext string provided by the user that we need to complete
     /// * `device_contacts` - contacts stored in the device storage, not shared between proton clients.
     /// * `tether` - The database interface
     ///
@@ -451,14 +451,15 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
+    /// # Panics
+    ///
+    /// This function panics if remote ID of the contact is missing.
+    ///
     pub async fn contact_suggestions(
-        query: &str,
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
-    ) -> Result<Vec<ContactSuggestion>, StashError> {
-        // TODO (ET-1971): Extend that implementation by using query to filter contacts, groups and device contacts
-        let (_query,) = (query,);
-
+    ) -> Result<ContactSuggestions, StashError> {
+        // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
@@ -468,7 +469,7 @@ impl Contact {
             contact.emails(tether).await?;
         }
 
-        Ok(ContactSuggestion::from_contacts_and_device_contacts(
+        Ok(ContactSuggestions::from_contacts_and_device_contacts(
             contacts,
             contact_groups,
             device_contacts,
