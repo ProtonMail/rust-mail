@@ -2114,7 +2114,7 @@ async fn messages_mark_unread() {
         .boxed()
     };
 
-    check_counters(conn.stash().clone(), 3, 1).await;
+    check_counters(stash.clone(), 3, 1).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id1), &tx)
         .await
@@ -2137,13 +2137,13 @@ async fn messages_mark_unread() {
     .unwrap();
     assert_eq!(db_conv.num_unread, 1);
 
-    check_counters(conn.stash().clone(), 2, 0).await;
+    check_counters(stash.clone(), 2, 0).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id3), &tx)
         .await
         .expect("failed to mark as read");
     tx.commit().await.unwrap();
-    check_counters(conn.stash().clone(), 1, 0).await;
+    check_counters(stash.clone(), 1, 0).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id4), &tx)
         .await
@@ -2151,7 +2151,7 @@ async fn messages_mark_unread() {
     tx.commit().await.unwrap();
     // All conversation messages on label_1 have been marked as read, we should now see an updated
     // conversation count.
-    check_counters(conn.stash().clone(), 0, 0).await;
+    check_counters(stash.clone(), 0, 0).await;
 
     let db_conv = ContextualConversation::new(
         Conversation::find_by_id(local_conv_id, &conn)

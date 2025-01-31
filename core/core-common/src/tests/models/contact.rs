@@ -405,12 +405,13 @@ mod contact_watcher {
 
     #[tokio::test]
     async fn test_contact_list_watcher() {
-        let mut tether = new_core_test_connection().await.connection();
+        let stash = new_core_test_connection().await;
+        let mut tether = stash.connection();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         let tx = tether.transaction().await.unwrap();
         contact.save(&tx).await.unwrap();
         tx.commit().await.unwrap();
-        let (_, list_receiver) = Contact::watch_contact_list(tether.stash()).await.unwrap();
+        let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
         let list_receiver = list_receiver.receiver;
 
         // Rename contact

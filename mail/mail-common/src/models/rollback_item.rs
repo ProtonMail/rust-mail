@@ -47,12 +47,11 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// As sync_all method. This is only a helper macro to reduce code duplication.
 ///
 macro_rules! sync_any {
-    ($item:tt, $class:tt, $tether:expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
+    ($item:tt, $class:tt, $tether:expr, $stash: expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
         let tether = $tether;
         let items = Self::find_by_kind(RollbackItemType::$item, tether).await?;
         let batch = $batch.into().unwrap_or(items.len() + 1);
         let chunked_remote_ids = items.into_iter().map(|item| item.remote_id).chunks(batch);
-        let stash = tether.stash();
 
         stream::iter(&chunked_remote_ids)
             .then(|remote_ids| async {
@@ -79,52 +78,56 @@ macro_rules! sync_any {
 
                 Ok(items.into_inner())
             })
-            .try_for_each(|mut items| async move {
-                let mut tether = stash.connection();
-                let tx = tether.transaction().await?;
+            .try_for_each(move |mut items| {
+                let mut tether = $stash.connection();
+                {
+                    async move {
+                        let tx = tether.transaction().await?;
 
-                for item in items.iter_mut() {
-                    let result = $class::save(item, &tx).await;
+                        for item in items.iter_mut() {
+                            let result = $class::save(item, &tx).await;
 
-                    if let Err(err) = result {
-                        error!(
-                            "Failed to save {} with remote ID {:?}: {:?}",
-                            stringify!($item),
-                            item.remote_id,
-                            err
-                        );
+                            if let Err(err) = result {
+                                error!(
+                                    "Failed to save {} with remote ID {:?}: {:?}",
+                                    stringify!($item),
+                                    item.remote_id,
+                                    err
+                                );
 
-                        return Err(err.into());
+                                return Err(err.into());
+                            }
+
+                            let result = Self::delete_by_rid_and_kind(
+                                item.remote_id.clone().map(|v| v.into_inner()),
+                                RollbackItemType::$item,
+                                &tx,
+                            )
+                            .await;
+
+                            if let Err(err) = result {
+                                error!(
+                                    "Failed to delete {} with remote ID {:?}: {:?}",
+                                    stringify!($item),
+                                    item.remote_id,
+                                    err
+                                );
+
+                                return Err(err.into());
+                            }
+
+                            debug!(
+                                "Synced {} with remote ID {:?}",
+                                stringify!($item),
+                                item.remote_id
+                            );
+                        }
+
+                        tx.commit().await?;
+
+                        Result::<_, AppError>::Ok(())
                     }
-
-                    let result = Self::delete_by_rid_and_kind(
-                        item.remote_id.clone().map(|v| v.into_inner()),
-                        RollbackItemType::$item,
-                        &tx,
-                    )
-                    .await;
-
-                    if let Err(err) = result {
-                        error!(
-                            "Failed to delete {} with remote ID {:?}: {:?}",
-                            stringify!($item),
-                            item.remote_id,
-                            err
-                        );
-
-                        return Err(err.into());
-                    }
-
-                    debug!(
-                        "Synced {} with remote ID {:?}",
-                        stringify!($item),
-                        item.remote_id
-                    );
                 }
-
-                tx.commit().await?;
-
-                Result::<_, AppError>::Ok(())
             })
             .await?;
 
@@ -212,9 +215,9 @@ impl RollbackItem {
         API: ProtonMail + ProtonCore,
     {
         let tether = stash.connection();
-        Self::sync_labels(api, &tether, batch).await?;
-        Self::sync_messages(api, &tether, batch).await?;
-        Self::sync_conversations(api, &tether, batch).await?;
+        Self::sync_labels(api, &tether, stash.clone(), batch).await?;
+        Self::sync_messages(api, &tether, stash.clone(), batch).await?;
+        Self::sync_conversations(api, &tether, stash.clone(), batch).await?;
 
         Ok(())
     }
@@ -225,14 +228,19 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_labels<I, API>(api: &API, tether: &Tether, batch: I) -> Result<(), AppError>
+    pub async fn sync_labels<I, API>(
+        api: &API,
+        tether: &Tether,
+        stash: Stash,
+        batch: I,
+    ) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         API: ProtonCore,
     {
         use proton_api_core::services::proton::responses::GetLabelsResponse;
 
-        sync_any!(Label, Label, tether, batch => |remote_id| async {
+        sync_any!(Label, Label, tether, stash, batch => |remote_id| async {
             api.get_labels_by_ids(vec![LabelId::from(remote_id)]).await
         } => |api_labels: GetLabelsResponse| async {
             Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
@@ -245,12 +253,17 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_messages<I, PM>(api: &PM, tether: &Tether, batch: I) -> Result<(), AppError>
+    pub async fn sync_messages<I, PM>(
+        api: &PM,
+        tether: &Tether,
+        stash: Stash,
+        batch: I,
+    ) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Message, MessageAndBodyMetadata, tether, batch => |remote_id| async {
+        sync_any!(Message, MessageAndBodyMetadata, tether, stash, batch => |remote_id| async {
             api.get_message(MessageId::from(remote_id)).await
         } => |api_message: GetMessageResponse| async {
             let remote_id = api_message.message.metadata.id.clone();
@@ -268,13 +281,14 @@ impl RollbackItem {
     pub async fn sync_conversations<I, PM>(
         api: &PM,
         tether: &Tether,
+        stash: Stash,
         batch: I,
     ) -> Result<(), AppError>
     where
         I: Into<Option<usize>>,
         PM: ProtonMail,
     {
-        sync_any!(Conversation, Conversation, tether, batch => |remote_id| async {
+        sync_any!(Conversation, Conversation, tether, stash, batch => |remote_id| async {
             api.get_conversations(GetConversationsOptions {
                 ids: Some(vec![ConversationId::from(remote_id)]),
                 ..Default::default()
