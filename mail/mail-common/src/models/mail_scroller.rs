@@ -189,10 +189,10 @@ impl ScrollData for MessageScrollData {
         match filter {
             ReadFilter::All => {}
             ReadFilter::Unread => {
-                query += " AND messages.unread = 0 ";
+                query += " AND messages.unread = 1 ";
             }
             ReadFilter::Read => {
-                query += " AND messages.unread = 1 ";
+                query += " AND messages.unread = 0 ";
             }
         }
 
