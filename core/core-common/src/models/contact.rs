@@ -424,6 +424,7 @@ impl Contact {
     /// when querying the database fails.
     ///
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
+        // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)
@@ -454,11 +455,11 @@ impl Contact {
     ///
     /// This function panics if remote ID of the contact is missing.
     ///
-    #[allow(trivial_casts)] // Box<dyn ToSql> cannot be infered
     pub async fn contact_suggestions(
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
     ) -> Result<ContactSuggestions, StashError> {
+        // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
             Contact::find("WHERE deleted = 0", vec![], tether),
             Label::find_by_kind(LabelType::ContactGroup, tether)

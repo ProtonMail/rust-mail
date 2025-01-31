@@ -276,7 +276,7 @@ impl ContactSuggestions {
         let mut contact_groups: HashMap<LabelId, ContactGroup> = contact_groups
             .into_iter()
             .filter(|group| group.label_type == LabelType::ContactGroup)
-            // TODO(ET-1971): We should not reference groups by remote ids, instead we should use local ids
+            // TODO(ET-2030): We should not reference groups by remote ids, instead we should use local ids
             // This is to ensure the offline mode works with contacts and contact groups not synced with API
             .filter(|group| label_ids.contains(group.remote_id.as_ref().unwrap()))
             .map(|group| {
