@@ -10,8 +10,8 @@ use crate::AppError;
 use futures::try_join;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::session::Session;
 use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_ids::LocalConversationId;
@@ -185,15 +185,12 @@ impl ContextualConversation {
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
-    pub async fn conversation_and_messages<PM>(
+    pub async fn conversation_and_messages(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         stash: &Stash,
-        api: &PM,
-    ) -> Result<Option<ContextualConversationAndMessages>, AppError>
-    where
-        PM: ProtonMail,
-    {
+        api: &Session,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let mut conn = stash.connection();
         let label = Label::find_by_id(local_label_id, &conn)
             .await?

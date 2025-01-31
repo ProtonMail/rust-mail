@@ -205,7 +205,7 @@ impl MessagesState {
             conversation_id,
             label_id,
             ctx.user_stash(),
-            ctx.api(),
+            ctx.session(),
         )
         .await?
         else {

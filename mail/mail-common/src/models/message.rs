@@ -1785,6 +1785,13 @@ impl Message {
             return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
         };
 
+        if ctx.session().status().await.is_offline() {
+            debug!("No connection, skipping sync");
+            return Err(MailContextError::Api(ApiServiceError::NetworkError(
+                "No connection".to_owned(),
+            )));
+        }
+
         let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
 
         let decrypted = Self::decrypt_message_body(
