@@ -264,6 +264,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         self.total
     }
 
+    /// Return the number of already seen elements.
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         self.source.visible_items_total(&self.ctx).await
     }
@@ -575,7 +576,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 // To check if there is more data to download before asking for more.
                 scroller.fetch_more(&tether).await?
             } else {
-                self.initialized = true;
                 scroller.visible_elements(&tether).await?
             };
 
@@ -590,6 +590,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     .await?
             };
 
+            self.initialized = true;
             Ok((items, total, task))
         } else if total > 0 {
             // Fallback for failing to initialize the scroller

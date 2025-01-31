@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   -[ET-2032] function `conversation` now early returns when app is offline.
   -[ET-2032] function `get_message_body` now early returns when app is offline.
   -[ET-2007] unread filter now works correctly for message scroller
+  -[ET-2022] paginator does not initialize until the first page is fetched and ready to be returned
 
 ## [0.40.1] - 2025-01-31
 
