@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+## [0.40.2] - 2025-01-31
+
 ### Fixed
 
   -[ET-2032] function `conversation` now early returns when app is offline.
