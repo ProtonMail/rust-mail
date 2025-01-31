@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
-use crate::prefetch::Prefetch;
 use crate::{MailContextError, MailUserContext};
 use futures::future::try_join;
 use futures::try_join;
@@ -151,12 +150,6 @@ impl MailUserContext {
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
         cb.on_stage(MailUserContextLoadingStage::Finished);
-
-        let (sender, receiver) = flume::unbounded();
-        let _ = ctx.prefetch.set(sender).inspect_err(|e| {
-            error!("Failed to set prefetch sender: {e:?}");
-        });
-        Prefetch::initialize(ctx.clone(), receiver).await;
 
         Ok(())
     }

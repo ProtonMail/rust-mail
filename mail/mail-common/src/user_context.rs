@@ -5,6 +5,7 @@ mod images;
 mod initialization;
 
 use crate::models::{Conversation, Message};
+use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -42,7 +43,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
-    prefetch: OnceLock<flume::Sender<()>>,
+    prefetch: PrefetchNotify,
 }
 
 impl MailUserContext {
@@ -351,7 +352,7 @@ impl MailUserContext {
     /// - AllSent
     /// - Drafts
     /// - AllDrafts
-    pub fn prefetch(&self) -> MailContextResult<()> {
+    pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
         if let Some(sender) = self.prefetch.get() {
             sender.send(()).map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
@@ -359,9 +360,17 @@ impl MailUserContext {
 
             Ok(())
         } else {
-            Err(MailContextError::Other(anyhow!(
-                "Prefetcher is not initialized"
-            )))
+            let (sender, receiver) = flume::unbounded();
+            let _ = self.prefetch.set(sender).inspect_err(|e| {
+                error!("Failed to set prefetch sender: {e:?}");
+            });
+            Prefetch::initialize(self.clone(), receiver).await;
+
+            self.prefetch.get().unwrap().send(()).map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+            })?;
+
+            Ok(())
         }
     }
 }

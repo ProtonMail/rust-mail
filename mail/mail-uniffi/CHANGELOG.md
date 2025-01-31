@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased] - 2025-01-XX
+## [0.40.1] - 2025-01-31
+
+### Fixed
+
+  - [ET-1953] Fix prefetch not working after closing the app
 
 ## [0.40.0] - 2025-01-31
 
@@ -13,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-1999] `Message::is_draft` property.
   - `EventError` now reports refresh error.
+  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
 
 ### Fixed
 
@@ -33,7 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
-  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
 
 ### Fixed
 
