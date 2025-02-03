@@ -18,6 +18,7 @@ use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User};
@@ -34,6 +35,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
+use tokio::task::JoinHandle;
 use tracing::error;
 
 pub struct MailUserContext {
@@ -377,6 +379,15 @@ impl MailUserContext {
 
             Ok(())
         }
+    }
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        task: impl Future<Output = T> + Send + 'static,
+    ) -> JoinHandle<AsyncTaskResult<T>> {
+        self.user_context.spawn(task)
     }
 }
 

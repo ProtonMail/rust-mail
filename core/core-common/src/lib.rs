@@ -16,6 +16,7 @@ mod user_context;
 pub mod utils;
 pub mod watch_handle;
 
+pub mod async_task;
 #[cfg(test)]
 mod tests;
 
