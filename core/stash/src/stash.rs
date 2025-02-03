@@ -283,7 +283,9 @@ use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
-use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
+use rusqlite::{
+    Connection, Error as SqliteError, PrepFlags, Rows, ToSql, Transaction, TransactionBehavior,
+};
 use sqlite_watcher::connection::SqlConnectionAsync;
 use sqlite_watcher::connection::SqlExecutorAsync;
 use sqlite_watcher::connection::SqlTransactionAsync;
@@ -402,34 +404,69 @@ enum OperationTransaction {
 
 /// TODO: Document this struct
 pub trait GetParams: Send {
-    fn get(&self) -> Vec<&[&dyn ToSql]>;
+    fn query(&self) -> String;
+    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError>;
+}
+
+impl<T: Deref<Target = [M]> + Send, M: Model + Send> GetParams for T {
+    fn query(&self) -> String {
+        <Self as Deref>::deref(self).query()
+    }
+
+    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError> {
+        <Self as Deref>::deref(self).execute(stmt)
+    }
+}
+
+impl<M: Model + Send> GetParams for [M] {
+    fn query(&self) -> String {
+        let field_names = M::field_names_without_id();
+        format!(
+            "INSERT INTO {} ({}) VALUES ({})
+            RETURNING {} AS id",
+            M::table_name(),
+            field_names.join(","),
+            crate::utils::placeholders(field_names.len()),
+            M::id_field_name(),
+        )
+    }
+
+    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError> {
+        let mut out = vec![];
+        for i in self {
+            // PERF: This could be optimized in a big way.
+            let params = i.field_values_without_id();
+            let id = stmt
+                .query(&*prepare_params(&params))
+                .map_err(StashError::ExecutionError)?
+                .next()
+                // NOTE: None of these errors can actually happen
+                .context("Critical error: Update affected no rows")?
+                .context("No id found?!")?
+                .get(0)
+                .context("Critical Error: No id found")?;
+            out.push(id);
+        }
+        Ok(out)
+    }
 }
 
 struct BatchedWrite {
     params: Box<dyn GetParams>,
 
-    /// The query to execute. This is in raw SQL format ready for parameter
-    /// substitution.
-    query: String,
-
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    sender: OneshotSender<ResultedTime<usize>>,
+    sender: OneshotSender<ResultedTime<Vec<u64>>>,
 }
 
 impl BatchedWrite {
     /// Prepares and executes a query, and returns the number of affected rows.
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Vec<u64>, StashError> {
         let mut statement = connection
-            .prepare(&self.query)
+            .prepare_with_flags(&self.params.query(), PrepFlags::SQLITE_PREPARE_PERSISTENT)
             .map_err(StashError::PreparationError)?;
-        let mut affected = 0;
-        for params in self.params.get() {
-            affected += statement
-                .execute(params)
-                .map_err(StashError::ExecutionError)?;
-        }
-        Ok(affected)
+
+        self.params.execute(&mut statement)
     }
 }
 
@@ -1152,7 +1189,7 @@ pub struct Tether {
     /// The time at which the Tether was created.
     start_time: Instant,
 
-    /// The associated [`Stash`] instance.
+    /// TODO: Remove me
     stash: Stash,
 
     /// State needed for the connection to be updated on transaction start and
@@ -1249,18 +1286,18 @@ impl Tether {
         r
     }
 
+    pub async fn batch_write_arc(&self, params: Arc<[impl Model]>) -> Result<Vec<u64>, StashError> {
+        let b: Box<dyn GetParams> = Box::new(params);
+        self.batch_write(b).await
+    }
+
     // TODO: Document this fn
-    pub async fn batch_write(
-        &self,
-        query: impl Into<String>,
-        params: Box<dyn GetParams>,
-    ) -> Result<usize, StashError> {
+    pub async fn batch_write(&self, params: Box<dyn GetParams>) -> Result<Vec<u64>, StashError> {
         let t0 = Instant::now();
         let (sender, receiver) = oneshot::channel();
         let operation = TetherOperation::Execution(OperationExec::BatchedInstruct(BatchedWrite {
             sender,
             params,
-            query: query.into(),
         }));
         self.queue.send(operation);
         let (r, d) = oneshot_join(receiver).await;

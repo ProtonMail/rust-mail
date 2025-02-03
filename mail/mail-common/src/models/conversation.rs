@@ -2467,8 +2467,9 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let handle =
-            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
+        let handle = tether
+            .stash()
+            .subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =

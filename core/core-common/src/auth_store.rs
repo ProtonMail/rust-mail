@@ -52,20 +52,15 @@ impl AuthStore {
     }
 
     async fn try_get_auth(&self) -> Result<Auth, StoreError> {
-        debug!("waht");
         let key = self.encryption_key()?;
-        debug!("key");
         let tether = self.stash.connection();
-        debug!("conn");
 
         let Some(account) = (if let Some(id) = &self.user_id {
             debug!("Get account {}", id);
             CoreAccount::find_by_id(id.to_owned(), &tether).await?
         } else {
-            debug!("bruh");
             None
         }) else {
-            debug!("bruh2");
             return Ok(Auth::None);
         };
 
