@@ -1,5 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
+use crate::async_task::{spawn_task, AsyncTaskResult};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
@@ -23,12 +24,14 @@ use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tokio::task::JoinError;
+use tokio::task::{JoinError, JoinHandle};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
@@ -204,6 +207,7 @@ pub struct Context {
     cache_path: PathBuf,
     sender_image_cache_size: u64,
     api_config: ApiConfig,
+    cancellation_token: CancellationToken,
 }
 
 impl Context {
@@ -257,6 +261,7 @@ impl Context {
             cache_path: cache_path.into(),
             sender_image_cache_size,
             api_config,
+            cancellation_token: CancellationToken::new(),
         }))
     }
 
@@ -751,6 +756,29 @@ impl Context {
         active_contexts.insert(user_id, Arc::downgrade(&user_context));
 
         Ok(user_context)
+    }
+
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        task: impl Future<Output = T> + Send + 'static,
+    ) -> JoinHandle<AsyncTaskResult<T>> {
+        let token = self.cancellation_token.clone();
+        spawn_task(token, task)
+    }
+
+    /// Returns a cancellation token that is a child of the the one owned by the context.
+    pub fn new_child_cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.child_token()
+    }
+
+    /// Cancel all tasks which are bound to this context.
+    ///
+    /// This will also cancel all child token created with [`child_cancellation_token()`]
+    pub fn cancel_all_tasks(&self) {
+        self.cancellation_token.cancel();
     }
 }
 
