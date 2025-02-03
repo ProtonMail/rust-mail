@@ -293,7 +293,6 @@ use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::collections::HashMap;
-use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, LazyLock};
@@ -308,12 +307,12 @@ use crate as stash;
 use crate::registry::{StashRegistry, REGISTRY};
 
 /// Set a timeout for a specified amount of time when a table is locked. This
-/// defaults to 5,000 milliseconds in the underlying libraries, but can be
-/// overridden here if necessary.
-const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+/// defaults to 5,000 milliseconds in the underlying libraries.
+const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// The maximum number of simultaneous connections allowed to the database. This
 /// defaults to 10.
+// TODO: Test perf of lower values.
 const MAX_CONNECTIONS: u32 = 100;
 
 /// A type alias for a field convertor function.
@@ -328,11 +327,8 @@ type Converter = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Se
 /// It implements [`Deref`] so that it is essentially invisible to the caller.
 ///
 enum AgnosticConnection<'tx> {
-    /// A connection that is not currently in a transaction.
-    Unbound(&'tx PooledConnection<SqliteConnectionManager>),
-
-    /// A connection that is currently engaged in an active transaction.
-    Engaged(&'tx Transaction<'tx>),
+    NotTransaction(&'tx PooledConnection<SqliteConnectionManager>),
+    Transaction(&'tx Transaction<'tx>),
 }
 
 impl Deref for AgnosticConnection<'_> {
@@ -340,8 +336,8 @@ impl Deref for AgnosticConnection<'_> {
 
     fn deref(&self) -> &Self::Target {
         match *self {
-            Self::Unbound(connection) => connection,
-            Self::Engaged(transaction) => transaction,
+            Self::NotTransaction(connection) => connection,
+            Self::Transaction(transaction) => transaction,
         }
     }
 }
@@ -382,7 +378,6 @@ enum StashOperation {
 }
 
 /// These are all the operations allowed on a tether.
-#[derive(Debug)]
 enum TetherOperation {
     /// Only the operations related to a transaction.
     Transaction(OperationTransaction),
@@ -405,25 +400,54 @@ enum OperationTransaction {
     Abort,
 }
 
+/// TODO: Document this struct
+pub trait GetParams: Send {
+    fn get(&self) -> Vec<&[&dyn ToSql]>;
+}
+
+struct BatchedWrite {
+    params: Box<dyn GetParams>,
+
+    /// The query to execute. This is in raw SQL format ready for parameter
+    /// substitution.
+    query: String,
+
+    /// The communication channel used to send the result of the operation back
+    /// to the caller.
+    sender: OneshotSender<ResultedTime<usize>>,
+}
+
+impl BatchedWrite {
+    /// Prepares and executes a query, and returns the number of affected rows.
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+        let mut statement = connection
+            .prepare(&self.query)
+            .map_err(StashError::PreparationError)?;
+        let mut affected = 0;
+        for params in self.params.get() {
+            affected += statement
+                .execute(params)
+                .map_err(StashError::ExecutionError)?;
+        }
+        Ok(affected)
+    }
+}
+
 enum OperationExec {
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
     /// not enforced.
     Instruct(Instruction),
 
+    /// A query to be executed, where no results are expected. This is usually
+    /// a write query, or a command, but differentiation is up to the caller and
+    /// not enforced.
+    BatchedInstruct(BatchedWrite),
+
     /// A query to be executed, where results are expected. This is typically a
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
     Query(Query),
-}
-
-impl Debug for OperationExec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Instruct(_) => f.write_str("Instruct"),
-            Self::Query(_) => f.write_str("Query"),
-        }
-    }
 }
 
 impl TetherOperation {
@@ -448,10 +472,31 @@ impl TetherOperation {
             }
             Self::Transaction(OperationTransaction::Abort) => {}
             Self::Execution(OperationExec::Instruct(x)) => {
-                x.send((Err(error), Duration::from_secs(0)));
+                {
+                    let result = (Err(error), Duration::from_secs(0));
+                    if x.sender.send(result).is_err() {
+                        // This means that the receiver has dropped.
+                        error!("Oneshot error: Failed sending result back to caller");
+                    }
+                };
             }
             Self::Execution(OperationExec::Query(x)) => {
-                x.send((Err(error), Duration::from_secs(0)));
+                {
+                    let result = (Err(error), Duration::from_secs(0));
+                    if x.sender.send(result).is_err() {
+                        // This means that the receiver has dropped.
+                        error!("Oneshot error: Failed sending result back to caller");
+                    }
+                };
+            }
+            Self::Execution(OperationExec::BatchedInstruct(x)) => {
+                {
+                    let result = (Err(error), Duration::from_secs(0));
+                    if x.sender.send(result).is_err() {
+                        // This means that the receiver has dropped.
+                        error!("Oneshot error: Failed sending result back to caller");
+                    }
+                };
             }
         }
     }
@@ -615,45 +660,7 @@ struct Instruction {
 }
 
 impl Instruction {
-    fn send(self, result: ResultedTime<usize>) {
-        if self.sender.send(result).is_err() {
-            // This means that the receiver has dropped.
-            error!("Oneshot error: Failed sending result back to caller");
-        }
-    }
-
     /// Prepares and executes a query, and returns the number of affected rows.
-    ///
-    /// This function prepares a query and executes it on the database, and then
-    /// indicates whether it was successful, returning the number of affected
-    /// rows.
-    ///
-    /// **Note: This function is the one that actually deals with the query
-    /// execution, which occurs on the background worker thread in response to
-    /// queued instructions. It is an internal function. For the public-facing
-    /// versions of this function, which lead to it being called, see
-    /// [`Stash::execute()`] and [`Tether::execute()`].**
-    ///
-    /// # Parameters
-    ///
-    /// * `connection` - The database connection to use for the operation.
-    /// * `stash`      - The associated [`Stash`] instance for the operation.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Query::run()`]
-    /// * [`Stash::execute()`]
-    /// * [`Tether::execute()`]
-    ///
     fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
         let mut statement = connection
             .prepare(&self.query)
@@ -661,8 +668,9 @@ impl Instruction {
         let affected = statement
             .execute(&*prepare_params(&self.params))
             .map_err(StashError::ExecutionError)?;
+        // I'm not sure if we should do this.
         if let Some(query) = statement.expanded_sql() {
-            debug!("Query: {query}");
+            trace!("Query: {query}");
         }
         Ok(affected)
     }
@@ -731,49 +739,7 @@ struct Query {
 }
 
 impl Query {
-    fn send(self, result: ResultedTime<DbRecords>) {
-        if self.sender.send(result).is_err() {
-            // This means that the receiver has dropped.
-            error!("Oneshot error: Failed sending result back to caller");
-        }
-    }
-
     /// Prepares and executes a query, and returns any rows of data emitted.
-    ///
-    /// This function prepares a query and executes it on the database, and then
-    /// indicates whether it was successful, returning the number of affected
-    /// rows.
-    ///
-    /// **Note: This function is the one that actually deals with the query
-    /// execution, which occurs on the background worker thread in response to
-    /// queued instructions. It is an internal function. For the public-facing
-    /// versions of this function, which lead to it being called, see
-    /// [`Stash::query()`] and [`Tether::query()`].**
-    ///
-    /// # Parameters
-    ///
-    /// * `connection` - The database connection to use for the operation.
-    /// * `stash`      - The associated [`Stash`] instance for the operation.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
-    ///     converting from [`Rows`] to `T`.
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`PreparationError`](StashError::PreparationError) - Problem
-    ///     preparing the query.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Instruction::run()`]
-    /// * [`Stash::query()`]
-    /// * [`Tether::query()`]
-    ///
     fn run(&self, connection: &AgnosticConnection<'_>) -> Result<DbRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
@@ -1265,7 +1231,7 @@ impl Tether {
     /// * [`Interface::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    pub async fn execute<Q: Into<String> + Send>(
+    pub async fn execute<Q: Into<String>>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -1280,6 +1246,25 @@ impl Tether {
         self.queue.send(operation);
         let (r, d) = oneshot_join(receiver).await;
         STATS.send((t0.elapsed(), d, "execute"));
+        r
+    }
+
+    // TODO: Document this fn
+    pub async fn batch_write(
+        &self,
+        query: impl Into<String>,
+        params: Box<dyn GetParams>,
+    ) -> Result<usize, StashError> {
+        let t0 = Instant::now();
+        let (sender, receiver) = oneshot::channel();
+        let operation = TetherOperation::Execution(OperationExec::BatchedInstruct(BatchedWrite {
+            sender,
+            params,
+            query: query.into(),
+        }));
+        self.queue.send(operation);
+        let (r, d) = oneshot_join(receiver).await;
+        STATS.send((t0.elapsed(), d, "batch"));
         r
     }
 
@@ -2047,7 +2032,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     /// * `queue`       - The main operations queue for the central worker.
     ///
     fn handle_operation(&mut self, operation: TetherOperation) {
-        debug!("Tether {} got {operation:?}", self.id);
         match operation {
             TetherOperation::Transaction(operation) => {
                 self.handle_transaction(operation);
@@ -2175,18 +2159,34 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     fn handle_exec(&self, operation: OperationExec) {
         let t0 = Instant::now();
         let connection = match self.transaction {
-            Some(ref tx) => AgnosticConnection::Engaged(tx),
-            None => AgnosticConnection::Unbound(self.connection),
+            Some(ref tx) => AgnosticConnection::Transaction(tx),
+            None => AgnosticConnection::NotTransaction(self.connection),
         };
 
         match operation {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(&connection);
-                instruction.send((res, t0.elapsed()));
+                let result = (res, t0.elapsed());
+                if instruction.sender.send(result).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
+                }
+            }
+            OperationExec::BatchedInstruct(instruct) => {
+                let res = instruct.run(&connection);
+                let result = (res, t0.elapsed());
+                if instruct.sender.send(result).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
+                }
             }
             OperationExec::Query(query) => {
                 let res = query.run(&connection);
-                query.send((res, t0.elapsed()));
+                let result = (res, t0.elapsed());
+                if query.sender.send(result).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
+                }
             }
         }
     }
