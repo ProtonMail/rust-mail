@@ -1,4 +1,6 @@
-use crate::actions::draft::local_draft_label_id;
+use crate::actions::draft::{
+    local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
+};
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
     MessageSenders, MimeType, SystemLabelId,
@@ -13,7 +15,7 @@ use crate::models::{
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_api_mail::services::proton::request_data::DraftAction;
+use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
@@ -78,13 +80,15 @@ impl Save {
             } else {
                 draft.subject.clone()
             },
-            body: draft.body.clone(),
+            body: draft.decrypted_body.body.clone(),
             attachments: draft
+                .decrypted_body
+                .metadata
                 .attachments
                 .iter()
                 .map(|v| v.local_id.unwrap())
                 .collect(),
-            mime_type: draft.mime_type,
+            mime_type: draft.decrypted_body.metadata.mime_type,
             parent_id: None,
             reply_mode: None,
             save_origin,
@@ -121,6 +125,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
         tether: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let local_draft_id = local_draft_label_id(tether).await?;
+        let local_all_draft_id = local_all_draft_label_id(tether).await?;
+        let local_all_mail_id = local_all_mail_label_id(tether).await?;
 
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tether)
             .await
@@ -159,6 +165,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
+                attachments.len() as u64,
                 action.subject.clone(),
             );
             conversation
@@ -187,7 +194,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 return Err(SaveOrSendError::AlreadySent.into());
             }
 
-            action.update_message(&address, &mut message, attachment_metadata, body_len, time);
+            action.update_message(
+                &address,
+                &mut message,
+                attachments.len() as u64,
+                attachment_metadata,
+                body_len,
+                time,
+            );
 
             message.save(tether).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e}");
@@ -215,6 +229,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .inspect_err(|e| error!("Failed to get next message display order: {e}"))?;
             let mut message = action.create_new_message(
                 &address,
+                attachments.len() as u64,
                 attachment_metadata,
                 body_len,
                 time,
@@ -249,6 +264,26 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .await
             .inspect_err(|e| {
                 error!("Failed to apply draft label to new message: {e}");
+            })?;
+
+            Message::apply_label(
+                local_all_draft_id,
+                std::iter::once(message.local_id.unwrap()),
+                tether,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to apply all_draft label to new message: {e}");
+            })?;
+
+            Message::apply_label(
+                local_all_mail_id,
+                std::iter::once(message.local_id.unwrap()),
+                tether,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to apply all_mail label to new message: {e}");
             })?;
 
             message
@@ -337,6 +372,17 @@ impl proton_action_queue::action::Handler for SaveHandler {
             None
         };
 
+        let draft_reply_or_forward_params = if let (Some(remote_parent_id), Some(reply_mode)) =
+            (remote_parent_id, action.reply_mode)
+        {
+            Some(DraftReplyOrForwardParams {
+                parent_id: remote_parent_id,
+                action: reply_mode.into(),
+            })
+        } else {
+            None
+        };
+
         // Load body.
         let Some(message_body) =
             Message::load_decrypted_message_body_from_cache(ctx, message.local_id.unwrap())?
@@ -350,11 +396,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 ctx,
                 session,
                 action.address_id.clone(),
-                action.reply_mode.map_or(DraftAction::Reply, Into::into),
                 &message,
                 &message_body_metadata,
                 &message_body.body,
-                remote_parent_id,
+                draft_reply_or_forward_params,
             )
             .await
             .inspect_err(|e| {
@@ -433,12 +478,15 @@ impl Save {
     fn create_new_message(
         &self,
         address: &Address,
+        total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
         time: u64,
         display_order: u64,
     ) -> Message {
-        let num_attachments = attachments.len();
+        debug_assert!(attachments
+            .iter()
+            .all(|v| v.disposition == Disposition::Attachment));
         Message {
             local_id: None,
             remote_id: None,
@@ -458,7 +506,7 @@ impl Save {
             is_replied: false,
             is_replied_all: false,
             label_ids: vec![],
-            num_attachments: num_attachments.try_into().unwrap_or_default(),
+            num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
             reply_tos: Default::default(),
             sender: MessageSender {
@@ -484,18 +532,18 @@ impl Save {
         &self,
         address: &Address,
         message: &mut Message,
+        total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
         time: u64,
     ) {
-        let num_attachments = attachments.len();
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
         message.to_list = self.to_list.to_message_recipients().into();
         message.cc_list = self.cc_list.to_message_recipients().into();
         message.bcc_list = self.bcc_list.to_message_recipients().into();
-        message.num_attachments = num_attachments.try_into().unwrap_or_default();
+        message.num_attachments = total_attachment_count.try_into().unwrap_or_default();
         message.sender = MessageSender {
             address: address.email.clone(),
             bimi_selector: None,
@@ -515,8 +563,12 @@ impl Save {
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
+        total_attachment_count: u64,
         subject: String,
     ) -> Conversation {
+        debug_assert!(attachments
+            .iter()
+            .all(|v| v.disposition == Disposition::Attachment));
         Conversation {
             local_id: None,
             remote_id: None,
@@ -527,7 +579,7 @@ impl Save {
             exclusive_location: None,
             expiration_time: 0,
             labels: vec![],
-            num_attachments: 0,
+            num_attachments: total_attachment_count,
             num_messages: 0,
             num_unread: 0,
             display_order,

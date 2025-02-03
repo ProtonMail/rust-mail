@@ -51,8 +51,16 @@ impl<T: MailScrollerSource> Paginator<T> {
         ))
     }
 
-    pub async fn all_items(&self) -> Result<Vec<T::Item>, MailContextError> {
-        self.paginator.lock().await.all_items().await
+    pub fn clone_paginator(&self) -> Arc<Mutex<MailScroller<T>>> {
+        Arc::clone(&self.paginator)
+    }
+
+    pub async fn fetch_more(&self) -> Result<Vec<T::Item>, MailContextError> {
+        self.paginator.lock().await.fetch_more().await
+    }
+
+    pub async fn total(&self) -> u64 {
+        self.paginator.lock().await.total()
     }
 
     /// Get the next pagination page as series of background tasks which will

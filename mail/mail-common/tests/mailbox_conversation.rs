@@ -1,6 +1,5 @@
 use proton_api_core::services::proton::common::{LabelId, LabelType as ApiLabelType};
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
@@ -122,7 +121,7 @@ async fn test_new_mailbox_sync_conversations() {
         conversation.local_id.unwrap(),
         mailbox.label_id(),
         user_ctx.user_stash(),
-        user_ctx.session().api(),
+        user_ctx.session(),
     )
     .await
     .unwrap()
@@ -137,7 +136,7 @@ async fn test_new_mailbox_sync_conversations() {
         conversation.local_id.unwrap(),
         mailbox.label_id(),
         user_ctx.user_stash(),
-        user_ctx.session().api(),
+        user_ctx.session(),
     )
     .await
     .unwrap()

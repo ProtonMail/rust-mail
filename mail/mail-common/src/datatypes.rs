@@ -47,6 +47,7 @@ mod search_options;
 mod system_folder;
 
 pub use contextual_conversation::*;
+use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
 use indoc::formatdoc;
 use proton_core_common::models::Label;
@@ -110,7 +111,8 @@ use tracing::{error, warn};
 //==============================================================================
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum AlmostAllMail {
     /// TODO: Document this variant.
@@ -132,11 +134,8 @@ impl From<ApiAlmostAllMail> for AlmostAllMail {
 
 impl FromSql for AlmostAllMail {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::AllMail),
-            1 => Ok(Self::AlmostAllMail),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -147,7 +146,8 @@ impl ToSql for AlmostAllMail {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ComposerDirection {
     /// TODO: Document this variant.
@@ -169,11 +169,8 @@ impl From<ApiComposerDirection> for ComposerDirection {
 
 impl FromSql for ComposerDirection {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::LeftToRight),
-            1 => Ok(Self::RightToLeft),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -184,7 +181,8 @@ impl ToSql for ComposerDirection {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ComposerMode {
     /// TODO: Document this variant.
@@ -206,11 +204,8 @@ impl From<ApiComposerMode> for ComposerMode {
 
 impl FromSql for ComposerMode {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Normal),
-            1 => Ok(Self::Maximized),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -221,7 +216,8 @@ impl ToSql for ComposerMode {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum Disposition {
     /// TODO: Document this variant.
@@ -251,11 +247,8 @@ impl From<CryptoDisposition> for Disposition {
 
 impl FromSql for Disposition {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::Attachment),
-            2 => Ok(Self::Inline),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -266,7 +259,8 @@ impl ToSql for Disposition {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum MessageButtons {
     /// TODO: Document this variant.
@@ -288,11 +282,8 @@ impl From<ApiMessageButtons> for MessageButtons {
 
 impl FromSql for MessageButtons {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::ReadFirst),
-            1 => Ok(Self::UnreadFirst),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -303,7 +294,8 @@ impl ToSql for MessageButtons {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum MimeType {
     /// TODO: Document this variant.
@@ -369,16 +361,8 @@ impl From<MimeType> for CryptoMimeType {
 
 impl FromSql for MimeType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Self::ApplicationJson),
-            2 => Ok(Self::ApplicationPdf),
-            3 => Ok(Self::MessageRfc822),
-            4 => Ok(Self::MultipartMixed),
-            5 => Ok(Self::MultipartRelated),
-            6 => Ok(Self::TextHtml),
-            7 => Ok(Self::TextPlain),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -389,7 +373,8 @@ impl ToSql for MimeType {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum NextMessageOnMove {
     /// TODO: Document this variant.
@@ -415,12 +400,8 @@ impl From<ApiNextMessageOnMove> for NextMessageOnMove {
 
 impl FromSql for NextMessageOnMove {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::DisabledExplicit),
-            1 => Ok(Self::DisabledImplicit),
-            2 => Ok(Self::EnabledExplicit),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -441,7 +422,8 @@ pub enum ParsedHeaderValue {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum PgpScheme {
     /// TODO: Document this variant.
@@ -472,11 +454,8 @@ impl From<PgpScheme> for CryptoPgpScheme {
 
 impl FromSql for PgpScheme {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            8 => Ok(Self::Inline),
-            16 => Ok(Self::Mime),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -487,7 +466,8 @@ impl ToSql for PgpScheme {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum PmSignature {
     /// TODO: Document this variant.
@@ -513,12 +493,8 @@ impl From<ApiPmSignature> for PmSignature {
 
 impl FromSql for PmSignature {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Disabled),
-            1 => Ok(Self::Enabled),
-            2 => Ok(Self::EnabledLocked),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -529,7 +505,8 @@ impl ToSql for PmSignature {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ShowImages {
     /// TODO: Document this variant.
@@ -559,13 +536,8 @@ impl From<ApiShowImages> for ShowImages {
 
 impl FromSql for ShowImages {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::DoNotAutoLoad),
-            1 => Ok(Self::AutoLoadRemote),
-            2 => Ok(Self::AutoLoadEmbedded),
-            3 => Ok(Self::AutoLoadBoth),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -576,7 +548,8 @@ impl ToSql for ShowImages {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ShowMoved {
     /// TODO: Document this variant.
@@ -606,13 +579,8 @@ impl From<ApiShowMoved> for ShowMoved {
 
 impl FromSql for ShowMoved {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::DoNotKeep),
-            1 => Ok(Self::KeepInDrafts),
-            2 => Ok(Self::KeepInSent),
-            3 => Ok(Self::KeepBoth),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -623,7 +591,8 @@ impl ToSql for ShowMoved {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum SpamAction {
     /// TODO: Document this variant.
@@ -644,11 +613,8 @@ impl From<ApiSpamAction> for SpamAction {
 
 impl FromSql for SpamAction {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::DoNothing),
-            1 => Ok(Self::UnsubscribeWithOneClick),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -658,49 +624,48 @@ impl ToSql for SpamAction {
     }
 }
 
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-#[repr(u8)]
+/// Where to move or what to do with the item when the user swipes it.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
+#[repr(i8)]
 pub enum SwipeAction {
-    /// TODO: Document this variant.
+    NoAction = -1,
+
     Trash = 0,
 
-    /// TODO: Document this variant.
     Spam = 1,
 
-    /// TODO: Document this variant.
     Star = 2,
 
-    /// TODO: Document this variant.
     #[default]
     Archive = 3,
 
-    /// TODO: Document this variant.
     MarkAsRead = 4,
+
+    LabelAs = 5,
+
+    MoveTo = 6,
 }
 
 impl From<ApiSwipeAction> for SwipeAction {
     fn from(value: ApiSwipeAction) -> Self {
         match value {
+            ApiSwipeAction::NoAction => Self::NoAction,
             ApiSwipeAction::Trash => Self::Trash,
             ApiSwipeAction::Spam => Self::Spam,
             ApiSwipeAction::Star => Self::Star,
             ApiSwipeAction::Archive => Self::Archive,
             ApiSwipeAction::MarkAsRead => Self::MarkAsRead,
+            ApiSwipeAction::MoveTo => Self::MoveTo,
+            ApiSwipeAction::LabelAs => Self::LabelAs,
         }
     }
 }
 
 impl FromSql for SwipeAction {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Trash),
-            1 => Ok(Self::Spam),
-            2 => Ok(Self::Star),
-            3 => Ok(Self::Archive),
-            4 => Ok(Self::MarkAsRead),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = i8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -711,7 +676,8 @@ impl ToSql for SwipeAction {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ViewLayout {
     /// TODO: Document this variant.
@@ -733,11 +699,8 @@ impl From<ApiViewLayout> for ViewLayout {
 
 impl FromSql for ViewLayout {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Column),
-            1 => Ok(Self::Row),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -748,7 +711,8 @@ impl ToSql for ViewLayout {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
 #[repr(u8)]
 pub enum ViewMode {
     /// TODO: Document this variant.
@@ -770,11 +734,8 @@ impl From<ApiViewMode> for ViewMode {
 
 impl FromSql for ViewMode {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::Conversations),
-            1 => Ok(Self::Messages),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
@@ -1016,6 +977,7 @@ impl EncryptedMessageBody {
         ctx: Arc<MailUserContext>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
+        with_attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MessageError> {
         // TODO: Verify signature.
         let (decrypted_body, _) = self
@@ -1023,25 +985,32 @@ impl EncryptedMessageBody {
             .inspect_err(|e| error!("Failed to decrypt message body: {e}"))?;
 
         match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody::new(
-                body,
-                self.metadata,
-                None,
-                None,
-                ctx,
-            )),
+            DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
+                DecryptedMessageBody::new(body, self.metadata, None, None, ctx)
+            } else {
+                DecryptedMessageBody::without_prefetch(body, self.metadata, None, None)
+            }),
             DecryptedBody::Mime(ProcessedMessage {
                 body,
                 attachments,
                 encrypted_subject,
                 ..
-            }) => Ok(DecryptedMessageBody::new(
-                body,
-                self.metadata,
-                Some(attachments),
-                encrypted_subject,
-                ctx,
-            )),
+            }) => Ok(if with_attachment_prefetch {
+                DecryptedMessageBody::new(
+                    body,
+                    self.metadata,
+                    Some(attachments),
+                    encrypted_subject,
+                    ctx,
+                )
+            } else {
+                DecryptedMessageBody::without_prefetch(
+                    body,
+                    self.metadata,
+                    Some(attachments),
+                    encrypted_subject,
+                )
+            }),
         }
     }
 }

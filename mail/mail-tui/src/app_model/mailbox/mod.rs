@@ -4,6 +4,7 @@ mod messages;
 mod model;
 mod paginator;
 mod popups;
+mod search;
 
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
@@ -16,6 +17,7 @@ use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
 use proton_mail_common::models::Message as MailMessage;
 use proton_mail_common::Mailbox;
+use search::{Search, SearchStatusBar};
 
 const ITEM_LIMIT: usize = 50;
 
@@ -23,6 +25,7 @@ pub enum Message {
     Sync(Mailbox),
     OpenConversationView(Mailbox, Label, ConversationsState),
     OpenMessageView(Mailbox, Label, MessagesState),
+    OpenSearchView(Mailbox, MessagesState),
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
@@ -35,6 +38,11 @@ pub enum Message {
     CloseComposer,
     NewLabelWatcher(WatchHandle),
     Composer(ComposerMessage),
+    SearchSubmit(String),
+    SearchPopup(Search),
+    CloseSearchPopup,
+    SearchStatusBar(SearchStatusBar),
+    ClearSearchStatusBar,
     OpenContacts,
 }
 pub struct LabelAs<T: LocalIdMarker> {
@@ -59,6 +67,7 @@ pub enum ConversationMessage {
     OpenConversationFailed(anyhow::Error),
     Refreshed(Vec<ContextualConversation>),
     NextPage(Vec<ContextualConversation>),
+    HasMore,
     CloseConversation,
 }
 
@@ -82,6 +91,7 @@ pub enum MessageMessage {
     MarkMessageUnread(LocalMessageId),
     StarMessage(LocalMessageId),
     UnstarMessage(LocalMessageId),
+    HasMore,
 }
 
 impl From<MessageMessage> for Messages {
@@ -95,6 +105,7 @@ pub enum ComposerMessage {
     Save,
     Send,
     Discard,
+    UpdateDraftSaveId(proton_action_queue::action::Id),
 }
 
 impl From<ComposerMessage> for Messages {

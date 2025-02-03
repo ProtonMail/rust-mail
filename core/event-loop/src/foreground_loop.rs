@@ -85,6 +85,11 @@ impl EventLoop {
             events.iter().map(Event::event_id).collect::<Vec<_>>()
         );
 
+        if events.iter().any(Event::is_refresh) {
+            error!("Received refresh event, but this is not yet implemented");
+            return Err(EventLoopError::Refresh);
+        }
+
         self.publish_events_to_subscribers(&mut events, subscribers)
             .await?;
 

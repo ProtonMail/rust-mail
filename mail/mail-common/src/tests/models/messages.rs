@@ -958,7 +958,7 @@ async fn test_create_message_with_attachments() {
         size: 80,
         name: "foo.pdf".to_owned(),
         mime_type: attachment::MimeType::application_pdf().to_string(),
-        disposition: ApiDisposition::Inline,
+        disposition: ApiDisposition::Attachment,
     };
     let _ = test_create_message_dependencies(&mut conn).await;
     let message = test_message_with_metadata(
@@ -1687,7 +1687,7 @@ async fn test_create_message_and_body_with_attachments() {
                 size: 1024,
                 name: "fooo".to_owned(),
                 mime_type: attachment::MimeType::text_html().to_string(),
-                disposition: ApiDisposition::Inline,
+                disposition: ApiDisposition::Attachment,
             }],
         ),
         body: ApiMessageBody {
@@ -1703,7 +1703,7 @@ async fn test_create_message_and_body_with_attachments() {
                 name: "fooo".to_owned(),
                 size: 1024,
                 mime_type: attachment::MimeType::text_html().to_string(),
-                disposition: ApiDisposition::Inline,
+                disposition: ApiDisposition::Attachment,
                 key_packets: KeyPackets::from("packets"),
                 signature: None,
                 enc_signature: None,
@@ -1767,6 +1767,122 @@ async fn test_create_message_and_body_with_attachments() {
 
     assert_eq!(new_metadata.attachments.len(), 1);
     assert_eq!(attachment, new_metadata.attachments[0]);
+}
+
+#[tokio::test]
+async fn message_metadata_update_does_not_purge_inline_attachments() {
+    // Ensure that metadata updates do not wipe inline attachments as metadata only
+    // has attachments with disposition attachment.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection();
+    test_create_message_dependencies_core(&mut conn).await;
+    let attachment_id = AttachmentId::from("attachment");
+    let attachment_inline_id = AttachmentId::from("attachment-inine");
+    test_create_message_dependencies(&mut conn).await;
+    let mut message = ApiMessage {
+        metadata: test_message_metadata(
+            vec![MY_LABEL_ID1.clone()],
+            vec![ApiAttachmentMetadata {
+                id: attachment_id.clone(),
+                size: 1024,
+                name: "fooo".to_owned(),
+                mime_type: attachment::MimeType::text_html().to_string(),
+                disposition: ApiDisposition::Attachment,
+            }],
+        ),
+        body: ApiMessageBody {
+            header: "my headers".to_owned(),
+            parsed_headers: hash_map! {
+                "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
+            },
+            body: "my_message".to_owned(),
+            mime_type: ApiMimeType::TextPlain,
+            attachments: vec![
+                ApiMessageAttachment {
+                    id: attachment_id.clone(),
+                    name: "fooo".to_owned(),
+                    size: 1024,
+                    mime_type: attachment::MimeType::text_html().to_string(),
+                    disposition: ApiDisposition::Attachment,
+                    key_packets: KeyPackets::from("packets"),
+                    signature: None,
+                    enc_signature: None,
+                    headers: ApiMessageAttachmentHeaders {
+                        content_disposition: "attachment".to_owned(),
+                        content_id: None,
+                        content_transfer_encoding: Some("base64".to_owned()),
+                        image_width: None,
+                        image_height: None,
+                    },
+                },
+                ApiMessageAttachment {
+                    id: attachment_inline_id.clone(),
+                    name: "image.png".to_owned(),
+                    size: 1024,
+                    mime_type: "image/png".to_owned(),
+                    disposition: ApiDisposition::Inline,
+                    key_packets: KeyPackets::from("packets"),
+                    signature: None,
+                    enc_signature: None,
+                    headers: ApiMessageAttachmentHeaders {
+                        content_disposition: "inline".to_owned(),
+                        content_id: Some("mycontent_id".to_owned()),
+                        content_transfer_encoding: Some("base64".to_owned()),
+                        image_width: Some("1280".to_owned()),
+                        image_height: Some("720".to_owned()),
+                    },
+                },
+            ],
+        },
+    };
+
+    message.metadata.num_attachments = 2;
+
+    let (mut metadata, mut body_metadata, _) = Message::from_api_data(message.clone(), &conn)
+        .await
+        .unwrap();
+
+    let tx = conn.transaction().await.unwrap();
+    metadata.save(&tx).await.expect("failed to create message");
+    body_metadata.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let id = metadata.local_id.unwrap();
+
+    let db_message = Message::load(id, &conn)
+        .await
+        .expect("failed to get message")
+        .expect("must have a value");
+
+    assert_eq!(db_message.num_attachments, 2);
+    assert_eq!(db_message.attachments_metadata.len(), 1);
+    assert_eq!(
+        db_message.attachments_metadata[0].remote_id,
+        Some(attachment_id.clone())
+    );
+    assert_eq!(
+        db_message.attachments_metadata[0].disposition,
+        Disposition::Attachment
+    );
+
+    let db_body_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(db_body_metadata.attachments.len(), 2);
+
+    // save message again to simulate event loop update
+    let tx = conn.transaction().await.unwrap();
+    metadata.save(&tx).await.expect("failed to create message");
+    tx.commit().await.unwrap();
+
+    // Inline attachment should not go missing.
+    let db_body_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(db_body_metadata.attachments.len(), 2);
 }
 
 #[tokio::test]
@@ -1998,7 +2114,7 @@ async fn messages_mark_unread() {
         .boxed()
     };
 
-    check_counters(conn.stash().clone(), 3, 1).await;
+    check_counters(stash.clone(), 3, 1).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id1), &tx)
         .await
@@ -2021,13 +2137,13 @@ async fn messages_mark_unread() {
     .unwrap();
     assert_eq!(db_conv.num_unread, 1);
 
-    check_counters(conn.stash().clone(), 2, 0).await;
+    check_counters(stash.clone(), 2, 0).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id3), &tx)
         .await
         .expect("failed to mark as read");
     tx.commit().await.unwrap();
-    check_counters(conn.stash().clone(), 1, 0).await;
+    check_counters(stash.clone(), 1, 0).await;
     let tx = conn.transaction().await.unwrap();
     Message::mark_unread(std::iter::once(local_msg_id4), &tx)
         .await
@@ -2035,7 +2151,7 @@ async fn messages_mark_unread() {
     tx.commit().await.unwrap();
     // All conversation messages on label_1 have been marked as read, we should now see an updated
     // conversation count.
-    check_counters(conn.stash().clone(), 0, 0).await;
+    check_counters(stash.clone(), 0, 0).await;
 
     let db_conv = ContextualConversation::new(
         Conversation::find_by_id(local_conv_id, &conn)

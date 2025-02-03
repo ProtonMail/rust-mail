@@ -10,7 +10,7 @@ impl AsTable for Vec<Message> {
         let rows = self.iter().map(|msg| {
             let starred = if msg.is_starred() { "★" } else { " " };
             let date = date_from_timestamp(msg.time);
-            let num_attachments = msg.attachments_metadata.len();
+            let num_attachments = msg.num_attachments;
             let num_labels = msg.custom_labels.len();
             let sender = sender_name(&msg.sender);
 

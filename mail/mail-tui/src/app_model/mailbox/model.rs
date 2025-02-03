@@ -1,3 +1,4 @@
+use super::search::{Search, SearchStatusBar};
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
@@ -13,9 +14,12 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use flume::Sender;
 use futures::FutureExt;
 
+use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
+use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
-use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
+use proton_mail_common::actions::event_poll::EventPoll;
+use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{
@@ -33,6 +37,7 @@ use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
 
@@ -71,11 +76,18 @@ pub struct Model {
     state: State,
     cancel_token: CancellationToken,
     composer: Option<Composer>,
+    search: Option<Search>,
+    search_status: Option<SearchStatusBar>,
+    filter: ReadFilter,
+    background_worker_initialized: bool,
 }
 
 impl Model {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
         let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
+
+        ctx.prefetch().await?;
+
         let tether = ctx.user_stash().connection();
         let label = Label::find_by_id(mailbox.label_id(), &tether)
             .await?
@@ -98,21 +110,31 @@ impl Model {
             cancel_token: CancellationToken::new(),
             label_watcher: None,
             composer: None,
+            search: None,
+            search_status: None,
+            filter: ReadFilter::All,
+            background_worker_initialized: false,
         })
     }
 
     fn create_background_worker(&mut self) -> Command<Messages> {
         let ctx = self.ctx.clone();
-        background_worker(ctx, self.cancel_token.clone())
+        if self.background_worker_initialized {
+            Command::none()
+        } else {
+            self.background_worker_initialized = true;
+            background_worker(ctx, self.cancel_token.clone())
+        }
     }
 
     #[must_use]
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
+        let filter = self.filter;
         // Create the background worker.
         Command::batch([
             self.create_background_worker(),
-            Command::task(async {
+            Command::task(async move {
                 let tether = mbox.user_context().user_stash().connection();
                 let label = match Label::find_by_id(mbox.label_id(), &tether).await {
                     Ok(l) => {
@@ -134,9 +156,9 @@ impl Model {
                     }
                 };
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(mbox, label)
+                    ConversationsState::build(mbox, label, filter)
                 } else {
-                    MessagesState::build(mbox, label)
+                    MessagesState::build(mbox, label, filter)
                 }
             }),
         ])
@@ -219,6 +241,12 @@ impl Model {
         self.build_item_count_query()
     }
 
+    fn open_search_view(&mut self, mbox: Mailbox, state: MessagesState) -> Command<Messages> {
+        self.mailbox = mbox;
+        self.state = State::Messages(state);
+        self.build_item_count_query()
+    }
+
     fn open_label_select_popup(&mut self) -> Command<Messages> {
         let ctx = self.mailbox.user_context();
         let label = self.label.clone();
@@ -295,12 +323,17 @@ impl Model {
 impl AppStateHandler for Model {
     fn on_state_enter(&mut self) -> Command<Messages> {
         let ctx = self.mailbox.user_context();
+        let ctx_clone = Arc::clone(&ctx);
         let cancel_token = self.cancel_token.clone();
+        let cancel_token_clone = cancel_token.clone();
         Command::batch([
             self.create_background_worker(),
             Command::message(Message::Sync(self.mailbox.clone()).into()),
             Command::background_task(move |sender| {
                 observe_draft_action_errors(ctx, cancel_token, sender).boxed()
+            }),
+            Command::background_task(move |sender| {
+                observe_event_loop_errors(ctx_clone, cancel_token_clone, sender).boxed()
             }),
         ])
     }
@@ -316,7 +349,27 @@ impl AppStateHandler for Model {
                 KeyCode::Char('c') => {
                     return Command::message(Message::OpenContacts.into());
                 }
+                KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::Unread;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
+                KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::Read;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
+                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.filter = ReadFilter::All;
+                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                }
                 _ => (),
+            }
+        }
+
+        if let Some(search) = &mut self.search {
+            return search.handle_event(&self.mailbox, event);
+        } else if let Event::Key(key) = &event {
+            if key.code == KeyCode::Char('/') {
+                return Command::Message(Message::SearchPopup(Search::new()).into());
             }
         }
 
@@ -344,6 +397,12 @@ impl AppStateHandler for Model {
             return composer.update(ctx, message, &self.mailbox, &self.mail_settings);
         }
 
+        if let Some(search) = &mut self.search {
+            let Message::CloseSearchPopup = message else {
+                return search.update(ctx, message, &self.mailbox, &self.mail_settings);
+            };
+        }
+
         match message {
             Message::Sync(mbox) => self.sync_mailbox(mbox),
             Message::OpenConversationView(mbox, label, state) => {
@@ -352,6 +411,7 @@ impl AppStateHandler for Model {
             Message::OpenMessageView(mbox, label, state) => {
                 self.open_message_view(mbox, label, state)
             }
+            Message::OpenSearchView(mbox, state) => self.open_search_view(mbox, state),
             Message::OpenLabelSelectPopup => self.open_label_select_popup(),
             Message::SelectLabel(label_id) => self.select_label(label_id),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
@@ -377,7 +437,23 @@ impl AppStateHandler for Model {
                 Command::None
             }
             Message::OpenContacts => self.open_contacts(),
-            Message::Composer(_) => Command::None,
+            Message::SearchPopup(search) => {
+                self.search = Some(search);
+                Command::None
+            }
+            Message::CloseSearchPopup => {
+                self.search = None;
+                Command::None
+            }
+            Message::SearchStatusBar(status) => {
+                self.search_status = Some(status);
+                Command::None
+            }
+            Message::ClearSearchStatusBar => {
+                self.search_status = None;
+                Command::None
+            }
+            Message::Composer(_) | Message::SearchSubmit(_) => Command::None,
         }
     }
 
@@ -385,6 +461,9 @@ impl AppStateHandler for Model {
         self.state.view(frame, area);
         if let Some(composer) = &mut self.composer {
             composer.view(frame, area);
+        }
+        if let Some(search) = &mut self.search {
+            search.view(frame, area);
         }
     }
 
@@ -414,6 +493,14 @@ impl AppStateHandler for Model {
             Span::from("Delete"),
             Span::from(" Crtl+N: ").bold(),
             Span::from("New Msg."),
+            Span::from(" Crtl+A: ").bold(),
+            Span::from("Filter All"),
+            Span::from(" Crtl+R: ").bold(),
+            Span::from("Filter Read"),
+            Span::from(" Crtl+U: ").bold(),
+            Span::from("Filter Unread"),
+            Span::from(" /: ").bold(),
+            Span::from("Search"),
         ];
         let line_2 = vec![
             Span::from(" Shift+▲: ").bold(),
@@ -443,31 +530,53 @@ impl AppStateHandler for Model {
     }
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
-        let label_name = self
-            .label
-            .path
-            .as_deref()
-            .unwrap_or(self.label.name.as_str());
+        if let Some(ref status) = self.search_status {
+            let [count_area, _, other_area] = Layout::horizontal([
+                Constraint::Length(16),
+                Constraint::Length(1),
+                Constraint::Percentage(100),
+            ])
+            .flex(Flex::Start)
+            .areas(area);
 
-        let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
-            (self.conv_counters.total, self.conv_counters.unread)
+            let count = format!("Search T:{total:4}", total = status.total);
+            frame.render_widget(Text::from(count), count_area);
+
+            let search = format!("phrase: `{}`, press ESC to go back.", status.search_phrase);
+            frame.render_widget(Text::from(search), other_area);
         } else {
-            (self.msg_counters.total, self.msg_counters.unread)
-        };
-        let counters = format!("T:{total:4} U:{unread:4}");
-        let [label_area, _, count_area, other_area] = Layout::horizontal([
-            Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
-            Constraint::Length(1),
-            Constraint::Length(13),
-            Constraint::Percentage(100),
-        ])
-        .flex(Flex::Start)
-        .areas(area);
-        let text = Text::from(label_name);
-        frame.render_widget(text, label_area);
-        frame.render_widget(Text::from(counters), count_area);
-        if let State::Conversations(state) = &mut self.state {
-            state.draw_status_bar(frame, other_area);
+            let label_name = self
+                .label
+                .path
+                .as_deref()
+                .unwrap_or(self.label.name.as_str());
+
+            let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
+                (self.conv_counters.total, self.conv_counters.unread)
+            } else {
+                (self.msg_counters.total, self.msg_counters.unread)
+            };
+            let counters = format!("T:{total:4} U:{unread:4}");
+            let [label_area, _, count_area, filter_area, other_area] = Layout::horizontal([
+                Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
+                Constraint::Length(1),
+                Constraint::Length(13),
+                Constraint::Length(13),
+                Constraint::Percentage(100),
+            ])
+            .flex(Flex::Start)
+            .areas(area);
+
+            let text = Text::from(label_name);
+            frame.render_widget(text, label_area);
+            frame.render_widget(Text::from(counters), count_area);
+            frame.render_widget(
+                Text::from(format!(" | {:?} | ", self.filter).bold()),
+                filter_area,
+            );
+            if let State::Conversations(state) = &mut self.state {
+                state.draw_status_bar(frame, other_area);
+            }
         }
     }
 }
@@ -630,11 +739,11 @@ async fn handle_draft_failure(
                         "Cancelling Send".to_owned(),
                     )),
                     Command::task(async move {
-                        let result_cmd = match ctx
-                            .with_queue(|queue| {
-                                Draft::action_undo_send(queue, result.local_message_id)
-                            })
-                            .await
+                        let result_cmd = match Draft::action_undo_send(
+                            ctx.action_queue(),
+                            result.local_message_id,
+                        )
+                        .await
                         {
                             // On success open composer, else display error
                             Ok(_) => Composer::open(Arc::clone(&ctx), result.local_message_id),
@@ -676,5 +785,53 @@ async fn handle_draft_failure(
                 .send_async(Command::batch([err_command, open_composer_command]))
                 .await;
         }
+    }
+}
+
+/// Observe event loop errors
+async fn observe_event_loop_errors(
+    ctx: Arc<MailUserContext>,
+    cancellation_token: CancellationToken,
+    sender: Sender<Command<Messages>>,
+) {
+    let mut oberserver = ActionFailureObserver::<EventPoll>::new(ctx.action_queue());
+
+    loop {
+        select! {
+            () = cancellation_token.cancelled() => {
+                return;
+            }
+
+            r = oberserver.next() => {
+                let Ok(v) = r else {
+                    return;
+                };
+                handle_event_loop_error(v, &sender).await;
+            }
+        }
+    }
+}
+
+// Convert the error into a user displayable message.
+async fn handle_event_loop_error(error: ActionFailureReason, sender: &Sender<Command<Messages>>) {
+    if let ActionFailureReason::Error(e, _) = error {
+        let cmd = if let Some(details) = e.as_action_error::<EventPoll>() {
+            match details {
+                ActionError::Action(e) => Command::message(Messages::DisplayError(
+                    Some("Event Loop".to_owned()),
+                    anyhow!("Event Poll Failure: {}", e.0),
+                )),
+                ActionError::Queue(e) => Command::message(Messages::DisplayError(
+                    Some("Event Loop".to_owned()),
+                    anyhow!("Queue Failure: {}", e),
+                )),
+            }
+        } else {
+            Command::message(Messages::DisplayError(
+                Some("Event Loop".to_owned()),
+                anyhow!("Failed to poll the event loop"),
+            ))
+        };
+        let _ = sender.send_async(cmd).await;
     }
 }

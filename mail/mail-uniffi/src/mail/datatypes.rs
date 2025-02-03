@@ -701,35 +701,31 @@ impl From<RealSpamAction> for SpamAction {
     }
 }
 
-/// TODO: Document this enum.
+/// See [`RealSwipeAction`]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
-#[repr(u8)]
 pub enum SwipeAction {
-    /// TODO: Document this variant.
-    Trash = 0,
-
-    /// TODO: Document this variant.
-    Spam = 1,
-
-    /// TODO: Document this variant.
-    Star = 2,
-
-    /// TODO: Document this variant.
+    NoAction,
+    Trash,
+    Spam,
+    Star,
     #[default]
-    Archive = 3,
-
-    /// TODO: Document this variant.
-    MarkAsRead = 4,
+    Archive,
+    MarkAsRead,
+    LabelAs,
+    MoveTo,
 }
 
 impl From<SwipeAction> for RealSwipeAction {
     fn from(value: SwipeAction) -> Self {
         match value {
+            SwipeAction::NoAction => RealSwipeAction::NoAction,
             SwipeAction::Trash => RealSwipeAction::Trash,
             SwipeAction::Spam => RealSwipeAction::Spam,
             SwipeAction::Star => RealSwipeAction::Star,
             SwipeAction::Archive => RealSwipeAction::Archive,
             SwipeAction::MarkAsRead => RealSwipeAction::MarkAsRead,
+            SwipeAction::LabelAs => RealSwipeAction::LabelAs,
+            SwipeAction::MoveTo => RealSwipeAction::MoveTo,
         }
     }
 }
@@ -737,11 +733,14 @@ impl From<SwipeAction> for RealSwipeAction {
 impl From<RealSwipeAction> for SwipeAction {
     fn from(value: RealSwipeAction) -> Self {
         match value {
+            RealSwipeAction::NoAction => SwipeAction::NoAction,
             RealSwipeAction::Trash => SwipeAction::Trash,
             RealSwipeAction::Spam => SwipeAction::Spam,
             RealSwipeAction::Star => SwipeAction::Star,
             RealSwipeAction::Archive => SwipeAction::Archive,
             RealSwipeAction::MarkAsRead => SwipeAction::MarkAsRead,
+            RealSwipeAction::LabelAs => SwipeAction::LabelAs,
+            RealSwipeAction::MoveTo => SwipeAction::MoveTo,
         }
     }
 }
@@ -1530,12 +1529,16 @@ pub struct Message {
 
     /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
+
+    /// Whether this message is a draft.
+    pub is_draft: bool,
 }
 
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
         let starred = value.is_starred();
         let avatar = RealAvatarInformation::from(&value.sender);
+        let is_draft = value.is_draft();
         Message {
             id: value.local_id.unwrap().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
@@ -1584,6 +1587,7 @@ impl From<RealMessage> for Message {
                 .collect(),
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
+            is_draft,
             starred,
             avatar: avatar.into(),
         }

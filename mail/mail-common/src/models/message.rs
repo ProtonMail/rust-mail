@@ -15,6 +15,7 @@ use crate::actions::{
 };
 use crate::models::*;
 use crate::{find_in_query, MailContextError};
+use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
@@ -702,14 +703,28 @@ impl Message {
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
-        let inbox = MovableSystemFolderAction::inbox(tether).await?;
-        let archive = MovableSystemFolderAction::archive(tether).await?;
-        let trash = MovableSystemFolderAction::trash(tether).await?;
-        let spam = MovableSystemFolderAction::spam(tether).await?;
+        let messages_fut = async {
+            Self::find_by_ids(message_ids.to_vec(), tether)
+                .await
+                .map_err(AppError::from)
+        };
 
-        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(tether).await?;
-        let messages = Self::find_by_ids(message_ids.to_vec(), tether).await?;
+        let current_label_fut = async {
+            Label::resolve_remote_label_id(current_label_id, tether)
+                .await
+                .map_err(AppError::from)
+        };
+
+        let (inbox, archive, trash, spam, bottom_bar_actions, current_label, messages) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileActions::bottom_bar_actions(tether),
+            current_label_fut,
+            messages_fut
+        )?;
+
         let visible_bottom_bar_actions = Self::visible_bottom_bar_actions(
             &current_label,
             &messages,
@@ -1297,7 +1312,10 @@ impl Message {
                     attachment.remote_address_id = Some(self.remote_address_id.clone());
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
-                    attachment.save(bond).await?;
+                    attachment
+                        .save(bond)
+                        .await
+                        .inspect_err(|e| error!("Failed to save attachment from message: {e}"))?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
@@ -1314,17 +1332,20 @@ impl Message {
 
             #[allow(trivial_casts)]
             bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    message_attachments
-                WHERE
-                    local_message_id = ?
-                    AND local_attachment_id NOT IN ({})
-                ",
+                formatdoc!("
+                    DELETE FROM message_attachments WHERE
+                            local_attachment_id IN (
+                                SELECT local_id FROM attachments
+                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
+                                    message_attachments.local_attachment_id = attachments.local_id
+                                WHERE attachments.disposition = ?
+                                AND attachments.local_id NOT IN ({})
+
+                            )",
                     stash::utils::placeholders(local_ids.len()),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>,
+                Box::new(Disposition::Attachment) as Box<dyn ToSql + Send>]
                     .into_iter()
                     .chain(
                         local_ids
@@ -1336,15 +1357,16 @@ impl Message {
             .await?;
         } else {
             bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    message_attachments
-                WHERE
-                    local_message_id = ?
-                ",
+                formatdoc!("
+                    DELETE FROM message_attachments WHERE
+                            local_attachment_id IN (
+                                SELECT local_id FROM attachments
+                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
+                                    message_attachments.local_attachment_id = attachments.local_id
+                                WHERE attachments.disposition = ?
+                            )"
                 ),
-                params![self.local_id],
+                params![self.local_id, Disposition::Attachment],
             )
             .await?;
         }
@@ -1644,9 +1666,7 @@ impl Message {
             return Err(AppError::EmptyListOfMessages);
         }
 
-        let handle = tether
-            .stash()
-            .subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
+        let handle = tether.subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let messages = <Message as ModelExtension>::find_by_ids(message_ids, tether).await?;
@@ -1763,6 +1783,13 @@ impl Message {
             return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
         };
 
+        if ctx.session().status().await.is_offline() {
+            debug!("No connection, skipping sync");
+            return Err(MailContextError::Api(ApiServiceError::NetworkError(
+                "No connection".to_owned(),
+            )));
+        }
+
         let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
 
         let decrypted = Self::decrypt_message_body(
@@ -1770,6 +1797,7 @@ impl Message {
             &self.remote_address_id,
             encrypted_body,
             tether,
+            true,
         )
         .await?;
 
@@ -2472,7 +2500,8 @@ impl Message {
     pub async fn force_sync_message_and_body(
         ctx: Arc<MailUserContext>,
         message_id: MessageId,
-    ) -> MailContextResult<(Message, MessageBodyMetadata, String)> {
+        with_attachment_prefetch: bool,
+    ) -> MailContextResult<(Message, DecryptedMessageBody)> {
         let mut tether = ctx.user_stash().connection();
 
         let (message, encrypted) =
@@ -2483,12 +2512,13 @@ impl Message {
             &message.remote_address_id,
             encrypted,
             &tether,
+            with_attachment_prefetch,
         )
         .await?;
 
         tokio::task::spawn_blocking(move || {
             Self::store_decrypted_message_body(&ctx, message.local_id.unwrap(), &decrypted)?;
-            Ok((message, decrypted.metadata, decrypted.body))
+            Ok((message, decrypted))
         })
         .await?
     }
@@ -2534,6 +2564,9 @@ impl Message {
 
     /// Decrypt an `encrypted_message_body` with a given `address_id` keys.
     ///
+    /// If `attachment_prefetch` is set to `true`, all the attachments will start prefetching
+    /// the moment the object is created.
+    ///
     /// # Errors
     ///
     /// Returns error if the decryption or loading addresses fails.
@@ -2542,6 +2575,7 @@ impl Message {
         address_id: &AddressId,
         encrypted_message_body: EncryptedMessageBody,
         tether: &Tether,
+        attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         let pgp_provider = proton_crypto::new_pgp_provider();
 
@@ -2549,7 +2583,7 @@ impl Message {
             .unlocked_address_keys(&pgp_provider, tether, address_id)
             .await?;
         encrypted_message_body
-            .into_decrypted_message(ctx, address_keys, pgp_provider)
+            .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e}");
                 MailContextError::Crypto
@@ -2629,6 +2663,37 @@ impl Message {
         )))
     }
 
+    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the cache without
+    /// pre-loading all the attachments.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the db query or cache load fails.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    pub(crate) async fn load_decrypted_message_from_cache_without_attachment_preload(
+        ctx: &MailUserContext,
+        local_id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
+        let cache_key = CacheMessageKey::from(local_id);
+
+        let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
+            .await
+            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+        else {
+            return Ok(None);
+        };
+
+        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
+            return Ok(None);
+        };
+
+        let message = StorableMessageBody::from_reader(reader)?;
+        Ok(Some(DecryptedMessageBody::from_storable_without_preload(
+            message, metadata,
+        )))
+    }
+
     /// Load the decrypted message body from the cache.
     ///
     /// # Errors
@@ -2646,6 +2711,14 @@ impl Message {
 
         let message = StorableMessageBody::from_reader(reader)?;
         Ok(Some(message))
+    }
+
+    /// Whether this message is a draft.
+    ///
+    /// A message is considered a draft when it has the AllDrafts label assigned.
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
     }
 }
 
@@ -3291,5 +3364,35 @@ impl MessageCounters {
             total: self.total,
             unread: self.unread,
         })
+    }
+
+    /// Watch message counter for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// # Errors
+    /// Returns error if the query failed
+    ///
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(MessageCounterWatcher { sender }))
+    }
+}
+
+pub struct MessageCounterWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for MessageCounterWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![MessageCounters::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for MessageCounterWatcher: {e}")
+            })
+            .ok();
     }
 }

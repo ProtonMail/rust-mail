@@ -138,8 +138,10 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match context.with_queue(|queue| save_action.queue(queue)).await {
-                        Ok(_) => Command::none(),
+                    match save_action.queue(context.action_queue()).await {
+                        Ok(output) => {
+                            Command::message(ComposerMessage::UpdateDraftSaveId(output.id).into())
+                        }
                         Err(e) => {
                             error!("Failed to save draft: {e}");
                             Command::message(MailContextError::from(e).into())
@@ -152,9 +154,9 @@ impl Composer {
 
     fn update_draft_from_state(&mut self) -> Result<(), recipients::RecipientError> {
         // We are TUI, what else can we do?
-        self.draft.mime_type = MimeType::TextPlain;
+        self.draft.decrypted_body.metadata.mime_type = MimeType::TextPlain;
         self.draft.subject = self.subject_input_state.value().to_owned();
-        self.draft.body = self.text_area.lines().join("\n");
+        self.draft.decrypted_body.body = self.text_area.lines().join("\n");
         self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value())?;
         self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value())?;
         self.draft.to_list = recipients_value_to_list(self.to_input_state.value())?;
@@ -163,7 +165,9 @@ impl Composer {
 
     fn create_save_action(&mut self) -> Result<DraftSaveActionQueuer, recipients::RecipientError> {
         self.update_draft_from_state()?;
-        Ok(self.draft.to_save_action())
+        Ok(self
+            .draft
+            .to_save_action(self.draft.last_draft_save_action_id))
     }
 
     /// Send the draft.
@@ -174,7 +178,10 @@ impl Composer {
                 err.into(),
             ));
         };
-        match self.draft.to_send_action() {
+        match self
+            .draft
+            .to_send_action(self.draft.last_draft_save_action_id)
+        {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
                     "Sending draft...".to_owned(),
@@ -182,7 +189,7 @@ impl Composer {
                 Command::task(async move {
                     Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
-                        match context.with_queue(|queue| send_action.queue(queue)).await {
+                        match send_action.queue(context.action_queue()).await {
                             Ok(_) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
                                 error!("Failed to save draft: {e}");
@@ -201,20 +208,29 @@ impl Composer {
         let to_list = recipient_list_to_display_value(&draft.to_list);
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
         let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
-        let text_area = if draft.mime_type == MimeType::TextHtml {
+        let text_area = if draft.decrypted_body.metadata.mime_type == MimeType::TextHtml {
             let config = html2text::config::plain();
-            let cursor = Cursor::new(&draft.body);
+            let cursor = Cursor::new(&draft.decrypted_body.body);
             let text = config
                 .string_from_read(cursor, 80)
                 .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
             TextArea::new(text.split('\n').map(str::to_owned).collect())
-        } else if draft.mime_type == MimeType::TextPlain {
-            TextArea::new(draft.body.split('\n').map(str::to_owned).collect())
+        } else if draft.decrypted_body.metadata.mime_type == MimeType::TextPlain {
+            TextArea::new(
+                draft
+                    .decrypted_body
+                    .body
+                    .split('\n')
+                    .map(str::to_owned)
+                    .collect(),
+            )
         } else {
             TextArea::new(vec!["Unknown mime type".to_owned()])
         };
         let subject = draft.subject.clone();
         let attachment_infos = draft
+            .decrypted_body
+            .metadata
             .attachments
             .iter()
             .map(|attachment| AttachmentInfo {
@@ -249,10 +265,7 @@ impl Composer {
                 "Discarding Draft".to_owned(),
             )),
             Command::task(async move {
-                let cmd = match context
-                    .with_queue(|queue| discard_action.queue(queue))
-                    .await
-                {
+                let cmd = match discard_action.queue(context.action_queue()).await {
                     Ok(_) => Command::none(),
                     Err(e) => Command::message(Messages::DisplayError(None, anyhow::Error::new(e))),
                 };
@@ -495,6 +508,10 @@ impl StateHandler for Composer {
             ComposerMessage::Save => self.save(mbox.user_context()),
             ComposerMessage::Send => self.send(mbox.user_context()),
             ComposerMessage::Discard => self.discard(mbox.user_context()),
+            ComposerMessage::UpdateDraftSaveId(id) => {
+                self.draft.last_draft_save_action_id = Some(id);
+                Command::none()
+            }
         }
     }
 }

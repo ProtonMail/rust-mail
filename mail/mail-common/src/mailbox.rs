@@ -17,7 +17,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Stash, StashError, WatcherHandle};
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -222,5 +222,23 @@ impl Mailbox {
                 counters.map(|c| c.unread).unwrap_or_default()
             }
         })
+    }
+
+    /// Subscribe for updates to the number of unread items in this mailbox.
+    /// Depending on the view mode it either watches conversations or messages.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub async fn watch_unread_count(&self) -> Result<WatcherHandle, MailboxError> {
+        let stash = self.user_ctx.user_stash();
+
+        let watcher = match self.view_mode {
+            ViewMode::Conversations => ConversationCounters::watch(stash)?,
+            ViewMode::Messages => MessageCounters::watch(stash)?,
+        };
+
+        Ok(watcher)
     }
 }

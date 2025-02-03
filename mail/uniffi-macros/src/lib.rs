@@ -146,7 +146,7 @@ fn export_single_function(mut input: syn::ItemFn) -> GeneratedTokens {
     );
 
     // Create new enum type with `From` implementation
-    let new_enum = create_enum_type(enum_name.clone(), ok_type, err_type);
+    let new_enum = create_enum_type(&enum_name, &ok_type, &err_type);
 
     // Modify the return to use new enum type
     input.sig.output = syn::ReturnType::Type(
@@ -193,7 +193,7 @@ fn export_single_method(impl_type: Option<&String>, mut input: syn::ImplItemFn) 
     };
     let enum_name = syn::Ident::new(&enum_name, proc_macro2::Span::call_site());
 
-    let new_enum = create_enum_type(enum_name.clone(), ok_type, err_type);
+    let new_enum = create_enum_type(&enum_name, &ok_type, &err_type);
 
     // Modify the return to use new enum type
     input.sig.output = syn::ReturnType::Type(
@@ -215,50 +215,36 @@ fn export_single_method(impl_type: Option<&String>, mut input: syn::ImplItemFn) 
     }
 }
 
-/// Creates a new enum type with Ok and Error variants
-///
-#[allow(clippy::needless_pass_by_value)]
 fn create_enum_type(
-    enum_name: syn::Ident,
-    ok_type: syn::Type,
-    err_type: syn::Type,
+    enum_name: &syn::Ident,
+    ok_type: &syn::Type,
+    err_type: &syn::Type,
 ) -> proc_macro2::TokenStream {
-    match &ok_type {
-        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => {
-            quote! {
-            #[derive(uniffi::Enum)]
-                    pub enum #enum_name {
-                        Ok,
-                        Error(#err_type),
-                    }
+    // Empty for tuples
+    let (ok_variant, ok_match_arm) = match &ok_type {
+        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => (quote! {}, quote! {}),
+        _ => (quote! { (#ok_type) }, quote! { (val) }),
+    };
 
-                    impl From<Result<#ok_type, #err_type>> for #enum_name {
-                        fn from(value: Result<#ok_type, #err_type>) -> Self {
-                            match value {
-                                Ok(value) => #enum_name::Ok,
-                                Err(err) => #enum_name::Error(err),
-                            }
-                        }
-                    }
-                }
+    quote! {
+        #[derive(uniffi::Enum)]
+        pub enum #enum_name {
+            Ok #ok_variant,
+            Error(#err_type),
         }
-        _ => {
-            quote! {
-            #[derive(uniffi::Enum)]
-                    pub enum #enum_name {
-                        Ok(#ok_type),
-                        Error(#err_type),
-                    }
 
-                    impl From<Result<#ok_type, #err_type>> for #enum_name {
-                        fn from(value: Result<#ok_type, #err_type>) -> Self {
-                            match value {
-                                Ok(value) => #enum_name::Ok(value),
-                                Err(err) => #enum_name::Error(err),
-                            }
-                        }
+        #[automatically_derived]
+        impl From<::std::result::Result<#ok_type, #err_type>> for #enum_name
+        {
+            fn from(value: ::std::result::Result<#ok_type, #err_type>) -> Self {
+                match value {
+                    Ok(val) => Self::Ok #ok_match_arm,
+                    Err(error) => {
+                        ::tracing::error!("{error:?}");
+                        #enum_name::Error(error)
                     }
                 }
+            }
         }
     }
 }

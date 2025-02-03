@@ -1,4 +1,5 @@
 use clap::Parser;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
@@ -80,7 +81,9 @@ async fn main() {
 
     let mut flow = ctx.new_login_flow().unwrap();
 
-    flow.login(username, password).await.unwrap();
+    flow.login(username, password, LoginExtraInfo::default())
+        .await
+        .unwrap();
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
@@ -93,8 +96,8 @@ async fn main() {
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
 
     draft.subject = subject;
-    body.push_str(&draft.body);
-    draft.body = body;
+    body.push_str(&draft.decrypted_body.body);
+    draft.decrypted_body.body = body;
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -103,14 +106,8 @@ async fn main() {
         })
         .unwrap();
 
-    let send_action = draft.to_send_action().unwrap();
-    user_ctx
-        .with_queue(|queue| send_action.queue(queue))
-        .await
-        .unwrap();
+    let send_action = draft.to_send_action(None).unwrap();
+    send_action.queue(user_ctx.action_queue()).await.unwrap();
 
-    user_ctx
-        .with_queue(|queue| queue.execute_all())
-        .await
-        .unwrap()
+    user_ctx.action_queue().execute_all().await.unwrap();
 }

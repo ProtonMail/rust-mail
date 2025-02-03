@@ -1,18 +1,23 @@
 pub use self::keys::*;
+use crate::async_task::{spawn_task, AsyncTaskResult};
 use crate::cache::ProtonCache;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
+use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 pub mod images_logo;
@@ -45,6 +50,7 @@ pub struct UserContext {
     session_id: AuthId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
     pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
+    cancellation_token: CancellationToken,
 }
 
 impl Debug for UserContext {
@@ -73,6 +79,7 @@ impl UserContext {
             &user_stash,
         )
         .await?;
+        let cancellation_token = context.new_child_cancellation_token();
 
         Ok(Arc::new(Self {
             session,
@@ -82,6 +89,7 @@ impl UserContext {
             session_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
             images_logo_cache,
+            cancellation_token,
         }))
     }
 
@@ -146,6 +154,11 @@ impl UserContext {
         &self.session_id
     }
 
+    /// Get the connection status of the current user session.
+    pub async fn connection_status(&self) -> ConnectionStatus {
+        self.session.status().await
+    }
+
     async fn new_user_db(
         path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
@@ -162,5 +175,21 @@ impl UserContext {
         }
 
         Ok(stash)
+    }
+
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        task: impl Future<Output = T> + Send + 'static,
+    ) -> JoinHandle<AsyncTaskResult<T>> {
+        let token = self.cancellation_token.clone();
+        spawn_task(token, task)
+    }
+
+    /// Cancel all tasks which are bound to this context.
+    pub fn cancel_all_tasks(&self) {
+        self.cancellation_token.cancel();
     }
 }

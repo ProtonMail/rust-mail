@@ -8,18 +8,19 @@ use crate::errors::{
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
+use crate::mail::messages::{EmbeddedAttachmentInfo, EmbeddedAttachmentInfoResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use parking_lot::RwLock;
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{
-    Draft as RealDraft, DraftSaveActionQueuer, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
+    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContextError, MailUserContext};
 use recipients::ComposerRecipientList;
 use std::sync::{Arc, Weak};
+use tokio::sync::RwLock;
 
 /// Draft creation mode.
 #[derive(Debug, Copy, Clone, uniffi::Enum)]
@@ -152,7 +153,7 @@ pub async fn open_draft(session: &MailUserSession, message_id: Id) -> OpenDraftR
 impl Draft {
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
-        self.instance.read().sender.clone()
+        async_runtime().block_on(async { self.instance.read().await.sender.clone() })
     }
 
     /// Get the To recipients of the draft.
@@ -172,24 +173,21 @@ impl Draft {
 
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
-        self.instance.read().subject.clone()
+        async_runtime().block_on(async { self.instance.read().await.subject.clone() })
     }
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        self.instance.read().body.clone()
+        async_runtime().block_on(async { self.instance.read().await.decrypted_body.body.clone() })
     }
 
     /// Set the draft's `subject`.
     pub fn set_subject(&self, subject: String) -> VoidDraftSaveSendResult {
-        let action = {
-            let mut draft = self.instance.write();
-            draft.subject = subject;
-            draft.to_save_action()
-        };
         async_runtime()
             .block_on(async {
-                save_draft(&self.ctx, action)
+                let mut instance = self.instance.write().await;
+                instance.subject = subject;
+                save_draft(&self.ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -199,14 +197,11 @@ impl Draft {
 
     /// Set the draft's `body`.
     pub fn set_body(&self, body: String) -> VoidDraftSaveSendResult {
-        let action = {
-            let mut draft = self.instance.write();
-            draft.body = body;
-            draft.to_save_action()
-        };
         async_runtime()
             .block_on(async {
-                save_draft(&self.ctx, action)
+                let mut instance = self.instance.write().await;
+                instance.decrypted_body.body = body;
+                save_draft(&self.ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -216,25 +211,38 @@ impl Draft {
 
     /// Get the draft's attachments
     pub fn attachments(&self) -> Vec<AttachmentMetadata> {
-        self.instance
-            .read()
-            .attachments
-            .clone()
-            .into_iter()
-            .map(|v| RealAttachmentMetadata::from(v).into())
-            .collect()
+        async_runtime().block_on(async {
+            self.instance
+                .read()
+                .await
+                .decrypted_body
+                .metadata
+                .attachments
+                .clone()
+                .into_iter()
+                .map(|v| RealAttachmentMetadata::from(v).into())
+                .collect()
+        })
     }
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        self.instance.read().mime_type.into()
+        async_runtime().block_on(async {
+            self.instance
+                .read()
+                .await
+                .decrypted_body
+                .metadata
+                .mime_type
+                .into()
+        })
     }
 
     /// Get the Draft's message id .
     ///
     /// Returns `None` if no message was created.
     pub async fn message_id(self: Arc<Self>) -> OptIdProtonResult {
-        let metadata_id = { self.instance.read().metadata_id };
+        let metadata_id = { self.instance.read().await.metadata_id };
         let tether = self.ctx.user_stash().connection();
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
             DraftMetadata::message_id(metadata_id, &tether)
@@ -251,7 +259,45 @@ impl Draft {
     ///
     /// Note this only loaded with [`open_draft()`].
     pub fn send_result(&self) -> Option<DraftSendResult> {
-        self.instance.read().send_result.clone().map(Into::into)
+        async_runtime().block_on(async {
+            self.instance
+                .read()
+                .await
+                .send_result
+                .clone()
+                .map(Into::into)
+        })
+    }
+
+    /// Load an embedded attachment in this draft message.
+    ///
+    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    ///
+    /// # Errors
+    ///
+    /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
+    //NOTE: iOS request we share the same result types between
+    // this function and the DecryptedMessageBody equivalent.
+    pub async fn get_embedded_attachment(
+        self: Arc<Self>,
+        cid: String,
+    ) -> EmbeddedAttachmentInfoResult {
+        uniffi_async(async move {
+            let draft = self.instance.read().await;
+            let att = draft
+                .get_embedded_attachment(&self.ctx, &cid)
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+                data: att.data,
+                mime: att.mime,
+                height: att.height,
+                width: att.width,
+            })
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
     }
 }
 
@@ -264,14 +310,11 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(&self) -> VoidDraftSaveSendResult {
-        let action = {
-            let draft = self.instance.read();
-            draft.to_save_action()
-        };
-        let ctx = Arc::clone(&self.ctx);
+    pub async fn save(self: Arc<Self>) -> VoidDraftSaveSendResult {
         uniffi_async(async move {
-            ctx.with_queue(|queue| action.queue(queue))
+            let mut instance = self.instance.write().await;
+            instance
+                .save(self.ctx.action_queue())
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -288,16 +331,11 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn send(&self) -> VoidDraftSaveSendResult {
-        let send_queuer = {
-            let draft = self.instance.read();
-            draft.to_send_action()
-        };
-        let ctx = Arc::clone(&self.ctx);
-
+    pub async fn send(self: Arc<Self>) -> VoidDraftSaveSendResult {
         uniffi_async(async move {
-            let send_action = send_queuer?;
-            ctx.with_queue(|queue| send_action.queue(queue))
+            let mut instance = self.instance.write().await;
+            instance
+                .send(self.ctx.action_queue())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -315,15 +353,11 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn discard(&self) -> VoidDraftDiscardResult {
-        let discard_queuer = {
-            let draft = self.instance.read();
-            draft.to_discard_action()
-        };
-        let ctx = Arc::clone(&self.ctx);
-
+    pub async fn discard(self: Arc<Self>) -> VoidDraftDiscardResult {
         uniffi_async(async move {
-            ctx.with_queue(|queue| discard_queuer.queue(queue))
+            let instance = self.instance.read().await;
+            instance
+                .discard(self.ctx.action_queue())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -342,8 +376,7 @@ impl Draft {
 pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftUndoSendResult {
     let ctx = session.ctx();
     uniffi_async(async move {
-        ctx.with_queue(|queue| RealDraft::action_undo_send(queue, message_id.into()))
-            .await?;
+        RealDraft::action_undo_send(ctx.action_queue(), message_id.into()).await?;
         Ok::<_, RealProtonMailError>(())
     })
     .await
@@ -351,11 +384,9 @@ pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidD
     .into()
 }
 
-async fn save_draft(
-    ctx: &MailUserContext,
-    action: DraftSaveActionQueuer,
-) -> Result<(), MailContextError> {
-    ctx.with_queue(|queue| action.queue(queue))
+async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
+    draft
+        .save(ctx.action_queue())
         .await
         .map_err(MailContextError::from)?;
     Ok(())

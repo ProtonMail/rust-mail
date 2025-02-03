@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::request_data::{
 };
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -32,15 +32,14 @@ async fn create_empty_draft() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
+    let message = draft_message();
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -53,20 +52,29 @@ async fn create_empty_draft() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
-
-    // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    // Check the draft has the draft label.
+    // We check this here as the message will be overridden by what the server returns.
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
+    assert!(draft_message.is_draft());
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -80,9 +88,6 @@ async fn create_empty_draft() {
         draft_conversation_id,
         draft_message.local_conversation_id.unwrap(),
     );
-
-    // Check the draft has the draft label.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
     let message_body_metadata =
@@ -127,7 +132,7 @@ async fn create_empty_draft_and_save_twice() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let new_subject = "My New Subject";
@@ -206,7 +211,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -227,24 +232,18 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
 
     // Update the draft
     draft.subject = new_subject.to_owned();
-    draft.body = new_body.to_owned();
+    draft.decrypted_body.body = new_body.to_owned();
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
     user_ctx.execute_pending_actions().await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
@@ -252,7 +251,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Opening the draft and check if all the information is up to date
     let (draft, _) = Draft::open(user_ctx, draft_message_id).await.unwrap();
-    assert_eq!(draft.body, new_body);
+    assert_eq!(draft.decrypted_body.body, new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
     assert_eq!(draft.cc_list, new_cc_list);
@@ -367,7 +366,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
@@ -456,7 +455,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft_failure(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         None,
         DraftAttachmentKeyPackets::new(),
         CoreBundle::AppVersionInvalid as u32,
@@ -466,11 +465,8 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap_err();
@@ -551,7 +547,7 @@ async fn create_draft_reply_impl(
 
     let expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.body.attachments = remote_existing_message.body.attachments.clone();
     if reply_mode != ReplyMode::Forward {
         message
@@ -559,7 +555,6 @@ async fn create_draft_reply_impl(
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
     }
-    message.metadata.label_ids.push(LabelId::drafts());
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
         remote_existing_message
@@ -582,7 +577,7 @@ async fn create_draft_reply_impl(
     .await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::from(reply_mode),
+        Some(DraftAction::from(reply_mode)),
         message.clone(),
         Some(existing_message.remote_id.clone().unwrap()),
         key_packets,
@@ -599,12 +594,16 @@ async fn create_draft_reply_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
-        .await
-        .unwrap();
+    Message::force_sync_message_and_body(
+        user_ctx.clone(),
+        existing_message.remote_id.unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
 
     // Create draft.
-    let draft = Draft::reply(
+    let mut draft = Draft::reply(
         &user_ctx,
         existing_message.local_id.unwrap(),
         reply_mode,
@@ -612,10 +611,7 @@ async fn create_draft_reply_impl(
     )
     .await
     .unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -629,7 +625,25 @@ async fn create_draft_reply_impl(
         .await
         .unwrap()
         .expect("failed to load message");
+
+    let sender_address = Address::find_by_remote_id(existing_message.remote_address_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+
+    // Sender address should not be repeated in replies or forward.
+    assert!(!draft_message
+        .to_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
+    assert!(!draft_message
+        .cc_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
 
     // Local conversation id match the source message,
     assert_eq!(
@@ -680,15 +694,14 @@ async fn open_draft_sync_status_success() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
+    let message = draft_message();
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -701,11 +714,8 @@ async fn open_draft_sync_status_success() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -733,7 +743,7 @@ async fn open_draft_sync_status_cached() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let mut message = message_body_test_message_simple();
+    let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
@@ -741,7 +751,7 @@ async fn open_draft_sync_status_cached() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_create_draft(
         expected_draft_params,
-        DraftAction::Reply,
+        None,
         message.clone(),
         None,
         DraftAttachmentKeyPackets::new(),
@@ -762,11 +772,8 @@ async fn open_draft_sync_status_cached() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create draft.
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    user_ctx
-        .with_queue(|queue| draft.save(queue))
-        .await
-        .unwrap();
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
@@ -778,4 +785,38 @@ async fn open_draft_sync_status_cached() {
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Cached);
+}
+
+#[tokio::test]
+async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_status() {
+    // Check that open draft reports cached status when we can't sync from server due to
+    // network failure.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft should work;
+    let (_, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
 }

@@ -1,8 +1,10 @@
 #![allow(clippy::print_stdout)]
+use muon::client::flow::LoginExtraInfo;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::Config;
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::services::proton::ProtonMail;
 use std::io::{stdin, stdout, BufRead, Write};
@@ -32,11 +34,15 @@ async fn main() {
             ..Default::default()
         },
         None,
+        StatusWatcher::test(),
     )
     .unwrap();
 
     let mut login_flow = Flow::new(session.clone());
-    login_flow.login(user_email, user_password).await.unwrap();
+    login_flow
+        .login(user_email, user_password, LoginExtraInfo::default())
+        .await
+        .unwrap();
 
     if login_flow.is_awaiting_2fa() {
         let mut line_reader = std::io::BufReader::new(stdin());

@@ -1,4 +1,5 @@
 use clap::Parser;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
@@ -47,9 +48,13 @@ async fn main() {
 
     let mut flow = context.new_login_flow().unwrap();
 
-    flow.login(username.clone(), password.clone())
-        .await
-        .unwrap();
+    flow.login(
+        username.clone(),
+        password.clone(),
+        LoginExtraInfo::default(),
+    )
+    .await
+    .unwrap();
 
     let ctx = context
         .user_context_from_login_flow(&mut flow)
@@ -59,7 +64,9 @@ async fn main() {
     // Create a new login for this context will fail.
     let mut flow = context.new_login_flow().unwrap();
 
-    flow.login(username, password).await.unwrap();
+    flow.login(username, password, LoginExtraInfo::default())
+        .await
+        .unwrap();
 
     assert!(matches!(
         context
@@ -75,7 +82,7 @@ async fn main() {
         .await
         .unwrap();
     let ctx2 = context
-        .user_context_from_session(&sessions[0])
+        .user_context_from_session(&sessions[0], None)
         .await
         .unwrap();
 

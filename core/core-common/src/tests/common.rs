@@ -74,6 +74,17 @@ macro_rules! labels {
     }}
 }
 
+#[macro_export]
+macro_rules! device_contact {
+    ($($field:tt)*) => {{
+        #[allow(clippy::needless_update)] // If all fields were provided
+        $crate::datatypes::DeviceContact {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
 pub async fn new_core_test_connection() -> Stash {
     use crate::db::migrations::migrate_core_db;
     use std::io::stdout;

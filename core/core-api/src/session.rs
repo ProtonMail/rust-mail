@@ -1,13 +1,16 @@
 #![allow(clippy::module_name_repetitions)]
 
+use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::auth::UserKeySecret;
+use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
+use crate::status_watcher::StatusWatcher;
 use crate::store::{DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
@@ -62,10 +65,12 @@ impl Default for Config {
 }
 
 /// An API session, capable of making requests to the API on behalf of a user.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+#[debug("Session {{ client: {client:?}, config: {config:?} }}")]
 pub struct Session {
     client: Proton,
     config: Arc<Config>,
+    status: StatusWatcher,
     store: DynStore,
 }
 
@@ -79,16 +84,21 @@ impl Session {
     /// # Panics
     ///
     /// Panics if the Proton client fails to build.
-    pub fn new(config: Config, store: Option<Box<dyn Store>>) -> Result<Self, BuildError> {
+    pub fn new(
+        config: Config,
+        store: Option<Box<dyn Store>>,
+        status: StatusWatcher,
+    ) -> Result<Self, BuildError> {
         init_server_crypto_clock();
 
         let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
-        let client = proton::build(Config::clone(&config), Arc::clone(&store))?;
+        let client = proton::build(Config::clone(&config), Arc::clone(&store), status.clone())?;
         let config = Arc::new(config);
 
         Ok(Self {
             client,
             config,
+            status,
             store,
         })
     }
@@ -147,6 +157,21 @@ impl Session {
 
         Ok(())
     }
+
+    /// Get the connection status of the current session.
+    ///
+    /// Underlying it will ping the Proton server with one second timeout to check
+    /// if the connection can be established. The method will return the current
+    /// status if is fresh enough without making a new request.
+    ///
+    /// The connection status can be one of the following:
+    /// - `ConnectionStatus::Online`: The application is online and server is reachable.
+    /// - `ConnectionStatus::Offline`: The application is offline.
+    /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
+    ///
+    pub async fn status(&self) -> ConnectionStatus {
+        self.status.status(self.client.clone()).await
+    }
 }
 
 /// The parts of a session.
@@ -157,6 +182,10 @@ pub(crate) struct SessionParts {
 }
 
 impl Session {
+    pub(crate) fn to_parts(&self) -> SessionParts {
+        self.clone().into_parts()
+    }
+
     pub(crate) fn into_parts(self) -> SessionParts {
         SessionParts {
             client: self.client,
@@ -170,6 +199,7 @@ impl Session {
             client: parts.client,
             config: parts.config,
             store: parts.store,
+            status: StatusWatcher::new(),
         }
     }
 }

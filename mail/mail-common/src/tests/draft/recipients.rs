@@ -34,19 +34,27 @@ fn remove_single_recipient() {
 
 #[test]
 fn invalid_email_is_added_to_list_with_error_status() {
-    let mut list = RecipientList::default();
-    let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "borkenEmail!".to_owned(),
-    };
+    let invalid_emails = ["brokenEmail!", "icalid@prprp"];
 
-    list.add_single(entry.clone()).unwrap();
-    assert_eq!(list.len(), 1);
-    match &list.recipients()[0] {
-        Recipient::Single(entry) => {
-            assert_eq!(entry.state, ValidationState::InvalidEmail);
+    for invalid_email in invalid_emails {
+        let entry = RecipientEntry {
+            display_name: MaybeEmptyString(None),
+            email: invalid_email.to_owned(),
+        };
+
+        let mut list = RecipientList::default();
+        list.add_single(entry.clone()).unwrap();
+        assert_eq!(list.len(), 1);
+        match &list.recipients()[0] {
+            Recipient::Single(entry) => {
+                assert_eq!(
+                    entry.state,
+                    ValidationState::InvalidEmail,
+                    "Unexpected validation state for {invalid_email}"
+                );
+            }
+            _ => panic!("unexpected entry"),
         }
-        _ => panic!("unexpected entry"),
     }
 }
 

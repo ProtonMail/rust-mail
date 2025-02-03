@@ -289,9 +289,11 @@ impl Conversation {
     ) -> Result<ActionOutput<MarkRead>, QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
         match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
-            Err(other) => Err(other),
+            Err(QueueActionError::Action(ActionError::NoInput)) => {
+                warn!("Action mark read with no actionable input");
+                Ok(ActionOutput::default())
+            }
+            other => other,
         }
     }
 
@@ -314,13 +316,15 @@ impl Conversation {
     ) -> Result<ActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
-            Err(other) => Err(other),
+            Err(QueueActionError::Action(ActionError::NoInput)) => {
+                warn!("Action mark read with no actionable input");
+                Ok(ActionOutput::default())
+            }
+            other => other,
         }
     }
 
-    /// Mark multiple conversations as read.
+    /// Delete multiple conversations.
     ///
     /// # Parameters
     ///
@@ -1631,7 +1635,12 @@ impl Conversation {
 
                     attachment.local_conversation_id = self.local_id;
                     attachment.remote_conversation_id = self.remote_id.clone();
-                    attachment.save(bond).await?;
+                    attachment.save(bond).await.inspect_err(|e| {
+                        error!(
+                            "Failed to updated attachment from conversation: {}",
+                            e.to_string()
+                        )
+                    })?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
@@ -1953,9 +1962,9 @@ impl Conversation {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn mark_multiple_as_unread_remote<PM: ProtonMail>(
+    pub async fn mark_multiple_as_unread_remote(
         ids: Vec<ConversationId>,
-        api: &PM,
+        api: &impl ProtonMail,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
         let request = |ids: Vec<ConversationId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
@@ -2458,9 +2467,8 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let handle = tether
-            .stash()
-            .subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
+        let handle =
+            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
@@ -2750,14 +2758,11 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the queries failed or if the server request failed.
-    pub async fn sync_conversation_messages<PM>(
+    pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
         tether: &mut Tether,
-        api: &PM,
-    ) -> Result<(), AppError>
-    where
-        PM: ProtonMail,
-    {
+        session: &Session,
+    ) -> Result<(), AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, tether).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
@@ -2767,7 +2772,15 @@ impl Conversation {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
-            let conversation_response = api.get_conversation(rid).await.map_err(|e| {
+
+            if session.status().await.is_offline() {
+                debug!("No connection, skipping sync");
+                return Err(AppError::API(ApiServiceError::NetworkError(
+                    "No connection".to_owned(),
+                )));
+            }
+
+            let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
                 error!("failed to download conversation messages: {e}");
                 AppError::from(e)
             })?;
@@ -2918,6 +2931,7 @@ impl Conversation {
         endpoint: F,
     ) -> Result<Vec<OperationResult<T>>, ApiServiceError>
     where
+        // TODO: Change me for an AsyncFn
         F: Fn(Vec<T>) -> Fut,
         Fut: Future<Output = Result<Vec<OperationResult<T>>, ApiServiceError>>,
         T: ProtonIdMarker,
@@ -3771,6 +3785,18 @@ impl ConversationCounters {
             unread: self.unread,
         })
     }
+
+    /// Watch conversation counter for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed
+    ///
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(ConversationCounterWatcher { sender }))
+    }
 }
 
 // TODO: Refactor this at 1.85 into an AsyncFnOnce
@@ -3793,5 +3819,24 @@ impl StoreLabelCounters {
         MessageLabelsCount::create_or_update_message_counts(self.1, &tx).await?;
         tx.commit().await?;
         Ok(())
+    }
+}
+
+pub struct ConversationCounterWatcher {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for ConversationCounterWatcher {
+    fn tables(&self) -> Vec<String> {
+        vec![ConversationCounters::table_name().to_string()]
+    }
+
+    fn on_tables_changed(&self, _tables: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!("Failed to send notification for ConversationCounterWatcher: {e}")
+            })
+            .ok();
     }
 }

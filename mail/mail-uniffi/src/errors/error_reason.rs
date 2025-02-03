@@ -222,13 +222,15 @@ impl From<RealDraftDiscardErrorReason> for DraftDiscardErrorReason {
 /// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum EventErrorReason {
-    Placeholder,
+    Refresh,
+    Subscriber,
 }
 
 impl From<RealEventErrorReason> for EventErrorReason {
     fn from(reason: RealEventErrorReason) -> Self {
         match reason {
-            RealEventErrorReason::Placeholder => EventErrorReason::Placeholder,
+            RealEventErrorReason::Subscriber => EventErrorReason::Subscriber,
+            RealEventErrorReason::Refresh => EventErrorReason::Refresh,
         }
     }
 }

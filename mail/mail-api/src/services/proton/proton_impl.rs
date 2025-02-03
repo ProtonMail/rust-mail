@@ -266,10 +266,11 @@ impl ProtonMail for Proton {
     async fn create_draft(
         &self,
         message: DraftParams,
-        action: DraftAction,
         attachment_key_packets: DraftAttachmentKeyPackets,
-        parent_id: Option<MessageId>,
+        reply_or_forward_params: Option<DraftReplyOrForwardParams>,
     ) -> ApiServiceResult<PostCreateDraftResponse> {
+        let (action, parent_id) =
+            reply_or_forward_params.map_or((None, None), |v| (Some(v.action), Some(v.parent_id)));
         Ok(POST!("{MAIL_V4}/messages")
             .body_json(PostCreateDraftRequest {
                 message,

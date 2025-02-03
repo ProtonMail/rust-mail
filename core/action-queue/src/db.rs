@@ -13,7 +13,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use std::ops::Add;
-use tracing::debug;
+use tracing::{debug, error};
 
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
@@ -59,6 +59,10 @@ pub struct StoredAction {
     #[DbField]
     pub version: u32,
 
+    #[DbField]
+    /// Whether this action has been picked up by the queue.
+    pub executing: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -88,6 +92,7 @@ impl StoredAction {
             state: serialized_state,
             version: T::VERSION,
             row_id: None,
+            executing: false,
         })
     }
 
@@ -155,7 +160,7 @@ impl StoredAction {
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
-            .await?;
+            .await.inspect_err(|e| error!("failed to load action deps: {e}"))?;
         self.dependencies.extend(dependencies);
 
         // Resources
@@ -168,6 +173,7 @@ impl StoredAction {
         {
             Ok(r) => self.resources = r,
             Err(e) => {
+                error!("failed to load resources: {e}");
                 if !matches!(
                     e,
                     StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
@@ -198,7 +204,7 @@ impl StoredAction {
 
         // Create resources
         bond.execute(
-            "INSERT INTO action_queue_resources VALUES (?,?)",
+            "INSERT OR REPLACE INTO action_queue_resources VALUES (?,?)",
             params![self.id, self.resources.clone()],
         )
         .await?;
@@ -264,6 +270,48 @@ impl StoredAction {
         )
         .await
     }
+
+    /// Create or update a stored action.
+    ///
+    /// An update is only applied when the existing action type matches the new action type. If
+    /// the type differ a new action is stored instead.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query fails.
+    pub async fn create_or_update(
+        &mut self,
+        existing_id: Id,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        if let Some(existing) =
+            StoredAction::find_first("WHERE id = ?", params![existing_id], bond).await?
+        {
+            // Only update if the action types are the same.
+            // NOTE: the executing check works since we guarantee immediate locking in sqlite
+            // transactions so that there is only ever one writer so this value will always be
+            // up to date.
+            if existing.action_type == self.action_type && !existing.executing {
+                self.id = existing.id;
+                self.row_id = existing.row_id;
+                // failsafe, filter out any dependencies on self.
+                // We also check this at submission time.
+                self.dependencies.retain(|v| *v != existing_id);
+            }
+        }
+
+        self.save(bond).await
+    }
+
+    /// Mark an action as executing by the queue.
+    pub async fn mark_as_executing(id: Id, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.execute(
+            format!("UPDATE {} SET executing=? WHERE id =?", Self::table_name()),
+            params![true, id],
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 /// Create the action queue tables.
@@ -303,7 +351,8 @@ impl Migration for MigrationV1 {
                 created INTEGER DEFAULT (datetime('now')),
                 scheduled INTEGER DEFAULT (datetime('now')),
                 state BLOB NOT NULL,
-                debug_string TEXT DEFAULT NULL
+                debug_string TEXT DEFAULT NULL,
+                executing INTEGER NOT NULL DEFAULT 0
             )
         "};
 
@@ -342,7 +391,7 @@ impl Migration for MigrationV1 {
         // Create resource tables
         let query = indoc! {"
             CREATE TABLE action_queue_resources (
-                action_id INTEGER NOT NULL,
+                action_id INTEGER PRIMARY KEY,
                 resource BLOB NOT NULL,
 
                 CONSTRAINT action_queue_res_action_id
@@ -351,9 +400,6 @@ impl Migration for MigrationV1 {
                     ON DELETE CASCADE
             )
         "};
-        tx.execute(query, vec![]).await?;
-
-        let query = "CREATE INDEX action_queue_resources_idx ON action_queue_resources (action_id)";
         tx.execute(query, vec![]).await?;
 
         Ok(())

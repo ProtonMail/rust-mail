@@ -7,10 +7,11 @@ use crate::datatypes::{
 };
 use crate::models::{Conversation, ConversationLabel, Message};
 use crate::AppError;
+use futures::try_join;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::session::Session;
 use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_ids::LocalConversationId;
@@ -184,15 +185,12 @@ impl ContextualConversation {
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
-    pub async fn conversation_and_messages<PM>(
+    pub async fn conversation_and_messages(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
         stash: &Stash,
-        api: &PM,
-    ) -> Result<Option<ContextualConversationAndMessages>, AppError>
-    where
-        PM: ProtonMail,
-    {
+        api: &Session,
+    ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
         let mut conn = stash.connection();
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
@@ -239,19 +237,32 @@ impl ContextualConversation {
         conversation_ids: Vec<LocalConversationId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
-        let inbox = MovableSystemFolderAction::inbox(tether).await?;
-        let archive = MovableSystemFolderAction::archive(tether).await?;
-        let trash = MovableSystemFolderAction::trash(tether).await?;
-        let spam = MovableSystemFolderAction::spam(tether).await?;
+        let current_label_fut = async {
+            Label::resolve_remote_label_id(current_label_id, tether)
+                .await
+                .map_err(AppError::from)
+        };
+        let conversations_fut = async {
+            Conversation::find_by_ids(conversation_ids.to_vec(), tether)
+                .await
+                .map_err(AppError::from)
+                .map(|convs| {
+                    convs
+                        .into_iter()
+                        .filter_map(|conv| ContextualConversation::new(conv, current_label_id))
+                        .collect_vec()
+                })
+        };
 
-        let current_label = Label::resolve_remote_label_id(current_label_id, tether).await?;
-        let bottom_bar_actions = MobileActions::bottom_bar_actions(tether).await?;
-        let conversations = Conversation::find_by_ids(conversation_ids.to_vec(), tether).await?;
-
-        let conversations = conversations
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, current_label_id))
-            .collect_vec();
+        let (inbox, archive, trash, spam, bottom_bar_actions, current_label, conversations) = try_join!(
+            MovableSystemFolderAction::inbox(tether),
+            MovableSystemFolderAction::archive(tether),
+            MovableSystemFolderAction::trash(tether),
+            MovableSystemFolderAction::spam(tether),
+            MobileActions::bottom_bar_actions(tether),
+            current_label_fut,
+            conversations_fut
+        )?;
 
         let visible_bottom_bar_actions = ContextualConversation::visible_bottom_bar_actions(
             &current_label,

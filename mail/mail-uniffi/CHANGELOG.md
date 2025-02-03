@@ -5,7 +5,120 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased] - 2025-01-XX
+## [unreleased] - 2025-01-xx
+
+## [0.40.2] - 2025-01-31
+
+### Fixed
+
+  -[ET-2032] function `conversation` now early returns when app is offline.
+  -[ET-2032] function `get_message_body` now early returns when app is offline.
+  -[ET-2007] unread filter now works correctly for message scroller
+  -[ET-2022] paginator does not initialize until the first page is fetched and ready to be returned
+  -[ET-2014] & [ET-2012] create message and conversation counters when label event is received.
+
+## [0.40.1] - 2025-01-31
+
+### Fixed
+
+  - [ET-1953] Fix prefetch not working after closing the app
+
+### Changed
+
+  - [ET-1971] `contact_suggestions` is loading contacts, sorting and deduplicating them
+    - It no longer takes `query` parameter, in order to fetch the data only once and not with every keystroke.
+      Therefore, it should be called only once when composer is opened and kept in the memory
+    - It no longer returns an array of suggestions. Instead, it returns the object that has two methods
+      - `.all()` - to get all suggestions
+      - `.filtered(query)` - to get filtered suggestions
+
+## [0.40.0] - 2025-01-31
+
+### Added
+
+  - [ET-1999] `Message::is_draft` property.
+  - `EventError` now reports refresh error.
+  - [ET-1953] Add a `prefetch` method getting key locations most recent 10 items loaded in a background
+
+### Fixed
+
+  - Newline delimiter in HTML draft replies/forward.
+  - [ET-1999] Apply `AllDraft` label and `AllMail` to drafts.
+
+## [0.39.0] - 2025-01-29
+
+### Added
+
+  - [ET-1894] `Draft::get_embedded_attachment` to load inline attachments via cid.
+
+### Fixed
+
+  - [ET-1332] Some messages should display better
+  - [ET-1913] Support retrying of failed login flow stages
+  - [ET-1923] Remove mail settings signature.
+  - [ET-1978] New drafts are not marked as being replies.
+  - [ET-1987] Fix email address validation for `RecipientList`.
+  - Fix sender address repeated in To and CC on draft reply.
+
+### Changed
+
+  - The log file will be append only.
+
+## [0.38.0] - 2025-01-28
+
+### Added
+
+  - [ET-1954] New method on `MailUserSession` `connection_status` and `ConnectionStatus` enum.
+  - [ET-1971] `contact_suggestions` function for the composer recipients autocompletion
+    - It has a dummy implementation that always return empty list for now.
+  - [ET-1956] `EventLoopErrorObserver` and `MailUserSession::obeserve_event_loop_errors`
+
+### Changed
+
+  - [ET-1956] `MailUserSession::poll_events` queues a poll event action. To get the real event loop
+    error one must pass an `EventLoopErrorObserver` to
+    `MailUserSession::obeserve_event_loop_errors`. Be sure to keep the returned handle alive.
+
+## [0.37.3] - 2025-01-27
+
+### Fixed
+
+  - [ET-1863] Mailbox counter watchers are updated whenever user marks conversation/message as read/unread
+  - [ET-1863] System labels (like Outbox) watchers are updated whenever labels change
+
+### Added
+
+- [ET-1944] `SwipeAction::{NoAction, LabelAs, MoveTo}` are now supported.
+
+
+## [0.37.2] - 2025-01-27
+
+### Fixed
+
+  - [ET-1932] Fix sending of forward/reply to messges with attachments.
+    - Does not yet handle PGP/MIME embedded content
+  - [ET-1685] Scroller now is able to switch between filters without being stuck on infinite loading.
+  - Conversation and Message attachments now only contain attachments with disposition attachment.
+   - Use `numAttachments` to get the total attachment count for each type.
+
+## [0.37.1] - 2025-01-24
+
+### Fixed
+
+  - [ET-1685] Scroller now is able to switch between filters without being stuck on infinite loading.
+
+## [0.37.0] - 2025-01-24
+
+### Changed
+
+  - [ET-1896] Draft save actions are now deduped in the queue.
+  - [ET-1685] `scroll_search` was renamed to `scroller_search`
+
+## [0.36.1] - 2025-01-24
+
+### Fixed
+
+  - [ET-1926]: Remote images and embedded images are always enabled, disregarding the setting.
 
 ### Added
 

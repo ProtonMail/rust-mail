@@ -5,6 +5,7 @@ use crate::widgets::{TextInput, TextInputState};
 use crate::CLI_ARGS;
 use anyhow::anyhow;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
+use proton_mail_common::proton_api_mail::proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
@@ -118,7 +119,11 @@ impl AppStateHandler for Model {
                             }
                         };
                         let message = if let Err(e) = flow
-                            .login(email.clone(), password.expose_secret().to_owned())
+                            .login(
+                                email.clone(),
+                                password.expose_secret().to_owned(),
+                                LoginExtraInfo::default(),
+                            )
                             .await
                         {
                             Message::LoginFailed(e).into()

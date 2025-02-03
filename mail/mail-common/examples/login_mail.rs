@@ -1,5 +1,6 @@
 #![allow(clippy::print_stdout)]
 use futures::TryFutureExt;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
@@ -26,14 +27,11 @@ async fn main() -> Result<()> {
     let mail_ctx = new_mail_ctx(&dir, kch.into(), cfg).await?;
     let user_ctx = new_user_ctx(Arc::clone(&mail_ctx)).await?;
 
-    println!("{:#?}", user_ctx.user().await?);
+    let user_obj = user_ctx.user().await?;
+    let user_acc = mail_ctx.get_account(user_ctx.user_id().to_owned()).await?;
 
-    let account = mail_ctx
-        .get_account(user_ctx.user_id().to_owned())
-        .await?
-        .unwrap();
-
-    println!("{account:#?}");
+    println!("{user_obj:#?}");
+    println!("{user_acc:#?}");
 
     Ok(())
 }
@@ -64,20 +62,30 @@ async fn new_mail_ctx(
 async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     let mut flow = ctx.new_login_flow()?;
 
-    flow.login(read("username")?, read("password")?)
-        .inspect_err(|err| error!("failed to login: {err}"))
-        .await?;
+    flow.login(
+        read("username")?,
+        read("password")?,
+        LoginExtraInfo::default(),
+    )
+    .inspect_err(|err| error!("failed to login: {err}"))
+    .await?;
 
     if flow.is_awaiting_2fa() {
-        flow.submit_totp(read("2nd factor")?)
-            .inspect_err(|err| error!("failed to submit TOTP: {err}"))
-            .await?;
+        for _ in 0..3 {
+            match flow.submit_totp(read("2nd factor")?).await {
+                Ok(()) => break,
+                Err(err) => error!("failed to submit TOTP: {err}"),
+            }
+        }
     }
 
     if flow.is_awaiting_mailbox_password() {
-        flow.submit_mailbox_password(read("2nd password")?)
-            .inspect_err(|err| error!("failed to submit mailbox password: {err}"))
-            .await?;
+        for _ in 0..3 {
+            match flow.submit_mailbox_password(read("2nd password")?).await {
+                Ok(()) => break,
+                Err(err) => error!("failed to submit mailbox password: {err}"),
+            }
+        }
     }
 
     let user_ctx = ctx

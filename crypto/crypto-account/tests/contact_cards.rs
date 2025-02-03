@@ -111,6 +111,31 @@ fn test_signed_card() {
 }
 
 #[test]
+fn test_signed_card_whitespace() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
+
+    // Trailing whitespaces should be stripped.
+    let mut data_to_sign = SIGNED_DATA.to_owned();
+    data_to_sign.push_str("    ");
+    let card = TestDecryptableCard(
+        ContactCardType::Signed,
+        data_to_sign,
+        SIGNED_SIGNATURE.to_owned(),
+    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
+
+    assert!(test_result.is_ok());
+}
+
+#[test]
 fn test_signed_card_invalid_signature() {
     let provider = new_pgp_provider();
     let private_key = provider

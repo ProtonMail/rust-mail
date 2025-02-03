@@ -18,9 +18,7 @@ use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{
-    spawn_async, uniffi_async, watch_channel, LiveQueryCallback, MapIntoResult, WatchHandle,
-};
+use crate::{spawn_async, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
@@ -120,10 +118,38 @@ impl DecryptedMessage {
         })
     }
 
+    /// This function merges the API attachments and PGP attachments into one for easier client
+    /// consumption.
+    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
+        self.body
+            .get_attachments()
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+}
+
+export_typed_result!(
+    EmbeddedAttachmentInfoResult,
+    EmbeddedAttachmentInfo,
+    ProtonError
+);
+#[uniffi::export]
+impl DecryptedMessage {
+    /// Load or fetch an embedded attachment with `cid` for this message.
+    ///
+    /// If the attachment is not in the cache it will be downloaded from the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the attachments can't be fetched from the server, retrieved
+    /// from the cache or the attachment with `cid` does not exist.
+    //NOTE: iOS request we share the same result types between
+    // this function and the Draft equivalent.
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+    ) -> EmbeddedAttachmentInfoResult {
         uniffi_async(async move {
             let att = self
                 .body
@@ -138,17 +164,8 @@ impl DecryptedMessage {
             })
         })
         .await
-        .map_into()
-    }
-
-    /// This function merges the API attachments and PGP attachments into one for easier client
-    /// consumption.
-    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
-        self.body
-            .get_attachments()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+        .map_err(ProtonError::from)
+        .into()
     }
 }
 
@@ -456,7 +473,7 @@ pub async fn paginate_search(
 
 #[allow(clippy::missing_panics_doc)]
 #[proton_uniffi_macros::export_result]
-pub async fn scroll_search(
+pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
     callback: Box<dyn LiveQueryCallback>,
@@ -536,11 +553,9 @@ pub async fn available_actions_for_messages(
         let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions =
-            RealMessage::available_actions(view, ids.into_iter().map_into().collect(), &tether)
-                .await?;
+        let actions = RealMessage::available_actions(view, ids.map_vec(), &tether).await?;
 
-        Result::<_, RealProtonMailError>::Ok(MessageAvailableActions::from(actions))
+        Ok::<_, RealProtonMailError>(MessageAvailableActions::from(actions))
     })
     .await
     .map_err(ActionError::from)
@@ -599,15 +614,12 @@ pub async fn watch_available_label_as_actions_for_messages(
 ) -> Result<WatchedLabelAs, ActionError> {
     uniffi_async(async move {
         let tether = mailbox.stash().connection();
-        let (actions, handle) = RealMessage::watch_available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?;
-        let actions = actions.into_iter().map_into().collect_vec();
+        let (actions, handle) =
+            RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
+        let actions = actions.map_vec();
         let handle = watch_channel(handle, callback);
 
-        Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
+        Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
     })
     .await
     .map_err(ActionError::from)
@@ -678,12 +690,12 @@ pub async fn all_available_bottom_bar_actions_for_messages(
         let tether = mailbox.stash().connection();
         let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
             mailbox.label_id().into(),
-            message_ids.into_iter().map_into().collect(),
+            message_ids.map_vec(),
             &tether,
         )
         .await?
         .into();
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)
@@ -776,13 +788,14 @@ pub async fn apply_label_to_messages(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_apply_label(queue, label_id.into(), message_ids.map_vec())
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_apply_label(
+            user_context.action_queue(),
+            label_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -807,8 +820,7 @@ pub async fn star_messages(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| RealMessage::action_star(queue, message_ids.map_vec()))
+        RealMessage::action_star(user_context.action_queue(), message_ids.map_vec())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -836,8 +848,7 @@ pub async fn unstar_messages(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| RealMessage::action_unstar(queue, message_ids.map_vec()))
+        RealMessage::action_unstar(user_context.action_queue(), message_ids.map_vec())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -867,13 +878,14 @@ pub async fn remove_label_from_messages(
 ) -> VoidActionResult {
     let user_context = session.ctx();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_remove_label(queue, label_id.into(), message_ids.map_vec())
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_remove_label(
+            user_context.action_queue(),
+            label_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -896,13 +908,14 @@ pub async fn mark_messages_read(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> 
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_mark_read(queue, label_id.into(), message_ids.map_vec())
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_mark_read(
+            user_context.action_queue(),
+            label_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -925,13 +938,14 @@ pub async fn mark_messages_unread(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_mark_unread(queue, label_id.into(), message_ids.map_vec())
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_mark_unread(
+            user_context.action_queue(),
+            label_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -954,13 +968,14 @@ pub async fn delete_messages(mailbox: Arc<Mailbox>, message_ids: Vec<Id>) -> Voi
     let user_context = mailbox.mbox().user_context();
     let label_id = mailbox.label_id();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_delete(queue, label_id.into(), message_ids.map_vec())
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_delete(
+            user_context.action_queue(),
+            label_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -1006,21 +1021,18 @@ pub async fn label_messages_as(
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
         Result::<_, RealProtonMailError>::Ok(
-            user_context
-                .with_queue(|queue| {
-                    RealMessage::action_label_as(
-                        queue,
-                        source_label_id.into(),
-                        message_ids.into_iter().map_into().collect(),
-                        selected_label_ids.into_iter().map_into().collect(),
-                        partially_selected_label_ids
-                            .into_iter()
-                            .map_into()
-                            .collect(),
-                        must_archive,
-                    )
-                })
-                .await?,
+            RealMessage::action_label_as(
+                user_context.action_queue(),
+                source_label_id.into(),
+                message_ids.into_iter().map_into().collect(),
+                selected_label_ids.into_iter().map_into().collect(),
+                partially_selected_label_ids
+                    .into_iter()
+                    .map_into()
+                    .collect(),
+                must_archive,
+            )
+            .await?,
         )
     })
     .await
@@ -1048,18 +1060,15 @@ pub async fn move_messages(
     let user_context = mailbox.mbox().user_context();
     let source_id = mailbox.label_id();
     uniffi_async(async move {
-        user_context
-            .with_queue(|queue| {
-                RealMessage::action_move(
-                    queue,
-                    source_id.into(),
-                    destination_id.into(),
-                    message_ids.map_vec(),
-                )
-            })
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_move(
+            user_context.action_queue(),
+            source_id.into(),
+            destination_id.into(),
+            message_ids.map_vec(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

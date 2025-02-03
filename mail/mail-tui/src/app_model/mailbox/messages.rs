@@ -20,11 +20,11 @@ use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{
-    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter,
+    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::{MailSettings, Message as MailMessage, MessageScrollData};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
@@ -39,6 +39,7 @@ use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
 
+use super::search::SearchStatusBar;
 use super::LabelAs;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
@@ -53,17 +54,18 @@ pub struct MessagesState {
 #[allow(dead_code)] // Watcher handle is needed to keep state
 enum Mode {
     Label(Paginator<DataScrollerSource<MessageScrollData>>),
+    Search(Paginator<SearchScrollerSource>),
     Conversation(WatchHandle),
 }
 
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub(super) fn build(mbox: Mailbox, label: Label) -> Command<Messages> {
+    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
         let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
-            match Self::new_impl(ctx, label_id).await {
+            match Self::new_impl(ctx, label_id, filter).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state).into()),
                     background_command,
@@ -75,12 +77,66 @@ impl MessagesState {
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
+        filter: ReadFilter,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
+                async move { MailScroller::messages(context, label_id, filter, ITEM_LIMIT).await }
+                    .boxed()
+            },
+            |result| match result {
+                Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                Err(e) => {
+                    let e = anyhow!("Message Reload Query error: {e}");
+                    tracing::error!("{e}");
+                    e.into()
+                }
+            },
+        )
+        .await?;
+
+        let messages = paginator.fetch_more().await?;
+
+        Ok((
+            Self {
+                messages,
+                table_state: ScrollableTableState::new(Some(0)),
+                open_message: DecryptedMessageStatus::None,
+                mode: Mode::Label(paginator),
+            },
+            command,
+        ))
+    }
+
+    pub(super) fn from_search(mbox: Mailbox, search_phrase: String) -> Command<Messages> {
+        let ctx = mbox.user_context();
+        Command::task(async move {
+            match Self::from_search_impl(ctx, search_phrase).await {
+                Ok((state, background_command)) => Command::batch([
+                    Command::message(Message::OpenSearchView(mbox, state).into()),
+                    background_command,
+                ]),
+                Err(e) => Command::message(e.into()),
+            }
+        })
+    }
+
+    async fn from_search_impl(
+        ctx: Arc<MailUserContext>,
+        search_phrase: String,
+    ) -> MailboxResult<(Self, Command<Messages>)> {
+        let context = ctx.clone();
+        let search_phrase_clone = search_phrase.clone();
+        let (paginator, command) = Paginator::new(
+            || {
                 async move {
-                    MailScroller::messages(context, label_id, ReadFilter::All, ITEM_LIMIT).await
+                    MailScroller::search(
+                        context,
+                        SearchOptions::from(search_phrase_clone),
+                        ITEM_LIMIT,
+                    )
+                    .await
                 }
                 .boxed()
             },
@@ -95,16 +151,26 @@ impl MessagesState {
         )
         .await?;
 
-        let messages = paginator.all_items().await?;
+        let messages = paginator.fetch_more().await?;
+        let total = paginator.total().await;
 
         Ok((
             Self {
                 messages,
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
-                mode: Mode::Label(paginator),
+                mode: Mode::Search(paginator),
             },
-            command,
+            Command::batch(vec![
+                Command::message(
+                    Message::SearchStatusBar(SearchStatusBar {
+                        search_phrase,
+                        total,
+                    })
+                    .into(),
+                ),
+                command,
+            ]),
         ))
     }
 
@@ -139,7 +205,7 @@ impl MessagesState {
             conversation_id,
             label_id,
             ctx.user_stash(),
-            ctx.api(),
+            ctx.session(),
         )
         .await?
         else {
@@ -226,6 +292,7 @@ impl MessagesState {
                     );
                     temp_dir.push(escaped_subject);
 
+                    fs::create_dir_all(&temp_dir).unwrap();
                     let before = temp_dir.join("before.html");
                     fs::write(&before, &decrypted.body).unwrap();
 
@@ -284,6 +351,17 @@ impl StateHandler for MessagesState {
             return Command::None;
         };
 
+        if matches!(self.mode, Mode::Search(_))
+            && matches!(self.open_message, DecryptedMessageStatus::None)
+            && key.code == KeyCode::Esc
+        {
+            return Command::batch(vec![
+                Command::message(Message::ClearSearchStatusBar.into()),
+                // TODO: For now its hard to go back in the previous state - fixme
+                Command::message(Message::Sync(mbox.clone()).into()),
+            ]);
+        }
+
         if matches!(
             self.open_message,
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
@@ -318,6 +396,15 @@ impl StateHandler for MessagesState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 if let Mode::Label(paginator) = &self.mode {
+                    if self.table_state.selected().unwrap_or_default()
+                        == self.messages.len().saturating_sub(1)
+                    {
+                        return paginator.next_page_command(|v| {
+                            Command::message(MessageMessage::NextPage(v).into())
+                        });
+                    }
+                }
+                if let Mode::Search(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
                     {
@@ -438,6 +525,7 @@ impl StateHandler for MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('h') => Command::message(MessageMessage::HasMore.into()),
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
@@ -490,6 +578,34 @@ impl StateHandler for MessagesState {
                 return unstar_message(mbox, id);
             }
             MessageMessage::NextPage(messages) => self.messages.extend(messages),
+            MessageMessage::HasMore => {
+                if let Mode::Label(paginator) = &self.mode {
+                    let paginator_clone = paginator.clone_paginator();
+                    return Command::task(async move {
+                        let paginator = paginator_clone.lock().await;
+                        let has_more = paginator.has_more().await.unwrap();
+                        let total = paginator.total();
+                        let seen = paginator.seen().await.unwrap();
+                        Command::message(Messages::DisplayInfo(
+                            Some("Has more".to_owned()),
+                            format!("Loaded: {seen}/{total}, Has more: {has_more}"),
+                        ))
+                    });
+                }
+                if let Mode::Search(paginator) = &self.mode {
+                    let paginator_clone = paginator.clone_paginator();
+                    return Command::task(async move {
+                        let paginator = paginator_clone.lock().await;
+                        let has_more = paginator.has_more().await.unwrap();
+                        let total = paginator.total();
+                        let seen = paginator.seen().await.unwrap();
+                        Command::message(Messages::DisplayInfo(
+                            Some("Has more".to_owned()),
+                            format!("Loaded: {seen}/{total}, Has more: {has_more}"),
+                        ))
+                    });
+                }
+            }
         }
         Command::None
     }
@@ -651,10 +767,7 @@ fn mark_message_read(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages>
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| MailMessage::action_mark_read(queue, current_label_id, vec![id]))
-            .await
-        {
+        match MailMessage::action_mark_read(ctx.action_queue(), current_label_id, vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark message as read: {e}");
@@ -669,9 +782,7 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalMessageId) -> Command<Message
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| MailMessage::action_mark_unread(queue, current_label_id, vec![id]))
-            .await
+        match MailMessage::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
         {
             Ok(_) => Command::None,
             Err(e) => {
@@ -692,10 +803,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
             "Are you sure you wish to permanently delete the currently selected message?",
         )
         .on_accept(Command::task(async move {
-            match ctx
-                .with_queue(|queue| MailMessage::action_delete(queue, current_label_id, vec![id]))
-                .await
-            {
+            match MailMessage::action_delete(ctx.action_queue(), current_label_id, vec![id]).await {
                 Ok(_) => Command::None,
                 Err(e) => {
                     let e = anyhow!("Failed to delete message: {e}");
@@ -710,10 +818,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
 fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| MailMessage::action_star(queue, vec![id]))
-            .await
-        {
+        match MailMessage::action_star(ctx.action_queue(), vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
@@ -727,10 +832,7 @@ fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
 fn unstar_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| MailMessage::action_unstar(queue, vec![id]))
-            .await
-        {
+        match MailMessage::action_unstar(ctx.action_queue(), vec![id]).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
@@ -752,18 +854,15 @@ fn label_message(
 ) -> Command<Messages> {
     let ctx = mailbox.user_context();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| {
-                MailMessage::action_label_as(
-                    queue,
-                    source_label_id,
-                    conversation_ids,
-                    selected_label_ids,
-                    partially_selected_label_ids,
-                    must_archive,
-                )
-            })
-            .await
+        match MailMessage::action_label_as(
+            ctx.action_queue(),
+            source_label_id,
+            conversation_ids,
+            selected_label_ids,
+            partially_selected_label_ids,
+            must_archive,
+        )
+        .await
         {
             Ok(_) => Command::None,
             Err(e) => {
@@ -783,10 +882,7 @@ fn move_message(
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match ctx
-            .with_queue(|queue| {
-                MailMessage::action_move(queue, current_label_id, label_id, vec![id])
-            })
+        match MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, vec![id])
             .await
         {
             Ok(_) => Command::None,

@@ -48,11 +48,12 @@
 //! other functionality, and would get saved to the database.
 //!
 
+use std::future::Future;
 use std::sync::Arc;
 
 use bytes::Bytes;
 use muon::client::middleware::{DisplayLogger, Tagger};
-use muon::common::IntoDyn;
+use muon::common::{IntoDyn, RetryPolicy};
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
 use muon::App;
@@ -68,6 +69,7 @@ use crate::services::proton::proton_impl::{
     MuonStoreImpl, SetCryptoClockLayer, SetDefaultServiceTypeLayer, SetDefaultTimeoutLayer,
 };
 use crate::session::Config;
+use crate::status_watcher::StatusWatcher;
 use crate::store::Store;
 
 /// Re-export muon for downstream convenience.
@@ -79,6 +81,8 @@ pub mod request_data;
 pub mod requests;
 pub mod response_data;
 pub mod responses;
+
+pub use self::proton_impl::{ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, QUARTER_SECOND_TIMEOUT};
 
 mod proton_impl;
 
@@ -104,7 +108,11 @@ pub enum BuildError {
 }
 
 /// Builds a new Proton client.
-pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, BuildError> {
+pub fn build<S: Store>(
+    config: Config,
+    store: Arc<RwLock<S>>,
+    status_watcher: StatusWatcher,
+) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
         App::new(config.app_version)?.with_user_agent(agent)
     } else {
@@ -117,6 +125,7 @@ pub fn build<S: Store>(config: Config, store: Arc<RwLock<S>>) -> Result<Proton, 
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
+        .layer_back(status_watcher)
         .layer_back(DisplayLogger::debug())
         .build()?;
 
@@ -268,13 +277,17 @@ pub trait ProtonCore {
     ///
     async fn get_settings(&self) -> ApiServiceResult<GetSettingsResponse>;
 
-    /// TODO: Document this method.
+    /// The ping endpoint for testing connectivity.
     ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_tests_ping(&self) -> ApiServiceResult<()>;
+    fn get_tests_ping(
+        &self,
+        timeout_ms: Option<u64>,
+        retry: Option<RetryPolicy>,
+    ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 
     /// TODO: Document this method.
     ///

@@ -8,6 +8,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
@@ -254,8 +255,12 @@ impl MailContext {
     pub async fn user_context_from_session(
         self: &Arc<Self>,
         session: &CoreSession,
+        status: Option<StatusWatcher>,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self.core_context.user_context_from_session(session).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, status)
+            .await?;
         Arc::clone(self).new_user_context(ctx).await
     }
 

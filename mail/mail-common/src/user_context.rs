@@ -1,23 +1,24 @@
 mod action_queue;
 pub mod cache;
 mod events;
-pub mod exclusive_updates;
 mod images;
 mod initialization;
 
 use crate::models::{Conversation, Message};
+use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
-use crate::user_context::exclusive_updates::MailUserContextExclusive;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
 use proton_action_queue::queue::{Queue, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
+use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User};
@@ -31,9 +32,10 @@ use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
+use tokio::task::JoinHandle;
 use tracing::error;
 
 pub struct MailUserContext {
@@ -41,7 +43,9 @@ pub struct MailUserContext {
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
     cache: Cache,
-    exclusive: MailUserContextExclusive,
+    event_loop: EventLoop,
+    action_queue: Queue,
+    prefetch: PrefetchNotify,
 }
 
 impl MailUserContext {
@@ -55,33 +59,39 @@ impl MailUserContext {
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let user_context_weak = Arc::downgrade(&user_context);
-        let exclusive = MailUserContextExclusive::new(EventLoop::new(), action_queue);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             cache,
-            exclusive,
+            action_queue,
+            event_loop: EventLoop::new(),
+            prefetch: OnceLock::new(),
         });
 
-        this.exclusive
+        this.action_queue
             .register_execution_context(Weak::clone(&this.this));
-        this.exclusive.register_execution_context(user_context_weak);
+        this.action_queue
+            .register_execution_context(user_context_weak);
 
         this.init_expiration_loop();
+
         Ok(this)
     }
 
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
     /// that have an expiration date.
     fn init_expiration_loop(&self) {
-        let db = self.user_stash().clone();
+        let ctx = self.this.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            let mut tether = db.connection();
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
+                let Some(ctx) = ctx.upgrade() else {
+                    return;
+                };
+                let mut tether = ctx.user_stash().connection();
                 if let Err(e) = Conversation::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired conversations: {e}");
                 }
@@ -89,6 +99,8 @@ impl MailUserContext {
                 if let Err(e) = Message::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired messages: {e}");
                 }
+                drop(tether);
+                drop(ctx);
                 interval.tick().await;
             }
         });
@@ -108,15 +120,12 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    pub async fn execute_all_actions(&self) -> QueuedResult<()> {
-        self.exclusive.execute_all().await
+    pub async fn execute_all_actions(&self) -> QueuedResult<usize> {
+        self.action_queue.execute_all().await
     }
 
-    pub async fn with_queue<'a, F, T>(&'a self, closure: impl FnOnce(&'a Queue) -> F) -> T
-    where
-        F: Future<Output = T> + 'a,
-    {
-        self.exclusive.with_queue(closure).await
+    pub fn action_queue(&self) -> &Queue {
+        &self.action_queue
     }
 
     /// Get the API service.
@@ -329,8 +338,56 @@ impl MailUserContext {
 
     /// Ping the proton servers to see if they are responsive/alive.
     pub async fn ping(&self) -> MailContextResult<()> {
-        self.user_context.session().api().get_tests_ping().await?;
+        self.user_context
+            .session()
+            .api()
+            .get_tests_ping(None, None)
+            .await?;
         Ok(())
+    }
+
+    /// Get the connection status of the current user session.
+    pub async fn connection_status(&self) -> ConnectionStatus {
+        self.user_context.connection_status().await
+    }
+
+    /// Prefetch key locations in the background.
+    ///
+    /// Following priority locations are prefetched:
+    /// - Inbox
+    /// - Sent
+    /// - AllSent
+    /// - Drafts
+    /// - AllDrafts
+    pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
+        if let Some(sender) = self.prefetch.get() {
+            sender.send(()).map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+            })?;
+
+            Ok(())
+        } else {
+            let (sender, receiver) = flume::unbounded();
+
+            self.prefetch.set(sender).map_err(|e| {
+                MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
+            })?;
+            Prefetch::initialize(self.clone(), receiver).await;
+            self.prefetch.get().unwrap().send(()).map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+            })?;
+
+            Ok(())
+        }
+    }
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        task: impl Future<Output = T> + Send + 'static,
+    ) -> JoinHandle<AsyncTaskResult<T>> {
+        self.user_context.spawn(task)
     }
 }
 

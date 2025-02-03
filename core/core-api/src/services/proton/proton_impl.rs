@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::DateTime;
 use futures::TryFutureExt;
-use muon::common::Timeout;
 use muon::common::{BoxFut, Sender, SenderLayer, ServiceType};
+use muon::common::{RetryPolicy, Timeout};
 use muon::env::EnvId;
 use muon::error::ErrorKind as MuonErrorKind;
 use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
@@ -28,6 +28,10 @@ use crate::services::proton::prelude::*;
 use crate::services::proton::{Proton, ProtonCore};
 use crate::services::proton::{CORE_V4, CORE_V5};
 use crate::store::Store;
+
+pub const QUARTER_SECOND_TIMEOUT: u64 = 250;
+pub const ONE_SECOND_TIMEOUT: u64 = 1000;
+pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 
 impl ProtonCore for Proton {
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
@@ -160,8 +164,22 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn get_tests_ping(&self) -> ApiServiceResult<()> {
-        GET!("{CORE_V4}/tests/ping").send_with(self).await?.ok()?;
+    async fn get_tests_ping(
+        &self,
+        timeout_ms: Option<u64>,
+        retry: Option<RetryPolicy>,
+    ) -> ApiServiceResult<()> {
+        let timeout = timeout_ms.map(Duration::from_millis);
+        let mut request = GET!("{CORE_V4}/tests/ping");
+
+        if let Some(timeout) = timeout {
+            request = request.allowed_time(timeout);
+        }
+        if let Some(retry) = retry {
+            request = request.retry_policy(retry);
+        }
+
+        request.send_with(self).await?.ok()?;
 
         Ok(())
     }

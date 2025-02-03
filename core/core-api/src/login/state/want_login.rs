@@ -3,113 +3,99 @@ use std::sync::Arc;
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
 use crate::services::proton::prelude::{AuthId, UserId};
-use crate::services::proton::Proton;
 use crate::session::Config;
 use crate::store::{AuthInfo, DynStore, MbpMode, TfaMode};
-use muon::client::flow::{LoginExtraInfo, LoginFlow, LoginFlowData};
+use futures::TryFutureExt;
+use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
 use tracing::info;
 
 /// Represents the initial state of the login flow;
 /// the user must call `login` to proceed.
 pub struct WantLogin {
-    client: Proton,
+    flow: AuthFlow,
     config: Arc<Config>,
     store: DynStore,
 }
 
 impl WantLogin {
-    pub fn new(client: Proton, config: Arc<Config>, store: DynStore) -> Self {
+    pub fn new(flow: AuthFlow, config: Arc<Config>, store: DynStore) -> Self {
         info!("Login flow wants login");
 
         Self {
-            client,
+            flow,
             config,
             store,
         }
     }
 
-    pub async fn login(self, user: String, pass: String) -> Result<State, LoginError> {
-        let Self {
-            client,
-            config,
-            store,
-        } = self;
+    pub async fn login(
+        self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<State, (State, LoginError)> {
+        self.store.write().await.set_name_or_addr(&user);
 
-        store.write().await.set_name_or_addr(&user);
-
-        let state = match client
-            .auth()
-            .login_with_extra(&user, &pass, LoginExtraInfo::default())
+        self.try_login(user, pass, extra_info)
+            .map_err(|err| (State::LoginError, err))
             .await
-        {
+    }
+
+    async fn try_login(
+        self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<State, LoginError> {
+        match self.flow.login_with_extra(&user, &pass, extra_info).await {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
 
-                let LoginFlowData {
-                    user_id,
-                    session_id,
-                    password_mode,
-                } = flow_data;
+                let info = get_auth_info(&flow_data, false, false);
+                self.store.write().await.set_auth_info(info).await?;
+                let data = get_state_data(&flow_data, self.config, self.store);
 
-                let auth_info = AuthInfo {
-                    user_id: UserId::from(user_id.clone()),
-                    session_id: AuthId::from(session_id.clone()),
-                    tfa_mode: TfaMode::none(),
-                    mbp_mode: MbpMode::from(password_mode),
-                };
-
-                store.write().await.set_auth_info(auth_info).await?;
-
-                let data = StateData {
-                    config,
-                    store,
-                    user_id: UserId::from(user_id),
-                    auth_id: AuthId::from(session_id),
-                };
-
-                match password_mode {
-                    One => State::finalize(client, data, pass).await?,
-                    Two => State::want_mbp(client, data),
+                match flow_data.password_mode {
+                    One => State::finalize(client, data, pass).await,
+                    Two => Ok(State::want_mbp(client, data)),
                 }
             }
 
             LoginFlow::TwoFactor(flow, flow_data) => {
                 info!("Login flow requires 2FA");
 
-                let LoginFlowData {
-                    user_id,
-                    session_id,
-                    password_mode,
-                } = flow_data;
+                let info = get_auth_info(&flow_data, flow.has_totp(), flow.has_fido());
+                self.store.write().await.set_auth_info(info).await?;
+                let data = get_state_data(&flow_data, self.config, self.store);
 
-                let auth_info = AuthInfo {
-                    user_id: UserId::from(user_id.clone()),
-                    session_id: AuthId::from(session_id.clone()),
-                    tfa_mode: TfaMode::new(flow.has_totp(), flow.has_fido()),
-                    mbp_mode: MbpMode::from(password_mode),
-                };
-
-                store.write().await.set_auth_info(auth_info).await?;
-
-                let data = StateData {
-                    config,
-                    store,
-                    user_id: UserId::from(user_id),
-                    auth_id: AuthId::from(session_id),
-                };
-
-                match password_mode {
-                    One => State::want_tfa(flow, data, Some(pass)),
-                    Two => State::want_tfa(flow, data, None),
+                match flow_data.password_mode {
+                    One => Ok(State::want_tfa(flow.into(), data, Some(pass))),
+                    Two => Ok(State::want_tfa(flow.into(), data, None)),
                 }
             }
 
             LoginFlow::Failed { reason, .. } => {
-                return Err(LoginError::FlowLogin(muon::Error::from(reason).into()));
+                Err(LoginError::FlowLogin(muon::Error::from(reason).into()))
             }
-        };
+        }
+    }
+}
 
-        Ok(state)
+fn get_auth_info(data: &LoginFlowData, totp: bool, fido: bool) -> AuthInfo {
+    AuthInfo {
+        user_id: UserId::from(data.user_id.clone()),
+        session_id: AuthId::from(data.session_id.clone()),
+        tfa_mode: TfaMode::new(totp, fido),
+        mbp_mode: MbpMode::from(data.password_mode),
+    }
+}
+
+fn get_state_data(data: &LoginFlowData, config: Arc<Config>, store: DynStore) -> StateData {
+    StateData {
+        config,
+        store,
+        user_id: UserId::from(data.user_id.clone()),
+        auth_id: AuthId::from(data.session_id.clone()),
     }
 }

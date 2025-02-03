@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
+use futures::future::try_join;
 use futures::try_join;
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::{Address, Contact, Label, User};
@@ -26,6 +27,40 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 }
 
 impl MailUserContext {
+    /// Initialize a component.
+    #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
+    async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
+        stage: MailUserContextLoadingStage,
+        handle: JoinHandle<Result<(), E>>,
+        cb: &dyn MailUserContextInitializationCallback,
+    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        let t = Instant::now();
+        debug!("Begin syncing for {stage:?}");
+
+        let result = handle.await;
+        let elapsed = t.elapsed();
+        if elapsed > Duration::from_secs(1) {
+            warn!("Slow sync for {stage:?}: {elapsed:?}");
+        } else {
+            debug!("Syncing {stage:?} took {elapsed:?}");
+        }
+
+        cb.on_stage(stage);
+        match result {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => {
+                let e = e.into();
+                error!("Failed to sync {stage:?}: {e}");
+                Err((stage, e))
+            }
+            Err(e) => {
+                let e = e.into();
+                error!("Panicked while syncing {stage:?}: {e}");
+                Err((stage, e))
+            }
+        }
+    }
+
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
@@ -44,44 +79,47 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-        async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
-            stage: MailUserContextLoadingStage,
-            handle: JoinHandle<Result<(), E>>,
-            cb: &dyn MailUserContextInitializationCallback,
-        ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-            let t = Instant::now();
-            debug!("Begin syncing for {stage:?}");
+        let t0 = Instant::now();
+        let ctx_clone = ctx.clone();
+        let labels_and_contacts = tokio::spawn(async move {
+            // Since contact syncing is the slowest part let's leave it downloading in parallel while we
+            // setup all of the rest of the futures.
+            let ctx_clone2 = ctx_clone.clone();
+            let contact_sync_dl_fut = tokio::spawn(async move {
+                Contact::sync(ctx_clone2.session().api(), ctx_clone2.user_stash()).await
+            });
 
-            let result = handle.await;
-            let elapsed = t.elapsed();
-            if elapsed > Duration::from_secs(1) {
-                warn!("Slow sync for {stage:?}: {elapsed:?}");
-            } else {
-                debug!("Syncing {stage:?} took {elapsed:?}");
+            let labels = Label::all_labels(ctx_clone.session().api()).await?;
+
+            let api = ctx_clone.session().api().to_owned();
+            let counters = tokio::spawn(async move { StoreLabelCounters::new(&api).await });
+            let mut tether = ctx_clone.user_stash().connection();
+            let tx = tether.transaction().await?;
+            let label_ids = Label::sync_labels(&tx, labels).await?;
+            for local_id in label_ids {
+                ConversationCounters::new(local_id).save(&tx).await?;
+                MessageCounters::new(local_id).save(&tx).await?;
             }
 
-            cb.on_stage(stage);
-            match result {
-                Ok(Ok(())) => Ok(()),
-                Ok(Err(e)) => {
-                    let e = e.into();
-                    error!("Failed to sync {stage:?}: {e}");
-                    Err((stage, e))
-                }
-                Err(e) => {
-                    let e = e.into();
-                    error!("Panicked while syncing {stage:?}: {e}");
-                    Err((stage, e))
-                }
-            }
-        }
+            tx.commit().await?;
+
+            let (contact_fut, counters) = try_join(contact_sync_dl_fut, counters)
+                .await
+                .expect("Can't fail to join");
+
+            // FIXME:(perf): This should be a different future that requests contact
+            // group labels
+            contact_fut?.await?;
+            counters?.store(ctx_clone.user_stash()).await?;
+
+            Ok::<_, MailContextError>(())
+        });
 
         let ctx_clone = ctx.clone();
         let event_loop = tokio::spawn(async move {
             ctx_clone
-                .exclusive
-                .initialize_event_loop(ctx_clone.as_ref(), ctx_clone.as_ref())
+                .event_loop
+                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
                 .await
         });
         let ctx_clone = ctx.clone();
@@ -97,44 +135,22 @@ impl MailUserContext {
         let addresses = tokio::spawn(async move {
             Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
-        let ctx_clone = ctx.clone();
-        let labels_and_contacts = tokio::spawn(async move {
-            let labels = Label::all_labels(ctx_clone.session().api()).await?;
-
-            let api = ctx_clone.session().api().to_owned();
-            let counters = tokio::spawn(async move { StoreLabelCounters::new(&api).await });
-            let mut tether = ctx_clone.user_stash().connection();
-            let tx = tether.transaction().await?;
-            let label_ids = Label::sync_labels(&tx, labels).await?;
-            for local_id in label_ids {
-                ConversationCounters::new(local_id).save(&tx).await?;
-                MessageCounters::new(local_id).save(&tx).await?;
-            }
-
-            tx.commit().await?;
-
-            let counters = counters.await.expect("Can't fail to join")?;
-            counters.store(ctx_clone.user_stash()).await?;
-            // FIXME:(perf): This should be a different future that requests contact
-            // group labels
-            Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await?;
-            Ok::<_, MailContextError>(())
-        });
 
         try_join!(
-            initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
-            initial_sync_for(
+            Self::initial_sync_for(
                 MailUserContextLoadingStage::LabelsAndContacts,
                 labels_and_contacts,
                 cb
             ),
+            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
         )?;
 
-        debug!("Syncing Complete");
+        debug!("Syncing Complete in {:?}", t0.elapsed());
         cb.on_stage(MailUserContextLoadingStage::Finished);
+
         Ok(())
     }
 }

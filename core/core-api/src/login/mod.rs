@@ -3,9 +3,10 @@
 use crate::login::state::State;
 use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
-use crate::session::{Session, SessionParts};
+use crate::session::Session;
 use crate::store::StoreError;
 use futures::{TryFuture, TryFutureExt};
+use muon::client::flow::LoginExtraInfo;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -30,9 +31,13 @@ pub enum LoginError {
     #[error("Failed to login: {0}")]
     FlowLogin(#[source] ApiServiceError),
 
-    /// Returned if the 2FA code submission fails.
-    #[error("Failed to submit 2FA code: {0}")]
+    /// Returned if the TOTP code submission fails.
+    #[error("Failed to submit TOTP code: {0}")]
     FlowTotp(#[source] ApiServiceError),
+
+    /// Returned if the FIDO2 challenge response fails.
+    #[error("Failed to submit FIDO2 challenge response: {0}")]
+    FlowFido(#[source] ApiServiceError),
 
     /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
@@ -86,55 +91,49 @@ impl ServiceError for LoginError {}
 /// The flow is used to guide the user through the login process,
 /// ensuring that all necessary steps are completed in the correct order.
 #[derive(Debug)]
-pub struct Flow(State);
+pub struct Flow {
+    session: Session,
+    state: State,
+}
 
 impl Flow {
     #[must_use]
     pub fn new(session: Session) -> Self {
-        let SessionParts {
-            client,
-            config,
-            store,
-        } = session.into_parts();
+        let parts = session.to_parts();
+        let state = State::new(parts);
 
-        Self(State::want_login(client, config, store))
+        Self { session, state }
     }
 
     /// Resume the login flow at the 2FA step.
     #[must_use]
-    pub fn resume_second_factor(session: Session, user_id: UserId, session_id: AuthId) -> Self {
-        let SessionParts {
-            client,
-            config,
-            store,
-        } = session.into_parts();
+    pub fn new_from_tfa(session: Session, user_id: UserId, session_id: AuthId) -> Self {
+        let parts = session.to_parts();
+        let state = State::new_from_tfa(parts, user_id, session_id, None);
 
-        Self(State::want_resume_tfa(
-            client, config, store, user_id, session_id,
-        ))
+        Self { session, state }
     }
 
     /// Resume the login flow at the mailbox password step.
     #[must_use]
-    pub fn resume_mailbox_password(session: Session, user_id: UserId, session_id: AuthId) -> Self {
-        let SessionParts {
-            client,
-            config,
-            store,
-        } = session.into_parts();
+    pub fn new_from_mbp(session: Session, user_id: UserId, session_id: AuthId) -> Self {
+        let parts = session.to_parts();
+        let state = State::new_from_mbp(parts, user_id, session_id);
 
-        Self(State::want_resume_mbp(
-            client, config, store, user_id, session_id,
-        ))
+        Self { session, state }
     }
 
-    /// Start login with credentials. The `human_verification` parameter only needs to be submitted
-    /// if during the login flow you catch a [`LoginError::HumanVerificationRequired`] error.
+    /// Start login with credentials while passing additional `extra_info`.
     ///
     /// # Errors
     /// Returns error if the login request or SRP proof calculations failed.
-    pub async fn login(&mut self, user: String, pass: String) -> Result<(), LoginError> {
-        self.transition(|s| s.login(user, pass)).await
+    pub async fn login(
+        &mut self,
+        user: String,
+        pass: String,
+        extra_info: LoginExtraInfo,
+    ) -> Result<(), LoginError> {
+        self.transition(|s| s.login(user, pass, extra_info)).await
     }
 
     /// Submit TOTP 2FA code.
@@ -143,7 +142,9 @@ impl Flow {
     ///
     /// Returns error if the request failed.
     pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_totp(code)).await
+        self.transition(|s| s.submit_totp(code))
+            .await
+            .inspect_err(|_| self.try_recover())
     }
 
     /// Submit FIDO 2FA code.
@@ -154,7 +155,9 @@ impl Flow {
     ///
     /// Once implemented, this function will return an error if the request failed.
     pub async fn submit_fido(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_fido(code)).await
+        self.transition(|s| s.submit_fido(code))
+            .await
+            .inspect_err(|_| self.try_recover())
     }
 
     /// Submit the second mailbox password in two password mode.
@@ -164,7 +167,9 @@ impl Flow {
     /// Returns error if the request failed.
     /// If the password fails to decrypt the user key it returns a [`LoginError::WrongMailboxPassword`].
     pub async fn submit_mailbox_password(&mut self, pass: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_mbp(pass)).await
+        self.transition(|s| s.submit_mbp(pass))
+            .await
+            .inspect_err(|_| self.try_recover())
     }
 
     /// Take the completed session from the flow.
@@ -179,13 +184,13 @@ impl Flow {
     /// Check whether the session in logged out.
     #[must_use]
     pub fn is_logged_out(&self) -> bool {
-        matches!(self.0, State::WantLogin(_))
+        matches!(self.state, State::WantLogin(_))
     }
 
     /// Check whether the session is awaiting totp.
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
-        matches!(self.0, State::WantTfa(_))
+        matches!(self.state, State::WantTfa(_))
     }
 
     /// Check whether the session is awaiting a mailbox password.
@@ -193,13 +198,13 @@ impl Flow {
     /// If the user is in two password mode the mailbox password has to be provided separately.
     #[must_use]
     pub fn is_awaiting_mailbox_password(&self) -> bool {
-        matches!(self.0, State::WantMbp(_))
+        matches!(self.state, State::WantMbp(_))
     }
 
     /// Check whether the session has logged in.
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
-        matches!(self.0, State::Complete(_))
+        matches!(self.state, State::Complete(_))
     }
 
     /// Get the ID of the user that has been (or is about to be) logged in.
@@ -208,7 +213,7 @@ impl Flow {
     ///
     /// Returns an error if the user ID is not yet known.
     pub fn user_id(&self) -> Result<&UserId, LoginError> {
-        self.0.user_id()
+        self.state.user_id()
     }
 
     /// Get the ID of the session that has been (or is about to be) logged in.
@@ -217,20 +222,45 @@ impl Flow {
     ///
     /// Returns an error if the session ID is not yet known.
     pub fn session_id(&self) -> Result<&AuthId, LoginError> {
-        self.0.auth_id()
+        self.state.auth_id()
     }
 
     /// Try to transition the flow to the next state.
     async fn transition<F>(&mut self, f: impl FnOnce(State) -> F) -> Result<(), LoginError>
     where
-        F: TryFuture<Ok = State, Error = LoginError>,
+        F: TryFuture<Ok = State, Error = (State, LoginError)>,
     {
-        self.0 = f(self.take_state()).into_future().await?;
+        match f(self.take_state()).into_future().await {
+            Ok(state) => {
+                self.state = state;
+                Ok(())
+            }
 
-        Ok(())
+            Err((state, err)) => {
+                self.state = state;
+                Err(err)
+            }
+        }
+    }
+
+    /// Try to recover from a failed transition.
+    fn try_recover(&mut self) {
+        let parts = self.session.to_parts();
+
+        match self.take_state() {
+            State::TfaRetry(user_id, auth_id, pass) => {
+                self.state = State::new_from_tfa(parts, user_id, auth_id, pass);
+            }
+
+            State::MbpRetry(user_id, auth_id) => {
+                self.state = State::new_from_mbp(parts, user_id, auth_id);
+            }
+
+            state => self.state = state,
+        }
     }
 
     fn take_state(&mut self) -> State {
-        std::mem::replace(&mut self.0, State::Invalid)
+        std::mem::replace(&mut self.state, State::Invalid)
     }
 }

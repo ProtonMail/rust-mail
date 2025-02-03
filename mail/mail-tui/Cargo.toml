@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 # proton deps
+proton-action-queue = { workspace = true }
 proton-core-common = { workspace = true }
 proton-mail-common = { workspace = true }
 stash = { workspace = true }

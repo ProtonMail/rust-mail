@@ -1,4 +1,5 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
@@ -9,6 +10,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
@@ -29,13 +31,12 @@ use std::sync::Arc;
 use std::sync::Weak;
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
-use tracing::Level;
+use tracing::{info, Level};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{registry, EnvFilter};
 use wiremock::MockServer;
-use wiremock::{matchers::any, Mock, Request};
 
 pub trait BaseTestContext {
     /// Generate a test UID.
@@ -161,12 +162,13 @@ impl TestContext {
     ) -> Arc<Self> {
         drop(set_global_default(
             registry()
-                .with(EnvFilter::new("debug,stash=debug"))
+                .with(EnvFilter::new("debug,stash=info"))
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
 
         let mock_web_server = Arc::new(MockServer::start().await);
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
+        info!("CORE TMP DIR = {:?}", tmp_dir.path());
         let keychain: Arc<InMemoryKeyChain> = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
         let key = Self::encryption_key();
@@ -254,7 +256,7 @@ impl TestContext {
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
         self.context
-            .user_context_from_session(&self.core_session)
+            .user_context_from_session(&self.core_session, Some(StatusWatcher::test()))
             .await
             .expect("failed to create user context")
     }
@@ -270,27 +272,9 @@ impl TestContext {
     /// establish a catch-all in that way.
     ///
     /// # Panics
+    ///
     pub async fn catch_all(&self) {
-        // If there are any unconfigured calls, we will panic because it's not what
-        // we expect to happen, so the test should fail
-        Mock::given(any())
-            .respond_with(|request: &Request| {
-                panic!(
-                    "Received unexpected {} request\n  Path: {}\n  Headers:\n{}\n  Body: {}\n",
-                    request.method,
-                    request.url.path(),
-                    request
-                        .headers
-                        .iter()
-                        .map(|header| format!("    {}: {:?}", header.0, header.1))
-                        .collect::<Vec<String>>()
-                        .join("\n"),
-                    String::from_utf8(request.body.clone()).unwrap(),
-                );
-            })
-            .named("Catch all mock")
-            .mount(self.mock_server())
-            .await;
+        catch_all(self.mock_server()).await;
     }
 }
 
@@ -337,6 +321,10 @@ impl Event for TestCoreEvent {
     }
 
     fn has_more(&self) -> bool {
+        false
+    }
+
+    fn is_refresh(&self) -> bool {
         false
     }
 }

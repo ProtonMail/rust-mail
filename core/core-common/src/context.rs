@@ -1,5 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
+use crate::async_task::{spawn_task, AsyncTaskResult};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
@@ -17,17 +18,20 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tokio::task::JoinError;
+use tokio::task::{JoinError, JoinHandle};
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, Level};
 
 #[derive(Debug, Error)]
@@ -203,6 +207,7 @@ pub struct Context {
     cache_path: PathBuf,
     sender_image_cache_size: u64,
     api_config: ApiConfig,
+    cancellation_token: CancellationToken,
 }
 
 impl Context {
@@ -241,7 +246,7 @@ impl Context {
         std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let account_db_path = get_account_db_path(account_db_path);
-        let account_stash = Stash::get_instance(&account_db_path)?;
+        let account_stash = Stash::new(Some(&account_db_path))?;
         migrate_account_db(&account_stash).await?;
 
         Ok(Arc::new_cyclic(|this| Self {
@@ -256,6 +261,7 @@ impl Context {
             cache_path: cache_path.into(),
             sender_image_cache_size,
             api_config,
+            cancellation_token: CancellationToken::new(),
         }))
     }
 
@@ -470,7 +476,7 @@ impl Context {
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None)?;
+        let session = self.new_api_session(None, None)?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -499,14 +505,14 @@ impl Context {
         };
 
         match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
-                self.new_api_session(Some(&session))?,
+            CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
+                self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
             )),
 
-            CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
-                self.new_api_session(Some(&session))?,
+            CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
+                self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
             )),
@@ -548,6 +554,7 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
+        status: Option<StatusWatcher>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -566,7 +573,7 @@ impl Context {
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session))?;
+        let session = self.new_api_session(Some(session), status)?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -579,7 +586,7 @@ impl Context {
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
         for session in &self.get_account_sessions(user_id).await? {
             let Ok(api) = self
-                .new_api_session(Some(session))
+                .new_api_session(Some(session), None)
                 .inspect_err(|err| error!("failed to create API session: {err}"))
             else {
                 continue;
@@ -653,7 +660,11 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    fn new_api_session(&self, session: Option<&CoreSession>) -> CoreContextResult<ApiSession> {
+    fn new_api_session(
+        &self,
+        session: Option<&CoreSession>,
+        status: Option<StatusWatcher>,
+    ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let account_stash = self.account_stash();
@@ -661,7 +672,11 @@ impl Context {
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
         let config = self.api_config.clone();
 
-        Ok(ApiSession::new(config, Some(Box::new(store)))?)
+        Ok(ApiSession::new(
+            config,
+            Some(Box::new(store)),
+            status.unwrap_or_default(),
+        )?)
     }
 
     /// Get the stash in use
@@ -741,6 +756,29 @@ impl Context {
         active_contexts.insert(user_id, Arc::downgrade(&user_context));
 
         Ok(user_context)
+    }
+
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<T: Send + 'static>(
+        &self,
+        task: impl Future<Output = T> + Send + 'static,
+    ) -> JoinHandle<AsyncTaskResult<T>> {
+        let token = self.cancellation_token.clone();
+        spawn_task(token, task)
+    }
+
+    /// Returns a cancellation token that is a child of the the one owned by the context.
+    pub fn new_child_cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.child_token()
+    }
+
+    /// Cancel all tasks which are bound to this context.
+    ///
+    /// This will also cancel all child token created with [`child_cancellation_token()`]
+    pub fn cancel_all_tasks(&self) {
+        self.cancellation_token.cancel();
     }
 }
 
