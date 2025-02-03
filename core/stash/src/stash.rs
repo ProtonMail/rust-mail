@@ -433,7 +433,7 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: u32 = 100;
 
 /// A type alias for a field convertor function.
-type Convertor = Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>;
+type Convertor = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>;
 
 /// A dual-nature connection wrapper.
 ///
@@ -483,6 +483,8 @@ impl Deref for AgnosticConnection<'_> {
 /// * [`Worker`]
 ///
 enum Operation {
+    /// Terminate everything.
+    Quit,
     /// Closes a connection. This will also cause the associated
     /// [`TetheredWorker`] to exit.
     CloseConnection(Command),
@@ -534,19 +536,20 @@ impl Operation {
     /// * `error` - The error to send back to the caller.
     /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
-    fn send_back_error(&mut self, error: StashError, stash: &Stash) {
+    fn send_back_error(&mut self, error: StashError) {
         match *self {
             Self::CloseConnection(ref mut command)
             | Self::CommitTransaction(ref mut command)
             | Self::RollbackTransaction(ref mut command)
-            | Self::StartTransaction(ref mut command) => command.send_back(Err(error), stash),
-            Self::Instruct(ref mut instruction) => instruction.send_back(Err(error), stash),
+            | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
+            Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
             Self::Publish(_)
             | Self::NotifyRollbackTransaction(_)
             | Self::NotifyCommitTransaction(_)
+            | Self::Quit
             | Self::NotifyStartTransaction(_) => {}
-            Self::Query(ref mut query) => query.send_back(Err(error), stash),
-            Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error), stash),
+            Self::Query(ref mut query) => query.send_back(Err(error)),
+            Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error)),
         }
     }
 }
@@ -757,7 +760,7 @@ impl OperationLogic for Command {
     ///
     /// None.
     ///
-    fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
+    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
         Ok(())
     }
 
@@ -886,7 +889,7 @@ impl OperationLogic for Instruction {
     /// * [`Stash::execute()`]
     /// * [`Tether::execute()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<usize, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -1089,11 +1092,7 @@ impl OperationLogic for Query {
     /// * [`Stash::query()`]
     /// * [`Tether::query()`]
     ///
-    fn run(
-        &self,
-        connection: &AgnosticConnection<'_>,
-        stash: Stash,
-    ) -> Result<DbRecords, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<DbRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -1101,7 +1100,6 @@ impl OperationLogic for Query {
             statement
                 .query(&*Self::prepare_params(&self.params))
                 .map_err(StashError::ExecutionError)?,
-            stash,
         );
         if let Some(query) = statement.expanded_sql() {
             debug!("Query: {query}");
@@ -1190,13 +1188,37 @@ pub struct Stash {
     /// the worker thread for execution. This is the manner by which the order
     /// of operations is maintained, and how connections are managed and made
     /// thread-safe.
-    queue: QueueSender<Operation>,
+    queue: Arc<QuitOnDrop>,
 
     /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
     /// database for changes and notify subscribers. This is used to provide
     /// real-time updates to any subscribers that have registered interest in
     /// changes to the database for given tables.
     watcher: Arc<Watcher>,
+}
+
+/// Because the tethered workers are disconnected from the tether and since they also
+/// keep the sender queue alive, stash never really terminates.
+///
+/// This small wrapper ensures that when all references to `Stash` and `Tether` are
+/// dropped, we send a signal to the main worker to terminate.
+#[derive(Debug)]
+struct QuitOnDrop {
+    /// Message queue for stash main worker.
+    queue: QueueSender<Operation>,
+}
+
+impl Drop for QuitOnDrop {
+    fn drop(&mut self) {
+        drop(self.queue.send(Operation::Quit));
+    }
+}
+
+impl Deref for QuitOnDrop {
+    type Target = QueueSender<Operation>;
+    fn deref(&self) -> &Self::Target {
+        &self.queue
+    }
 }
 
 impl Debug for Stash {
@@ -1248,10 +1270,10 @@ impl Stash {
         let (sender, receiver) = flume::unbounded();
         let stash = Self {
             handle: Arc::new(()),
-            queue: sender,
+            queue: Arc::new(QuitOnDrop { queue: sender }),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
         };
-        Worker::start(path, receiver, stash.clone())?;
+        Worker::start(path, receiver, &stash)?;
         Ok(stash)
     }
 
@@ -1293,10 +1315,10 @@ impl Stash {
         debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
         Tether {
             handle,
-            queue: self.queue.clone(),
+            queue: Arc::clone(&self.queue),
             start_time: Arc::new(Instant::now()),
-            stash: self.clone(),
             state: Some(State::new()),
+            watcher: Arc::clone(&self.watcher),
         }
     }
 
@@ -1480,7 +1502,7 @@ impl OperationLogic for Subscription {
     ///
     /// None.
     ///
-    fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
+    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
         Ok(())
     }
 
@@ -1534,13 +1556,13 @@ pub struct Tether {
 
     /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
     /// associated. This is used to send queries to the worker for execution.
-    queue: QueueSender<Operation>,
+    queue: Arc<QuitOnDrop>,
 
     /// The time at which the Tether was created.
     start_time: Arc<Instant>,
 
-    /// The associated [`Stash`] instance.
-    stash: Stash,
+    /// Watcher instance
+    watcher: Arc<Watcher>,
 
     /// State needed for the connection to be updated on transaction start and
     /// published at the end.
@@ -1553,7 +1575,6 @@ impl Debug for Tether {
             .field("handle", &self.handle)
             .field("queue", &self.queue)
             .field("start_time", &self.start_time)
-            .field("stash", &self.stash)
             .finish_non_exhaustive()
     }
 }
@@ -1634,13 +1655,7 @@ impl Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        perform_execute(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
+        perform_execute(&self.queue, query, params, Some(Arc::clone(&self.handle))).await
     }
 
     /// Loads a record from the database by ID.
@@ -1760,13 +1775,7 @@ impl Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        perform_query(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
+        perform_query(&self.queue, query, params, Some(Arc::clone(&self.handle))).await
     }
 
     /// Utility function to return rows of a singular type.
@@ -1823,20 +1832,7 @@ impl Tether {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        perform_value_query(
-            self.stash().clone(),
-            query,
-            params,
-            Some(Arc::clone(&self.handle)),
-        )
-        .await
-    }
-
-    /// Get underlying stash instance.
-    ///
-    #[must_use]
-    pub const fn stash(&self) -> &Stash {
-        &self.stash
+        perform_value_query(&self.queue, query, params, Some(Arc::clone(&self.handle))).await
     }
 
     /// Utility function to return a single row of a singular type.
@@ -1941,7 +1937,7 @@ impl Tether {
             );
             return Err(StashError::Custom("No state found for Tether".into()));
         };
-        let watcher = Arc::clone(&self.stash.watcher);
+        let watcher = Arc::clone(&self.watcher);
         let result = state.sync_tables_async(self, &watcher).await;
 
         self.state = Some(state);
@@ -1957,12 +1953,34 @@ impl Tether {
             );
             return Err(StashError::Custom("No state found for Tether".into()));
         };
-        let watcher = Arc::clone(&self.stash.watcher);
+        let watcher = Arc::clone(&self.watcher);
         let result = state.publish_changes_async(self, &watcher).await;
 
         self.state = Some(state);
 
         result
+    }
+
+    /// Subscribes to notifications of changes to a specific table.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::subscribe()`].
+    pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
+    where
+        F: Fn(flume::Sender<()>) -> Box<dyn TableObserver>,
+    {
+        let (sender, receiver) = flume::unbounded();
+        let handle = self
+            .watcher
+            .add_observer_with_drop_remove(observer(sender))
+            .map_err(|e| {
+                StashError::WatcherError(format!(
+                    "Could not observe requested table, details: `{e}`"
+                ))
+            })?;
+
+        Ok(WatcherHandle { receiver, handle })
     }
 }
 
@@ -2027,12 +2045,6 @@ impl SqlTransactionAsync for Bond<'_> {
 
 impl Drop for Tether {
     fn drop(&mut self) {
-        // If the last reference to the Tether was in this variable being dropped,
-        // then we will close the connection.
-        if self.handle.fetch_sub(1, Ordering::SeqCst) > 1 {
-            // There are still other references to this Tether
-            return;
-        }
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
@@ -2263,7 +2275,6 @@ impl TetheredWorker {
         operation: Operation,
         connection: &'tx PooledConnection<SqliteConnectionManager>,
         mut transaction: Option<Transaction<'tx>>,
-        stash: &Stash,
         queue: &QueueSender<Operation>,
     ) -> Option<Transaction<'tx>> {
         match operation {
@@ -2284,7 +2295,7 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
-                        command.send_back(tx.commit().map_err(StashError::TransactionError), stash);
+                        command.send_back(tx.commit().map_err(StashError::TransactionError));
                         // Notify the main worker that the transaction has been committed
                         if queue
                             .send(Operation::NotifyCommitTransaction(Arc::clone(&conn_handle)))
@@ -2295,10 +2306,10 @@ impl TetheredWorker {
                             );
                         }
                     } else {
-                        command.send_back(Err(StashError::NoActiveTransaction), stash);
+                        command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::Instruct(mut instruction) => {
@@ -2309,16 +2320,10 @@ impl TetheredWorker {
                     instruction.start_time().elapsed().as_micros(),
                 );
                 // Note: The query count got incremented when the Instruction was created.
-                instruction.send_back(
-                    instruction.run(
-                        &transaction.as_ref().map_or(
-                            AgnosticConnection::Unbound(connection),
-                            AgnosticConnection::Engaged,
-                        ),
-                        stash.clone(),
-                    ),
-                    stash,
-                );
+                instruction.send_back(instruction.run(&transaction.as_ref().map_or(
+                    AgnosticConnection::Unbound(connection),
+                    AgnosticConnection::Engaged,
+                )));
             }
             Operation::Publish(_) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -2336,16 +2341,10 @@ impl TetheredWorker {
                     query.start_time().elapsed().as_micros(),
                 );
                 // Note: The query count got incremented when the Query was created.
-                query.send_back(
-                    query.run(
-                        &transaction.as_ref().map_or(
-                            AgnosticConnection::Unbound(connection),
-                            AgnosticConnection::Engaged,
-                        ),
-                        stash.clone(),
-                    ),
-                    stash,
-                );
+                query.send_back(query.run(&transaction.as_ref().map_or(
+                    AgnosticConnection::Unbound(connection),
+                    AgnosticConnection::Engaged,
+                )));
             }
             Operation::RollbackTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
@@ -2356,8 +2355,7 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
-                        command
-                            .send_back(tx.rollback().map_err(StashError::TransactionError), stash);
+                        command.send_back(tx.rollback().map_err(StashError::TransactionError));
                         // Notify the main worker that the transaction has been rolled back.
                         if queue
                             .send(Operation::NotifyRollbackTransaction(Arc::clone(
@@ -2370,10 +2368,10 @@ impl TetheredWorker {
                             );
                         }
                     } else {
-                        command.send_back(Err(StashError::NoActiveTransaction), stash);
+                        command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::StartTransaction(mut command) => {
@@ -2435,7 +2433,7 @@ impl TetheredWorker {
                         {
                             Ok(tx) => {
                                 transaction = Some(tx);
-                                command.send_back(Ok(()), stash);
+                                command.send_back(Ok(()));
                                 // Notify the main worker that a transaction has started.
                                 if queue
                                     .send(Operation::NotifyStartTransaction(conn_handle))
@@ -2447,24 +2445,25 @@ impl TetheredWorker {
                                 }
                             }
                             Err(error) => {
-                                command.send_back(Err(error), stash);
+                                command.send_back(Err(error));
                             }
                         };
                     } else {
-                        command.send_back(Err(StashError::TransactionAlreadyStarted), stash);
+                        command.send_back(Err(StashError::TransactionAlreadyStarted));
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::Subscribe(mut subscription) => {
                 // Technically, these cannot occur here, as subscription operations are
                 // global in scope and not connection-specific. We should never get here. If
                 // we do, it means there is an error in the logic of this module.
-                subscription.send_back(Err(StashError::SubscriptionError), stash);
+                subscription.send_back(Err(StashError::SubscriptionError));
             }
 
-            Operation::NotifyCommitTransaction(_)
+            Operation::Quit
+            | Operation::NotifyCommitTransaction(_)
             | Operation::NotifyRollbackTransaction(_)
             | Operation::NotifyStartTransaction(_) => {
                 // These should never occur in the tether work. If they do
@@ -2500,11 +2499,9 @@ impl TetheredWorker {
         conn_handle: Weak<AtomicU32>,
         pool: Pool<SqliteConnectionManager>,
         queue: QueueSender<Operation>,
-        stash: Stash,
     ) -> Self {
         let conn_handle_clone = Weak::clone(&conn_handle);
         let (sender, receiver) = flume::unbounded::<Operation>();
-        let stash_clone = stash.clone();
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
@@ -2529,7 +2526,7 @@ impl TetheredWorker {
                 connection = match pool.get_and_subscribe(queue.clone(), Some(conn_handle_clone)) {
                     Ok(conn) => Some(conn),
                     Err(error) => {
-                        operation.send_back_error(error, &stash_clone);
+                        operation.send_back_error(error);
                         return;
                     }
                 };
@@ -2561,7 +2558,6 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    &stash,
                     &queue,
                 );
             } else {
@@ -2570,6 +2566,9 @@ impl TetheredWorker {
 
             #[allow(clippy::unwrap_used)]
             while let Ok(operation) = receiver.recv() {
+                if matches!(operation, Operation::Quit) {
+                    return;
+                }
                 // Ownership of the transaction is sent and returned to avoid borrowing
                 // issues - otherwise the borrow checker believes the borrow is still active
                 // on the next loop.
@@ -2602,7 +2601,6 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    &stash_clone,
                     &queue,
                 );
             }
@@ -2684,9 +2682,6 @@ struct Worker {
     /// whenever changes are made to the database.
     subscribers: Vec<(QueueSender<Notification>, Option<String>)>,
 
-    /// The [`Stash] instance that the worker belongs to.
-    stash: Stash,
-
     /// A map of active connections with their tethered workers. This is used to
     /// keep track of the connections that are currently in use, and to
     /// associate them with the [`Tether`]s that are issued to the caller.
@@ -2767,7 +2762,6 @@ impl Worker {
     fn handle_operation(&mut self, operation: Operation) {
         let pool = self.pool.clone();
         let queue = self.queue.clone();
-        let stash = self.stash.clone();
         match operation {
             Operation::CloseConnection(_) => {
                 // At present this can only be sent directly to the tethered worker's queue.
@@ -2829,11 +2823,7 @@ impl Worker {
                             spawn_blocking(move || {
                                 // Note: The query count got incremented when the Instruction was created.
                                 instruction.send_back(
-                                    instruction.run(
-                                        &AgnosticConnection::Unbound(&connection),
-                                        stash.clone(),
-                                    ),
-                                    &stash,
+                                    instruction.run(&AgnosticConnection::Unbound(&connection)),
                                 );
                             })
                             .await
@@ -2842,7 +2832,7 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => instruction.send_back(Err(err), &stash),
+                        Err(err) => instruction.send_back(Err(err)),
                     }
                 }));
             }
@@ -2898,11 +2888,7 @@ impl Worker {
                             spawn_blocking(move || {
                                 // Note: The query count got incremented when the Query was created.
                                 query.send_back(
-                                    query.run(
-                                        &AgnosticConnection::Unbound(&connection),
-                                        stash.clone(),
-                                    ),
-                                    &stash,
+                                    query.run(&AgnosticConnection::Unbound(&connection)),
                                 );
                             })
                             .await
@@ -2911,7 +2897,7 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => query.send_back(Err(err), &stash),
+                        Err(err) => query.send_back(Err(err)),
                     }
                 }));
             }
@@ -2936,10 +2922,11 @@ impl Worker {
                 // Although this operation is infallible, a response still needs to be sent,
                 // as the caller might be waiting on the oneshot channel in order to
                 // continue.
-                subscription.send_back(Ok(()), &stash);
+                subscription.send_back(Ok(()));
             }
 
-            Operation::StartTransaction(_)
+            Operation::Quit
+            | Operation::StartTransaction(_)
             | Operation::CommitTransaction(_)
             | Operation::RollbackTransaction(_) => {
                 // These should not be handled by the main worker. If it
@@ -2989,7 +2976,7 @@ impl Worker {
     fn start(
         path: Option<&Path>,
         receiver: QueueReceiver<Operation>,
-        stash: Stash,
+        stash: &Stash,
     ) -> Result<(), StashError> {
         #[allow(clippy::single_match_else)]
         match path {
@@ -3004,6 +2991,8 @@ impl Worker {
             .max_size(MAX_CONNECTIONS)
             .build(manager)
             .map_err(StashError::TetherError)?;
+
+        let queue = stash.queue.queue.clone();
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, and will return the results via
@@ -3020,10 +3009,9 @@ impl Worker {
             let mut worker = Self {
                 notifications_buffer: HashMap::new(),
                 pool,
-                queue: stash.queue.clone(),
+                queue,
                 runtime,
                 subscribers: Vec::new(),
-                stash: stash.clone(),
                 tethers: HashMap::new(),
             };
 
@@ -3044,6 +3032,15 @@ impl Worker {
                     | Operation::NotifyRollbackTransaction(_)
                     | Operation::NotifyStartTransaction(_) => None,
                     Operation::Query(ref query) => query.conn_handle.clone(),
+                    Operation::Quit => {
+                        // Force terminate all tether workers
+                        #[allow(clippy::iter_over_hash_type)]
+                        for tether in worker.tethers.values() {
+                            drop(tether.queue.send(Operation::Quit));
+                        }
+                        debug!("Stash: Quit request");
+                        return;
+                    }
                 };
                 match conn_handle {
                     // If a tethered connection handle was specified, it means that this query
@@ -3144,7 +3141,6 @@ impl Worker {
                     weak_ref,
                     self.pool.clone(),
                     self.queue.clone(),
-                    self.stash.clone(),
                 )),
             ),
         }
@@ -3215,11 +3211,7 @@ trait OperationLogic {
     /// * [`Operation`]
     /// * [`Query`]
     ///
-    fn run(
-        &self,
-        connection: &AgnosticConnection<'_>,
-        stash: Stash,
-    ) -> Result<Self::Output, StashError>;
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
 
     /// Sends the result back to the caller.
     ///
@@ -3234,7 +3226,7 @@ trait OperationLogic {
     /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
     #[allow(clippy::used_underscore_binding)]
-    fn send_back(&mut self, result: Result<Self::Output, StashError>, _stash: &Stash) {
+    fn send_back(&mut self, result: Result<Self::Output, StashError>) {
         if let Some(channel) = self.channel().take() {
             // If sending down the oneshot channel fails, send() returns the message to
             // us. It's not particularly interesting what that message is, as we never
@@ -3372,15 +3364,12 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
 /// [`StashError::DeserializationError`] by the caller.
 ///
 #[allow(clippy::needless_pass_by_value)]
-fn converter<T>(rows: Rows<'_>, stash: Stash) -> Result<DbRecords, ConversionError>
+fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, ConversionError>
 where
     T: DbRecord + Send + 'static,
     DbRecords: FromIterator<Box<T>>,
 {
-    Ok(from_rows::<T>(rows, &stash)?
-        .into_iter()
-        .map(Box::new)
-        .collect())
+    Ok(from_rows::<T>(rows)?.into_iter().map(Box::new).collect())
 }
 
 /// Runs a query and returns the affected row count.
@@ -3410,7 +3399,7 @@ where
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_execute<Q: Into<String> + Send>(
-    stash: Stash,
+    queue: &QueueSender<Operation>,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
@@ -3422,8 +3411,7 @@ async fn perform_execute<Q: Into<String> + Send>(
         query.into(),
         params,
     ));
-    stash
-        .queue
+    queue
         .send_async(operation)
         .await
         .map_err(|err| StashError::QueueError(err.to_string()))?;
@@ -3461,7 +3449,7 @@ async fn perform_execute<Q: Into<String> + Send>(
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_value_query<Q, T>(
-    stash: Stash,
+    queue: &QueueSender<Operation>,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
@@ -3470,7 +3458,7 @@ where
     Q: Into<String> + Send,
     T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
 {
-    perform_query::<_, ValueRecord<T>>(stash, query, params, conn_handle)
+    perform_query::<_, ValueRecord<T>>(queue, query, params, conn_handle)
         .await
         .map(|values| values.into_iter().map(|v| v.value).collect())
 }
@@ -3503,7 +3491,7 @@ where
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_query<Q, T>(
-    stash: Stash,
+    queue: &QueueSender<Operation>,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
@@ -3524,8 +3512,7 @@ where
         // desired type.
         Box::new(converter::<T>),
     ));
-    stash
-        .queue
+    queue
         .send_async(operation)
         .await
         .map_err(|err| StashError::QueueError(err.to_string()))?;

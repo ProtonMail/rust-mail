@@ -242,7 +242,7 @@ impl Context {
         std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let account_db_path = get_account_db_path(account_db_path);
-        let account_stash = Stash::get_instance(&account_db_path)?;
+        let account_stash = Stash::new(Some(&account_db_path))?;
         migrate_account_db(&account_stash).await?;
 
         Ok(Arc::new_cyclic(|this| Self {

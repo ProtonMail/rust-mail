@@ -922,7 +922,7 @@ fn generate_fn_from_row_impl(
     let default_fields_impl = generate_default_fields_impl(default_fields);
 
     quote! {
-        fn from_row(row: &stash::exports::Row, columns: &[String], stash: stash::stash::Stash) -> Result<Self, stash::orm::ConversionError> {
+        fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
             Ok(Self {
                 #(
                     #db_fields: #from_row_values_impl,

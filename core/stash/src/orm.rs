@@ -13,7 +13,7 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{Bond, Stash, StashError, Tether};
+use crate::stash::{Bond, StashError, Tether};
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
@@ -150,7 +150,7 @@ where
     /// This function will return a [`ConversionError`] if there is a problem
     /// converting the row.
     ///
-    fn from_row(row: &Row<'_>, columns: &[String], stash: Stash) -> Result<Self, ConversionError>;
+    fn from_row(row: &Row<'_>, columns: &[String]) -> Result<Self, ConversionError>;
 }
 
 /// A trait for fully-modelled database records.
@@ -658,10 +658,7 @@ impl IntoIterator for DbRecords {
 /// This function will return a [`ConversionError`] if there is a problem
 /// converting the row.
 ///
-pub fn from_rows<T: DbRecord>(
-    mut rows: Rows<'_>,
-    stash: &Stash,
-) -> Result<Vec<T>, ConversionError> {
+pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
     let columns = rows
         .as_ref()
         .map(|statement| {
@@ -677,7 +674,7 @@ pub fn from_rows<T: DbRecord>(
         .ok_or(ConversionError::ColumnNamesNotAvailable)??;
     let mut results = vec![];
     while let Some(row) = rows.next()? {
-        results.push(T::from_row(row, &columns, stash.clone())?);
+        results.push(T::from_row(row, &columns)?);
     }
     Ok(results)
 }

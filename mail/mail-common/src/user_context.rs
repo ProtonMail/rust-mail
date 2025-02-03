@@ -80,13 +80,16 @@ impl MailUserContext {
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
     /// that have an expiration date.
     fn init_expiration_loop(&self) {
-        let db = self.user_stash().clone();
+        let ctx = self.this.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
-            let mut tether = db.connection();
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
+                let Some(ctx) = ctx.upgrade() else {
+                    return;
+                };
+                let mut tether = ctx.user_stash().connection();
                 if let Err(e) = Conversation::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired conversations: {e}");
                 }
@@ -94,6 +97,8 @@ impl MailUserContext {
                 if let Err(e) = Message::delete_expired(&mut tether).await {
                     error!("Error in background task deleting expired messages: {e}");
                 }
+                drop(tether);
+                drop(ctx);
                 interval.tick().await;
             }
         });

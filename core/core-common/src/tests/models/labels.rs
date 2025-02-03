@@ -363,7 +363,8 @@ async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label))
 
 #[tokio::test]
 async fn test_watch_label() {
-    let mut tether = new_core_test_connection().await.connection();
+    let stash = new_core_test_connection().await;
+    let mut tether = stash.connection();
     let tx = tether.transaction().await.unwrap();
 
     let mut label: Label = ApiLabel {
@@ -388,7 +389,7 @@ async fn test_watch_label() {
         .await
         .unwrap()
         .unwrap();
-    let handle = Label::watch(tether.stash()).unwrap();
+    let handle = Label::watch(&stash).unwrap();
     let watcher = &handle.receiver;
 
     assert_eq!(db_label, label);
