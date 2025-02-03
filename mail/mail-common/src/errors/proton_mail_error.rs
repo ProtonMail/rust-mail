@@ -189,6 +189,7 @@ impl From<MailContextError> for ProtonMailError {
                 Self::reason(ContextErrorReason::DuplicateContext)
             }
             MailContextError::Label(label_error) => Self::from(label_error),
+            MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

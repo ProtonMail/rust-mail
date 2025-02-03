@@ -12,6 +12,7 @@ use proton_api_mail::services::proton::prelude::{
     GetConversationsOptions, GetConversationsResponse, GetMessagesOptions,
 };
 use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use sqlite_watcher::watcher::TableObserver;
@@ -33,7 +34,7 @@ mod message_scroller;
 #[path = "tests/mail_scroller/conversation_scroller.rs"]
 mod conversation_scroller;
 
-type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
+type MailPaginatorJoinHandle = Option<JoinHandle<AsyncTaskResult<Result<(), MailContextError>>>>;
 pub trait MailScrollerSource: Send + Sync {
     type Item: Send + 'static;
 
@@ -229,7 +230,10 @@ impl<T: MailScrollerSource> MailScroller<T> {
             let result = wait_task
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
-                .and_then(|res| res);
+                .and_then(|res| match res {
+                    AsyncTaskResult::Completed(v) => v,
+                    AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
+                });
 
             if result.is_err() {
                 // We failed to fetch next page in the background. This is not the end of the world,
@@ -378,7 +382,7 @@ impl RemoteSource for ConversationScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let mut tether = ctx.user_stash().connection();
-        let handle = tokio::task::spawn(async move {
+        let handle = ctx.spawn(async move {
             RemoteConversationScrollerSource::sync_first_page(
                 &session,
                 &mut tether,
@@ -425,7 +429,7 @@ impl RemoteSource for MessageScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let mut tether = ctx.user_stash().connection();
-        let handle = tokio::task::spawn(async move {
+        let handle = ctx.spawn(async move {
             RemoteMessageScrollerSource::sync_first_page(
                 &session,
                 &mut tether,
@@ -629,7 +633,7 @@ impl RemoteConversationScrollerSource {
         let conversation_time = scroller.conversation_time;
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             Self::sync_next_page(
@@ -888,7 +892,7 @@ impl RemoteMessageScrollerSource {
         let message_time = scroller.message_time;
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             Self::sync_next_page(
@@ -1115,7 +1119,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let mut tether = stash.connection();
 
             Self::sync_first_page(
@@ -1143,7 +1147,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             if let Some((remote_id, time)) =

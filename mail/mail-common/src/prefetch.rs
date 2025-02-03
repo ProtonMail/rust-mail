@@ -73,8 +73,10 @@ impl Prefetch {
             prefetch_locations: locations,
         };
 
-        tokio::spawn(async move {
-            let ctx = Arc::downgrade(&ctx);
+        let ctx_weak = Arc::downgrade(&ctx);
+
+        ctx.spawn(async move {
+            let ctx = ctx_weak;
             loop {
                 if reciever.recv_async().await.is_err() {
                     break;
