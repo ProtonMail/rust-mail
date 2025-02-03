@@ -293,9 +293,10 @@ use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::collections::HashMap;
+use std::fs::File;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, LazyLock};
 use std::time::Instant;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
@@ -447,10 +448,10 @@ impl TetherOperation {
             }
             Self::Transaction(OperationTransaction::Abort) => {}
             Self::Execution(OperationExec::Instruct(x)) => {
-                x.send(Err(error));
+                x.send((Err(error), Duration::from_secs(0)));
             }
             Self::Execution(OperationExec::Query(x)) => {
-                x.send(Err(error));
+                x.send((Err(error), Duration::from_secs(0)));
             }
         }
     }
@@ -601,7 +602,7 @@ pub enum StashError {
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    channel: OneshotSender<Result<usize, StashError>>,
+    sender: OneshotSender<ResultedTime<usize>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -614,36 +615,8 @@ struct Instruction {
 }
 
 impl Instruction {
-    /// Creates a new command operation.
-    ///
-    /// # Parameters
-    ///
-    /// * `stash`       - The associated [`Stash`] instance for the operation.
-    /// * `channel`     - The communication channel used to send the result of
-    ///                   the operation back to the caller.
-    /// * `query`       - The query to execute. This is in raw SQL format ready
-    ///                   for parameter substitution.
-    /// * `params`      - The parameters to pass to the query. These are boxed
-    ///                   trait objects that implement the [`ToSql`] trait, and
-    ///                   are `Send` so that they can be sent between threads.
-    fn new(
-        channel: OneshotSender<Result<usize, StashError>>,
-        query: String,
-        params: Vec<Box<dyn ToSql + Send>>,
-    ) -> Self {
-        Self {
-            channel,
-            params,
-            query,
-        }
-    }
-}
-
-impl OperationLogic for Instruction {
-    type Output = usize;
-
-    fn send(self, result: Result<Self::Output, StashError>) {
-        if self.channel.send(result).is_err() {
+    fn send(self, result: ResultedTime<usize>) {
+        if self.sender.send(result).is_err() {
             // This means that the receiver has dropped.
             error!("Oneshot error: Failed sending result back to caller");
         }
@@ -686,7 +659,7 @@ impl OperationLogic for Instruction {
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
         let affected = statement
-            .execute(&*Self::prepare_params(&self.params))
+            .execute(&*prepare_params(&self.params))
             .map_err(StashError::ExecutionError)?;
         if let Some(query) = statement.expanded_sql() {
             debug!("Query: {query}");
@@ -740,7 +713,7 @@ pub struct Notification {
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    channel: OneshotSender<Result<DbRecords, StashError>>,
+    sender: OneshotSender<ResultedTime<DbRecords>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
@@ -758,49 +731,8 @@ struct Query {
 }
 
 impl Query {
-    /// Creates a new command operation.
-    ///
-    /// # Parameters
-    ///
-    /// * `stash`       - The associated [`Stash`] instance for the operation.
-    /// * `channel`     - The communication channel used to send the result of
-    ///                   the operation back to the caller.
-    /// * `conn_handle` - The unique handle of the connection to use for the
-    ///                   query. If [`Some`] a database connection will be
-    ///                   created and associated if not already registered, and
-    ///                   re-used otherwise. If [`None`], a new database
-    ///                   connection will be created, but not registered, and
-    ///                   used just this once.
-    /// * `query`       - The query to execute. This is in raw SQL format ready
-    ///                   for parameter substitution.
-    /// * `params`      - The parameters to pass to the query. These are boxed
-    ///                   trait objects that implement the [`ToSql`] trait, and
-    ///                   are `Send` so that they can be sent between threads.
-    /// * `converter`   - The deserialisation function to use to convert the
-    ///                   query results into the desired type. This is necessary
-    ///                   because the [`Rows`] type returned by the [`rusqlite`]
-    ///                   library is not thread-safe.
-    ///
-    fn new(
-        channel: OneshotSender<Result<DbRecords, StashError>>,
-        query: String,
-        params: Vec<Box<dyn ToSql + Send>>,
-        converter: Converter,
-    ) -> Self {
-        Self {
-            channel,
-            converter,
-            params,
-            query,
-        }
-    }
-}
-
-impl OperationLogic for Query {
-    type Output = DbRecords;
-
-    fn send(self, result: Result<Self::Output, StashError>) {
-        if self.channel.send(result).is_err() {
+    fn send(self, result: ResultedTime<DbRecords>) {
+        if self.sender.send(result).is_err() {
             // This means that the receiver has dropped.
             error!("Oneshot error: Failed sending result back to caller");
         }
@@ -848,7 +780,7 @@ impl OperationLogic for Query {
             .map_err(StashError::PreparationError)?;
         let rows: Result<DbRecords, ConversionError> = (self.converter)(
             statement
-                .query(&*Self::prepare_params(&self.params))
+                .query(&*prepare_params(&self.params))
                 .map_err(StashError::ExecutionError)?,
         );
         if let Some(query) = statement.expanded_sql() {
@@ -1203,32 +1135,12 @@ struct Subscription {
     table: Option<String>,
 }
 
-impl OperationLogic for Subscription {
-    type Output = ();
-
-    fn send(self, result: Result<Self::Output, StashError>) {
+impl Subscription {
+    fn send(self, result: Result<(), StashError>) {
         if self.channel.send(result).is_err() {
             // This means that the receiver has dropped.
             error!("Oneshot error: Failed sending result back to caller");
         }
-    }
-
-    /// Carries out a subscription.
-    ///
-    /// **Note: This function does not actually do anything, as the operational
-    /// context for subscriptions is the [`Subscription`] instance.**
-    ///
-    /// # Parameters
-    ///
-    /// * `connection` - The database connection to use for the operation.
-    /// * `stash`      - The associated [`Stash`] instance for the operation.
-    ///
-    /// # Errors
-    ///
-    /// None.
-    ///
-    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
-        Ok(())
     }
 }
 
@@ -1358,14 +1270,17 @@ impl Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = TetherOperation::Execution(OperationExec::Instruct(Instruction::new(
-            that_end,
-            query.into(),
+        let t0 = Instant::now();
+        let (sender, receiver) = oneshot::channel();
+        let operation = TetherOperation::Execution(OperationExec::Instruct(Instruction {
+            sender,
             params,
-        )));
+            query: query.into(),
+        }));
         self.queue.send(operation);
-        oneshot_join(this_end).await
+        let (r, d) = oneshot_join(receiver).await;
+        STATS.send((t0.elapsed(), d, "execute"));
+        r
     }
 
     /// Loads a record from the database by ID.
@@ -1486,20 +1401,19 @@ impl Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = TetherOperation::Execution(OperationExec::Query(Query::new(
-            that_end,
-            query.into(),
+        let t0 = Instant::now();
+        let (sender, receiver) = oneshot::channel();
+        let query = Query {
+            sender,
+            converter: Box::new(converter::<T>),
             params,
-            // The converter function picks up the nature of the generic T here, which
-            // allows Worker.query() to perform the deserialisation and return the
-            // desired type.
-            Box::new(converter::<T>),
-        )));
+            query: query.into(),
+        };
+        let operation = TetherOperation::Execution(OperationExec::Query(query));
         self.queue.send(operation);
 
-        let res = oneshot_join(this_end)
-            .await?
+        let (res, d) = oneshot_join(receiver).await;
+        let res = res?
             .into_iter()
             .map(|item| {
                 // The type we receive back is described as Any so that it can pass through
@@ -1508,6 +1422,7 @@ impl Tether {
                 *item.downcast::<T>().unwrap()
             })
             .collect();
+        STATS.send((t0.elapsed(), d, "query"));
         Ok(res)
     }
 
@@ -2258,6 +2173,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     }
 
     fn handle_exec(&self, operation: OperationExec) {
+        let t0 = Instant::now();
         let connection = match self.transaction {
             Some(ref tx) => AgnosticConnection::Engaged(tx),
             None => AgnosticConnection::Unbound(self.connection),
@@ -2266,11 +2182,11 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         match operation {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(&connection);
-                instruction.send(res);
+                instruction.send((res, t0.elapsed()));
             }
             OperationExec::Query(query) => {
                 let res = query.run(&connection);
-                query.send(res);
+                query.send((res, t0.elapsed()));
             }
         }
     }
@@ -2361,6 +2277,7 @@ impl Worker {
                 notifications_buffer: HashMap::new(),
                 subscribers: Vec::new(),
             };
+            // TODO: Clean this up
             while let Ok(operation) = receiver.recv_async().await {
                 debug!("we alive in loop");
                 match operation {
@@ -2439,82 +2356,30 @@ impl Worker {
                     }
                 };
             }
-            error!("Worker closed!");
-            unreachable!("aaaa");
         });
 
         Ok(())
     }
 }
 
-/// Logic for carrying out an operation on the database.
+/// Prepares parameters ready to be used with a query.
 ///
-/// This trait provides the interface for providing and running logic to carry
-/// out an operation on the database.
+/// This function prepares the parameters for a query, converting them into
+/// a form that can be used with the [`rusqlite`] library.
 ///
-/// # See also
+/// # Parameters
 ///
-/// * [`Command`]
-/// * [`Instruction`]
-/// * [`Notification`]
-/// * [`Operation`]
-/// * [`Query`]
-/// * [`Subscription`]
+/// * `params` - The parameters to prepare.
 ///
-trait OperationLogic
-where
-    Self: Sized,
-{
-    /// The type of the output of the operation, i.e. what is returned by the
-    /// [`run()`](OperationLogic::run()) method's implementation.
-    type Output;
-
-    /// The oneshot channel used to send the result back to the caller.
-    fn send(self, result: Result<Self::Output, StashError>);
-
-    /// Prepares parameters ready to be used with a query.
-    ///
-    /// This function prepares the parameters for a query, converting them into
-    /// a form that can be used with the [`rusqlite`] library.
-    ///
-    /// # Parameters
-    ///
-    /// * `params` - The parameters to prepare.
-    ///
-    fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
-        params
-            .iter()
-            .map(|p| {
-                #[allow(clippy::shadow_same)]
-                let p: &dyn ToSql = &**p;
-                p
-            })
-            .collect()
-    }
-
-    /// Carries out an operation on the database.
-    ///
-    /// This function carries out, or runs, an operation on the database. Its
-    /// exact behaviour is determined by the implementation of the trait, and
-    /// the associated documentation should be consulted for more details.
-    ///
-    /// # Parameters
-    ///
-    /// * `connection` - The database connection to use for the operation.
-    /// * `stash`      - The associated [`Stash`] instance for the operation.
-    ///
-    /// # Errors
-    ///
-    /// Various [`StashError`] variants can be returned. For more details see
-    /// the individual implementations of this trait.
-    ///
-    /// # See also
-    ///
-    /// * [`Instruction`]
-    /// * [`Operation`]
-    /// * [`Query`]
-    ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
+fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
+    params
+        .iter()
+        .map(|p| {
+            #[allow(clippy::shadow_same)]
+            let p: &dyn ToSql = &**p;
+            p
+        })
+        .collect()
 }
 
 /// Extension trait for the connection pool.
@@ -2651,3 +2516,29 @@ async fn oneshot_join<T>(rx: oneshot::Receiver<T>) -> T {
         .expect("channel timed out")
         .expect("Tether closed its channel with handles still open")
 }
+
+type ResultedTime<T> = (Result<T, StashError>, Duration);
+
+static STATS: LazyLock<mpsc::Sender<(Duration, Duration, &'static str)>> = LazyLock::new(|| {
+    let (tx, rx) = mpsc::channel::<(Duration, Duration, &'static str)>();
+    _ = std::thread::spawn(move || {
+        use std::io::Write as _;
+        let mut stats_file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("stats")
+            .unwrap();
+
+        while let Ok(val) = rx.recv() {
+            writeln!(
+                stats_file,
+                "{:?} {:?} {}",
+                val.0.as_nanos(),
+                val.1.as_nanos(),
+                val.2
+            )
+            .unwrap();
+        }
+    });
+    tx
+});
