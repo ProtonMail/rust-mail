@@ -1907,7 +1907,7 @@ impl Tether {
         self.quiet_transaction().await
     }
 
-    /// The transaction will no produce any notifications.
+    /// The transaction will produce no any notifications.
     ///
     /// This method is used to start a transaction without listening for changes.
     /// It is needed for internal implementation of the watch mechanism and scrollers.
@@ -2042,7 +2042,7 @@ impl SqlExecutorAsync for Bond<'_> {
 
 impl SqlTransactionAsync for Bond<'_> {
     fn sql_commit_transaction(self) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        self.quiet_commit(false)
+        self.commit_(false)
     }
 }
 
@@ -2116,16 +2116,33 @@ impl<'tether> Bond<'tether> {
     ///     committing the transaction.
     ///
     pub async fn commit(self) -> Result<(), StashError> {
-        self.quiet_commit(true).await
+        self.commit_(true).await
     }
 
-    #[allow(clippy::mem_forget)]
     /// Do not notify watchers about a changes, use in par with `quiet_transaction`.
     ///
     /// This method is used to commit a transaction without publishing changes.
     /// It is needed for internal implementation of the watch mechanism and scrollers.
     ///
-    pub async fn quiet_commit(self, publish_changes: bool) -> Result<(), StashError> {
+    /// # Errors
+    ///
+    /// see [`Bond::commit()`]
+    ///
+    pub async fn quiet_commit(self) -> Result<(), StashError> {
+        self.commit_(false).await
+    }
+
+    #[allow(clippy::mem_forget)]
+    /// Internal commit implementation.
+    ///
+    /// This method is used to commit a transaction without publishing changes.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
+    ///
+    /// # Errors
+    ///
+    /// see [`Bond::commit()`]
+    ///
+    async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
             Some(that_end),

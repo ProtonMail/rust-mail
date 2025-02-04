@@ -1325,7 +1325,7 @@ impl SearchScrollerSource {
             remote_id, time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }
