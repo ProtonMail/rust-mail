@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+### Fixed
+
+  - [ET-2028] Scroller now early exit for not seen location with error network
+
 ## [0.40.3] - 2025-01-31
 
 ### Fixed

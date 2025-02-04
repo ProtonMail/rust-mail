@@ -5,6 +5,7 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
@@ -226,7 +227,9 @@ impl<T: MailScrollerSource> MailScroller<T> {
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        if let Some(wait_task) = self.task.take() {
+        let is_online = self.ctx.session().status().await.is_online();
+        if self.task.is_some() && is_online {
+            let wait_task = self.task.take().unwrap();
             let result = wait_task
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
@@ -236,9 +239,6 @@ impl<T: MailScrollerSource> MailScroller<T> {
                 });
 
             if result.is_err() {
-                // We failed to fetch next page in the background. This is not the end of the world,
-                // `MailScrollerSource::sync_next` will return new task, log and keep going.
-
                 tracing::error!("Failed to fetch next page in the background: {:?}", result);
             }
         }
@@ -246,7 +246,12 @@ impl<T: MailScrollerSource> MailScroller<T> {
         let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
         self.task = task;
-        Ok(items)
+
+        if items.is_empty() && !is_online {
+            Err(MailContextError::no_connection())
+        } else {
+            Ok(items)
+        }
     }
 
     /// Returns all the elements that are "visible" in the data source.
@@ -583,8 +588,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 scroller.visible_elements(&tether).await?
             };
 
-            let should_not_load_more_from_remote =
-                scroller.has_more_than_a_page(&tether).await? || total < self.page_size as u64;
+            let should_not_load_more_from_remote = scroller.has_more_than_a_page(&tether).await?
+                || total < self.page_size as u64
+                || ctx.session().status().await.is_offline();
 
             let task = if should_not_load_more_from_remote {
                 None
@@ -597,6 +603,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             self.initialized = true;
             Ok((items, total, task))
         } else if total > 0 {
+            if ctx.session().status().await.is_offline() {
+                return Err(MailContextError::Api(ApiServiceError::NetworkError(
+                    "No connection".to_string(),
+                )));
+            }
+
             // Fallback for failing to initialize the scroller
             let (_, task) = self.initialize(ctx).await?;
             Ok((vec![], total, task))
