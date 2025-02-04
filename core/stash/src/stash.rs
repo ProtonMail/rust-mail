@@ -1912,6 +1912,9 @@ impl Tether {
     /// This method is used to start a transaction without listening for changes.
     /// It is needed for internal implementation of the watch mechanism and scrollers.
     ///
+    /// # Errors
+    ///
+    /// see [`Tether::transaction()`]
     pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
