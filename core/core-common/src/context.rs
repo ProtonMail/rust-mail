@@ -688,7 +688,7 @@ impl Context {
     fn find_user_db(&self, user_id: &UserId) -> Option<PathBuf> {
         let path = get_user_db_path(&self.user_db_path, user_id);
 
-        if path.try_exists().is_ok() {
+        if let Ok(true) = path.try_exists() {
             Some(path)
         } else {
             None
