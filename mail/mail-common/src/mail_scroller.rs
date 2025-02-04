@@ -241,14 +241,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
                     tracing::error!("Failed to fetch next page in the background: {:?}", result);
                 }
             } else {
-                dbg!("OFFLINE");
                 return Err(MailContextError::Api(ApiServiceError::NetworkError(
                     "No connection".to_string(),
                 )));
             }
         }
-
-        dbg!("HERE");
 
         let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
