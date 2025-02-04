@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+## [0.40.4] - 2025-01-31
+
 ### Fixed
 
   - [ET-2028] Scroller now early exit for not seen location with error network
+  - Fix false error during `delete_account`.
+  - Fix jitter during draft update
+
 
 ## [0.40.3] - 2025-01-31
 
