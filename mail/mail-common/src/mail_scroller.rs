@@ -227,30 +227,31 @@ impl<T: MailScrollerSource> MailScroller<T> {
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        if let Some(wait_task) = self.task.take() {
-            if self.ctx.session().status().await.is_online() {
-                let result = wait_task
-                    .await
-                    .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
-                    .and_then(|res| match res {
-                        AsyncTaskResult::Completed(v) => v,
-                        AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
-                    });
+        let is_online = self.ctx.session().status().await.is_online();
+        if self.task.is_some() && is_online {
+            let wait_task = self.task.take().unwrap();
+            let result = wait_task
+                .await
+                .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
+                .and_then(|res| match res {
+                    AsyncTaskResult::Completed(v) => v,
+                    AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
+                });
 
-                if result.is_err() {
-                    tracing::error!("Failed to fetch next page in the background: {:?}", result);
-                }
-            } else {
-                return Err(MailContextError::Api(ApiServiceError::NetworkError(
-                    "No connection".to_string(),
-                )));
+            if result.is_err() {
+                tracing::error!("Failed to fetch next page in the background: {:?}", result);
             }
         }
 
         let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
         self.task = task;
-        Ok(items)
+
+        if items.is_empty() && !is_online {
+            Err(MailContextError::no_connection())
+        } else {
+            Ok(items)
+        }
     }
 
     /// Returns all the elements that are "visible" in the data source.

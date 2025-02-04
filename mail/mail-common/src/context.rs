@@ -81,6 +81,12 @@ pub enum MailContextError {
     Other(anyhow::Error),
 }
 
+impl MailContextError {
+    pub fn no_connection() -> Self {
+        Self::Api(ApiServiceError::NetworkError("No connection".to_string()))
+    }
+}
+
 impl proton_action_queue::action::Error for MailContextError {
     fn is_network_failure(&self) -> bool {
         if let Self::Api(e) = self {
