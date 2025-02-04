@@ -192,4 +192,10 @@ impl UserContext {
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
     }
+
+    //TODO(Leander) cleanup
+    #[must_use]
+    pub fn cancellation_token(&self) -> CancellationToken {
+        self.cancellation_token.clone()
+    }
 }

@@ -11,9 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-  - [ET-2028] Scroller now early exit for not seen location with error network
+  - [ET-2028] Scroller now early exit for not seen location with error network.
   - Fix false error during `delete_account`.
-  - Fix jitter during draft update
+  - Fix jitter during draft update.
+  - Fix missing uniffi async wrapper in `new_event_loop_observer`.
 
 
 ## [0.40.3] - 2025-01-31

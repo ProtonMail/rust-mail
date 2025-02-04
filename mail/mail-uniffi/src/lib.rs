@@ -158,6 +158,7 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 pub mod core;
 #[macro_use]
@@ -245,7 +246,19 @@ where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
 {
-    ctx.spawn(future)
+    //TODO(Leander): cleanup
+    let cancellation_token = ctx.cancellation_token();
+    async_runtime().spawn(async move {
+        tokio::select! {
+            () = cancellation_token.cancelled() => {
+                AsyncTaskResult::Cancelled
+            }
+
+            r = future => {
+                AsyncTaskResult::Completed(r)
+            }
+        }
+    })
 }
 
 /// Run an async function on the Tokio runtime.
@@ -262,36 +275,24 @@ where
 /// Abstraction trait so we can reference either [`MailContext`] or [`MailUserContext`]
 /// when spawning tasks.
 pub trait AsyncSpawnable {
-    fn spawn<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
-        &self,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<T>>;
+    fn cancellation_token(&self) -> CancellationToken;
 }
 
 impl AsyncSpawnable for MailUserContext {
-    fn spawn<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
-        &self,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
-        self.spawn(future)
+    fn cancellation_token(&self) -> CancellationToken {
+        self.user_context().cancellation_token()
     }
 }
 
 impl AsyncSpawnable for Arc<MailUserContext> {
-    fn spawn<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
-        &self,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
-        MailUserContext::spawn(self.as_ref(), future)
+    fn cancellation_token(&self) -> CancellationToken {
+        self.user_context().cancellation_token()
     }
 }
 
 impl AsyncSpawnable for MailContext {
-    fn spawn<T: Send + 'static, F: Future<Output = T> + Send + 'static>(
-        &self,
-        future: F,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
-        self.core_context().spawn(future)
+    fn cancellation_token(&self) -> CancellationToken {
+        self.core_context().cancellation_token()
     }
 }
 
