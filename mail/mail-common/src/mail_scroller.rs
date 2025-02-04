@@ -857,7 +857,7 @@ impl RemoteConversationScrollerSource {
             remote_id, context_time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }
@@ -1061,7 +1061,7 @@ impl RemoteMessageScrollerSource {
             remote_id, time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }
