@@ -83,7 +83,7 @@ impl MailUserContext {
     /// that have an expiration date.
     fn init_expiration_loop(&self) {
         let ctx = self.this.clone();
-        tokio::spawn(async move {
+        self.spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -333,6 +333,7 @@ impl MailUserContext {
 
     pub async fn logout(&self) -> MailContextResult<()> {
         self.user_context.session().logout().await?;
+        self.user_context.cancel_all_tasks();
         Ok(())
     }
 

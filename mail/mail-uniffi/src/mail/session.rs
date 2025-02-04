@@ -233,7 +233,12 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(accounts, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
+                ctx.as_ref(),
+                accounts,
+                rx,
+                callback,
+            ))
         })
         .await
         .map_err(UserSessionError::from)
@@ -262,7 +267,12 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(accounts, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
+                ctx.as_ref(),
+                accounts,
+                rx,
+                callback,
+            ))
         })
         .await
         .map_err(UserSessionError::from)
@@ -315,7 +325,12 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(sessions, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
+                ctx.as_ref(),
+                sessions,
+                rx,
+                callback,
+            ))
         })
         .await
         .map_err(UserSessionError::from)
@@ -344,7 +359,12 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(sessions, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(
+                ctx.as_ref(),
+                sessions,
+                rx,
+                callback,
+            ))
         })
         .await
         .map_err(UserSessionError::from)
@@ -403,7 +423,12 @@ impl MailSession {
                 };
             }
 
-            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(sessions, rx, callback))
+            Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
+                ctx.as_ref(),
+                sessions,
+                rx,
+                callback,
+            ))
         })
         .await
         .map_err(UserSessionError::from)
@@ -681,19 +706,21 @@ impl WatchedAccounts {
     }
 
     fn new_sync(
+        ctx: &MailContext,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedAccounts {
-        WatchedAccounts::new(accounts, watch_channel(handle, callback))
+        WatchedAccounts::new(accounts, watch_channel(ctx, handle, callback))
     }
 
     fn new_async(
+        ctx: &MailContext,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedAccounts {
-        WatchedAccounts::new(accounts, watch_channel_async(handle, callback))
+        WatchedAccounts::new(accounts, watch_channel_async(ctx, handle, callback))
     }
 }
 
@@ -713,18 +740,20 @@ impl WatchedSessions {
     }
 
     fn new_sync(
+        ctx: &MailContext,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
     ) -> WatchedSessions {
-        WatchedSessions::new(sessions, watch_channel(handle, callback))
+        WatchedSessions::new(sessions, watch_channel(ctx, handle, callback))
     }
 
     fn new_async(
+        ctx: &MailContext,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedSessions {
-        WatchedSessions::new(sessions, watch_channel_async(handle, callback))
+        WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
     }
 }

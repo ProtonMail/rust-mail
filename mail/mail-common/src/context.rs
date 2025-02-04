@@ -75,6 +75,8 @@ pub enum MailContextError {
     Draft(#[from] draft::Error),
     #[error("Attempting to create more than one context for the user with id {0}")]
     DuplicateContext(UserId),
+    #[error("A task was cancelled")]
+    TaskCancelled,
     #[error("{0}")]
     Other(anyhow::Error),
 }

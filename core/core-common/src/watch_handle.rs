@@ -1,3 +1,4 @@
+use crate::async_task::AsyncTaskResult;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use tokio::task::{AbortHandle, JoinHandle};
 
@@ -8,9 +9,9 @@ pub struct WatchHandle {
 
 impl WatchHandle {
     #[must_use]
-    pub fn new<T>(
+    pub fn new<T: Send + 'static>(
         watch_handle: DropRemoveTableObserverHandle,
-        task_handle: &JoinHandle<T>,
+        task_handle: &JoinHandle<AsyncTaskResult<T>>,
     ) -> Self {
         Self {
             watch_handle,

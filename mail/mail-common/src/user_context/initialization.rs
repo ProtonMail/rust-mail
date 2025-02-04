@@ -6,6 +6,7 @@ use crate::{MailContextError, MailUserContext};
 use futures::future::try_join;
 use futures::try_join;
 use proton_api_core::session::CoreSession;
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::models::{Address, Contact, Label, User};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, warn, Level};
@@ -31,7 +32,7 @@ impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
     async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
         stage: MailUserContextLoadingStage,
-        handle: JoinHandle<Result<(), E>>,
+        handle: JoinHandle<AsyncTaskResult<Result<(), E>>>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let t = Instant::now();
@@ -47,11 +48,15 @@ impl MailUserContext {
 
         cb.on_stage(stage);
         match result {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(e)) => {
+            Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
+            Ok(AsyncTaskResult::Completed(Err(e))) => {
                 let e = e.into();
                 error!("Failed to sync {stage:?}: {e}");
                 Err((stage, e))
+            }
+            Ok(AsyncTaskResult::Cancelled) => {
+                error!("Called while syncing {stage:?}");
+                Err((stage, MailContextError::TaskCancelled))
             }
             Err(e) => {
                 let e = e.into();
@@ -81,18 +86,18 @@ impl MailUserContext {
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let t0 = Instant::now();
         let ctx_clone = ctx.clone();
-        let labels_and_contacts = tokio::spawn(async move {
+        let labels_and_contacts = ctx.spawn(async move {
             // Since contact syncing is the slowest part let's leave it downloading in parallel while we
             // setup all of the rest of the futures.
             let ctx_clone2 = ctx_clone.clone();
-            let contact_sync_dl_fut = tokio::spawn(async move {
+            let contact_sync_dl_fut = ctx_clone.spawn(async move {
                 Contact::sync(ctx_clone2.session().api(), ctx_clone2.user_stash()).await
             });
 
             let labels = Label::all_labels(ctx_clone.session().api()).await?;
 
             let api = ctx_clone.session().api().to_owned();
-            let counters = tokio::spawn(async move { StoreLabelCounters::new(&api).await });
+            let counters = ctx_clone.spawn(async move { StoreLabelCounters::new(&api).await });
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
             let label_ids = Label::sync_labels(&tx, labels).await?;
@@ -109,30 +114,38 @@ impl MailUserContext {
 
             // FIXME:(perf): This should be a different future that requests contact
             // group labels
-            contact_fut?.await?;
-            counters?.store(ctx_clone.user_stash()).await?;
+            match contact_fut {
+                AsyncTaskResult::Completed(f) => f?.await?,
+                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
+            }
+            match counters {
+                AsyncTaskResult::Completed(counters) => {
+                    counters?.store(ctx_clone.user_stash()).await?
+                }
+                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
+            }
 
             Ok::<_, MailContextError>(())
         });
 
         let ctx_clone = ctx.clone();
-        let event_loop = tokio::spawn(async move {
+        let event_loop = ctx.spawn(async move {
             ctx_clone
                 .event_loop
                 .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let user_settings = tokio::spawn(async move {
+        let user_settings = ctx.spawn(async move {
             User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let mail_settings = tokio::spawn(async move {
+        let mail_settings = ctx.spawn(async move {
             MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let addresses = tokio::spawn(async move {
+        let addresses = ctx.spawn(async move {
             Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
 

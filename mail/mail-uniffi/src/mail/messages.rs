@@ -18,7 +18,7 @@ use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{spawn_async, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
@@ -70,7 +70,8 @@ impl DecryptedMessage {
     #[allow(clippy::missing_panics_doc)]
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> BodyOutput {
         let this = self.clone();
-        spawn_async(async move { this.body.transformed(&this.ctx, opts).await })
+        async_runtime()
+            .spawn(async move { this.body.transformed(&this.ctx, opts).await })
             .await
             .expect("Transformed is infailable.")
     }
@@ -266,7 +267,7 @@ pub async fn watch_message(
             return Ok(None);
         };
         let handle = RealMessage::watch(&stash)?;
-        let handle = watch_channel(handle, callback);
+        let handle = watch_channel(&session.ctx(), handle, callback);
         Result::<_, RealProtonMailError>::Ok(Some(WatchedMessage {
             message: message.into(),
             handle,
@@ -376,7 +377,7 @@ pub async fn paginate_messages_for_label(
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(&context, handle, callback),
         }))
     })
     .await
@@ -411,12 +412,14 @@ pub async fn scroll_messages_for_label(
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx();
     uniffi_async(async move {
-        let scroller = MailScroller::messages(context, label_id.into(), filter.into(), 50).await?;
+        let scroller =
+            MailScroller::messages(Arc::clone(&context), label_id.into(), filter.into(), 50)
+                .await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {
             scroller: Mutex::new(scroller),
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(&context, handle, callback),
         }))
     })
     .await
@@ -464,7 +467,7 @@ pub async fn paginate_search(
         let handle = real_paginator.watch()?;
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
             real_paginator,
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(&context, handle, callback),
         }))
     })
     .await
@@ -480,12 +483,12 @@ pub async fn scroller_search(
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx();
     uniffi_async(async move {
-        let scroller = MailScroller::search(context, options.into(), 50).await?;
+        let scroller = MailScroller::search(Arc::clone(&context), options.into(), 50).await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(SearchScroller {
             scroller: Mutex::new(scroller),
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(&context, handle, callback),
         }))
     })
     .await
@@ -617,7 +620,7 @@ pub async fn watch_available_label_as_actions_for_messages(
         let (actions, handle) =
             RealMessage::watch_available_label_as_actions(ids.map_vec(), &tether).await?;
         let actions = actions.map_vec();
-        let handle = watch_channel(handle, callback);
+        let handle = watch_channel(&mailbox.context(), handle, callback);
 
         Ok::<_, RealProtonMailError>(WatchedLabelAs { actions, handle })
     })
@@ -758,7 +761,7 @@ pub async fn watch_messages_for_label(
         let tether = stash.connection();
         let messages = RealMessage::in_label(label_id.into(), &tether).await?;
         let handle = RealMessage::watch(&stash)?;
-        let watcher = watch_channel(handle, callback);
+        let watcher = watch_channel(&session.ctx(), handle, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedMessages {
             messages: messages.map_vec(),
             handle: watcher,
