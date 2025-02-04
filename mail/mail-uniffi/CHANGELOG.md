@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+## [0.40.3] - 2025-01-31
+
+### Fixed
+
+  - Fix contact order sorting.
+  - Fix ensure all background rust tasks are killed on logout.
+
 ## [0.40.2] - 2025-01-31
 
 ### Fixed
