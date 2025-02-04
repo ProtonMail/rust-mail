@@ -813,7 +813,9 @@ impl RemoteConversationScrollerSource {
         context_time: Option<u64>,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         // Save all conversations.
         for conversation in conversations.iter_mut() {
@@ -1024,7 +1026,9 @@ impl RemoteMessageScrollerSource {
         unread: ReadFilter,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         if messages.is_empty() {
             return Ok(());
@@ -1285,7 +1289,9 @@ impl SearchScrollerSource {
         messages: &mut [Message],
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         if messages.is_empty() {
             return Ok(());

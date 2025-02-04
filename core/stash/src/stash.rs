@@ -1904,15 +1904,15 @@ impl Tether {
     ///
     pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
         self.listen_for_changes().await?;
-        self.transaction_().await
+        self.quiet_transaction().await
     }
 
-    /// Internal helper method to start a transaction.
+    /// The transaction will no produce any notifications.
     ///
     /// This method is used to start a transaction without listening for changes.
-    /// It is needed for internal implementation of the watch mechanism.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
     ///
-    async fn transaction_(&mut self) -> Result<Bond<'_>, StashError> {
+    pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
             Some(that_end),
@@ -2019,7 +2019,7 @@ impl SqlConnectionAsync for Tether {
         &mut self,
     ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
            + Send {
-        self.transaction_()
+        self.quiet_transaction()
     }
 }
 

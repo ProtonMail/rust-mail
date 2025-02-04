@@ -220,10 +220,10 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         receiver,
         ..
     } = scroller.watch().unwrap();
+    // Setting scroller up will never push notification
+    assert!(receiver.is_empty());
+
     scroller.fetch_more().await.unwrap();
-    // At this point we have a scroller with one page loaded and one which may be yet loading.
-    // There is a case in which there might be a race and notification will be sent before the second page is loaded.
-    // This does not hurt anyone but we cannot be sure that we will receive the notification here.
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -241,10 +241,16 @@ async fn test_search_mail_scroller_notificate_about_changes() {
             msg_id!("mymsg_5"),
         ]
     );
+    // Fetching more will never trigger any notifications
+    assert!(receiver.is_empty());
 
     // Get next page
     let actual_page = scroller.fetch_more().await.unwrap();
     assert_eq!(actual_page.len(), 5);
+    let actual_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual_page.len(), 0);
+    // Fetching more will never trigger any notifications
+    assert!(receiver.is_empty());
 
     // Fetching for next, empty page will not trigger any notification
 
@@ -297,13 +303,8 @@ async fn test_search_mail_scroller_notificate_about_changes() {
     save_single_message(&label, &mut test_message.clone(), &bond).await;
     bond.commit().await.unwrap();
     // Getting an update will trigger a notification
-    if receiver.is_empty() {
-        receiver.recv_async().await.unwrap();
-    } else {
-        // We managed to get a notification for the second page request
-        receiver.recv_async().await.unwrap();
-        receiver.recv_async().await.unwrap();
-    }
+    receiver.recv_async().await.unwrap();
+
     // The new message will not be included in the scroller as it may not match the search criteria
     // It is up to client to run the search again to get the new message
     let actual = scroller.all_items().await.unwrap();
