@@ -1695,7 +1695,12 @@ impl Conversation {
 
         for label in &mut self.labels {
             label.local_conversation_id = self.local_id;
-            label.save(bond).await?;
+            label.save(bond).await.inspect_err(|e| {
+                error!(
+                    "Failed to save conversation label ({}): {e}",
+                    label.remote_label_id.as_deref().unwrap_or("?"),
+                )
+            })?;
         }
 
         // If exclusive location is not set, we try to calculate it now.
