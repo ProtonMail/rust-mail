@@ -1693,12 +1693,18 @@ impl MobileActions {
 
         if let Some(mobile_settings) = settings.mobile_settings {
             if mobile_settings.message_toolbar.is_custom {
-                return mobile_settings
+                match mobile_settings
                     .message_toolbar
                     .actions
                     .iter()
                     .map(|a| MobileActions::from_str(a))
-                    .collect::<Result<_, _>>();
+                    .collect::<Result<Vec<_>, _>>()
+                {
+                    Ok(actions) => return Ok(actions),
+                    Err(error) => {
+                        error!("Error parsing custom message_toolbar actions: {}", error);
+                    }
+                }
             }
         } else {
             warn!("No mobile_settings defined in MailSettings");
