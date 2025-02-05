@@ -33,9 +33,10 @@ pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, UserSessionError> {
-    let stash = ctx.ctx().user_stash().clone();
+    let ctx = ctx.ctx();
     uniffi_async(async move {
-        let handle = RealSettings::watch(&stash)?;
+        let stash = ctx.user_stash();
+        let handle = RealSettings::watch(stash)?;
         let tether = stash.connection();
         let settings = RealSettings::all(&tether)
             .await?
@@ -43,7 +44,7 @@ pub async fn watch_mail_settings(
             .unwrap_or_default()
             .into();
 
-        let watcher = watch_channel(handle, callback);
+        let watcher = watch_channel(ctx.as_ref(), handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,

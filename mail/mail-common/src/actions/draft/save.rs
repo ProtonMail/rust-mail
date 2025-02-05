@@ -344,8 +344,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
-        let Some(mut conversation) = Conversation::find_by_id(conversation_id, &tether).await?
-        else {
+        if Conversation::find_by_id(conversation_id, &tether)
+            .await?
+            .is_none()
+        {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
@@ -428,7 +430,15 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // Update remote ids
         message.remote_id = Some(new_message.metadata.id.clone());
         message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone());
-        conversation.remote_id = Some(new_message.metadata.conversation_id.clone());
+
+        // Update the remote conversation id.
+        Conversation::update_remote_id(
+            conversation_id,
+            new_message.metadata.conversation_id.clone(),
+            &bond,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to update the conversation remote id: {e}"))?;
 
         // Because we can't have custom update function in stash we need to
         // first set the remote id on the message body metadata and then
@@ -439,28 +449,36 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .await
             .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
 
-        // Update conversation
-        conversation
-            .save(&bond)
-            .await
-            .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
-
         // Update message data
-        let (mut message, mut new_message_body_metadata, _) =
+        let (mut new_local_message, mut new_message_body_metadata, _) =
             Message::from_api_data(new_message, &bond)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to convert api message: {e}");
                 })?;
-        message.row_id = row_id;
-        message.local_id = Some(message_id);
-        message.save(&bond).await.inspect_err(|e| {
+
+        // Do not override all the data as it may override local data that we modified
+        // but is out of date when we are making this request.
+        new_local_message.subject = message.subject;
+        new_local_message.to_list = message.to_list;
+        new_local_message.cc_list = message.cc_list;
+        new_local_message.bcc_list = message.bcc_list;
+        new_local_message.sender = message.sender;
+        new_local_message.num_attachments = message.num_attachments;
+        new_local_message.attachments_metadata = message.attachments_metadata;
+
+        new_local_message.row_id = row_id;
+        new_local_message.local_id = Some(message_id);
+        new_local_message.save(&bond).await.inspect_err(|e| {
             error!("Failed to update the message: {e}");
         })?;
 
         // Update body metadata
         new_message_body_metadata.local_message_id = Some(message_id);
         new_message_body_metadata.row_id = message_body_metadata.row_id;
+        // Keep the existing attachment data as this may be overridden by the server
+        // response if we have multiple saves.
+        new_message_body_metadata.attachments = message_body_metadata.attachments;
         new_message_body_metadata
             .save(&bond)
             .await

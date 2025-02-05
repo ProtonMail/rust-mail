@@ -1,6 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
-use crate::async_task::{spawn_task, AsyncTaskResult};
+use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
@@ -688,7 +688,7 @@ impl Context {
     fn find_user_db(&self, user_id: &UserId) -> Option<PathBuf> {
         let path = get_user_db_path(&self.user_db_path, user_id);
 
-        if path.try_exists().is_ok() {
+        if let Ok(true) = path.try_exists() {
             Some(path)
         } else {
             None
@@ -761,12 +761,25 @@ impl Context {
     /// Spawn an async `task` associated to this context.
     ///
     /// See [`spawn_task()`] for more details.
-    pub fn spawn<T: Send + 'static>(
-        &self,
-        task: impl Future<Output = T> + Send + 'static,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        <F as Future>::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        self.spawn_with::<_, DefaultTaskSpawner>(task)
+    }
+
+    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+        S: TaskSpawner + 'static,
+    {
         let token = self.cancellation_token.clone();
-        spawn_task(token, task)
+        spawn_task::<_, S>(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.

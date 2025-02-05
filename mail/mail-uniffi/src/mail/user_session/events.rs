@@ -72,7 +72,7 @@ impl MailUserSession {
         callback: Arc<dyn EventLoopErrorObserver>,
     ) -> Arc<EventLoopErrorObserverHandle> {
         let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx().action_queue());
-        let handle = spawn_async(async move {
+        let handle = spawn_async(self.ctx.as_ref(), async move {
             while let Ok(v) = observer.next().await {
                 if let ActionFailureReason::Error(err, _) = v {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {

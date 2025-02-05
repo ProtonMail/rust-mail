@@ -17,14 +17,16 @@ pub struct AllBottomBarMessageActions {
 
 /// Actions available from bottom bar for messages
 ///
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Eq, Hash, PartialEq, derive_more::derive::Debug)]
 pub enum BottomBarActions {
     LabelAs,
     MarkRead,
     MarkUnread,
     More,
     MoveTo,
+    #[debug("Move to {:?}", _0.name)]
     MoveToSystemFolder(MovableSystemFolderAction),
+    #[debug("NotSpam: Move to {:?}", _0.name)]
     NotSpam(MovableSystemFolderAction),
     PermanentDelete,
     Star,

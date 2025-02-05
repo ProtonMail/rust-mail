@@ -5,6 +5,7 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use anyhow::anyhow;
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
@@ -12,6 +13,7 @@ use proton_api_mail::services::proton::prelude::{
     GetConversationsOptions, GetConversationsResponse, GetMessagesOptions,
 };
 use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use sqlite_watcher::watcher::TableObserver;
@@ -33,7 +35,7 @@ mod message_scroller;
 #[path = "tests/mail_scroller/conversation_scroller.rs"]
 mod conversation_scroller;
 
-type MailPaginatorJoinHandle = Option<JoinHandle<Result<(), MailContextError>>>;
+type MailPaginatorJoinHandle = Option<JoinHandle<AsyncTaskResult<Result<(), MailContextError>>>>;
 pub trait MailScrollerSource: Send + Sync {
     type Item: Send + 'static;
 
@@ -225,16 +227,18 @@ impl<T: MailScrollerSource> MailScroller<T> {
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        if let Some(wait_task) = self.task.take() {
+        let is_online = self.ctx.session().status().await.is_online();
+        if self.task.is_some() && is_online {
+            let wait_task = self.task.take().unwrap();
             let result = wait_task
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
-                .and_then(|res| res);
+                .and_then(|res| match res {
+                    AsyncTaskResult::Completed(v) => v,
+                    AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
+                });
 
             if result.is_err() {
-                // We failed to fetch next page in the background. This is not the end of the world,
-                // `MailScrollerSource::sync_next` will return new task, log and keep going.
-
                 tracing::error!("Failed to fetch next page in the background: {:?}", result);
             }
         }
@@ -242,7 +246,12 @@ impl<T: MailScrollerSource> MailScroller<T> {
         let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
         self.task = task;
-        Ok(items)
+
+        if items.is_empty() && !is_online {
+            Err(MailContextError::no_connection())
+        } else {
+            Ok(items)
+        }
     }
 
     /// Returns all the elements that are "visible" in the data source.
@@ -378,7 +387,7 @@ impl RemoteSource for ConversationScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let mut tether = ctx.user_stash().connection();
-        let handle = tokio::task::spawn(async move {
+        let handle = ctx.spawn(async move {
             RemoteConversationScrollerSource::sync_first_page(
                 &session,
                 &mut tether,
@@ -425,7 +434,7 @@ impl RemoteSource for MessageScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let mut tether = ctx.user_stash().connection();
-        let handle = tokio::task::spawn(async move {
+        let handle = ctx.spawn(async move {
             RemoteMessageScrollerSource::sync_first_page(
                 &session,
                 &mut tether,
@@ -579,8 +588,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 scroller.visible_elements(&tether).await?
             };
 
-            let should_not_load_more_from_remote =
-                scroller.has_more_than_a_page(&tether).await? || total < self.page_size as u64;
+            let should_not_load_more_from_remote = scroller.has_more_than_a_page(&tether).await?
+                || total < self.page_size as u64
+                || ctx.session().status().await.is_offline();
 
             let task = if should_not_load_more_from_remote {
                 None
@@ -593,6 +603,12 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             self.initialized = true;
             Ok((items, total, task))
         } else if total > 0 {
+            if ctx.session().status().await.is_offline() {
+                return Err(MailContextError::Api(ApiServiceError::NetworkError(
+                    "No connection".to_string(),
+                )));
+            }
+
             // Fallback for failing to initialize the scroller
             let (_, task) = self.initialize(ctx).await?;
             Ok((vec![], total, task))
@@ -629,7 +645,7 @@ impl RemoteConversationScrollerSource {
         let conversation_time = scroller.conversation_time;
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             Self::sync_next_page(
@@ -797,7 +813,9 @@ impl RemoteConversationScrollerSource {
         context_time: Option<u64>,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         // Save all conversations.
         for conversation in conversations.iter_mut() {
@@ -839,7 +857,7 @@ impl RemoteConversationScrollerSource {
             remote_id, context_time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }
@@ -888,7 +906,7 @@ impl RemoteMessageScrollerSource {
         let message_time = scroller.message_time;
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             Self::sync_next_page(
@@ -1008,7 +1026,9 @@ impl RemoteMessageScrollerSource {
         unread: ReadFilter,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         if messages.is_empty() {
             return Ok(());
@@ -1041,7 +1061,7 @@ impl RemoteMessageScrollerSource {
             remote_id, time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }
@@ -1115,7 +1135,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let mut tether = stash.connection();
 
             Self::sync_first_page(
@@ -1143,7 +1163,7 @@ impl SearchScrollerSource {
         let stash = ctx.user_stash().clone();
         let session = ctx.session().clone();
 
-        let task = Some(tokio::spawn(async move {
+        let task = Some(ctx.spawn(async move {
             let tether = stash.connection();
 
             if let Some((remote_id, time)) =
@@ -1269,7 +1289,9 @@ impl SearchScrollerSource {
         messages: &mut [Message],
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        let tx = tether.transaction().await?;
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
 
         if messages.is_empty() {
             return Ok(());
@@ -1303,7 +1325,7 @@ impl SearchScrollerSource {
             remote_id, time, display_order
         );
 
-        tx.commit().await?;
+        tx.quiet_commit().await?;
 
         Ok(())
     }

@@ -9,6 +9,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
+use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
@@ -23,10 +24,11 @@ use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
-use tokio::task::JoinError;
+use tokio::task::{JoinError, JoinHandle};
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -75,8 +77,16 @@ pub enum MailContextError {
     Draft(#[from] draft::Error),
     #[error("Attempting to create more than one context for the user with id {0}")]
     DuplicateContext(UserId),
+    #[error("A task was cancelled")]
+    TaskCancelled,
     #[error("{0}")]
     Other(anyhow::Error),
+}
+
+impl MailContextError {
+    pub fn no_connection() -> Self {
+        Self::Api(ApiServiceError::NetworkError("No connection".to_string()))
+    }
 }
 
 impl proton_action_queue::action::Error for MailContextError {
@@ -485,6 +495,29 @@ impl MailContext {
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
 
         Ok(ctx)
+    }
+
+    /// Spawn an async `task` associated to this context.
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        <F as Future>::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        self.core_context.spawn(task)
+    }
+
+    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+        S: TaskSpawner + 'static,
+    {
+        self.core_context.spawn_with::<_, S>(task)
     }
 }
 

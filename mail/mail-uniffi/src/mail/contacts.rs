@@ -114,7 +114,7 @@ pub async fn watch_contact_list(
         let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        let task_handle = watch_channel_inner(handle.receiver, callback);
+        let task_handle = watch_channel_inner(user_context.as_ref(), handle.receiver, callback);
         let watcher = Arc::new(WatchHandle::new(handle.handle, &task_handle));
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
@@ -138,7 +138,7 @@ pub fn contacts_callback(
     let must_update = Arc::new(AtomicBool::new(false));
     let must_update_weak = Arc::downgrade(&must_update);
 
-    tokio::spawn(async move {
+    session.ctx().spawn(async move {
         let mut interval = interval(Duration::from_millis(50));
         let callback = Arc::new(callback);
 

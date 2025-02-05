@@ -162,16 +162,11 @@ pub async fn available_label_as_actions_for_conversations(
 ) -> Result<Vec<LabelAsAction>, ActionError> {
     uniffi_async(async move {
         let tether = mailbox.stash().connection();
-        let actions = RealConversation::available_label_as_actions(
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?
-        .into_iter()
-        .map_into()
-        .collect_vec();
+        let actions = RealConversation::available_label_as_actions(ids.map_vec(), &tether)
+            .await?
+            .map_vec();
 
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)
@@ -204,7 +199,7 @@ pub async fn watch_available_label_as_actions_for_conversations(
         )
         .await?;
         let actions = actions.into_iter().map_into().collect_vec();
-        let handle = watch_channel(handle, callback);
+        let handle = watch_channel(mailbox.context().as_ref(), handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(WatchedLabelAs { actions, handle })
     })
@@ -236,17 +231,11 @@ pub async fn available_move_to_actions_for_conversations(
         let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions = RealConversation::available_move_to_actions(
-            view,
-            ids.into_iter().map_into().collect(),
-            &tether,
-        )
-        .await?
-        .into_iter()
-        .map_into()
-        .collect_vec();
+        let actions = RealConversation::available_move_to_actions(view, ids.map_vec(), &tether)
+            .await?
+            .map_vec();
 
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)
@@ -272,13 +261,13 @@ pub async fn all_available_bottom_bar_actions_for_conversations(
         let tether = mailbox.stash().connection();
         let actions = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             mailbox.label_id().into(),
-            conversation_ids.into_iter().map_into().collect(),
+            conversation_ids.map_vec(),
             &tether,
         )
         .await?
         .into();
 
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)
@@ -314,15 +303,13 @@ async fn get_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
 ) -> Result<Option<ConversationAndMessages>, RealProtonMailError> {
-    let conn = mailbox.stash().clone();
-    let session = mailbox.mbox().user_context().session().clone();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(
+        Ok::<_, RealProtonMailError>(
             ContextualConversation::conversation_and_messages(
                 LocalConversationId::from(id),
                 mailbox.mbox().label_id(),
-                &conn,
-                &session,
+                mailbox.stash(),
+                mailbox.context().session(),
             )
             .await?
             .map(Into::into),
@@ -559,7 +546,7 @@ pub async fn paginate_conversations_for_label(
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationPaginator {
             real_paginator,
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(context.as_ref(), handle, callback),
             label_id,
         }))
     })
@@ -596,12 +583,13 @@ pub async fn scroll_conversations_for_label(
     let context = session.ctx();
     uniffi_async(async move {
         let scroller =
-            MailScroller::conversations(context, label_id.into(), filter.into(), 50).await?;
+            MailScroller::conversations(Arc::clone(&context), label_id.into(), filter.into(), 50)
+                .await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
             scroller: Mutex::new(scroller),
-            handle: watch_channel(handle, callback),
+            handle: watch_channel(context.as_ref(), handle, callback),
         }))
     })
     .await
@@ -779,7 +767,7 @@ pub async fn watch_conversation(
         };
 
         let receiver = ContextualConversation::watch(mailbox.stash())?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(mailbox.context().as_ref(), receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: conversation_messages.conversation,
@@ -829,7 +817,7 @@ pub async fn watch_conversations_for_label(
         let tether = session.user_stash().connection();
         let conversations = RealConversation::in_label(label_id.into(), &tether).await?;
         let receiver = ContextualConversation::watch(session.user_stash())?;
-        let watcher = watch_channel(receiver, callback);
+        let watcher = watch_channel(session.ctx().as_ref(), receiver, callback);
         Result::<_, RealProtonMailError>::Ok(WatchedConversations {
             conversations: conversations
                 .into_iter()
@@ -911,7 +899,7 @@ pub async fn watch_available_move_to_actions(
 ) -> Result<Arc<WatchHandle>, ActionError> {
     uniffi_async(async move {
         let handle = RealLabel::watch(mailbox.stash())?;
-        let handle = watch_channel(handle, callback);
+        let handle = watch_channel(mailbox.context().as_ref(), handle, callback);
         Result::<_, RealProtonMailError>::Ok(handle)
     })
     .await

@@ -10,25 +10,59 @@ pub enum AsyncTaskResult<T: Send> {
     Cancelled,
 }
 
+/// Abstraction trait to abstract the async task spawning.
+pub trait TaskSpawner {
+    /// Spawn the given task on the runtime.
+    fn spawn<F>(f: F) -> JoinHandle<F::Output>
+    where
+        F::Output: Send + 'static,
+        F: Future + Send + 'static;
+}
+
+pub struct DefaultTaskSpawner;
+impl TaskSpawner for DefaultTaskSpawner {
+    fn spawn<F>(f: F) -> JoinHandle<F::Output>
+    where
+        F::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        tokio::spawn(f)
+    }
+}
+
 /// Spawn an async `task` tied to a `cancellation_token`.
 ///
 /// The `task` will be spawned in a race with the `cancellation_token`.
 ///
 /// If the tasks completes before it gets cancelled, the output will be returned with
 ///[`AsyncTaskResult::Completed`], otherwise [`AsyncTaskResult::Cancelled` will be returned.
-pub fn spawn_task<T: Send + 'static>(
+pub fn spawn_task<F, S>(
     cancellation_token: CancellationToken,
-    task: impl Future<Output = T> + Send + 'static,
-) -> JoinHandle<AsyncTaskResult<T>> {
-    tokio::spawn(async move {
-        tokio::select! {
-            () = cancellation_token.cancelled() => {
-                AsyncTaskResult::Cancelled
-            }
+    task: F,
+) -> JoinHandle<AsyncTaskResult<F::Output>>
+where
+    F: Future + Send + 'static,
+    <F as Future>::Output: Send,
+    S: TaskSpawner + 'static,
+{
+    S::spawn::<_>(cancelable_task(cancellation_token, task))
+}
 
-            r = task => {
-                AsyncTaskResult::Completed(r)
-            }
+/// Utility wrapper that races a `task` against a `cancellation_token`.
+pub async fn cancelable_task<F: Future>(
+    cancellation_token: CancellationToken,
+    task: F,
+) -> AsyncTaskResult<F::Output>
+where
+    F::Output: Send,
+{
+    tokio::select! {
+        () = cancellation_token.cancelled() => {
+            AsyncTaskResult::Cancelled
         }
-    })
+
+        r = task => {
+            AsyncTaskResult::Completed(r)
+        }
+    }
 }

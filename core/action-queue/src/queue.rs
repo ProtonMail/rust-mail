@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use topological_sort::TopologicalSort;
-use tracing::{debug, error, Level};
+use tracing::{debug, debug_span, error, Instrument, Level};
 
 /// Execution context errors
 #[derive(Debug, thiserror::Error)]
@@ -1035,7 +1035,6 @@ impl BackgroundWorker {
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, tether))]
     async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some(action) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
@@ -1046,48 +1045,54 @@ impl BackgroundWorker {
         };
 
         let action_id = action.id.unwrap();
+        let action_type = action.action_type.clone();
         debug!(
             "Next Action: id={} type={} debug={}",
             action_id,
-            action.action_type,
+            action_type,
             action.short_dbg_str()
         );
-        let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
-        // mark the action as executing so it can't be replaced.
-        // NOTE: This only works because sqlite transactions are being serialized into
-        // a single writer. Because we are forcing immediate locking mode this will
-        // work correctly.
-        // NOTE2: If this action is marked as executing multiple times there is currently
-        // no harm as the only side effect is that some action which uses
-        // replace_or_queue will sometimes duplicate. This is a tradeoff to prevent
-        // a long running action from blocking the queuing o new actions.
-        let tx = tether.transaction().await?;
-        StoredAction::mark_as_executing(action_id, &tx)
-            .await
-            .inspect_err(|e| error!("Failed to mark as executing: {e}"))?;
-        tx.commit().await?;
+        async {
+            let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
-        let exec_output = decoded
-            .execute(&self.shared, metadata)
-            .await
-            .inspect_err(|e| {
-                if let QueuedError::Action(err, metadata) = e {
-                    // Send only fails if there are no receivers, which is a valid state.
-                    let _ = self.shared.broadcast_sender.send(BroadcastMessage::Error(
-                        Arc::clone(err),
-                        Arc::clone(metadata),
-                    ));
-                }
-            })?;
+            // mark the action as executing so it can't be replaced.
+            // NOTE: This only works because sqlite transactions are being serialized into
+            // a single writer. Because we are forcing immediate locking mode this will
+            // work correctly.
+            // NOTE2: If this action is marked as executing multiple times there is currently
+            // no harm as the only side effect is that some action which uses
+            // replace_or_queue will sometimes duplicate. This is a tradeoff to prevent
+            // a long running action from blocking the queuing o new actions.
+            let tx = tether.transaction().await?;
+            StoredAction::mark_as_executing(action_id, &tx)
+                .await
+                .inspect_err(|e| error!("Failed to mark as executing: {e}"))?;
+            tx.commit().await?;
 
-        // Send only fails if there are no receivers, which is a valid state.
-        let _ = self
-            .shared
-            .broadcast_sender
-            .send(BroadcastMessage::Success(action_id));
+            let exec_output = decoded
+                .execute(&self.shared, metadata)
+                .await
+                .inspect_err(|e| {
+                    if let QueuedError::Action(err, metadata) = e {
+                        // Send only fails if there are no receivers, which is a valid state.
+                        let _ = self.shared.broadcast_sender.send(BroadcastMessage::Error(
+                            Arc::clone(err),
+                            Arc::clone(metadata),
+                        ));
+                    }
+                })?;
 
-        Ok(Some(exec_output))
+            // Send only fails if there are no receivers, which is a valid state.
+            let _ = self
+                .shared
+                .broadcast_sender
+                .send(BroadcastMessage::Success(action_id));
+
+            Ok(Some(exec_output))
+        }
+        .instrument(debug_span!("QueuedExecute", id=?action_id, type=?action_type))
+        .await
     }
 
     /// See [`Queue::execute_all()`] for more details.
@@ -1208,6 +1213,7 @@ async fn execute_action_remote<T: Action>(
         Ok(result) => {
             StoredAction::delete(&bond, id).await?;
 
+            debug!("Action executed");
             Ok(ActionRemoteOutput::Executed(result))
         }
         Err(e) => {

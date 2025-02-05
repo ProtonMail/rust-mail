@@ -635,7 +635,8 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
             let cb = { self.cb.lock().clone() };
 
             // run validation in the background.
-            tokio::spawn(async move {
+            let ctx_cloned = Arc::clone(&ctx);
+            ctx_cloned.spawn(async move {
                 let new_state = validate_address(&ctx, email.clone()).await;
                 {
                     let mut list = list_cloned.write();
@@ -682,7 +683,8 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
 
         let cb = { self.cb.lock().clone() };
         let list_cloned = Arc::clone(&self.list);
-        tokio::spawn(async move {
+        let ctx_cloned = Arc::clone(&ctx);
+        ctx_cloned.spawn(async move {
             let mut update_statuses = Vec::with_capacity(to_validate.len());
             for email in to_validate {
                 let status = validate_address(&ctx, email.clone()).await;

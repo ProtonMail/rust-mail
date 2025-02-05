@@ -155,7 +155,7 @@ impl Sidebar {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let handle = RealLabelWithCounters::watch(sidebar.user_ctx.user_stash())?;
-            let handle = watch_channel(handle, callback);
+            let handle = watch_channel(sidebar.user_ctx.as_ref(), handle, callback);
 
             Result::<_, RealProtonMailError>::Ok(handle)
         })

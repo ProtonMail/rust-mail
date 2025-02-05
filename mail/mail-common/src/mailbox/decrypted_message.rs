@@ -5,9 +5,10 @@
 use crate::datatypes::attachment::MimeType as AttachmentMimeType;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
-use crate::{AppError, MailContextResult, MailUserContext};
+use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_api_core::services::proton::common::AuthId;
+use proton_core_common::async_task::AsyncTaskResult;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{self, ProcessedAttachment};
 use proton_mail_html_transformer::Transformer;
 use serde::{Deserialize, Serialize};
@@ -20,7 +21,7 @@ use std::io::Read;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -126,7 +127,8 @@ pub enum ParsedHeaderValue {
     Array(Vec<String>),
 }
 
-type InFlightAttachments = HashMap<LocalAttachmentId, JoinHandle<MailContextResult<Vec<u8>>>>;
+type InFlightAttachments =
+    HashMap<LocalAttachmentId, JoinHandle<AsyncTaskResult<MailContextResult<Vec<u8>>>>>;
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
@@ -218,9 +220,9 @@ impl DecryptedMessageBody {
         atts.into_iter()
             .map(|att| {
                 let id = att.id().unwrap();
-                let ctx = ctx.clone();
-                let fut = tokio::spawn(async move {
-                    let data = ctx
+                let ctx_clone = ctx.clone();
+                let fut = ctx.spawn(async move {
+                    let data = ctx_clone
                         .get_attachment_content_data(&att)
                         .await?
                         // We load this in the future so that it's there even if this has been cached before
@@ -299,7 +301,11 @@ impl DecryptedMessageBody {
             // We first remove the task from the mutex to avoid locking other threads.
             let task_handle = { self.in_flight.lock().remove(&att.id().unwrap()) };
             match task_handle {
-                Some(p) => p.await.unwrap()?,
+                Some(p) => match p.await? {
+                    AsyncTaskResult::Completed(Ok(data)) => data,
+                    AsyncTaskResult::Completed(Err(e)) => return Err(e),
+                    AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
+                },
                 None => ctx.get_attachment_content_data(att).await?.load().await?,
             }
         };
@@ -539,12 +545,18 @@ pub struct BodyOutput {
     pub body_banners: BodyBanners,
 }
 
-#[tracing::instrument(skip(html))]
+#[tracing::instrument(skip_all)]
 pub fn transform_html(
     html: &str,
     opts: TransformOptsResolved<'_>,
     mime_type: MimeType,
 ) -> BodyOutput {
+    trace!(
+        "\
+Beginning html transform:
+opts: {opts:#?}
+mime_type: {mime_type:?}"
+    );
     // The order at which we run the transforms is not random, it's been chosen for maximum
     // efficiency.
 
@@ -607,6 +619,7 @@ pub fn transform_html(
         transform_opts: opts.into(),
         body_banners: BodyBanners::new(opts, had_blockquote),
     };
-    debug!("Transform done. Output: {output:#?}");
+    debug!("HTML Transform done");
+    trace!("BodyOutput: {output:#?}");
     output
 }

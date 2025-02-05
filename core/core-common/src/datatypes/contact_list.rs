@@ -312,14 +312,16 @@ impl ContactSuggestions {
             .into_values()
             .filter(|group| !group.emails.is_empty())
             .map(ContactSuggestion::new_group)
-            .chain(device_contacts.into_iter().flat_map(|mut contact| {
-                let emails = std::mem::take(&mut contact.emails);
-                emails.into_iter().enumerate().map(move |(idx, email)| {
-                    ContactSuggestion::new_device_contact(&contact, idx, email)
-                })
-            }))
+            .chain(
+                device_contacts
+                    .into_iter()
+                    .map(ContactSuggestion::new_device_contact),
+            )
             .sorted()
-            .map(|suggestion| suggestion.suggestion);
+            .flat_map(|suggestion| match suggestion {
+                FollowingSuggestion::ContactGroup(contact_suggestion) => vec![contact_suggestion],
+                FollowingSuggestion::DeviceContact { suggestions, .. } => suggestions,
+            });
 
         Self {
             suggestions: proton_suggestions
@@ -429,15 +431,12 @@ impl ContactSuggestion {
     }
 
     fn new_group(group: ContactGroup) -> FollowingSuggestion {
-        FollowingSuggestion {
-            source_key: group.key.clone(),
-            suggestion: Self {
-                key: group.key,
-                avatar_information: AvatarInformation::from(&group.name),
-                name: group.name,
-                kind: ContactSuggestionKind::ContactGroup(group.emails),
-            },
-        }
+        FollowingSuggestion::ContactGroup(Self {
+            key: group.key,
+            avatar_information: AvatarInformation::from(&group.name),
+            name: group.name,
+            kind: ContactSuggestionKind::ContactGroup(group.emails),
+        })
     }
 
     fn new_contact(contact: Contact, email: ContactEmailItem) -> Self {
@@ -449,19 +448,21 @@ impl ContactSuggestion {
         }
     }
 
-    fn new_device_contact(
-        contact: &DeviceContact,
-        idx: usize,
-        email: String,
-    ) -> FollowingSuggestion {
-        FollowingSuggestion {
-            source_key: format!("device-contact/{}", contact.key),
-            suggestion: Self {
-                key: format!("device-contact-email/{}-{}", contact.key, idx),
-                avatar_information: AvatarInformation::from(&contact.name),
-                name: contact.name.clone(),
-                kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion { email }),
-            },
+    fn new_device_contact(contact: DeviceContact) -> FollowingSuggestion {
+        FollowingSuggestion::DeviceContact {
+            key: contact.key.clone(),
+            name: contact.name.clone(),
+            suggestions: contact
+                .emails
+                .into_iter()
+                .enumerate()
+                .map(|(idx, email)| Self {
+                    key: format!("device-contact-email/{}-{}", contact.key, idx),
+                    avatar_information: AvatarInformation::from(&contact.name),
+                    name: contact.name.clone(),
+                    kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion { email }),
+                })
+                .collect(),
         }
     }
 }
@@ -475,69 +476,31 @@ struct ContactGroup {
 /// A suggestion that is not based on the proton contact
 /// This type is required for some custom ordering logic
 ///
-#[derive(PartialEq, Eq)]
-struct FollowingSuggestion {
-    source_key: String,
-    suggestion: ContactSuggestion,
+#[derive(Debug)]
+enum FollowingSuggestion {
+    /// Suggestion represents contact group
+    ContactGroup(ContactSuggestion),
+    /// Multiple suggestions coming from the same device contact
+    DeviceContact {
+        name: String,
+        key: String,
+        suggestions: Vec<ContactSuggestion>,
+    },
 }
 impl Ord for FollowingSuggestion {
     fn cmp(&self, other: &Self) -> Ordering {
-        // First sort by name
-        match self.lex_name().cmp(&other.lex_name()) {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-
-        // Then sort by kind
-        match self
-            .suggestion
-            .kind
-            .discriminant()
-            .cmp(&other.suggestion.kind.discriminant())
-        {
-            Ordering::Equal => {}
-            ord => return ord,
-        }
-
-        match &self.suggestion.kind {
-            ContactSuggestionKind::ContactItem(_) => {
-                unreachable!("Following suggestion should contain only device contacts and groups")
-            }
-            ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
-                // If there are two device contact email suggestions with the same name, first lets check
-                // if those suggestion come from the same contact.
-                match self.source_key.cmp(&other.source_key) {
-                    Ordering::Equal => {
-                        // If yes, then sort by key. That guarantees ordering provided by the user.
-                        // Reason:
-                        // If two emails come from the same device contact item, then we want to preserve order of the emails
-                        // as it was in the platform contact book. User might have ordered them on purpose
-                        self.suggestion.key.cmp(&other.suggestion.key)
-                    }
-                    _ => {
-                        // Otherwise, sort by email address.
-                        // Reason:
-                        // If there are two contacts named the same way, then we assume there is no arbitrary order of emails
-                        // so we order by email addresses lexically
-                        match &other.suggestion.kind {
-                            ContactSuggestionKind::DeviceContact(other_device_contact) => {
-                                let our_email: String = device_contact_suggestion.email.unicode_words().collect();
-                                let other_email: String = other_device_contact.email.unicode_words().collect();
-                                our_email.cmp(&other_email)
-                            }
-                            ContactSuggestionKind::ContactItem(_) |
-                            ContactSuggestionKind::ContactGroup(_) => unreachable!("We already asserted that both sides have the same kind, device contact"),
-                        }
-                    }
-                }
-            }
-            ContactSuggestionKind::ContactGroup(_) => {
-                // If there are two contact groups with the same name, we just keep stable order given from theirs IDs
-                self.suggestion.key.cmp(&other.suggestion.key)
-            }
-        }
+        self.lex_name()
+            .cmp(&other.lex_name())
+            .then(self.discriminant().cmp(&other.discriminant()))
+            .then(self.key().cmp(other.key()))
     }
 }
+impl PartialEq for FollowingSuggestion {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+impl Eq for FollowingSuggestion {}
 impl PartialOrd for FollowingSuggestion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -545,7 +508,19 @@ impl PartialOrd for FollowingSuggestion {
 }
 impl FollowingSuggestion {
     fn lex_name(&self) -> String {
-        self.suggestion.name.unicode_words().collect()
+        let name = match self {
+            FollowingSuggestion::ContactGroup(contact_suggestion) => &contact_suggestion.name,
+            FollowingSuggestion::DeviceContact { name, .. } => name,
+        };
+        name.unicode_words().collect()
+    }
+    fn key(&self) -> &str {
+        match self {
+            FollowingSuggestion::ContactGroup(contact_suggestion) => {
+                contact_suggestion.key.as_str()
+            }
+            FollowingSuggestion::DeviceContact { key, .. } => key.as_str(),
+        }
     }
 }
 
@@ -564,20 +539,16 @@ pub enum ContactSuggestionKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
-enum ContactSuggestionKindDiscriminant {
-    ContactItem,
+enum FollowingSuggestionDiscriminant {
     DeviceContact,
     ContactGroup,
 }
-impl ContactSuggestionKind {
-    fn discriminant(&self) -> ContactSuggestionKindDiscriminant {
+impl FollowingSuggestion {
+    fn discriminant(&self) -> FollowingSuggestionDiscriminant {
         match self {
-            ContactSuggestionKind::ContactItem(_) => ContactSuggestionKindDiscriminant::ContactItem,
-            ContactSuggestionKind::DeviceContact(_) => {
-                ContactSuggestionKindDiscriminant::DeviceContact
-            }
-            ContactSuggestionKind::ContactGroup(_) => {
-                ContactSuggestionKindDiscriminant::ContactGroup
+            FollowingSuggestion::ContactGroup(_) => FollowingSuggestionDiscriminant::ContactGroup,
+            FollowingSuggestion::DeviceContact { .. } => {
+                FollowingSuggestionDiscriminant::DeviceContact
             }
         }
     }

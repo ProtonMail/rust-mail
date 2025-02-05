@@ -18,7 +18,7 @@ use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
-use proton_core_common::async_task::AsyncTaskResult;
+use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User};
@@ -83,7 +83,7 @@ impl MailUserContext {
     /// that have an expiration date.
     fn init_expiration_loop(&self) {
         let ctx = self.this.clone();
-        tokio::spawn(async move {
+        self.spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -333,6 +333,7 @@ impl MailUserContext {
 
     pub async fn logout(&self) -> MailContextResult<()> {
         self.user_context.session().logout().await?;
+        self.user_context.cancel_all_tasks();
         Ok(())
     }
 
@@ -380,14 +381,28 @@ impl MailUserContext {
             Ok(())
         }
     }
+
     /// Spawn an async `task` associated to this context.
     ///
     /// See [`spawn_task()`] for more details.
-    pub fn spawn<T: Send + 'static>(
-        &self,
-        task: impl Future<Output = T> + Send + 'static,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        <F as Future>::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
         self.user_context.spawn(task)
+    }
+
+    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+        S: TaskSpawner + 'static,
+    {
+        self.user_context.spawn_with::<_, S>(task)
     }
 }
 

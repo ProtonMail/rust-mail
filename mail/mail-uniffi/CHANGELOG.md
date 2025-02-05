@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+### Fixed
+
+  - Fix failed conversation updates during draft save.
+
+## [0.40.4] - 2025-01-31
+
+### Fixed
+
+  - [ET-2028] Scroller now early exit for not seen location with error network.
+  - Fix false error during `delete_account`.
+  - Fix jitter during draft update.
+  - Fix missing uniffi async wrapper in `new_event_loop_observer`.
+
+
+## [0.40.3] - 2025-01-31
+
+### Fixed
+
+  - Fix contact order sorting.
+  - Fix ensure all background rust tasks are killed on logout.
+
 ## [0.40.2] - 2025-01-31
 
 ### Fixed

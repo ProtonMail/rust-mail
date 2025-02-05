@@ -1583,15 +1583,18 @@ impl Tether {
     ///
     pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
         self.listen_for_changes().await?;
-        self.transaction_().await
+        self.quiet_transaction().await
     }
 
-    /// Internal helper method to start a transaction.
+    /// The transaction will produce no any notifications.
     ///
     /// This method is used to start a transaction without listening for changes.
-    /// It is needed for internal implementation of the watch mechanism.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
     ///
-    async fn transaction_(&mut self) -> Result<Bond<'_>, StashError> {
+    /// # Errors
+    ///
+    /// see [`Tether::transaction()`]
+    pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = TetherOperation::Transaction(OperationTransaction::Start(that_end));
 
@@ -1818,7 +1821,7 @@ impl SqlConnectionAsync for Tether {
         &mut self,
     ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
            + Send {
-        self.transaction_()
+        self.quiet_transaction()
     }
 }
 
@@ -1906,11 +1909,28 @@ impl<'tether> Bond<'tether> {
         self.commit_(true).await
     }
 
+    /// Do not notify watchers about a changes, use in par with `quiet_transaction`.
+    ///
+    /// This method is used to commit a transaction without publishing changes.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
+    ///
+    /// # Errors
+    ///
+    /// see [`Bond::commit()`]
+    ///
+    pub async fn quiet_commit(self) -> Result<(), StashError> {
+        self.commit_(false).await
+    }
+
     #[allow(clippy::mem_forget)]
     /// Internal commit implementation.
     ///
     /// This method is used to commit a transaction without publishing changes.
-    /// It is needed for internal implementation of the watch mechanism.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
+    ///
+    /// # Errors
+    ///
+    /// see [`Bond::commit()`]
     ///
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();

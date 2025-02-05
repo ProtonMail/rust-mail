@@ -9,6 +9,7 @@ use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::services::proton::Proton;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
 use std::sync::Arc;
 use tracing::error;
@@ -142,7 +143,7 @@ impl Mailbox {
         let mbox = self.mbox.clone();
         uniffi_async(async move {
             let receiver = mbox.watch_unread_count().await?;
-            let watcher = watch_channel(receiver, callback);
+            let watcher = watch_channel(mbox.user_context().as_ref(), receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
@@ -176,5 +177,11 @@ impl Mailbox {
     #[must_use]
     pub fn stash(&self) -> &Stash {
         self.mbox.stash()
+    }
+
+    /// Get the [`MailUserContext`].
+    #[must_use]
+    pub fn context(&self) -> Arc<MailUserContext> {
+        self.mbox.user_context()
     }
 }
