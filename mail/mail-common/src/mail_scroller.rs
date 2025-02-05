@@ -240,6 +240,21 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
             if result.is_err() {
                 tracing::error!("Failed to fetch next page in the background: {:?}", result);
+                // The task will be spawned again optymistically.
+                // It is safe as we already determined that we are online.
+                // and if for any reason we are offline, we will not spawn the task at all.
+                // This call is required to be able to fetch the cached data, so the result
+                // of the failing call will be propagated only if we have nothing more to show.
+                let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
+                self.total = new_total;
+                self.task = task;
+                if items.is_empty() {
+                    // Nothing more to show, fail the call.
+                    result?;
+                } else {
+                    // We have something more, show it.
+                    return Ok(items);
+                }
             }
         }
 
