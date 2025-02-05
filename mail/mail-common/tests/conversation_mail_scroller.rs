@@ -518,6 +518,65 @@ pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
         .await;
 }
 
+#[function_name::named]
+pub async fn mock_api_forbidden(ctx: &MailTestContext) {
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/conversations"))
+        .respond_with(ResponseTemplate::new(403))
+        .named(function_name!())
+        .mount(ctx.mock_server())
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(ctx.mock_server())
+        .await;
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request(
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+
+    mock_api_forbidden(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 1;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 5;
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items can be read only when we progress with `fetch_more`
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+    );
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    assert!(scroller.has_more().await.unwrap());
+
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+    );
+}
+
 #[tokio::test]
 async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time() {
     let ctx = MailTestContext::new().await;

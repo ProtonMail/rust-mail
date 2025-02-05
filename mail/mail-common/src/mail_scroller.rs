@@ -240,6 +240,15 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
             if result.is_err() {
                 tracing::error!("Failed to fetch next page in the background: {:?}", result);
+                let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
+                self.total = new_total;
+                self.task = task;
+                if items.is_empty() {
+                    // Throw the error when you have nothing more to report
+                    result?;
+                } else {
+                    return Ok(items);
+                }
             }
         }
 
