@@ -1,6 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
-use crate::async_task::{spawn_task, AsyncTaskResult};
+use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
@@ -761,12 +761,25 @@ impl Context {
     /// Spawn an async `task` associated to this context.
     ///
     /// See [`spawn_task()`] for more details.
-    pub fn spawn<T: Send + 'static>(
-        &self,
-        task: impl Future<Output = T> + Send + 'static,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        <F as Future>::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        self.spawn_with::<_, DefaultTaskSpawner>(task)
+    }
+
+    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+        S: TaskSpawner + 'static,
+    {
         let token = self.cancellation_token.clone();
-        spawn_task(token, task)
+        spawn_task::<_, S>(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
@@ -779,10 +792,6 @@ impl Context {
     /// This will also cancel all child token created with [`child_cancellation_token()`]
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
-    }
-    //TODO(Leander) cleanup
-    pub fn cancellation_token(&self) -> CancellationToken {
-        self.cancellation_token.clone()
     }
 }
 

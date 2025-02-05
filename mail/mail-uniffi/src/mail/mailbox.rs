@@ -143,7 +143,7 @@ impl Mailbox {
         let mbox = self.mbox.clone();
         uniffi_async(async move {
             let receiver = mbox.watch_unread_count().await?;
-            let watcher = watch_channel(&mbox.user_context(), receiver, callback);
+            let watcher = watch_channel(mbox.user_context().as_ref(), receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
