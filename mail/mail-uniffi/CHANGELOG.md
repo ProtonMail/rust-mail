@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+## [0.40.5] - 2025-02-05
+
 ### Fixed
 
   - Fix failed conversation updates during draft save.
   - [ET-2039] Scroller now reports an error when there is no more cached data and the api responds with an error.
 
-## [0.40.4] - 2025-01-31
+## [0.40.4] - 2025-02-04
 
 ### Fixed
 
