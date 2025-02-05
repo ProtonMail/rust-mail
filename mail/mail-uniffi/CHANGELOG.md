@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+## [0.40.6] - 2025-02-05
+
+### Fixed
+
+  - Added snooze mobile action
+
 ## [0.40.5] - 2025-02-05
 
 ### Fixed

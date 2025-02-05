@@ -1703,6 +1703,7 @@ impl MobileActions {
                     Ok(actions) => return Ok(actions),
                     Err(error) => {
                         error!("Error parsing custom message_toolbar actions: {}", error);
+                        return Err(error);
                     }
                 }
             }
@@ -1732,6 +1733,7 @@ impl FromStr for MobileActions {
             "report_phishing" => Ok(Self::ReportPhishing),
             "save_attachments" => Ok(Self::SaveAttachments),
             "save_pdf" => Ok(Self::SavePDF),
+            "snooze" => Ok(Self::Snooze),
             "sender_emails" => Ok(Self::SenderEmails),
             "spam" => Ok(Self::Spam),
             "toggle_light" => Ok(Self::ToggleLight),
