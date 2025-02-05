@@ -47,12 +47,11 @@ use stash_macros::DbRecord;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, LazyLock};
+use std::sync::{mpsc, Arc};
 use std::time::Instant;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-use tokio::time::timeout;
 use tracing::{debug, error, info, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
@@ -149,7 +148,10 @@ enum OperationTransaction {
     /// Rolls back a transaction, i.e. abandons it.
     Rollback(OneshotSender<Result<(), StashError>>),
 
-    Abort,
+    /// Rollbacks a transaction too.
+    /// This one is meant to be called in destructors, that's why t doesn't have a sender.
+    /// Same semantics as Rollback.
+    RollbackAbort,
 }
 
 /// This trait was designed for batched queries to efficiently create the queries just by borrowing
@@ -231,7 +233,7 @@ struct BatchedWrite {
 
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    sender: OneshotSender<ResultedTime<Vec<u64>>>,
+    sender: OneshotSender<Result<Vec<u64>, StashError>>,
 }
 
 impl BatchedWrite {
@@ -282,30 +284,21 @@ impl TetherOperation {
             }
             Self::Transaction(OperationTransaction::Abort) => {}
             Self::Execution(OperationExec::Instruct(x)) => {
-                {
-                    let result = (Err(error), Duration::from_secs(0));
-                    if x.sender.send(result).is_err() {
-                        // This means that the receiver has dropped.
-                        error!("Oneshot error: Failed sending result back to caller");
-                    }
+                if x.sender.send(Err(error)).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
                 };
             }
             Self::Execution(OperationExec::Query(x)) => {
-                {
-                    let result = (Err(error), Duration::from_secs(0));
-                    if x.sender.send(result).is_err() {
-                        // This means that the receiver has dropped.
-                        error!("Oneshot error: Failed sending result back to caller");
-                    }
+                if x.sender.send(Err(error)).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
                 };
             }
             Self::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
-                {
-                    let result = (Err(error), Duration::from_secs(0));
-                    if x.sender.send(result).is_err() {
-                        // This means that the receiver has dropped.
-                        error!("Oneshot error: Failed sending result back to caller");
-                    }
+                if x.sender.send(Err(error)).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
                 };
             }
         }
@@ -448,7 +441,7 @@ pub enum StashError {
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    sender: OneshotSender<ResultedTime<usize>>,
+    sender: OneshotSender<Result<usize, StashError>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -515,7 +508,7 @@ pub struct Notification {
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    sender: OneshotSender<ResultedTime<DbRecords>>,
+    sender: OneshotSender<Result<DbRecords, StashError>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
@@ -887,7 +880,6 @@ impl Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        let t0 = Instant::now();
         let (sender, receiver) = oneshot::channel();
         let operation = TetherOperation::Execution(OperationExec::Instruct(Instruction {
             sender,
@@ -895,9 +887,10 @@ impl Tether {
             query: query.into(),
         }));
         self.sender.send(operation);
-        let (r, d) = oneshot_join(receiver).await;
-        STATS.send((t0.elapsed(), d, "execute"));
-        r
+        receiver
+            .await
+            .expect("Tether closed its channel with handles still open")
+            .map_err(Into::into)
     }
 
     /// Sends a batch of `INSERT`.
@@ -925,7 +918,6 @@ impl Tether {
         &self,
         params: Box<dyn BatchQueryRetId>,
     ) -> Result<Vec<u64>, StashError> {
-        let t0 = Instant::now();
         let (sender, receiver) = oneshot::channel();
         let operation =
             TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
@@ -933,9 +925,9 @@ impl Tether {
                 params,
             }));
         self.sender.send(operation);
-        let (r, d) = oneshot_join(receiver).await;
-        STATS.send((t0.elapsed(), d, "batch"));
-        r
+        receiver
+            .await
+            .expect("Tether closed its channel with handles still open")
     }
 
     /// Loads a record from the database by ID.
@@ -1027,7 +1019,6 @@ impl Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        let t0 = Instant::now();
         let (sender, receiver) = oneshot::channel();
         let query = Query {
             sender,
@@ -1038,8 +1029,9 @@ impl Tether {
         let operation = TetherOperation::Execution(OperationExec::Query(query));
         self.sender.send(operation);
 
-        let (res, d) = oneshot_join(receiver).await;
-        let res = res?
+        Ok(receiver
+            .await
+            .expect("Tether closed its channel with handles still open")?
             .into_iter()
             .map(|item| {
                 // The type we receive back is described as Any so that it can pass through
@@ -1047,9 +1039,7 @@ impl Tether {
                 // fact already known to be of type T, so we can downcast it safely.
                 *item.downcast::<T>().unwrap()
             })
-            .collect();
-        STATS.send((t0.elapsed(), d, "query"));
-        Ok(res)
+            .collect())
     }
 
     /// Utility function to return rows of a singular type.
@@ -1197,11 +1187,13 @@ impl Tether {
     ///
     /// see [`Tether::transaction()`]
     pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = TetherOperation::Transaction(OperationTransaction::Start(that_end));
+        let (sender, receiver) = oneshot::channel();
+        let operation = TetherOperation::Transaction(OperationTransaction::Start(sender));
 
         self.sender.send(operation);
-        oneshot_join(this_end).await?;
+        receiver
+            .await
+            .expect("Tether closed its channel with handles still open")?;
 
         Ok(Bond::new(self))
     }
@@ -1295,7 +1287,34 @@ impl Tether {
                 (Ok(op), Ok(con)) => (op, con),
                 (Ok(op), Err(e)) => {
                     error!("Critical error creating worker {e}");
-                    op.send_error(e);
+                    match op {
+                        TetherOperation::Transaction(
+                            OperationTransaction::Start(ch)
+                            | OperationTransaction::Rollback(ch)
+                            | OperationTransaction::Commit(ch),
+                        ) => {
+                            _ = ch.send(Err(e));
+                        }
+                        TetherOperation::Transaction(OperationTransaction::RollbackAbort) => {}
+                        TetherOperation::Execution(OperationExec::Instruct(x)) => {
+                            if x.sender.send(Err(e)).is_err() {
+                                // This means that the receiver has dropped.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            };
+                        }
+                        TetherOperation::Execution(OperationExec::Query(x)) => {
+                            if x.sender.send(Err(e)).is_err() {
+                                // This means that the receiver has dropped.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            };
+                        }
+                        TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
+                            if x.sender.send(Err(e)).is_err() {
+                                // This means that the receiver has dropped.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            };
+                        }
+                    };
                     return;
                 }
                 (Err(_), _) => {
@@ -1317,6 +1336,7 @@ This cannot happen, the main worker thread is not supposed to close.",
                 connection: &connection,
                 id,
                 queue,
+                last_op: "None yet",
             };
             sm.handle_operation(first_operation);
 
@@ -1406,12 +1426,6 @@ impl SqlConnectionAsync for Tether {
     ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
            + Send {
         self.quiet_transaction()
-    }
-}
-
-impl Drop for Tether {
-    fn drop(&mut self) {
-        trace!("Dropping Tether. Should drop Tether state machine right after");
     }
 }
 
@@ -1517,22 +1531,23 @@ impl<'tether> Bond<'tether> {
     /// see [`Bond::commit()`]
     ///
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = TetherOperation::Transaction(OperationTransaction::Commit(that_end));
+        let (sender, receiver) = oneshot::channel();
+        let operation = TetherOperation::Transaction(OperationTransaction::Commit(sender));
         self.tether.sender.send(operation);
 
-        if let Err(e) = oneshot_join(this_end).await {
+        if let Err(e) = receiver
+            .await
+            .expect("Tether closed its channel with handles still open")
+        {
             error!("Commit error: {e}");
-            self.rollback().await.expect("TODO"); // TODO!
-                                                  // panic!("Error {e} while committing!");
-        } else {
-            if publish_changes {
-                debug!("Publishing changes after commit.");
-                self.tether.publish_changes().await?;
-            }
-            // Transaction commited, skip the drop logic
-            mem::forget(self);
+            self.rollback().await?;
+            return Ok(());
+        } else if publish_changes {
+            debug!("Publishing changes after commit.");
+            self.tether.publish_changes().await?;
         }
+        // Transaction commited, skip the drop logic
+        mem::forget(self);
 
         Ok(())
     }
@@ -1559,11 +1574,13 @@ impl<'tether> Bond<'tether> {
     ///
     #[allow(clippy::mem_forget)]
     pub async fn rollback(self) -> Result<(), StashError> {
-        let (that_end, this_end) = oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
 
-        let operation = TetherOperation::Transaction(OperationTransaction::Rollback(that_end));
+        let operation = TetherOperation::Transaction(OperationTransaction::Rollback(sender));
         self.tether.sender.send(operation);
-        oneshot_join(this_end).await?;
+        receiver
+            .await
+            .expect("Tether closed its channel with handles still open")?;
 
         // Transaction rolled back, skip the drop logic
         mem::forget(self);
@@ -1582,8 +1599,9 @@ impl Deref for Bond<'_> {
 
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
-        self.sender
-            .send(TetherOperation::Transaction(OperationTransaction::Abort));
+        self.sender.send(TetherOperation::Transaction(
+            OperationTransaction::RollbackAbort,
+        ));
     }
 }
 
@@ -1648,6 +1666,7 @@ struct TetheredWorkerStateMachine<'a> {
     connection: &'a PooledConnection<SqliteConnectionManager>,
     /// This is a unique id used for notifications
     id: u64,
+    last_op: &'static str,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {
@@ -1696,9 +1715,11 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         self.queue
                             .send(StashOperation::NotifyStartTransaction(self.id));
                         _ = send_back.send(Ok(()));
+                        self.last_op = "Start transaction";
                     }
                     Err(error) => {
                         _ = send_back.send(Err(StashError::ExecutionError(error)));
+                        self.last_op = "Start transaction failed";
                     }
                 };
             }
@@ -1717,6 +1738,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                             .commit()
                             .map_err(StashError::TransactionError),
                     );
+                    self.last_op = "commit tx";
                 }
             }
             OperationTransaction::Rollback(send_back) => {
@@ -1727,23 +1749,25 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 let try_rollback = self
                     .transaction
                     .take()
-                    .expect("Critical error: Commited a transaction with no transaction open!?")
+                    .expect("Critical error: Rollback a transaction with no transaction open!?")
                     .rollback()
                     .map_err(StashError::TransactionError);
                 _ = send_back.send(try_rollback);
+                self.last_op = "rollback tx";
             }
-            OperationTransaction::Abort => {
+            OperationTransaction::RollbackAbort => {
                 // Notify the main worker that the transaction has been rolled back.
                 self.queue
                     .send(StashOperation::NotifyRollbackTransaction(self.id));
                 if let Err(e) = self
                     .transaction
                     .take()
-                    .expect("Critical error: Commited a transaction with no transaction open!?")
+                    .unwrap_or_else(|| panic!("Critical error: RollbackAbort with no transaction open!?\nPrevious op was {}", self.last_op))
                     .rollback()
                 {
                     error!("Error when aborting a transaction (Bond drop): {e}");
                 }
+                self.last_op = "abort tx";
             }
         }
     }
@@ -1798,7 +1822,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     }
 
     fn handle_exec(&self, operation: OperationExec) {
-        let t0 = Instant::now();
         let connection = match self.transaction {
             Some(ref tx) => AgnosticConnection::Transaction(tx),
             None => AgnosticConnection::NotTransaction(self.connection),
@@ -1807,24 +1830,21 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         match operation {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(&connection);
-                let result = (res, t0.elapsed());
-                if instruction.sender.send(result).is_err() {
+                if instruction.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
             }
             OperationExec::BatchedInsertReturningIds(instruct) => {
                 let res = instruct.run(&connection);
-                let result = (res, t0.elapsed());
-                if instruct.sender.send(result).is_err() {
+                if instruct.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
             }
             OperationExec::Query(query) => {
                 let res = query.run(&connection);
-                let result = (res, t0.elapsed());
-                if query.sender.send(result).is_err() {
+                if query.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
@@ -1845,12 +1865,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         // Notify the main worker that the transaction has been rolled back
         self.queue
             .send(StashOperation::NotifyRollbackTransaction(self.id));
-    }
-}
-
-impl Drop for TetheredWorkerStateMachine<'_> {
-    fn drop(&mut self) {
-        trace!("Dropping TetheredWorkerStateMachine {}", self.id);
     }
 }
 
@@ -2148,37 +2162,3 @@ struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq 
     #[DbField]
     value: V,
 }
-
-/// TODO: this is debug, remove me later.
-async fn oneshot_join<T>(rx: oneshot::Receiver<T>) -> T {
-    timeout(Duration::from_millis(500), rx)
-        .await
-        .expect("channel timed out")
-        .expect("Tether closed its channel with handles still open")
-}
-
-type ResultedTime<T> = (Result<T, StashError>, Duration);
-
-static STATS: LazyLock<mpsc::Sender<(Duration, Duration, &'static str)>> = LazyLock::new(|| {
-    let (tx, rx) = mpsc::channel::<(Duration, Duration, &'static str)>();
-    _ = std::thread::spawn(move || {
-        use std::io::Write as _;
-        let mut stats_file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open("stats")
-            .unwrap();
-
-        while let Ok(val) = rx.recv() {
-            writeln!(
-                stats_file,
-                "{:?} {:?} {}",
-                val.0.as_nanos(),
-                val.1.as_nanos(),
-                val.2
-            )
-            .unwrap();
-        }
-    });
-    tx
-});
