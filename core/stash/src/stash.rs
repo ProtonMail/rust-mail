@@ -262,49 +262,6 @@ enum OperationExec {
     Query(Query),
 }
 
-impl TetherOperation {
-    /// Sends an error result back to the caller.
-    ///
-    /// This is a convenience function to reduce code boilerplate, sending an
-    /// error result back to the caller via the oneshot channel.
-    ///
-    /// # Parameters
-    ///
-    /// * `error` - The error to send back to the caller.
-    /// * `stash`  - The associated [`Stash`] instance for the operation.
-    ///
-    fn send_error(self, error: StashError) {
-        match self {
-            Self::Transaction(
-                OperationTransaction::Start(ch)
-                | OperationTransaction::Rollback(ch)
-                | OperationTransaction::Commit(ch),
-            ) => {
-                _ = ch.send(Err(error));
-            }
-            Self::Transaction(OperationTransaction::Abort) => {}
-            Self::Execution(OperationExec::Instruct(x)) => {
-                if x.sender.send(Err(error)).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                };
-            }
-            Self::Execution(OperationExec::Query(x)) => {
-                if x.sender.send(Err(error)).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                };
-            }
-            Self::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
-                if x.sender.send(Err(error)).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                };
-            }
-        }
-    }
-}
-
 /// Error type for the [`Stash`] module.
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -1263,6 +1220,7 @@ impl Tether {
             debug!("Creating worker thread");
             // The first time an operation is received, we attempt to acquire a database
             // connection from the pool. This is done lazily so that creating tethers is sync.
+            // Note that most of this logic could be avoided if we made tether cration async.
 
             #[allow(clippy::items_after_statements)]
             // This is scoped here so that we can't create an id from anywhere else.
@@ -1295,7 +1253,6 @@ impl Tether {
                         ) => {
                             _ = ch.send(Err(e));
                         }
-                        TetherOperation::Transaction(OperationTransaction::RollbackAbort) => {}
                         TetherOperation::Execution(OperationExec::Instruct(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
@@ -1313,6 +1270,9 @@ impl Tether {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
                             };
+                        }
+                        TetherOperation::Transaction(OperationTransaction::RollbackAbort) => {
+                            unreachable!("This cannot happen at this point")
                         }
                     };
                     return;
