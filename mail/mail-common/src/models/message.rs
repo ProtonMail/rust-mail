@@ -70,7 +70,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -698,6 +698,7 @@ impl Message {
     /// * `message_ids` - List of the messages IDs.
     /// * `interface`   - The database interface.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn all_available_bottom_bar_actions_for_messages(
         current_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
@@ -744,10 +745,12 @@ impl Message {
             &spam,
         );
 
-        Ok(AllBottomBarMessageActions {
+        let actions = AllBottomBarMessageActions {
             hidden_bottom_bar_actions,
             visible_bottom_bar_actions,
-        })
+        };
+        debug!("all available bottom bar actions for messages: {actions:?}");
+        Ok(actions)
     }
 
     /// Get actions to display in bottom_bar when selecting messages
@@ -1555,6 +1558,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_actions(
         view: Label,
         message_ids: Vec<LocalMessageId>,
@@ -1589,11 +1593,13 @@ impl Message {
 
         let move_actions = MoveItemAction::from_view(view, tether).await?;
 
-        Ok(MessageAvailableActions::builder()
+        let res = MessageAvailableActions::builder()
             .reply_actions(reply_actions)
             .message_actions(message_actions)
             .move_actions(move_actions)
-            .build())
+            .build();
+        debug!("available actions for messages: {res:?}");
+        Ok(res)
     }
 
     /// Get the available `label as` actions for conversations
@@ -1607,6 +1613,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1626,20 +1633,19 @@ impl Message {
         )
         .await?;
 
-        let all_label_as_actions = messages
-            .iter()
-            .flat_map(|message| {
-                LabelAsAction::vec(all_label_as.iter(), |label| {
-                    message
-                        .custom_labels
-                        .iter()
-                        .map(|label| Some(label.local_id))
-                        .contains(&label.local_id)
-                })
+        let all_label_as_actions = messages.into_iter().flat_map(|message| {
+            LabelAsAction::vec(all_label_as.iter(), |label| {
+                message
+                    .custom_labels
+                    .iter()
+                    .map(|label| Some(label.local_id))
+                    .contains(&label.local_id)
             })
-            .collect_vec();
+        });
 
-        Ok(LabelAsAction::finalize(all_label_as_actions))
+        let res = LabelAsAction::finalize(all_label_as_actions);
+        debug!("Available label_as actions for messages: {res:?}");
+        Ok(res)
     }
 
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
@@ -1658,6 +1664,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn watch_available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1670,20 +1677,19 @@ impl Message {
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let messages = <Message as ModelExtension>::find_by_ids(message_ids, tether).await?;
-        let all_label_as_actions = messages
-            .iter()
-            .flat_map(|message| {
-                LabelAsAction::vec(all_label_as.iter(), |label| {
-                    message
-                        .custom_labels
-                        .iter()
-                        .map(|label| Some(label.local_id))
-                        .contains(&label.local_id)
-                })
+        let all_label_as_actions = messages.iter().flat_map(|message| {
+            LabelAsAction::vec(all_label_as.iter(), |label| {
+                message
+                    .custom_labels
+                    .iter()
+                    .map(|label| Some(label.local_id))
+                    .contains(&label.local_id)
             })
-            .collect_vec();
+        });
 
-        Ok((LabelAsAction::finalize(all_label_as_actions), handle))
+        let res = LabelAsAction::finalize(all_label_as_actions);
+        debug!("available label_as actions for messages: {res:?}");
+        Ok((res, handle))
     }
 
     /// Get the available move actions for messages.
@@ -1698,6 +1704,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_move_to_actions(
         view: Label,
         message_ids: Vec<LocalMessageId>,
@@ -1718,7 +1725,9 @@ impl Message {
                 .chain(all_custom_folders.iter()),
         );
 
-        MoveAction::finalize(all_move_to_actions, tether).await
+        let res = MoveAction::finalize(all_move_to_actions, tether).await?;
+        debug!("available label_as actions for messages: {res:?}");
+        Ok(res)
     }
 
     /// Gets the body of a message from a message id.
@@ -1764,6 +1773,7 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn fetch_message_body(
         &self,
         ctx: Arc<MailUserContext>,
@@ -1776,8 +1786,10 @@ impl Message {
         )
         .await?
         {
+            debug!("Found message body in cache.");
             return Ok(decrypted);
         }
+        trace!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
             return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
@@ -1791,6 +1803,7 @@ impl Message {
         }
 
         let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
+        trace!("Message successfully downloaded. Decrypting...");
 
         let decrypted = Self::decrypt_message_body(
             Arc::clone(&ctx),
@@ -1800,9 +1813,11 @@ impl Message {
             true,
         )
         .await?;
+        trace!("Message successfully decrypted. Caching...");
 
         Self::store_decrypted_message_body(&ctx, self.local_id.unwrap(), &decrypted)?;
 
+        debug!("Message successfully synced.");
         Ok(decrypted)
     }
 

@@ -583,14 +583,11 @@ pub async fn available_label_as_actions_for_messages(
 ) -> Result<Vec<LabelAsAction>, ActionError> {
     uniffi_async(async move {
         let tether = mailbox.stash().connection();
-        let actions =
-            RealMessage::available_label_as_actions(ids.into_iter().map_into().collect(), &tether)
-                .await?
-                .into_iter()
-                .map_into()
-                .collect_vec();
+        let actions = RealMessage::available_label_as_actions(ids.map_vec(), &tether)
+            .await?
+            .map_vec();
 
-        Result::<_, RealProtonMailError>::Ok(actions)
+        Ok::<_, RealProtonMailError>(actions)
     })
     .await
     .map_err(ActionError::from)
@@ -717,7 +714,7 @@ pub async fn get_message_body(
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
         let body = models::Message::message_body(ctx.clone(), id.into()).await?;
-        Result::<_, RealProtonMailError>::Ok(Arc::new(DecryptedMessage { ctx, body }))
+        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
     .map_err(ActionError::from)

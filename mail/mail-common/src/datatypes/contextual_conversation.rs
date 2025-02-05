@@ -19,7 +19,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -232,6 +232,7 @@ impl ContextualConversation {
     /// * `conversations_ids` - List of the conversations IDs.
     /// * `interface`         - The database interface.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn all_available_bottom_bar_actions_for_conversations(
         current_label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
@@ -283,10 +284,12 @@ impl ContextualConversation {
             &spam,
         );
 
-        Ok(AllBottomBarMessageActions {
+        let actions = AllBottomBarMessageActions {
             hidden_bottom_bar_actions,
             visible_bottom_bar_actions,
-        })
+        };
+        debug!("All available bottombar actions: {actions:?}");
+        Ok(actions)
     }
 
     /// Get actions to display in bottom_bar when selecting messages
