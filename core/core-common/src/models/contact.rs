@@ -295,6 +295,9 @@ impl Contact {
             }
         }
         let contacts = contacts_joinset.join_all().await;
+        // If you're wondering why this is an Arc, [T] implements GetParams. We will need it after
+        // sending the data for calculating the local ids of the ContactEmails the insert so in order to avoid
+        // cloning it again we send it as a Box<Arc<[Contact]>> which gets converted into a Box<dyn GetParams>.
         let contacts: Arc<[Contact]> = iter::once(Ok(first_contacts.contacts))
             .chain(contacts)
             .flatten()
@@ -303,6 +306,7 @@ impl Contact {
             .collect();
 
         let emails = emails_joinset.join_all().await;
+        // We don't need the data afterwards so we don't need to Arc it.
         let mut emails: Vec<ContactEmail> = iter::once(Ok(first_emails.contact_emails))
             .chain(emails)
             .flatten()
