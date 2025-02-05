@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased] - 2025-01-xx
+## [unreleased] - 2025-02-xx
+
+### Added
+
+  - [ET-1976] `assigned_swipe_actions` returns what actions are assigned to swipe gestures including
+    necessary context information needed for executing them (for example what is Trash/Spam/Archive local label id)
+
 
 ## [0.40.5] - 2025-02-05
 
