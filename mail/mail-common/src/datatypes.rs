@@ -1703,7 +1703,6 @@ impl MobileActions {
                     Ok(actions) => return Ok(actions),
                     Err(error) => {
                         error!("Error parsing custom message_toolbar actions: {}", error);
-                        return Err(error);
                     }
                 }
             }
