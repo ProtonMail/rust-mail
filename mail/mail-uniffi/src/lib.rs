@@ -146,7 +146,7 @@ use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
-use proton_core_common::async_task::AsyncTaskResult;
+use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
 use proton_mail_common::models::{
@@ -158,7 +158,6 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
 
 pub mod core;
 #[macro_use]
@@ -246,19 +245,7 @@ where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
 {
-    //TODO(Leander): cleanup
-    let cancellation_token = ctx.cancellation_token();
-    async_runtime().spawn(async move {
-        tokio::select! {
-            () = cancellation_token.cancelled() => {
-                AsyncTaskResult::Cancelled
-            }
-
-            r = future => {
-                AsyncTaskResult::Completed(r)
-            }
-        }
-    })
+    ctx.spawn(future)
 }
 
 /// Run an async function on the Tokio runtime.
@@ -275,24 +262,42 @@ where
 /// Abstraction trait so we can reference either [`MailContext`] or [`MailUserContext`]
 /// when spawning tasks.
 pub trait AsyncSpawnable {
-    fn cancellation_token(&self) -> CancellationToken;
+    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static;
 }
 
 impl AsyncSpawnable for MailUserContext {
-    fn cancellation_token(&self) -> CancellationToken {
-        self.user_context().cancellation_token()
-    }
-}
-
-impl AsyncSpawnable for Arc<MailUserContext> {
-    fn cancellation_token(&self) -> CancellationToken {
-        self.user_context().cancellation_token()
+    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+    {
+        self.spawn_with::<_, UniffiTaskSpawner>(future)
     }
 }
 
 impl AsyncSpawnable for MailContext {
-    fn cancellation_token(&self) -> CancellationToken {
-        self.core_context().cancellation_token()
+    fn spawn<F>(&self, future: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+    {
+        self.spawn_with::<_, UniffiTaskSpawner>(future)
+    }
+}
+
+/// Task spawner that works over the runtime managed by us.
+struct UniffiTaskSpawner;
+
+impl TaskSpawner for UniffiTaskSpawner {
+    fn spawn<F>(f: F) -> JoinHandle<F::Output>
+    where
+        F::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        async_runtime().spawn(f)
     }
 }
 

@@ -1,5 +1,5 @@
 pub use self::keys::*;
-use crate::async_task::{spawn_task, AsyncTaskResult};
+use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::cache::ProtonCache;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
@@ -180,22 +180,29 @@ impl UserContext {
     /// Spawn an async `task` associated to this context.
     ///
     /// See [`spawn_task()`] for more details.
-    pub fn spawn<T: Send + 'static>(
-        &self,
-        task: impl Future<Output = T> + Send + 'static,
-    ) -> JoinHandle<AsyncTaskResult<T>> {
+    pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        <F as Future>::Output: Send + 'static,
+        F: Future + Send + 'static,
+    {
+        self.spawn_with::<_, DefaultTaskSpawner>(task)
+    }
+
+    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
+    ///
+    /// See [`spawn_task()`] for more details.
+    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        F: Future + Send + 'static,
+        <F as Future>::Output: Send + 'static,
+        S: TaskSpawner + 'static,
+    {
         let token = self.cancellation_token.clone();
-        spawn_task(token, task)
+        spawn_task::<_, S>(token, task)
     }
 
     /// Cancel all tasks which are bound to this context.
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
-    }
-
-    //TODO(Leander) cleanup
-    #[must_use]
-    pub fn cancellation_token(&self) -> CancellationToken {
-        self.cancellation_token.clone()
     }
 }
