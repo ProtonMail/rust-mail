@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-01-xx
 
+### Fixed
+
+  - Fix failed conversation updates during draft save.
+
 ## [0.40.4] - 2025-01-31
 
 ### Fixed
