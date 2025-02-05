@@ -569,7 +569,7 @@ impl Stash {
     /// This is infaliable, if it cannot open the file it will fail later on when we try to
     /// connect.
     #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
-    pub fn make_pool(path: Option<&Path>) -> Pool<SqliteConnectionManager> {
+    fn make_pool(path: Option<&Path>) -> Pool<SqliteConnectionManager> {
         #[allow(clippy::single_match_else)]
         match path {
             Some(p) => debug!("New Stash with file: {:?}", p),
