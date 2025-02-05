@@ -13,7 +13,7 @@ use test_case::test_case;
 // MoveTo action means, that the ui has to display an additional popup with the list of folders
 #[test_case(
     SwipeAction::MoveTo,
-    AssignedSwipeAction::MoveTo(SwipeActionMoveToTarget::UnknownLabel)
+    AssignedSwipeAction::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel)
 )]
 #[tokio::test]
 async fn when_swipe_action_doesnt_require_any_extra_context(
@@ -54,7 +54,7 @@ async fn when_it_is_move_to_system_folder_action(
         .expect("Local id");
 
     assert_eq!(
-        AssignedSwipeAction::MoveTo(SwipeActionMoveToTarget::SystemLabel {
+        AssignedSwipeAction::MoveTo(SwipeActionMoveToTarget::MoveToSystemLabel {
             label: expected_system_label,
             id: local_id,
         }),

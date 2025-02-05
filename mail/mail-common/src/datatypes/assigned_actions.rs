@@ -89,7 +89,9 @@ impl AssignedSwipeAction {
             SwipeAction::Star => return Ok(Self::ToggleStar),
             SwipeAction::MarkAsRead => return Ok(Self::ToggleRead),
             SwipeAction::LabelAs => return Ok(Self::LabelAs),
-            SwipeAction::MoveTo => return Ok(Self::MoveTo(SwipeActionMoveToTarget::UnknownLabel)),
+            SwipeAction::MoveTo => {
+                return Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel))
+            }
             // These actions are just specific hardcoded variants of MoveTo action
             SwipeAction::Trash => SystemLabel::Trash,
             SwipeAction::Spam => SystemLabel::Spam,
@@ -101,7 +103,7 @@ impl AssignedSwipeAction {
             .await?
             .expect("System label to have a local ID");
 
-        Ok(Self::MoveTo(SwipeActionMoveToTarget::SystemLabel {
+        Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToSystemLabel {
             label: move_to,
             id: label_id,
         }))
@@ -114,12 +116,12 @@ impl AssignedSwipeAction {
 pub enum SwipeActionMoveToTarget {
     /// Swipe action is programmed to move to one of the special folders
     /// For example Trash, Archive, Spam etc.
-    SystemLabel {
+    MoveToSystemLabel {
         /// To show the right icon
         label: SystemLabel,
         /// To pass as a parameter for `move_to` functions.
         id: LocalLabelId,
     },
     /// Swipe action requires extra popup for user to choose the target
-    UnknownLabel,
+    MoveToUnknownLabel,
 }

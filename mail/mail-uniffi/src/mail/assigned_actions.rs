@@ -81,7 +81,7 @@ impl From<RealAssignedSwipeAction> for AssignedSwipeAction {
 pub enum SwipeActionMoveToTarget {
     /// Swipe action is programmed to move to one of the special folders
     /// For example Trash, Archive, Spam etc.
-    SystemLabel {
+    MoveToSystemLabel {
         /// To show the right icon
         label: SystemLabel,
         /// To pass as a parameter for `move_to` functions.
@@ -89,17 +89,19 @@ pub enum SwipeActionMoveToTarget {
         id: Id,
     },
     /// Swipe action requires extra popup for user to choose the target
-    UnknownLabel,
+    MoveToUnknownLabel,
 }
 
 impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
     fn from(value: RealSwipeActionMoveToTarget) -> Self {
         match value {
-            RealSwipeActionMoveToTarget::SystemLabel { label, id } => Self::SystemLabel {
-                label: label.into(),
-                id: id.into(),
-            },
-            RealSwipeActionMoveToTarget::UnknownLabel => Self::UnknownLabel,
+            RealSwipeActionMoveToTarget::MoveToSystemLabel { label, id } => {
+                Self::MoveToSystemLabel {
+                    label: label.into(),
+                    id: id.into(),
+                }
+            }
+            RealSwipeActionMoveToTarget::MoveToUnknownLabel => Self::MoveToUnknownLabel,
         }
     }
 }
