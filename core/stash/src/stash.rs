@@ -1,271 +1,21 @@
-#![allow(clippy::struct_field_names)]
-
-//! Main database-handling interface.
 //!
-//! This module provides the main functionality for handling the database. At
-//! present there is only support for SQLite, and no attempt is made to cater
-//! for any other database engine. Hence the behaviour of this module is
-//! closely tied to SQLite.
+//! This module provides the main functionality for interacting with sqlite
 //!
-//! # Choice of name
+//! The primary point of interaction is the [`Stash`] struct, which is the
+//! database pool which gives out [`Tether`]s.
 //!
-//! The name "stash" has been chosen carefully — it can represent a place where
-//! data is stored, and it does not already appear in the repository. This makes
-//! refactoring clearer, establishing the new identity, after which the name can
-//! be trivially changed to e.g. "database".
+//! To interact with the database you first need to connect to a database by creating
+//! a new [`Stash`], then obtain connections to it by obtaining tethers via [`Stash::connection`].
+//! You can create transactions with [`Tether::transaction`] to obtain a [`Bond`],
+//! which is the transaction type.
 //!
-//! Equally, the term "tether" has been used for the same reason. It represents
-//! the connection established to the database, and it is not already in use in
-//! the repository.
-//!
-//! # Design
-//!
-//! The primary point of interaction is the [`Stash`] struct, which provides a
-//! centralised, asynchronous database-handling interface that manages
-//! connections and carries out queries. One [`Stash`] instance should be
-//! created per database, and can be cloned and shared across threads as
-//! necessary.
-//!
-//! To interact with the database:
-//! Obtain a connection from the pool, and then use the equivalent
-//! functionality it provides, i.e. by calling the [`Tether::query()`] or
-//! [`Tether::execute()`] methods. This will allow for multiple queries to
-//! be run on the same connection, which is necessary for transactions.
-//!
-//! Connections are provided via lightweight, thread-safe [`Tether`]s, which are
-//! use in place of the "real" connections, as those are not thread-safe.
-//!
+//! Note that all 3 Stash, Bond and Tether are `Send`, but only Stash is Clone.
+//! This is to avoid having one connection in two threads, which can result in deadlocks.
 //! Under the bonnet, there is a background worker that manages the connection
-//! pool and executes queries. This worker runs on a separate task, and
-//! receives its instructions via a queue.
 //!
-//! # Approach to async
 //!
-//! The [`Stash`] struct is designed to be used in an asynchronous context.
-//! The database handling uses the [`r2d2`] and [`rusqlite`] crates, which are
-//! synchronous, so they are handled carefully using `spawn_blocking`.
-//!
-//! # Thread structure and management
-//!
-//! It is worth describing the thread structure and management in more detail.
-//! The module as a whole is thread-safe and compatible with both async usage
-//! and multi-threading in general. What this means is that it is possible to
-//! interact with the same [`Stash`] instance from multiple threads.
-//!
-//! Calling code runs on the main Tokio runtime, and issues async requests to
-//! the main interface functions of the [`Stash`] struct (such as
-//! [`Stash::query()`] and [`Stash::execute()`]). These functions will then
-//! send instructions to the background worker via an MPSC queue, and will
-//! obtain their responses via oneshot channels, and pass them back to the
-//! caller. In this way, all of this behaviour is invisible to the caller, and
-//! the interface is simple and easy to use.
-//!
-//! The background worker runs as sync on a dedicated thread, and processes the
-//! incoming instructions from the queue as they arrive. These are the main
-//! points of operation:
-//!
-//!   - Database operation instructions get sent via the central queue. The
-//!     sending is done as async by the sender, with the sender here being the
-//!     public interface methods used by the caller.
-//!
-//!   - A central worker listens to the queue and takes the instructions from
-//!     it. This is sync. It could also be async, but there is no specific need
-//!     for this at present.
-//!
-//!   - The central worker then looks at the instruction it has received:
-//!
-//!       - If it is not associated to any connection then it spawns an async
-//!         thread block to handle it. This will be managed by Tokio. Within the
-//!         spawned async thread the call to the (sync) database operation is
-//!         run with [`spawn_blocking()`].
-//!
-//!       - If it is associated to a connection, and the connection is new, then
-//!         it creates a new dedicated sync thread (non-Tokio) to handle it.
-//!         This is registered with a thread handle for future use, and a
-//!         channel is established for communication.
-//!
-//!       - If it is associated to a connection, and the connection already
-//!         exists, then it sends the instruction down the channel to that
-//!         thread so that it can carry out its instructions. This way, the
-//!         [`PooledConnection`] established inside the thread is preserved and
-//!         re-used.
-//!
-//!     In this way, the central worker is never blocked, and can continue to
-//!     process instructions as they arrive.
-//!
-//!   - Each persistent, connection-specific thread is considered to be active
-//!     when a new instruction is sent to it, and once that action has been
-//!     completed, it should inform the central worker that it has finished.
-//!     This will update a last-active time.
-//!
-//!   - The maximum number of connection-based threads to spawn is configurable.
-//!     If this limit is hit then more connections will not be created, but
-//!     instead the instructions will be added to a Deque held by the central
-//!     worker, up to a certain limit. Beyond that limit, additional
-//!     instructions will be rejected with errors. Otherwise, the worker will
-//!     resume processing the Deque once spare threads are available again.
-//!
-//!   - The number of active transactions is monitored, and should be less than
-//!     the allowed connection thread limit, otherwise errors will be thrown.
-//!
-//!   - Nested transactions will be detected, and rejected. This is achieved by
-//!     each queued instruction having a thread identifier. If thread X starts a
-//!     transaction, and then later there is another request from thread X to
-//!     start another transaction before the first one has finished (regardless
-//!     of the connection context), then this will be rejected. This mechanism
-//!     is fully-async safe, and the method of identifying threads "follows" the
-//!     logic trail through async/await boundaries.
-//!
-//! # Performance
-//!
-//! The current implementation has been carefully designed to be suitable for
-//! the target usage. The profile is fairly write-heavy, and quite low volume.
-//! Although performance is important to consider, the public interface and
-//! manner of approach are of paramount importance in order to provide ease of
-//! development and reliability of operation. Top priorities are therefore
-//! async compatibility, simplicity of use, predictability, and robustness of
-//! operation. The performance of the system is not expected to be a limiting
-//! factor, and the current design is expected to be more than adequate for the
-//! target usage.
-//!
-//! With that said, we can make educated predictions about scalability and where
-//! constraints may occur. The current design is expected to be able to handle
-//! significant volume without issue, but the approach of funnelling all queries
-//! through a single worker thread is a potential bottleneck. This can be
-//! improved or resolved by adding additional workers to process the queue, but
-//! that may or may not be desirable. The fact that the main queue-processing
-//! worker is very lightweight and non-blocking, and simply hands off the actual
-//! query execution to separate threads, means that it is unlikely to become a
-//! source of contention.
-//!
-//! The approach to logic using this module also needs to be thought through
-//! carefully in any situation where transactions are used. As a rule of thumb,
-//! code using transactions should be as close to hand as possible (to minimise
-//! unseen effects), and should keep the transaction open for as short a time as
-//! possible.
-//!
-//! The following points of operation need to generally be considered:
-//!
-//!   1. **Is it possible for a deadlock to occur because multiple threads are
-//!      waiting for interdependent queries to complete?**
-//!
-//!      This should not generally be a concern, as most queries will be run on
-//!      new connections, and only transactions that have started write
-//!      operations need to actually be thought about (see question 2 below).
-//!      For the vast majority of usage, developers using this module will
-//!      therefore not need to think at all about deadlocks or the order of
-//!      operations. The approach taken is as non-blocking as possible.
-//!
-//!      The only time when this could be a concern is when using transactions,
-//!      in which case the developer will know that all queries within the
-//!      transaction need to be run on the same connection, and so will use the
-//!      [`Tether`] interface to ensure that this is the case. Transactions have
-//!      a blocking effect, but notably, any ad-hoc, unrelated queries will not
-//!      be run on the same connection, and so will not be blocked unless a
-//!      write operation has started (see question 2 below). Deadlocks can
-//!      potentially occur in this situation, but that will not be due to
-//!      multiple threads waiting for interdependent queries to complete, but
-//!      rather, due to logic happening in the same thread.
-//!
-//!      Note that any queries happening *inside* an active transaction — i.e.
-//!      read or write, and reusing the same connection — will not be blocked,
-//!      as the transaction holds the lock. So **a deadlock situation is limited
-//!      to a situation where a query is attempted by the same thread that has
-//!      started a write transaction, but on a different connection.**
-//!
-//!   2. **Can an active transaction block other queries?**
-//!
-//!      Yes. An active transaction will apply to its own connection, and will
-//!      hold up any effects of changes carried out on that connection until it
-//!      is committed. Other, unrelated queries will not initially be affected,
-//!      as they will be run on new connections. However, as soon as a write
-//!      operation occurs within the transaction, all unrelated queries will be
-//!      blocked until the transaction is committed or rolled back.
-//!
-//!        - In SQLite, when a transaction is started, it does not immediately
-//!          acquire any locks.
-//!
-//!        - When a read operation is carried out it then establishes a shared
-//!          read lock on the database. Multiple read transactions can coexist
-//!          and proceed concurrently, as they can share the read lock.
-//!
-//!        - However, when a transaction performs a write operation (`INSERT`,
-//!          `UPDATE`, `DELETE`), it attempts to acquire a reserved write lock
-//!          on the database. From that point on, **any other queries that are
-//!          attempted while a write transaction is active will block until the
-//!          write transaction has completed** and released the reserved write
-//!          lock.
-//!
-//!        - Similarly, **if a new transaction is attempted while there is
-//!          another, active write transaction, it will block until the write
-//!          transaction has completed** and released the reserved write lock.
-//!
-//!      This module could take the approach of disallowing multiple
-//!      simultaneous transactions, but given the inherently asynchronous nature
-//!      of the system (with a number of simultaneous sources of activity, all
-//!      of which could potentially lead to a transaction), this would lead to a
-//!      non-trivial number of rejections and errors, which would not be a good
-//!      user experience. Instead, the approach is taken whereby "nested"
-//!      transactions are disallowed (see question 3 below).
-//!
-//!      In summary:
-//!
-//!        - SQLite transactions operate at the database file level, not at a
-//!          connection, table, or resource level.
-//!
-//!        - Read transactions don't block reads, but do block writes.
-//!
-//!        - Write transactions will block reads and writes.
-//!
-//!      Reference:
-//!
-//!        - [File Locking And Concurrency In SQLite Version 3](https://www.sqlite.org/lockingv3.html)
-//!
-//!          *The SQL command "BEGIN TRANSACTION" ... is used to take SQLite out
-//!          of autocommit mode. Note that the BEGIN command does not acquire
-//!          any locks on the database. After a BEGIN command, a SHARED lock
-//!          will be acquired when the first SELECT statement is executed. A
-//!          RESERVED lock will be acquired when the first INSERT, UPDATE, or
-//!          DELETE statement is executed. No EXCLUSIVE lock is acquired until
-//!          either the memory cache fills up and must be spilled to disk or
-//!          until the transaction commits. In this way, the system delays
-//!          blocking read access to the file until the last possible moment.*
-//!
-//!   3. **Is it possible to carry out nested transactions?**
-//!
-//!      At present, these are disallowed.
-//!
-//!      For the sake of clarity, a "nested" transaction is considered to be one
-//!      where a new transaction is started from the same thread as an existing,
-//!      active transaction. This is not allowed in this module, as it is not
-//!      currently considered valid behaviour to be in the process of carrying
-//!      out changes that require a transaction, and then to do something that
-//!      itself also requires a transaction. This position may change in future,
-//!      as it is not technically invalid, only considered to be logically so.
-//!      If and when that position changes, this module will need to be changed
-//!      to not only allow nested transactions, but to handle them correctly in
-//!      order to prevent deadlocks.
-//!
-//!      If other threads attempt transactions then that is absolutely fine, and
-//!      although they will be blocked until the current active transaction
-//!      completes, they will not be rejected. Additionally, as they are for
-//!      unrelated logic, their being blocked will not lead to any deadlocks.
-//!
-//!      However, the real issue is that of nested unrelated queries, i.e. when
-//!      a transaction has started and then another piece of code on the same
-//!      thread attempts a query (not just a transaction — any query) on a
-//!      different connection. That can lead to a deadlock, and so care needs to
-//!      be taken (see question 2 above).
-//!
-//!   4. **Does the synchronous, single-threaded nature of the background worker
-//!      cause any reduction in performance, and does it prevent parallel read
-//!      operations?**
-//!
-//!      The current design is expected to be more than adequate for the target
-//!      usage. The central background worker that handles the queue hands off
-//!      the actual query execution to separate threads, and so does not itself
-//!      block. Read operations can therefore occur in parallel, as the actual
-//!      query handling is multi-threaded.
+//! The database handling uses the [`r2d2`] for connection pooling and [`rusqlite`]
+//! to interface with sqlite.
 //!
 
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
@@ -402,13 +152,36 @@ enum OperationTransaction {
     Abort,
 }
 
-/// TODO: Document this struct
-pub trait GetParams: Send {
+/// This trait was designed for batched queries to efficiently create the queries just by borrowing
+/// data and execute it in the actual db connection thread.
+/// This allows us to efficiently convert the data into a query, skipping having to send thousands of
+/// `Vec<Box<dyn ToSql>>`
+///
+/// This trait is automatically implemented for all `[Model]`s, so that it can be used with any
+/// smart pointer:
+/// - Vec<M>
+/// - Arc<[M]>
+/// - Box<[M]>
+///
+/// where M: Model.
+///
+/// It's theoretically possible to implement this on other types, like API types directly.
+///
+/// This trait is meant to be used as a trait object.
+/// You might notice the `RetId` part of the name, this is because the execute returns the inserted
+/// IDs. This could be extended in the future to return arbitrary data, or no data at all.
+pub trait BatchQueryRetId: Send {
     fn query(&self) -> String;
+    /// This returns a `Vec<u64>`, where the u64 is of the id of the model.  
     fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError>;
 }
 
-impl<T: Deref<Target = [M]> + Send, M: Model + Send> GetParams for T {
+/// Make sure that it's object safe
+#[allow(dead_code)]
+fn _f(_: &dyn BatchQueryRetId) {}
+
+// TODO: I'm not sure if this impl is strictly needed.
+impl<T: Deref<Target = [M]> + Send, M: Model + Send> BatchQueryRetId for T {
     fn query(&self) -> String {
         <Self as Deref>::deref(self).query()
     }
@@ -418,7 +191,7 @@ impl<T: Deref<Target = [M]> + Send, M: Model + Send> GetParams for T {
     }
 }
 
-impl<M: Model + Send> GetParams for [M] {
+impl<M: Model + Send> BatchQueryRetId for [M] {
     fn query(&self) -> String {
         let field_names = M::field_names_without_id();
         format!(
@@ -451,8 +224,10 @@ impl<M: Model + Send> GetParams for [M] {
     }
 }
 
+/// This gets constructed from [`Tether::batch_write`] in order to perform many inserts more
+/// efficiently.
 struct BatchedWrite {
-    params: Box<dyn GetParams>,
+    params: Box<dyn BatchQueryRetId>,
 
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -460,7 +235,7 @@ struct BatchedWrite {
 }
 
 impl BatchedWrite {
-    /// Prepares and executes a query, and returns the number of affected rows.
+    /// Prepares and executes a query, and returns the ids.
     fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Vec<u64>, StashError> {
         let mut statement = connection
             .prepare_with_flags(&self.params.query(), PrepFlags::SQLITE_PREPARE_PERSISTENT)
@@ -476,10 +251,8 @@ enum OperationExec {
     /// not enforced.
     Instruct(Instruction),
 
-    /// A query to be executed, where no results are expected. This is usually
-    /// a write query, or a command, but differentiation is up to the caller and
-    /// not enforced.
-    BatchedInstruct(BatchedWrite),
+    /// A mass insert function that returns the ids of the records inserted.
+    BatchedInsertReturningIds(BatchedWrite),
 
     /// A query to be executed, where results are expected. This is typically a
     /// read query, but could be any query where results are expected, such as
@@ -526,7 +299,7 @@ impl TetherOperation {
                     }
                 };
             }
-            Self::Execution(OperationExec::BatchedInstruct(x)) => {
+            Self::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
                 {
                     let result = (Err(error), Duration::from_secs(0));
                     if x.sender.send(result).is_err() {
@@ -672,15 +445,6 @@ pub enum StashError {
 /// the result is the number of rows affected, along with other similar
 /// commands.
 ///
-/// # See also
-///
-/// * [`Command`]
-/// * [`Information`]
-/// * [`Notification`]
-/// * [`Operation`]
-/// * [`Query`]
-/// * [`Subscription`]
-///
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -724,7 +488,6 @@ impl Instruction {
 /// * [`Stash::subscribe()`]
 ///
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct Notification {
     /// The action that has been performed on the table. This can be one of
     /// `INSERT`, `UPDATE`, or `DELETE`.
@@ -748,12 +511,6 @@ pub struct Notification {
 /// rows of data. Notably, the deserialisation function is also passed, so that
 /// the results can be converted into the desired type. This is because the
 /// [`Rows`] type returned by the [`rusqlite`] library is not thread-safe.
-///
-/// # See also
-///
-/// * [`Instruction`]
-/// * [`Notification`]
-/// * [`Subscription`]
 ///
 struct Query {
     /// The communication channel used to send the result of the operation back
@@ -796,61 +553,11 @@ impl Query {
     }
 }
 
-/// Database interaction interface.
-///
-/// This struct provides a centralised database-handling interface that
-/// manages connections and carries out queries.
-///
-/// [`Stash`] instances are lightweight, and can be freely cloned without any
-/// concerns. When cloned, the new instance will share the same queue — and
-/// therefore worker — as the original. This is achieved due to the nature of
-/// the [`QueueSender`] type, which is thread-safe and can be shared across
-/// threads. For this reason the [`Stash`] struct is not wrapped in an [`Arc`],
-/// and does not need any self-reference.
-///
-/// # Design
-///
-/// The [`Stash`] struct provides a simple and straightforward interface for
-/// interacting with the database in an asynchronous manner, abstracting away
-/// the details of connection management and query execution and presenting the
-/// most common functions through an easy-to-use API, while still allowing for
-/// more advanced/direct usage when necessary.
-///
-/// A key goal is to use available libraries wherever possible and sensible, and
-/// to avoid custom implementation of widely-available functionality. This
-/// reduces the amount of code that needs to be written and maintained, and
-/// reduces the potential for bugs and errors. The [`r2d2`] and [`rusqlite`]
-/// crates are used for connection pooling and SQLite database interaction,
-/// respectively, and are well-established and widely-used libraries that
-/// provide robust and reliable functionality.
-///
-/// No distinction is made between read and write operations, as this would
-/// require additional overhead to detect and enforce, as it would not be
-/// possible to rely purely upon method usage, for instance. Therefore, any
-/// context of read or write operations is left to the [`rusqlite`] library to
-/// handle. It is entirely possible to have a number of read operations running
-/// in parallel, and locking is achieved either automatically by SQLite when a
-/// write operation is performed, or via the use of a transaction.
-///
-///
-/// Notably, it is only possible to compose a [`Statement`](rusqlite::Statement)
-/// at the time of execution, and not to prepare it in advance. This is because
-/// the [`Statement`](rusqlite::Statement) type is not [`Send`] compatible, and
-/// cannot be passed between threads, so cannot cross the async boundary. This
-/// is a limitation of the [`rusqlite`] crate, and is not something that can be
-/// worked around. There is therefore no possibility of preparing a statement in
-/// one action and then executing it in another. However, this is not a
-/// significant limitation, as the preparation and execution of a statement are
-/// usually done in close proximity, and [`Statement`](rusqlite::Statement)s are
-/// fairly quick to create. It is notable, though, that this enforced
-/// restriction does result in repeated re-preparation of statements, which
-/// could otherwise potentially be done up-front and cached.
-///
+/// This is stash's database pool. Its main use is to create [`Tether`]s.
+// Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
 pub struct Stash {
-    /// A reference-counted pointer to an immutable internal handle, which is
-    /// used to identify an individual stash. The handle is an atomic counter,
-    /// to manually keep track of the number of instances.
+    /// TODO: remove this field.
     pub(crate) handle: Arc<()>,
 
     /// The sender for the stash operations that goes to [`Worker`]
@@ -879,27 +586,12 @@ impl Stash {
     /// Creates a new [`Stash`] instance.
     ///
     /// This function creates a new [`Stash`] instance with an associated
-    /// background worker on a separate thread, with a new SQLite connection
-    /// pool.
-    ///
-    /// Note that the pool is created internally by the worker, and fully
-    /// managed by it, as there can only be one worker per [`Stash`] instance
-    /// and database operations need to be executed sequentially.
-    ///
-    /// # WARNING
-    ///
-    /// Please ensure that you handle multiple concurrent connections sensibly,
-    /// in order to avoid exhausting the pool. Things like properly waiting for
-    /// tasks and threads to complete, for example.
-    ///
-    /// Be wary in multithreaded environment of possible panics while dealing
-    /// with transactions with in-memory storage. There may or may not be a
-    /// problem here, caused by [`r2d2_sqlite`]'s connection pool, which in the
-    /// past has had similar issues. Though it seems to be patched for
-    /// multithreading generally, it might still cause issues for async with
-    /// threads, although this is not completely confirmed.
-    ///
-    ///   - Reference: https://github.com/ivanceras/r2d2-sqlite/issues/39
+    // background worker on a separate task, with a new SQLite connection
+    // pool.
+    //
+    // Note that the pool is created internally by the worker, and fully
+    // managed by it, as there can only be one worker per [`Stash`] instance
+    // and database operations need to be executed sequentially.
     ///
     /// # Parameters
     ///
@@ -1090,14 +782,6 @@ impl Stash {
     }
 }
 
-impl Eq for Stash {}
-
-impl PartialEq for Stash {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.handle, &other.handle)
-    }
-}
-
 /// A handle to a database connection watcher.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -1112,17 +796,6 @@ pub struct WatcherHandle {
 ///
 /// This is used for subscribing to [`Notification`]s, such as database change
 /// events.
-///
-/// # See also
-///
-/// * [`Command`]
-/// * [`Information`]
-/// * [`Instruction`]
-/// * [`Notification`]
-/// * [`Operation`]
-/// * [`Query`]
-/// * [`Stash::subscribe()`]
-///
 struct Subscription {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
@@ -1147,47 +820,19 @@ impl Subscription {
     }
 }
 
-/// Database connection context.
-///
-/// This struct provides a lightweight, thread-safe database connection context
-/// — which is not an actual connection, but a tether to one — that can be
-/// shared easily and without concern. It is used to execute queries against the
-/// database,
+/// A connection to the database. It is used to execute queries against the database, and obtained
+/// from [`Stash::connection`].
 ///
 /// # Design
 ///
 /// Because [`PooledConnection`] is not [`Send`] compatible, it cannot be passed
 /// between threads, and so cannot cross the async boundary. This is an
-/// inherited limitation of the [`rusqlite`] crate. The [`Tether`] struct gets
-/// around this problem by storing an immutable handle which is used to persist
-/// the connection context, and expires when no longer in use. This way, the
-/// [`PooledConnection`] remains in the control of the worker, which runs on a
-/// dedicated background thread.
-///
-/// Note that the important thing about a [`Tether`] is the *instance* of the
-/// internal handle, and not the actual value of the handle. This is why the
-/// handle is simply a unit. It is equivalent to a unique ID, but without having
-/// to actually assign a value.
-///
-/// In addition to the internal handle, the [`Tether`] also stores a reference
-/// to the queue, which is used to send queries to the worker for execution.
-/// This is the manner by which context is associated.
-///
-/// When the [`Tether`] is dropped, the reference count to the internal handle
-/// decreases, and when there are no remaining strong references, the worker
-/// will return the underlying connection to the pool.
-///
-/// # See also
-///
-/// * [`Stash::connection()`]
-///
+/// inherited limitation of the [`rusqlite`] crate.
+/// `stash` works around it by using the actor pattern and wrapping each connection in a
+/// thread, using message passing for executing the queries and waiting for the result.
 pub struct Tether {
-    /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
-    /// associated. This is used to send queries to the worker for execution.
-    queue: InfallibleSender<TetherOperation>,
-
-    /// The time at which the Tether was created.
-    start_time: Instant,
+    /// This is the channel that sends [`TetherOperation`]s to the inner thread.
+    sender: InfallibleSender<TetherOperation>,
 
     /// TODO: Remove me
     stash: Stash,
@@ -1220,28 +865,6 @@ impl Tether {
     /// module. The [`rusqlite`] library will handle the distinction as
     /// necessary.
     ///
-    /// # Transactions, and connection context
-    ///
-    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
-    /// [`AgnosticInterface`].
-    ///
-    ///   - If run against a [`Stash`] instance, the query will be executed
-    ///     against a new database connection created specifically for its use.
-    ///     For once-off, unrelated queries this is fine, but when using
-    ///     transactions it is critical to run all related queries against the
-    ///     same connection, in which case use [`Tether::execute()`].
-    ///
-    ///   - If run against a [`Tether`] instance, the query will be executed in
-    ///     context to that instance, against the associated database
-    ///     connection.
-    ///
-    /// # Mechanism
-    ///
-    /// To be technically accurate, this function does not actually execute the
-    /// query, but provides an interface to do so. It adds the query to the
-    /// database operations queue, where it will be picked up and processed by
-    /// the background worker, and the result returned.
-    ///
     /// # Parameters
     ///
     /// * `query`  - The query to execute.
@@ -1259,15 +882,6 @@ impl Tether {
     ///     operation to the queue.
     ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
     ///     connection from the pool.
-    ///
-    /// Note that, unlike the [`query()`][Tether::query()] method, no
-    /// distinction is made between execution and preparation errors.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::query()`]
-    /// * [`params!`](crate::utils::params)
-    ///
     pub async fn execute<Q: Into<String>>(
         &self,
         query: Q,
@@ -1280,26 +894,45 @@ impl Tether {
             params,
             query: query.into(),
         }));
-        self.queue.send(operation);
+        self.sender.send(operation);
         let (r, d) = oneshot_join(receiver).await;
         STATS.send((t0.elapsed(), d, "execute"));
         r
     }
 
-    pub async fn batch_write_arc(&self, params: Arc<[impl Model]>) -> Result<Vec<u64>, StashError> {
-        let b: Box<dyn GetParams> = Box::new(params);
-        self.batch_write(b).await
-    }
-
-    // TODO: Document this fn
-    pub async fn batch_write(&self, params: Box<dyn GetParams>) -> Result<Vec<u64>, StashError> {
+    /// Sends a batch of `INSERT`.
+    /// In order to get `params`, you just need to Box any slice (or smart ptr that derefs into one
+    /// like Vec, Box, Arc...) into it:
+    ///
+    /// ```rs
+    ///    pub async fn batch_write_arc(&self, params: Arc<[impl Model]>) -> Result<Vec<u64>, StashError> {
+    ///        &self,
+    ///        params: Vec<impl Model>,
+    ///    ) -> Result<Vec<u64>, StashError> {
+    ///        let b: Box<dyn GetParams> = Box::new(params);
+    ///        self.batch_write(b).await
+    ///    }
+    ///
+    ///    pub async fn batch_write_vec(&self, params: Vec<impl Model>) -> Result<Vec<u64>, StashError> {
+    ///        &self,
+    ///        params: Vec<impl Model>,
+    ///    ) -> Result<Vec<u64>, StashError> {
+    ///        let b: Box<dyn GetParams> = Box::new(params);
+    ///        self.batch_write(b).await
+    ///    }
+    /// ```
+    pub async fn batch_write(
+        &self,
+        params: Box<dyn BatchQueryRetId>,
+    ) -> Result<Vec<u64>, StashError> {
         let t0 = Instant::now();
         let (sender, receiver) = oneshot::channel();
-        let operation = TetherOperation::Execution(OperationExec::BatchedInstruct(BatchedWrite {
-            sender,
-            params,
-        }));
-        self.queue.send(operation);
+        let operation =
+            TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
+                sender,
+                params,
+            }));
+        self.sender.send(operation);
         let (r, d) = oneshot_join(receiver).await;
         STATS.send((t0.elapsed(), d, "batch"));
         r
@@ -1320,11 +953,6 @@ impl Tether {
     /// # Errors
     ///
     /// See [`Model::load()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::load()`]
-    ///
     pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
     where
         T: Model,
@@ -1361,28 +989,6 @@ impl Tether {
     /// unlikely to be needed, or at least not common, and so are not provided
     /// by this module. No interface is currently provided to achieve this.
     ///
-    /// # Transactions, and connection context
-    ///
-    /// The [`Interface`] trait is implemented for [`Stash`], [`Tether`], and
-    /// [`AgnosticInterface`].
-    ///
-    ///   - If run against a [`Stash`] instance, the query will be executed
-    ///     against a new database connection created specifically for its use.
-    ///     For once-off, unrelated queries this is fine, but when using
-    ///     transactions it is critical to run all related queries against the
-    ///     same connection, in which case use [`Tether::execute()`].
-    ///
-    ///   - If run against a [`Tether`] instance, the query will be executed in
-    ///     context to that instance, against the associated database
-    ///     connection.
-    ///
-    /// # Mechanism
-    ///
-    /// To be technically accurate, this function does not actually execute the
-    /// query, but provides an interface to do so. It adds the query to the
-    /// database operations queue, where it will be picked up and processed by
-    /// the background worker, and the result returned.
-    ///
     /// # Parameters
     ///
     /// * `query`  - The query to execute.
@@ -1394,8 +1000,6 @@ impl Tether {
     ///
     ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
     ///     converting from [`Rows`] to `T`.
-    ///   - [`DowncastError`](StashError::DowncastError) - Problem downcasting
-    ///     from [`Any`](std::any::Any) to `T`.
     ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
     ///     the query.
     ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
@@ -1432,7 +1036,7 @@ impl Tether {
             query: query.into(),
         };
         let operation = TetherOperation::Execution(OperationExec::Query(query));
-        self.queue.send(operation);
+        self.sender.send(operation);
 
         let (res, d) = oneshot_join(receiver).await;
         let res = res?
@@ -1524,8 +1128,6 @@ impl Tether {
     /// If no rows are returned, this function returns
     /// [`SqliteError::QueryReturnedNoRows`].
     ///
-    /// See [`Interface::query_values()`] for more information.
-    ///
     /// # See also
     ///
     /// * [`Interface::query_values()`]
@@ -1598,7 +1200,7 @@ impl Tether {
         let (that_end, this_end) = oneshot::channel();
         let operation = TetherOperation::Transaction(OperationTransaction::Start(that_end));
 
-        self.queue.send(operation);
+        self.sender.send(operation);
         oneshot_join(this_end).await?;
 
         Ok(Bond::new(self))
@@ -1657,10 +1259,10 @@ impl Tether {
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn new(stash: Stash) -> Self {
-        let start_time = Instant::now();
         let (tether_sender, tether_receiver) = mpsc::channel::<TetherOperation>();
 
-        let stash_clone = stash.clone();
+        let pool = stash.pool.clone();
+        let queue_clone = stash.queue.clone();
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
@@ -1668,11 +1270,7 @@ impl Tether {
         _ = spawn_blocking(move || {
             debug!("Creating worker thread");
             // The first time an operation is received, we attempt to acquire a database
-            // connection from the pool. This is done lazily so that there is no delay
-            // in creating [`Tether`] instances, and so that any errors can be returned
-            // to the caller. It is important that this happens just once, ahead of the
-            // main loop starting, to avoid borrowing issues (because when transactions
-            // are started, they borrow the underlying connection).
+            // connection from the pool. This is done lazily so that creating tethers is sync.
 
             #[allow(clippy::items_after_statements)]
             // This is scoped here so that we can't create an id from anywhere else.
@@ -1680,11 +1278,10 @@ impl Tether {
             let id = TETHER_ID.fetch_add(1, Ordering::Relaxed);
             info!("Creating tether {id}");
 
-            let pool = stash_clone.pool.clone();
-            let queue_clone = stash_clone.queue.clone();
+            let queue_clone_2 = queue_clone.clone();
             let connection = || {
                 let mut connection = pool
-                    .get_and_subscribe(queue_clone, id)
+                    .get_and_subscribe(queue_clone_2, id)
                     .context("Could not connect to the database")?;
                 Self::conn_configuration(&connection)
                     .context("Could not set connection configuration.")?;
@@ -1707,39 +1304,28 @@ impl Tether {
                 }
             };
 
-            // The first time an operation is received, we attempt to acquire a database
-            // connection from the pool. This is done lazily so that there is no delay
-            // in creating [`Tether`] instances, and so that any errors can be returned
-            // to the caller. It is important that this happens just once, ahead of the
-            // main loop starting, to avoid borrowing issues (because when transactions
-            // are started, they borrow the underlying connection).
-            debug!("connection, first op");
-
             let queue = InfallibleSenderAsync {
-                sender: stash_clone.queue.clone(),
+                sender: queue_clone,
                 reason: "Failed to send NotifyStartTransaction operation to main queue.
 This means that the main worker thread has closed with open handles to it. 
 This cannot happen, the main worker thread is not supposed to close.",
             };
 
-            _ = spawn_blocking(move || {
-                debug!("Starting tether {id} worker");
-                let mut sm = TetheredWorkerStateMachine {
-                    transaction: None,
-                    connection: &connection,
-                    id,
-                    queue,
-                };
-                sm.handle_operation(first_operation);
+            debug!("Starting tether {id} worker");
+            let mut sm = TetheredWorkerStateMachine {
+                transaction: None,
+                connection: &connection,
+                id,
+                queue,
+            };
+            sm.handle_operation(first_operation);
 
+            debug!("{id} Waiting for more...");
+            while let Ok(operation) = tether_receiver.recv() {
+                sm.handle_operation(operation);
                 debug!("{id} Waiting for more...");
-                while let Ok(operation) = tether_receiver.recv() {
-                    sm.handle_operation(operation);
-                    debug!("{id} Waiting for more...");
-                }
-                info!("Exiting loop {id}");
-                sm.handle_close();
-            });
+            }
+            sm.handle_close();
         });
 
         let reason = "It shouldn't be allowed create a TetherOperation after TetherOperation::CloseConnection has been issued. 
@@ -1747,13 +1333,12 @@ The other possible explanation of why a send could fail is if the thread has exi
 which can't possibly happen because it remains open at least until the first operation.
 ";
 
-        let queue = InfallibleSender {
+        let sender = InfallibleSender {
             sender: tether_sender,
             reason,
         };
         Self {
-            queue,
-            start_time,
+            sender,
             stash,
             state: Some(State::new()),
         }
@@ -1779,8 +1364,7 @@ which can't possibly happen because it remains open at least until the first ope
 impl Debug for Tether {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tether")
-            .field("queue", &self.queue)
-            .field("start_time", &self.start_time)
+            .field("queue", &self.sender)
             .field("stash", &self.stash)
             .finish_non_exhaustive()
     }
@@ -1935,7 +1519,7 @@ impl<'tether> Bond<'tether> {
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = TetherOperation::Transaction(OperationTransaction::Commit(that_end));
-        self.tether.queue.send(operation);
+        self.tether.sender.send(operation);
 
         if let Err(e) = oneshot_join(this_end).await {
             error!("Commit error: {e}");
@@ -1978,7 +1562,7 @@ impl<'tether> Bond<'tether> {
         let (that_end, this_end) = oneshot::channel();
 
         let operation = TetherOperation::Transaction(OperationTransaction::Rollback(that_end));
-        self.tether.queue.send(operation);
+        self.tether.sender.send(operation);
         oneshot_join(this_end).await?;
 
         // Transaction rolled back, skip the drop logic
@@ -1998,7 +1582,7 @@ impl Deref for Bond<'_> {
 
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
-        self.queue
+        self.sender
             .send(TetherOperation::Transaction(OperationTransaction::Abort));
     }
 }
@@ -2229,7 +1813,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     error!("Oneshot error: Failed sending result back to caller");
                 }
             }
-            OperationExec::BatchedInstruct(instruct) => {
+            OperationExec::BatchedInsertReturningIds(instruct) => {
                 let res = instruct.run(&connection);
                 let result = (res, t0.elapsed());
                 if instruct.sender.send(result).is_err() {
@@ -2336,7 +1920,6 @@ impl Worker {
             };
             // TODO: Clean this up
             while let Ok(operation) = receiver.recv_async().await {
-                debug!("we alive in loop");
                 match operation {
                     StashOperation::NotifyCommitTransaction(id) => {
                         debug!(
