@@ -344,8 +344,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
-        let Some(mut conversation) = Conversation::find_by_id(conversation_id, &tether).await?
-        else {
+        if Conversation::find_by_id(conversation_id, &tether)
+            .await?
+            .is_none()
+        {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
@@ -428,7 +430,15 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // Update remote ids
         message.remote_id = Some(new_message.metadata.id.clone());
         message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone());
-        conversation.remote_id = Some(new_message.metadata.conversation_id.clone());
+
+        // Update the remote conversation id.
+        Conversation::update_remote_id(
+            conversation_id,
+            new_message.metadata.conversation_id.clone(),
+            &bond,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to update the conversation remote id: {e}"))?;
 
         // Because we can't have custom update function in stash we need to
         // first set the remote id on the message body metadata and then
@@ -438,12 +448,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .save(&bond)
             .await
             .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
-
-        // Update conversation
-        conversation
-            .save(&bond)
-            .await
-            .inspect_err(|e| error!("Failed to update the conversation: {e}"))?;
 
         // Update message data
         let (mut new_local_message, mut new_message_body_metadata, _) =

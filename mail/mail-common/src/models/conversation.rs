@@ -3010,6 +3010,26 @@ impl Conversation {
 
         Ok(label.is_some())
     }
+
+    /// Update a conversation with `local_conversation_id`'s remote id.
+    ///
+    /// # Error
+    ///
+    /// Return error if the query failed.
+    pub(crate) async fn update_remote_id(
+        local_conversation_id: LocalConversationId,
+        conversation_id: ConversationId,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        bond.execute(
+            format!(
+                "UPDATE {} SET remote_id=? WHERE local_id=?",
+                Self::table_name()
+            ),
+            params![conversation_id, local_conversation_id],
+        )
+        .await
+    }
 }
 
 impl From<ApiConversation> for Conversation {
