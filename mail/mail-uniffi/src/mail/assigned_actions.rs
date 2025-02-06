@@ -120,7 +120,7 @@ pub async fn assigned_swipe_actions(
         let tether = session.user_stash().connection();
         let actions = RealAssignedSwipeActions::get(&tether).await?;
 
-        Result::<_, RealProtonMailError>::Ok(AssignedSwipeActions::from(actions))
+        Ok::<_, RealProtonMailError>(AssignedSwipeActions::from(actions))
     })
     .await
     .map_err(ActionError::from)
