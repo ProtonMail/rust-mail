@@ -37,6 +37,7 @@
 //! Hence event data types are placed into the [`events`](crate::events) module.
 //!
 
+mod assigned_actions;
 pub mod attachment;
 pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
@@ -46,6 +47,7 @@ mod rollback_item_type;
 mod search_options;
 mod system_folder;
 
+pub use assigned_actions::*;
 pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;

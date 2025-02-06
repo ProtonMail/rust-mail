@@ -1,3 +1,4 @@
+mod assigned_actions;
 mod avatar_information;
 mod contacts;
 pub mod conversations;

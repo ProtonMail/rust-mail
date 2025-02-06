@@ -114,9 +114,9 @@ pub enum AppError {
     AddressHasNoRemoteId(LocalAddressId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
-    #[error("Culd not find counters for remote label {0}")]
+    #[error("Could not find counters for remote label {0}")]
     RemoteLabelHasNoCounters(LabelId),
-    #[error("Culd not find counters for local label {0}")]
+    #[error("Could not find counters for local label {0}")]
     LocalLabelHasNoCounters(LocalLabelId),
 
     #[error("API error: {0}")]
