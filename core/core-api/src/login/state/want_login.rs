@@ -38,7 +38,7 @@ impl WantLogin {
         self.store.write().await.set_name_or_addr(&user);
 
         self.try_login(user, pass, extra_info)
-            .map_err(|err| (State::LoginError, err))
+            .map_err(|err| (State::LoginRetry, err))
             .await
     }
 

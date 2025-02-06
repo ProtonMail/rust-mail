@@ -32,9 +32,9 @@ pub enum State {
     #[debug("WantLogin")]
     WantLogin(WantLogin),
 
-    /// An error occurred during the `WantLogin` state.
-    #[debug("LoginError")]
-    LoginError,
+    /// A recoverable error occurred during the `WantLogin` state.
+    #[debug("LoginRetry")]
+    LoginRetry,
 
     /// The flow is waiting for the user to provide a 2FA token.
     #[debug("WantTfa")]

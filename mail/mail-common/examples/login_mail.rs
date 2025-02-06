@@ -9,7 +9,7 @@ use std::io::{stdin, stdout, Result as IoResult, Write};
 use std::path::Path;
 use std::sync::Arc;
 use tempdir::TempDir;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -62,13 +62,16 @@ async fn new_mail_ctx(
 async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
     let mut flow = ctx.new_login_flow()?;
 
-    flow.login(
-        read("username")?,
-        read("password")?,
-        LoginExtraInfo::default(),
-    )
-    .inspect_err(|err| error!("failed to login: {err}"))
-    .await?;
+    while let Err(err) = flow
+        .login(
+            read("username")?,
+            read("password")?,
+            LoginExtraInfo::default(),
+        )
+        .await
+    {
+        warn!("failed to login: {err}");
+    }
 
     if flow.is_awaiting_2fa() {
         for _ in 0..3 {

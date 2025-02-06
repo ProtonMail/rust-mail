@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.40.7] - 2025-02-06
+
 ### Added
 
   - [ET-1976] `assigned_swipe_actions` returns what actions are assigned to swipe gestures including
     necessary context information needed for executing them (for example what is Trash/Spam/Archive local label id)
 
+### Fixed
+
+  - Support retrying initial login flow stage
 
 ## [0.40.6] - 2025-02-05
 

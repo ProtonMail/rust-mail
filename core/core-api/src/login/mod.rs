@@ -133,7 +133,9 @@ impl Flow {
         pass: String,
         extra_info: LoginExtraInfo,
     ) -> Result<(), LoginError> {
-        self.transition(|s| s.login(user, pass, extra_info)).await
+        self.transition(|s| s.login(user, pass, extra_info))
+            .await
+            .inspect_err(|_| self.try_recover())
     }
 
     /// Submit TOTP 2FA code.
@@ -248,6 +250,10 @@ impl Flow {
         let parts = self.session.to_parts();
 
         match self.take_state() {
+            State::LoginRetry => {
+                self.state = State::new(parts);
+            }
+
             State::TfaRetry(user_id, auth_id, pass) => {
                 self.state = State::new_from_tfa(parts, user_id, auth_id, pass);
             }
