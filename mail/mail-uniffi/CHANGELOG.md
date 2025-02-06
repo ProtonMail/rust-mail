@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.40.8] - 2025-02-06
+
+### Fixed
+
+  - Correct state transition when entering wrong mailbox password
+
+### Added
+
 ## [0.40.7] - 2025-02-06
 
 ### Added
