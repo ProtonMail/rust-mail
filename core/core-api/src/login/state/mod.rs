@@ -56,10 +56,6 @@ pub enum State {
     #[debug("MbpRetry")]
     MbpRetry(UserId, AuthId),
 
-    /// An error occurred during the `WantMbp` state.
-    #[debug("MbpError")]
-    MbpError,
-
     /// The flow is complete.
     #[debug("Complete")]
     Complete(Complete),

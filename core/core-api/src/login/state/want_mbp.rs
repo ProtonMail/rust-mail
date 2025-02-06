@@ -20,8 +20,11 @@ impl WantMbp {
     }
 
     pub async fn submit_mbp(self, pass: String) -> Result<State, (State, LoginError)> {
+        let user_id = self.data.user_id.clone();
+        let auth_id = self.data.auth_id.clone();
+
         State::finalize(self.client, self.data, pass)
-            .map_err(|err| (State::MbpError, err))
+            .map_err(|err| (State::MbpRetry(user_id, auth_id), err))
             .await
     }
 }
