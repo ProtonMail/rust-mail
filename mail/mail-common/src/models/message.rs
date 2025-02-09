@@ -1673,9 +1673,7 @@ impl Message {
             return Err(AppError::EmptyListOfMessages);
         }
 
-        let handle = tether
-            .stash()
-            .subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
+        let handle = tether.subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let messages = <Message as ModelExtension>::find_by_ids(message_ids, tether).await?;

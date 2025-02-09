@@ -19,7 +19,7 @@
 //!
 
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use core::fmt;
 use core::fmt::Debug;
 use core::future::Future;
@@ -47,6 +47,7 @@ use stash_macros::DbRecord;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::Sender as StdSender;
 use std::sync::{mpsc, Arc};
 use std::time::Instant;
 use thiserror::Error;
@@ -420,6 +421,7 @@ impl Instruction {
             .execute(&*prepare_params(&self.params))
             .map_err(StashError::ExecutionError)?;
         // I'm not sure if we should do this.
+        // TODO : Put this behind a feature flag (next MR)
         if let Some(query) = statement.expanded_sql() {
             trace!("Query: {query}");
         }
@@ -782,10 +784,11 @@ impl Subscription {
 /// thread, using message passing for executing the queries and waiting for the result.
 pub struct Tether {
     /// This is the channel that sends [`TetherOperation`]s to the inner thread.
-    sender: InfallibleSender<TetherOperation>,
+    /// This was changed to a std channel since flume seems to hang on sync <-> async under some
+    /// circumstances.
+    sender: StdSender<TetherOperation>,
 
-    /// TODO: Remove me
-    stash: Stash,
+    watcher: Arc<Watcher>,
 
     /// State needed for the connection to be updated on transaction start and
     /// published at the end.
@@ -793,6 +796,27 @@ pub struct Tether {
 }
 
 impl Tether {
+    /// Subscribes to notifications of changes to a specific table.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::subscribe()`].
+    pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
+    where
+        F: Fn(QueueSender<()>) -> Box<dyn TableObserver>,
+    {
+        let (sender, receiver) = unbounded();
+        let handle = self
+            .watcher
+            .add_observer_with_drop_remove(observer(sender))
+            .map_err(|e| {
+                StashError::WatcherError(format!(
+                    "Could not observe requested table, details: `{e}`"
+                ))
+            })?;
+
+        Ok(WatcherHandle { receiver, handle })
+    }
     /// Runs a query and returns the affected row count.
     ///
     /// This function prepares a query and executes it on the database, and then
@@ -843,7 +867,9 @@ impl Tether {
             params,
             query: query.into(),
         }));
-        self.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
@@ -881,7 +907,9 @@ impl Tether {
                 sender,
                 params,
             }));
-        self.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
@@ -984,7 +1012,9 @@ impl Tether {
             query: query.into(),
         };
         let operation = TetherOperation::Execution(OperationExec::Query(query));
-        self.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
 
         Ok(receiver
             .await
@@ -1056,13 +1086,6 @@ impl Tether {
         self.query::<_, ValueRecord<T>>(query, params)
             .await
             .map(|values| values.into_iter().map(|v| v.value).collect())
-    }
-
-    /// Get underlying stash instance.
-    ///
-    #[must_use]
-    pub const fn stash(&self) -> &Stash {
-        &self.stash
     }
 
     /// Utility function to return a single row of a singular type.
@@ -1147,7 +1170,9 @@ impl Tether {
         let (sender, receiver) = oneshot::channel();
         let operation = TetherOperation::Transaction(OperationTransaction::Start(sender));
 
-        self.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
             .expect("Tether closed its channel with handles still open")?;
@@ -1163,7 +1188,7 @@ impl Tether {
             );
             return Err(StashError::Custom("No state found for Tether".into()));
         };
-        let watcher = Arc::clone(&self.stash.watcher);
+        let watcher = Arc::clone(&self.watcher);
         let result = state.sync_tables_async(self, &watcher).await;
 
         self.state = Some(state);
@@ -1179,7 +1204,7 @@ impl Tether {
             );
             return Err(StashError::Custom("No state found for Tether".into()));
         };
-        let watcher = Arc::clone(&self.stash.watcher);
+        let watcher = Arc::clone(&self.watcher);
         let result = state.publish_changes_async(self, &watcher).await;
 
         self.state = Some(state);
@@ -1236,7 +1261,7 @@ impl Tether {
                 Self::conn_configuration(&connection)
                     .context("Could not set connection configuration.")?;
                 State::start_tracking(&mut *connection)
-                    .context("Critical error: Failed to set watcher on the connection: {:?}")?;
+                    .context("Critical error: Failed to set watcher on the connection")?;
                 debug!("Success connecting to db");
                 Ok::<_, StashError>(connection)
             };
@@ -1308,18 +1333,9 @@ This cannot happen, the main worker thread is not supposed to close.",
             sm.handle_close();
         });
 
-        let reason = "It shouldn't be allowed create a TetherOperation after TetherOperation::CloseConnection has been issued. 
-The other possible explanation of why a send could fail is if the thread has exited,
-which can't possibly happen because it remains open at least until the first operation.
-";
-
-        let sender = InfallibleSender {
-            sender: tether_sender,
-            reason,
-        };
         Self {
-            sender,
-            stash,
+            sender: tether_sender,
+            watcher: stash.watcher.clone(),
             state: Some(State::new()),
         }
     }
@@ -1343,10 +1359,7 @@ which can't possibly happen because it remains open at least until the first ope
 
 impl Debug for Tether {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Tether")
-            .field("queue", &self.sender)
-            .field("stash", &self.stash)
-            .finish_non_exhaustive()
+        f.debug_struct("Tether").finish_non_exhaustive()
     }
 }
 
@@ -1493,7 +1506,9 @@ impl<'tether> Bond<'tether> {
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
         let operation = TetherOperation::Transaction(OperationTransaction::Commit(sender));
-        self.tether.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
 
         if let Err(e) = receiver
             .await
@@ -1537,7 +1552,9 @@ impl<'tether> Bond<'tether> {
         let (sender, receiver) = oneshot::channel();
 
         let operation = TetherOperation::Transaction(OperationTransaction::Rollback(sender));
-        self.tether.sender.send(operation);
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
             .expect("Tether closed its channel with handles still open")?;
@@ -1565,25 +1582,6 @@ impl Drop for Bond<'_> {
     }
 }
 
-struct InfallibleSender<T> {
-    sender: mpsc::Sender<T>,
-    reason: &'static str,
-}
-
-impl<T> Debug for InfallibleSender<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let type_name = std::any::type_name::<T>();
-        write!(f, "InfallibleSender<{type_name}>")
-    }
-}
-
-impl<T: Send> InfallibleSender<T> {
-    fn send(&self, msg: T) {
-        debug!("Sending thing");
-        self.sender.send(msg).expect(self.reason);
-    }
-}
-
 struct InfallibleSenderAsync<T> {
     sender: QueueSender<T>,
     reason: &'static str,
@@ -1598,20 +1596,7 @@ impl<T> Debug for InfallibleSenderAsync<T> {
 
 impl<T: Send> InfallibleSenderAsync<T> {
     fn send(&self, msg: T) {
-        debug!("Sending thing");
         self.sender.send(msg).expect(self.reason);
-    }
-}
-
-impl<T> Drop for InfallibleSenderAsync<T> {
-    fn drop(&mut self) {
-        info!("Dropping {self:?}");
-    }
-}
-
-impl<T> Drop for InfallibleSender<T> {
-    fn drop(&mut self) {
-        info!("Dropping {self:?}");
     }
 }
 
@@ -1892,7 +1877,7 @@ impl Worker {
                 notifications_buffer: HashMap::new(),
                 subscribers: Vec::new(),
             };
-            // TODO: Clean this up
+
             while let Ok(operation) = receiver.recv_async().await {
                 match operation {
                     StashOperation::NotifyCommitTransaction(id) => {
