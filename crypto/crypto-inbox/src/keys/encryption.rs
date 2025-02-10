@@ -446,6 +446,17 @@ pub struct SendPreferences<Pub: PublicKey> {
     pub key_transparency_verification: KTVerificationResult,
 }
 
+impl<Pub: PublicKey> Display for SendPreferences<Pub> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(encrypt={} sign={}", self.encrypt, self.sign)?;
+        write!(f, " pgp_scheme=\"{}\"", self.pgp_scheme)?;
+        write!(f, " mime_type={}", self.mime_type)?;
+        write!(f, " has_key={}", self.selected_key.is_some())?;
+        write!(f, " pinned={}", self.is_selected_key_pinned)?;
+        write!(f, " encryption_disabled={})", self.encryption_disabled)
+    }
+}
+
 impl<Pub: PublicKey> SendPreferences<Pub> {
     /// Creates an instance of [`SendPreferences`] based on the given encryption preferences and composer settings input.
     ///
