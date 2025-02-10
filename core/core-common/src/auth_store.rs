@@ -14,7 +14,7 @@ use stash::orm::Model;
 use stash::stash::Stash;
 use std::ops::Deref;
 use std::sync::Arc;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
@@ -56,7 +56,6 @@ impl AuthStore {
         let tether = self.stash.connection();
 
         let Some(account) = (if let Some(id) = &self.user_id {
-            debug!("Get account {}", id);
             CoreAccount::find_by_id(id.to_owned(), &tether).await?
         } else {
             None
@@ -65,7 +64,6 @@ impl AuthStore {
         };
 
         let Some(session) = (if let Some(id) = &self.session_id {
-            debug!("Get session {}", id);
             CoreSession::find_by_id(id.to_owned(), &tether).await?
         } else {
             None

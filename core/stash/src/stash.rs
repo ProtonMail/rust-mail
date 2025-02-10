@@ -33,9 +33,7 @@ use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
-use rusqlite::{
-    Connection, Error as SqliteError, PrepFlags, Rows, ToSql, Transaction, TransactionBehavior,
-};
+use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
 use sqlite_watcher::connection::SqlConnectionAsync;
 use sqlite_watcher::connection::SqlExecutorAsync;
 use sqlite_watcher::connection::SqlTransactionAsync;
@@ -214,14 +212,8 @@ impl<M: Model + Send> BatchQueryRetId for [M] {
             // PERF: This could be optimized in a big way.
             let params = i.field_values_without_id();
             let id = stmt
-                .query(&*prepare_params(&params))
-                .map_err(StashError::ExecutionError)?
-                .next()
-                // NOTE: None of these errors can actually happen
-                .context("Critical error: Update affected no rows")?
-                .context("No id found?!")?
-                .get(0)
-                .context("Critical Error: No id found")?;
+                .query_row(&*prepare_params(&params), |row| row.get(0))
+                .map_err(StashError::ExecutionError)?;
             out.push(id);
         }
         Ok(out)
@@ -242,7 +234,7 @@ impl BatchedWrite {
     /// Prepares and executes a query, and returns the ids.
     fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Vec<u64>, StashError> {
         let mut statement = connection
-            .prepare_with_flags(&self.params.query(), PrepFlags::SQLITE_PREPARE_PERSISTENT)
+            .prepare(&self.params.query())
             .map_err(StashError::PreparationError)?;
 
         self.params.execute(&mut statement)
