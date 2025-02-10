@@ -412,24 +412,16 @@ mod concurrency_std_threads {
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let rt = Runtime::new().unwrap();
 
-        let result = spawn(move || {
-            rt.block_on(async {
-                let mut conn = stash.connection();
-                let tx = conn
-                    .transaction()
-                    .await
-                    .expect("Failed to start transaction");
-                create_table_tx(&tx).await;
-                insert_tx(&tx, "test").await;
-                let result = query_tx(&tx, "test").await;
-                tx.commit().await.expect("Failed to commit transaction");
-                result
-            })
-        })
-        .join()
-        .unwrap();
+        let mut conn = stash.connection();
+        let tx = conn
+            .transaction()
+            .await
+            .expect("Failed to start transaction");
+        create_table_tx(&tx).await;
+        insert_tx(&tx, "test").await;
+        let result = query_tx(&tx, "test").await;
+        tx.commit().await.expect("Failed to commit transaction");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "test".to_owned());
