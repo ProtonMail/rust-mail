@@ -187,6 +187,7 @@ pub(super) fn prepare_html_reply(
     let sender_reply = generate_sender_reply(
         &message.sender,
         format_date_from_timestamp(message.time, use_utc),
+        false,
     );
     output.reserve((ORIGINAL_MESSAGE_BLOCK.len() * 2) + original_body.len());
     output.push_str(BEGIN_QUOTE);
@@ -219,6 +220,7 @@ pub(super) fn prepare_plain_text_reply(
     let sender_reply = generate_sender_reply(
         &message.sender,
         format_date_from_timestamp(message.time, use_utc),
+        true,
     );
 
     output.reserve((ORIGINAL_MESSAGE_BLOCK.len() * 2) + original_body.len());
@@ -248,12 +250,19 @@ pub fn html_to_text(input: impl AsRef<str>) -> String {
 
 /// Generates a reply similar to:
 /// > On Tuesday, 01/01/2024 14:25, Slack <notification@slack.com> wrote:
-fn generate_sender_reply(sender: &MessageSender, formatted_date: String) -> String {
+fn generate_sender_reply(sender: &MessageSender, formatted_date: String, is_text: bool) -> String {
     if !sender.name.is_empty() && !sender.address.is_empty() {
-        format!(
-            "{formatted_date} {} <{}> wrote:",
-            sender.name, sender.address
-        )
+        if is_text {
+            format!(
+                "{formatted_date} {} <{}> wrote:",
+                sender.name, sender.address
+            )
+        } else {
+            format!(
+                "{formatted_date} {} &lt;{}&gt; wrote:",
+                sender.name, sender.address
+            )
+        }
     } else if !sender.name.is_empty() {
         format!("{formatted_date} {} wrote:", sender.name)
     } else {

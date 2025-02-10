@@ -9,6 +9,7 @@ use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::Attachment;
 use crate::proton_api_mail::services::proton::prelude::ConversationId;
+use insta::assert_snapshot;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use std::str::FromStr;
 
@@ -58,6 +59,18 @@ async fn reply_all_draft_message_creation() {
         draft.decrypted_body.metadata.attachments,
         vec![inline_attachment()]
     )
+}
+
+#[tokio::test]
+async fn check_reply_signature_html() {
+    let (draft, _) = create_reply_with(ReplyMode::All, MimeType::TextHtml).await;
+    assert_snapshot!(draft.decrypted_body.body);
+}
+
+#[tokio::test]
+async fn check_reply_signature_text() {
+    let (draft, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
+    assert_snapshot!(draft.decrypted_body.body);
 }
 
 #[tokio::test]
@@ -119,11 +132,18 @@ fn message_signature_with_all_signatures() {
 }
 
 async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
+    create_reply_with(reply_mode, MimeType::default()).await
+}
+
+async fn create_reply_with(reply_mode: ReplyMode, mime_type: MimeType) -> (Draft, Message) {
     let address = address_with_signature("");
     let source_message = existing_message();
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
-    let mail_settings = MailSettings::default();
+    let mail_settings = MailSettings {
+        draft_mime_type: mime_type,
+        ..MailSettings::default()
+    };
     let source_body = DecryptedMessageBody {
         body: source_body,
         metadata: source_body_metadata,
