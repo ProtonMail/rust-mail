@@ -47,7 +47,7 @@ use stash_macros::DbRecord;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::Sender as StdSender;
+use std::sync::mpsc::Sender as StdSender_;
 use std::sync::{mpsc, Arc};
 use std::time::Instant;
 use thiserror::Error;
@@ -58,6 +58,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate as stash;
 use crate::registry::{StashRegistry, REGISTRY};
 
+type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries.
 const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
@@ -150,7 +151,7 @@ enum OperationTransaction {
     Rollback(OneshotSender<Result<(), StashError>>),
 
     /// Rollbacks a transaction too.
-    /// This one is meant to be called in destructors, that's why t doesn't have a sender.
+    /// This one is meant to be called in Bond's drop glue. That's why it doesn't have a sender.
     /// Same semantics as Rollback.
     RollbackAbort,
 }
@@ -1233,7 +1234,7 @@ impl Tether {
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn new(stash: Stash) -> Self {
-        let (tether_sender, tether_receiver) = mpsc::channel::<TetherOperation>();
+        let (tether_sender, tether_receiver) = flume::unbounded::<TetherOperation>();
 
         let pool = stash.pool.clone();
         let queue_clone = stash.queue.clone();
@@ -1611,7 +1612,6 @@ struct TetheredWorkerStateMachine<'a> {
     connection: &'a PooledConnection<SqliteConnectionManager>,
     /// This is a unique id used for notifications
     id: u64,
-    last_op: &'static str,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {
@@ -1660,11 +1660,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         self.queue
                             .send(StashOperation::NotifyStartTransaction(self.id));
                         _ = send_back.send(Ok(()));
-                        self.last_op = "Start transaction";
                     }
                     Err(error) => {
                         _ = send_back.send(Err(StashError::ExecutionError(error)));
-                        self.last_op = "Start transaction failed";
                     }
                 };
             }
@@ -1674,16 +1672,19 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     self.queue
                         .send(StashOperation::NotifyCommitTransaction(self.id));
 
-                    _ = send_back.send(
-                        self.transaction
-                            .take()
-                            .expect(
-                                "Critical error: Commited a transaction with no transaction open!?",
-                            )
-                            .commit()
-                            .map_err(StashError::TransactionError),
-                    );
-                    self.last_op = "commit tx";
+                    match self.transaction.take().map(|tx| tx.commit()) {
+                        Some(Ok(())) => {
+                            trace!("Commited transaction");
+                            _ = send_back.send(Ok(()));
+                        }
+                        Some(Err(e)) => {
+                            error!("Error when committing a transaction: {e}");
+                            _ = send_back.send(Err(StashError::TransactionError(e)));
+                        }
+                        None => {
+                            error!("Critical error: Rollback with no transaction open!?");
+                        }
+                    }
                 }
             }
             OperationTransaction::Rollback(send_back) => {
@@ -1691,28 +1692,36 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 self.queue
                     .send(StashOperation::NotifyRollbackTransaction(self.id));
 
-                let try_rollback = self
-                    .transaction
-                    .take()
-                    .expect("Critical error: Rollback a transaction with no transaction open!?")
-                    .rollback()
-                    .map_err(StashError::TransactionError);
-                _ = send_back.send(try_rollback);
-                self.last_op = "rollback tx";
+                match self.transaction.take().map(|tx| tx.rollback()) {
+                    Some(Ok(())) => {
+                        debug!("Rolled back transaction");
+                        _ = send_back.send(Ok(()));
+                    }
+                    Some(Err(e)) => {
+                        error!("Error when rolling back a transaction: {e}");
+                        _ = send_back.send(Err(StashError::TransactionError(e)));
+                    }
+                    None => {
+                        error!("Critical error: Rollback with no transaction open!?");
+                    }
+                }
             }
             OperationTransaction::RollbackAbort => {
                 // Notify the main worker that the transaction has been rolled back.
                 self.queue
                     .send(StashOperation::NotifyRollbackTransaction(self.id));
-                if let Err(e) = self
-                    .transaction
-                    .take()
-                    .unwrap_or_else(|| panic!("Critical error: RollbackAbort with no transaction open!?\nPrevious op was {}", self.last_op))
-                    .rollback()
-                {
-                    error!("Error when aborting a transaction (Bond drop): {e}");
+
+                match self.transaction.take().map(|tx| tx.rollback()) {
+                    Some(Ok(())) => {
+                        debug!("Aborted transaction")
+                    }
+                    Some(Err(e)) => {
+                        error!("Error when aborting a transaction (Bond drop): {e}");
+                    }
+                    None => {
+                        error!("Critical error: RollbackAbort with no transaction open!?");
+                    }
                 }
-                self.last_op = "abort tx";
             }
         }
     }
