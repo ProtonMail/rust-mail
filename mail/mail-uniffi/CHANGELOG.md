@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Fixed
+
+  - [ET-2092] External messages sent to contacts with the sign flag are now signed.
+
 ## [0.40.8] - 2025-02-06
 
 ### Fixed
