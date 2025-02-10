@@ -95,6 +95,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
                 }
                 err
             })?;
+        debug!("{} recipient preferences: {}", recipient, send_preference);
         send_preferences.insert(recipient.clone(), send_preference);
     }
     Ok(send_preferences)
@@ -159,8 +160,14 @@ pub async fn build_packages<Provider: PGPProviderSync>(
         let preferences: Vec<_> = send_preferences
             .iter()
             .filter(|(email, send_preference)| {
-                debug!("Build package for: {email}");
-                encrypted_package.mime_type == send_preference.mime_type
+                let use_key = encrypted_package.mime_type == send_preference.mime_type;
+                if use_key {
+                    debug!(
+                        "build recipient {} top package for the {} body package",
+                        email, encrypted_package.mime_type
+                    );
+                }
+                use_key
             })
             .collect();
         // Build the recipient parts of the package

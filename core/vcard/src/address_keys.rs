@@ -31,7 +31,7 @@ impl VCard {
     ///
     /// The email comparison ignores case-sensitivity.
     ///
-    /// If no pinned keys are detected, the method returns [`None`].
+    /// If no crypto information for this email is found in the vcard, the method returns [`None`].
     ///
     /// # Parameters
     ///
@@ -43,7 +43,7 @@ impl VCard {
         email: &str,
     ) -> Option<PinnedPublicKeys<<Provider>::PublicKey>> {
         let group = self.property_group_for_email(email)?;
-        let mut pinned_keys = self.pinned_keys_for_group(pgp_provider, &group)?;
+        let mut pinned_keys = self.pinned_keys_for_group(pgp_provider, &group);
         self.update_pinned_keys_with_extended_preferences(&group, &mut pinned_keys);
         Some(pinned_keys)
     }
@@ -64,7 +64,7 @@ impl VCard {
         &self,
         pgp_provider: &Provider,
         selected_group: &str,
-    ) -> Option<PinnedPublicKeys<<Provider>::PublicKey>> {
+    ) -> PinnedPublicKeys<<Provider>::PublicKey> {
         let mut preference_keys = self
             .get_all_key()
             .into_iter()
@@ -91,14 +91,10 @@ impl VCard {
             })
             .collect::<Vec<_>>();
 
-        if preference_keys.is_empty() {
-            return None;
-        }
-
         preference_keys.sort_by(|a, b| a.0.cmp(&b.0));
         let mut pinned_keys = Vec::with_capacity(preference_keys.len());
         pinned_keys.extend(preference_keys.into_iter().map(|val| val.1));
-        Some(PinnedPublicKeys::new(pinned_keys))
+        PinnedPublicKeys::new(pinned_keys)
     }
 
     /// Updates the pinned public key preferences in `pinned_keys`
