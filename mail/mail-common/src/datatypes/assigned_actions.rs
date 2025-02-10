@@ -28,18 +28,19 @@ impl AssignedSwipeActions {
     ///
     /// # Parameters
     ///
+    /// * `opened_folder` - local label ID of currently opened folder
     /// * `tether` - connection to the database
     ///
     /// # Errors
     ///
     /// Returns an error if query fails
     ///
-    pub async fn get(tether: &Tether) -> Result<Self, AppError> {
+    pub async fn get(opened_folder: LocalLabelId, tether: &Tether) -> Result<Self, AppError> {
         let settings = MailSettings::get_or_default(tether).await;
 
         Ok(Self {
-            left: AssignedSwipeAction::load(settings.swipe_left, tether).await?,
-            right: AssignedSwipeAction::load(settings.swipe_right, tether).await?,
+            left: AssignedSwipeAction::load(settings.swipe_left, opened_folder, tether).await?,
+            right: AssignedSwipeAction::load(settings.swipe_right, opened_folder, tether).await?,
         })
     }
 }
@@ -83,7 +84,11 @@ impl AssignedSwipeAction {
     ///
     /// Panics if system label does not have a Local ID
     ///
-    pub async fn load(swipe_action: SwipeAction, tether: &Tether) -> Result<Self, AppError> {
+    pub async fn load(
+        swipe_action: SwipeAction,
+        opened_folder: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Self, AppError> {
         let move_to = match swipe_action {
             SwipeAction::NoAction => return Ok(Self::NoAction),
             SwipeAction::Star => return Ok(Self::ToggleStar),
@@ -102,6 +107,10 @@ impl AssignedSwipeAction {
             .local_id(tether)
             .await?
             .expect("System label to have a local ID");
+
+        if label_id == opened_folder {
+            return Ok(Self::NoAction);
+        }
 
         Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToSystemLabel {
             label: move_to,
