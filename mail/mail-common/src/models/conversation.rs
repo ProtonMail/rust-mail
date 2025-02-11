@@ -2629,7 +2629,7 @@ impl Conversation {
             .await?;
         tx.commit().await?;
         if affected != 1 {
-            Err(StashError::Custom(String::from("No conversation found")))
+            Err(StashError::Critical(anyhow!("No conversation found")))
         } else {
             Ok(())
         }
@@ -2929,7 +2929,7 @@ impl Conversation {
                 params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
-                    .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+                    .ok_or(StashError::Critical(anyhow!("Invalid Page Count value")))?,
                 remote_source,
                 local_first,
             )
@@ -3229,18 +3229,18 @@ impl ConversationLabel {
     /// failed.
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let Some(local_conversation_id) = self.local_conversation_id else {
-            return Err(StashError::Custom(
-                "Missing local conversation id".to_owned(),
-            ));
+            return Err(StashError::Critical(anyhow!(
+                "Missing local conversation id"
+            )));
         };
 
         let Some(remote_label_id) = self.remote_label_id.clone() else {
-            return Err(StashError::Custom("Missing remote label id".to_owned()));
+            return Err(StashError::Critical(anyhow!("Missing remote label id")));
         };
 
         let Some(local_label) = Label::find_by_remote_id(remote_label_id.clone(), bond).await?
         else {
-            return Err(StashError::Custom(format!(
+            return Err(StashError::Critical(anyhow!(
                 "Can't find label with the remote id {remote_label_id}"
             )));
         };

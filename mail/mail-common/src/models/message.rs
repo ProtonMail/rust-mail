@@ -2416,7 +2416,7 @@ impl Message {
                 params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
-                    .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+                    .ok_or(StashError::Critical(anyhow!("Invalid Page Count value")))?,
                 remote_source,
                 local_first,
             )
@@ -3141,7 +3141,7 @@ impl MessageBodyMetadata {
                     self.row_id = existing.row_id;
                 } else {
                     let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
-                        return Err(StashError::Custom(format!(
+                        return Err(StashError::Critical(anyhow!(
                             "Failed to find message with remote id {}",
                             self.remote_message_id.as_ref().unwrap()
                         )));

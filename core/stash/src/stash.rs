@@ -28,8 +28,7 @@ use core::ops::Deref;
 use core::time::Duration;
 use flume::{unbounded, Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
-use parking_lot::Mutex;
-use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
+use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
@@ -42,18 +41,14 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
-use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
-use crate::registry::{StashRegistry, REGISTRY};
 
 type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
@@ -68,67 +63,8 @@ const MAX_CONNECTIONS: u32 = 100;
 /// A type alias for a field convertor function.
 type Converter = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>;
 
-/// A dual-nature connection wrapper.
-///
-/// This enum allows transparent handling of a connection, whether or not a
-/// transaction is currently active. It is used only for representation of types
-/// owned elsewhere, hence wraps references and borrows those instances.
-///
-/// It implements [`Deref`] so that it is essentially invisible to the caller.
-///
-enum AgnosticConnection<'tx> {
-    NotTransaction(&'tx PooledConnection<SqliteConnectionManager>),
-    Transaction(&'tx Transaction<'tx>),
-}
-
-impl Deref for AgnosticConnection<'_> {
-    type Target = Connection;
-
-    fn deref(&self) -> &Self::Target {
-        match *self {
-            Self::NotTransaction(connection) => connection,
-            Self::Transaction(transaction) => transaction,
-        }
-    }
-}
-
-/// The types of database operation that can be performed by the main worker.
-///
-/// A minimal command interface is provided, to issue instructions to the
-/// background worker via MPSC queue. The worker will process the commands and
-/// return the response via a oneshot channel. It is important to note that all
-/// the messages sent need to be [`Send`] and [`Sync`], as they will be passed
-/// between threads.
-///
-/// # See also
-///
-/// * [`Command`]
-/// * [`Instruction`]
-/// * [`Notification`]
-/// * [`Query`]
-/// * [`Subscription`]
-/// * [`Worker`]
-///
-enum StashOperation {
-    /// Notify a transaction was commited.
-    NotifyCommitTransaction(u64),
-
-    /// Notify a transaction was rolled back.
-    NotifyRollbackTransaction(u64),
-
-    /// Notify a new transaction has started.
-    NotifyStartTransaction(u64),
-
-    /// Publishes a notification of changes made to the database to all
-    /// subscribers.
-    Publish(Notification),
-
-    /// Subscribes to notifications of changes made to the database.
-    Subscribe(Subscription),
-}
-
 /// These are all the operations allowed on a tether.
-enum TetherOperation {
+enum Operation {
     /// Only the operations related to a transaction.
     Transaction(OperationTransaction),
     /// Only the operations related to execution
@@ -231,7 +167,7 @@ struct BatchedWrite {
 
 impl BatchedWrite {
     /// Prepares and executes a query, and returns the ids.
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Vec<u64>, StashError> {
+    fn run(&self, connection: &Connection) -> Result<Vec<u64>, StashError> {
         let mut statement = connection
             .prepare(&self.params.query())
             .map_err(StashError::PreparationError)?;
@@ -265,11 +201,6 @@ pub enum StashError {
     /// expected type.
     #[error("Query results deserialization error: {0}")]
     DeserializationError(#[from] ConversionError),
-
-    /// A problem was experienced when attempting to downcast a boxed trait
-    /// object. This should never happen in practice.
-    #[error("Downcast error")]
-    DowncastError,
 
     /// There was a problem with statement execution. Note that this refers to
     /// executing a prepared statement, e.g. actually running a query, and not
@@ -314,47 +245,16 @@ pub enum StashError {
     #[error("No row ID returned after saving record")]
     NoRowIdReturned,
 
-    /// No [`Stash`] is available to use. This usually implies that functions
-    /// are being called against a [`Model`] instance without setting the
-    /// `stash` property first.
-    #[error("No Stash available to use")]
-    NoStashAvailable,
+    /// There was a problem with subscriptions. For some reason the subscription
+    /// has ended up in the wrong place. This should never happen in practice.
+    #[error("Watcher error: `{0}`")]
+    WatcherError(String),
 
     /// No rows were updated upon saving a record. This can happen if the record
     /// data hasn't changed, in which case it's not an error — but in other
     /// situations, it would signify a problem.
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
-
-    /// There was a problem with receiving from a oneshot channel. This should
-    /// never happen in practice. Note that this only indicates a problem with
-    /// receiving, and not with sending — it is not possible to return an error
-    /// anywhere if sending fails, and so that is simply logged.
-    #[error("Oneshot channel error: Receiving failed: {0}")]
-    OneShotError(String),
-
-    /// There was a problem with sending to the background worker's queue. This
-    /// should never happen in practice. Note that this only indicates a problem
-    /// with sending, and not with receiving — it is not possible to report an
-    /// error with receiving, as any error would result in the queue handle
-    /// being dropped, which cannot be detected.
-    #[error("Queue error: Sending failed: {0}")]
-    QueueError(String),
-
-    /// There was a problem with subscriptions. For some reason the subscription
-    /// has ended up in the wrong place. This should never happen in practice.
-    #[error("Subscription error")]
-    SubscriptionError,
-
-    /// There was a problem with subscriptions. For some reason the subscription
-    /// has ended up in the wrong place. This should never happen in practice.
-    #[error("Watcher error: `{0}`")]
-    WatcherError(String),
-
-    /// There was a problem establishing a tether to the [`Stash`], which could
-    /// be to do with creating the actual stash, or connecting to the service.
-    #[error("Stash tether error: {0}")]
-    TetherError(#[from] PoolError),
 
     /// An attempt was made to start a transaction, but one is already active.
     #[error("Transaction already started")]
@@ -371,11 +271,6 @@ pub enum StashError {
     /// There was a problem with a transaction.
     #[error("Transaction error: {0}")]
     TransactionError(SqliteError),
-
-    /// Custom error that can be returned when an error occurs during
-    /// implementations of `on_save()` or `on_load()` for [`Model`].
-    #[error("Custom: {0}")]
-    Custom(String),
 
     /// Critical error that cannot be recovered from.
     #[error("Critical error: {0}")]
@@ -405,7 +300,7 @@ struct Instruction {
 
 impl Instruction {
     /// Prepares and executes a query, and returns the number of affected rows.
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+    fn run(&self, connection: &Connection) -> Result<usize, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -478,7 +373,7 @@ struct Query {
 
 impl Query {
     /// Prepares and executes a query, and returns any rows of data emitted.
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<DbRecords, StashError> {
+    fn run(&self, connection: &Connection) -> Result<DbRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -501,12 +396,6 @@ impl Query {
 // Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
 pub struct Stash {
-    /// TODO: remove this field.
-    pub(crate) handle: Arc<()>,
-
-    /// The sender for the stash operations that goes to [`Worker`]
-    queue: QueueSender<StashOperation>,
-
     /// The [`Watcher`] instance for the [`Stash`], which is used to monitor the
     /// database for changes and notify subscribers. This is used to provide
     /// real-time updates to any subscribers that have registered interest in
@@ -520,7 +409,6 @@ pub struct Stash {
 impl Debug for Stash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut r = f.debug_struct("Stash");
-        _ = r.field("handle", &self.handle).field("queue", &self.queue);
 
         r.finish_non_exhaustive()
     }
@@ -548,19 +436,14 @@ impl Stash {
     /// the database or connection pool.
     ///
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
-        let (sender, receiver) = unbounded();
-        let stash = Self {
+        Ok(Self {
             pool: Self::make_pool(path),
-            handle: Arc::new(()),
-            queue: sender.clone(),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
-        };
-        Worker::start(receiver)?;
-        Ok(stash)
+        })
     }
 
     /// Create a sqlite pool.
-    /// This is infaliable, if it cannot open the file it will fail later on when we try to
+    /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
     #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
     fn make_pool(path: Option<&Path>) -> Pool<SqliteConnectionManager> {
@@ -613,60 +496,7 @@ impl Stash {
     ///
     #[must_use]
     pub fn connection(&self) -> Tether {
-        Tether::new(self.clone())
-    }
-
-    /// Factory method that uses the registry.
-    ///
-    /// This method is used to get a [`Stash`] instance from the registry. If
-    /// the instance does not exist, it is created and added to the registry.
-    ///
-    /// # Parameters
-    ///
-    /// * `path` - The path to the SQLite database file. If `None`, an in-memory
-    ///            database is created.
-    ///
-    /// # Errors
-    ///
-    /// If there is a problem creating the database or connection pool, an error
-    /// will be returned.
-    ///
-    pub fn get_instance(path: &Path) -> Result<Self, StashError> {
-        let global = REGISTRY.get_or_init(|| Mutex::new(StashRegistry::new()));
-
-        let mut registry = global.lock();
-
-        // Periodically clean up dead entries
-        if fastrand::bool() {
-            registry.cleanup();
-        }
-        registry.get_or_create(path.to_path_buf())
-    }
-
-    /// Subscribes to notifications of changes to the database.
-    ///
-    /// This function subscribes to notifications of changes to the database. It
-    /// returns a queue receiver which will be sent [`Notification`] instances
-    /// containing information about the changes made.
-    ///
-    /// At present this is a wide-spectrum subscription, and will receive
-    /// notifications for all changes made to the database. In future it will be
-    /// possible to filter this.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    /// * [`StashError::OneShotError`]
-    /// * [`StashError::QueueError`]
-    /// * [`StashError::SubscriptionError`]
-    ///
-    /// # See alse
-    ///
-    /// * [`Notification`]
-    ///
-    pub async fn subscribe(&self) -> Result<QueueReceiver<Notification>, StashError> {
-        self.subscribe_internal(None).await
+        Tether::new(self)
     }
 
     /// Subscribes to notifications of changes to a specific table.
@@ -690,40 +520,6 @@ impl Stash {
 
         Ok(WatcherHandle { receiver, handle })
     }
-
-    /// Internal helper method to handle database change subscriptions.
-    ///
-    /// # Parameters
-    ///
-    /// * `table` - Optional table name to subscribe to. If None, subscribes to all tables.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    /// * [`StashError::OneShotError`]
-    /// * [`StashError::QueueError`]
-    /// * [`StashError::SubscriptionError`]
-    ///
-    async fn subscribe_internal(
-        &self,
-        table: Option<String>,
-    ) -> Result<QueueReceiver<Notification>, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let (sender, receiver) = unbounded::<Notification>();
-        let operation = StashOperation::Subscribe(Subscription {
-            channel: that_end,
-            queue: sender,
-            table,
-        });
-        self.queue
-            .send(operation)
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        Ok(receiver)
-    }
 }
 
 /// A handle to a database connection watcher.
@@ -734,34 +530,6 @@ pub struct WatcherHandle {
     pub receiver: QueueReceiver<()>,
     /// The handle to stop the watcher.
     pub handle: DropRemoveTableObserverHandle,
-}
-
-/// A subscription operation to be executed by the worker.
-///
-/// This is used for subscribing to [`Notification`]s, such as database change
-/// events.
-struct Subscription {
-    /// The communication channel used to send the result of the operation back
-    /// to the caller.
-    channel: OneshotSender<Result<(), StashError>>,
-
-    /// The queue to which [`Notification`]s will be sent. Note that this is
-    /// for *redistributed* notifications — i.e. after the central worker has
-    /// received them from the database, it will then send them to all
-    /// subscribers, with this being a subscriber-specific queue.
-    queue: QueueSender<Notification>,
-
-    /// The table to subscribe to. If [`None`], all tables are subscribed to.
-    table: Option<String>,
-}
-
-impl Subscription {
-    fn send(self, result: Result<(), StashError>) {
-        if self.channel.send(result).is_err() {
-            // This means that the receiver has dropped.
-            error!("Oneshot error: Failed sending result back to caller");
-        }
-    }
 }
 
 /// A connection to the database. It is used to execute queries against the database, and obtained
@@ -778,7 +546,7 @@ pub struct Tether {
     /// This is the channel that sends [`TetherOperation`]s to the inner thread.
     /// This was changed to a std channel since flume seems to hang on sync <-> async under some
     /// circumstances.
-    sender: StdSender<TetherOperation>,
+    sender: StdSender<Operation>,
 
     watcher: Arc<Watcher>,
 
@@ -854,7 +622,7 @@ impl Tether {
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
         let (sender, receiver) = oneshot::channel();
-        let operation = TetherOperation::Execution(OperationExec::Instruct(Instruction {
+        let operation = Operation::Execution(OperationExec::Instruct(Instruction {
             sender,
             params,
             query: query.into(),
@@ -893,7 +661,7 @@ impl Tether {
     async fn batch_write(&self, params: Box<dyn BatchQueryRetId>) -> Result<Vec<u64>, StashError> {
         let (sender, receiver) = oneshot::channel();
         let operation =
-            TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
+            Operation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
                 sender,
                 params,
             }));
@@ -1001,7 +769,7 @@ impl Tether {
             params,
             query: query.into(),
         };
-        let operation = TetherOperation::Execution(OperationExec::Query(query));
+        let operation = Operation::Execution(OperationExec::Query(query));
         self.sender
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1109,7 +877,9 @@ impl Tether {
         }
 
         if values.len() > 1 {
-            return Err(StashError::Custom("Query returned multiple rows".into()));
+            return Err(StashError::Critical(anyhow!(
+                "Query returned multiple rows"
+            )));
         }
 
         Ok(values.swap_remove(0))
@@ -1160,7 +930,7 @@ impl Tether {
     /// see [`Tether::transaction()`]
     pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
         let (sender, receiver) = oneshot::channel();
-        let operation = TetherOperation::Transaction(OperationTransaction::Start(sender));
+        let operation = Operation::Transaction(OperationTransaction::Start(sender));
 
         self.sender
             .send(operation)
@@ -1178,7 +948,7 @@ impl Tether {
             tracing::error!(
                 "No state found for Tether, something is very wrong with notification system"
             );
-            return Err(StashError::Custom("No state found for Tether".into()));
+            return Err(StashError::Critical(anyhow!("No state found for Tether")));
         };
         let watcher = Arc::clone(&self.watcher);
         let result = state.sync_tables_async(self, &watcher).await;
@@ -1194,7 +964,7 @@ impl Tether {
             tracing::error!(
                 "No state found for Tether, something is very wrong with notification system"
             );
-            return Err(StashError::Custom("No state found for Tether".into()));
+            return Err(StashError::Critical(anyhow!("No state found for Tether")));
         };
         let watcher = Arc::clone(&self.watcher);
         let result = state.publish_changes_async(self, &watcher).await;
@@ -1224,11 +994,10 @@ impl Tether {
     ///                   worker and other tethered workers.
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
-    fn new(stash: Stash) -> Self {
-        let (tether_sender, tether_receiver) = flume::unbounded::<TetherOperation>();
+    fn new(stash: &Stash) -> Self {
+        let (tether_sender, tether_receiver) = flume::unbounded::<Operation>();
 
         let pool = stash.pool.clone();
-        let queue_clone = stash.queue.clone();
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
@@ -1239,17 +1008,8 @@ impl Tether {
             // connection from the pool. This is done lazily so that creating tethers is sync.
             // Note that most of this logic could be avoided if we made tether cration async.
 
-            #[allow(clippy::items_after_statements)]
-            // This is scoped here so that we can't create an id from anywhere else.
-            static TETHER_ID: AtomicU64 = AtomicU64::new(0);
-            let id = TETHER_ID.fetch_add(1, Ordering::Relaxed);
-            info!("Creating tether {id}");
-
-            let queue_clone_2 = queue_clone.clone();
             let connection = || {
-                let mut connection = pool
-                    .get_and_subscribe(queue_clone_2, id)
-                    .context("Could not connect to the database")?;
+                let mut connection = pool.get().context("Could not connect to the database")?;
                 Self::conn_configuration(&connection)
                     .context("Could not set connection configuration.")?;
                 State::start_tracking(&mut *connection)
@@ -1263,32 +1023,32 @@ impl Tether {
                 (Ok(op), Err(e)) => {
                     error!("Critical error creating worker {e}");
                     match op {
-                        TetherOperation::Transaction(
+                        Operation::Transaction(
                             OperationTransaction::Start(ch)
                             | OperationTransaction::Rollback(ch)
                             | OperationTransaction::Commit(ch),
                         ) => {
                             _ = ch.send(Err(e));
                         }
-                        TetherOperation::Execution(OperationExec::Instruct(x)) => {
+                        Operation::Execution(OperationExec::Instruct(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
                             };
                         }
-                        TetherOperation::Execution(OperationExec::Query(x)) => {
+                        Operation::Execution(OperationExec::Query(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
                             };
                         }
-                        TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
+                        Operation::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
                             };
                         }
-                        TetherOperation::Transaction(OperationTransaction::RollbackAbort) => {
+                        Operation::Transaction(OperationTransaction::RollbackAbort) => {
                             unreachable!("This cannot happen at this point")
                         }
                     };
@@ -1300,26 +1060,14 @@ impl Tether {
                 }
             };
 
-            let queue = InfallibleSenderAsync {
-                sender: queue_clone,
-                reason: "Failed to send NotifyStartTransaction operation to main queue.
-This means that the main worker thread has closed with open handles to it. 
-This cannot happen, the main worker thread is not supposed to close.",
-            };
-
-            debug!("Starting tether {id} worker");
             let mut sm = TetheredWorkerStateMachine {
                 transaction: None,
                 connection: &connection,
-                id,
-                queue,
             };
             sm.handle_operation(first_operation);
 
-            debug!("{id} Waiting for more...");
             while let Ok(operation) = tether_receiver.recv() {
                 sm.handle_operation(operation);
-                debug!("{id} Waiting for more...");
             }
             sm.handle_close();
         });
@@ -1365,9 +1113,9 @@ impl SqlExecutorAsync for Tether {
         async {
             let query_parts = query.split(" FROM ").collect::<Vec<&str>>();
             if query_parts.len() != 2 {
-                return Err(StashError::Custom(
-                    "Invalid query format. Expected 'SELECT ... FROM ...'".into(),
-                ));
+                return Err(StashError::Critical(anyhow!(
+                    "Invalid query format. Expected 'SELECT ... FROM ...'"
+                )));
             }
             let new_query = format!("{} as value FROM {}", query_parts[0], query_parts[1]);
             self.query_values::<_, usize>(new_query, vec![]).await
@@ -1496,7 +1244,7 @@ impl<'tether> Bond<'tether> {
     ///
     async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
-        let operation = TetherOperation::Transaction(OperationTransaction::Commit(sender));
+        let operation = Operation::Transaction(OperationTransaction::Commit(sender));
         self.sender
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1542,7 +1290,7 @@ impl<'tether> Bond<'tether> {
     pub async fn rollback(self) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
 
-        let operation = TetherOperation::Transaction(OperationTransaction::Rollback(sender));
+        let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
         self.sender
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1567,27 +1315,9 @@ impl Deref for Bond<'_> {
 
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
-        _ = self.sender.send(TetherOperation::Transaction(
-            OperationTransaction::RollbackAbort,
-        ));
-    }
-}
-
-struct InfallibleSenderAsync<T> {
-    sender: QueueSender<T>,
-    reason: &'static str,
-}
-
-impl<T> Debug for InfallibleSenderAsync<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let type_name = std::any::type_name::<T>();
-        write!(f, "InfallibleSenderAsync<{type_name}>")
-    }
-}
-
-impl<T: Send> InfallibleSenderAsync<T> {
-    fn send(&self, msg: T) {
-        self.sender.send(msg).expect(self.reason);
+        _ = self
+            .sender
+            .send(Operation::Transaction(OperationTransaction::RollbackAbort));
     }
 }
 
@@ -1598,10 +1328,7 @@ struct TetheredWorkerStateMachine<'a> {
     /// The transaction that might or might not be active
     transaction: Option<Transaction<'a>>,
     /// The sender we use to communicate with the main worker thread.
-    queue: InfallibleSenderAsync<StashOperation>,
     connection: &'a PooledConnection<SqliteConnectionManager>,
-    /// This is a unique id used for notifications
-    id: u64,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {
@@ -1626,12 +1353,12 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `queue`       - The main operations queue for the central worker.
     ///
-    fn handle_operation(&mut self, operation: TetherOperation) {
+    fn handle_operation(&mut self, operation: Operation) {
         match operation {
-            TetherOperation::Transaction(operation) => {
+            Operation::Transaction(operation) => {
                 self.handle_transaction(operation);
             }
-            TetherOperation::Execution(operation) => {
+            Operation::Execution(operation) => {
                 self.handle_exec(operation);
             }
         }
@@ -1645,10 +1372,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 match self.start_transaction() {
                     Ok(transaction) => {
                         self.transaction = Some(transaction);
-
-                        // Notify the main worker that a transaction has started.
-                        self.queue
-                            .send(StashOperation::NotifyStartTransaction(self.id));
                         _ = send_back.send(Ok(()));
                     }
                     Err(error) => {
@@ -1657,31 +1380,21 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 };
             }
             OperationTransaction::Commit(send_back) => {
-                {
-                    // Notify the main worker that the transaction has been committed
-                    self.queue
-                        .send(StashOperation::NotifyCommitTransaction(self.id));
-
-                    match self.transaction.take().map(|tx| tx.commit()) {
-                        Some(Ok(())) => {
-                            trace!("Commited transaction");
-                            _ = send_back.send(Ok(()));
-                        }
-                        Some(Err(e)) => {
-                            error!("Error when committing a transaction: {e}");
-                            _ = send_back.send(Err(StashError::TransactionError(e)));
-                        }
-                        None => {
-                            error!("Critical error: Rollback with no transaction open!?");
-                        }
+                match self.transaction.take().map(|tx| tx.commit()) {
+                    Some(Ok(())) => {
+                        trace!("Commited transaction");
+                        _ = send_back.send(Ok(()));
+                    }
+                    Some(Err(e)) => {
+                        error!("Error when committing a transaction: {e}");
+                        _ = send_back.send(Err(StashError::TransactionError(e)));
+                    }
+                    None => {
+                        error!("Critical error: Rollback with no transaction open!?");
                     }
                 }
             }
             OperationTransaction::Rollback(send_back) => {
-                // Notify the main worker that the transaction has been rolled back.
-                self.queue
-                    .send(StashOperation::NotifyRollbackTransaction(self.id));
-
                 match self.transaction.take().map(|tx| tx.rollback()) {
                     Some(Ok(())) => {
                         debug!("Rolled back transaction");
@@ -1697,10 +1410,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 }
             }
             OperationTransaction::RollbackAbort => {
-                // Notify the main worker that the transaction has been rolled back.
-                self.queue
-                    .send(StashOperation::NotifyRollbackTransaction(self.id));
-
                 match self.transaction.take().map(|tx| tx.rollback()) {
                     Some(Ok(())) => {
                         debug!("Aborted transaction")
@@ -1766,28 +1475,28 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     }
 
     fn handle_exec(&self, operation: OperationExec) {
-        let connection = match self.transaction {
-            Some(ref tx) => AgnosticConnection::Transaction(tx),
-            None => AgnosticConnection::NotTransaction(self.connection),
+        let connection: &Connection = match self.transaction {
+            Some(ref tx) => tx,
+            None => self.connection,
         };
 
         match operation {
             OperationExec::Instruct(instruction) => {
-                let res = instruction.run(&connection);
+                let res = instruction.run(connection);
                 if instruction.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
             }
             OperationExec::BatchedInsertReturningIds(instruct) => {
-                let res = instruct.run(&connection);
+                let res = instruct.run(connection);
                 if instruct.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
             }
             OperationExec::Query(query) => {
-                let res = query.run(&connection);
+                let res = query.run(connection);
                 if query.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
@@ -1804,159 +1513,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 
         if transaction.rollback().is_err() {
             error!("Failed to roll back transaction upon connection closure");
-            return;
         }
-        // Notify the main worker that the transaction has been rolled back
-        self.queue
-            .send(StashOperation::NotifyRollbackTransaction(self.id));
-    }
-}
-
-/// Background worker for executing queries.
-///
-/// This struct provides a background worker for executing queries. It is
-/// responsible for managing the connection pool and carrying out database
-/// operations in a separate thread. It receives its instructions via a queue,
-/// and sends the results back via oneshot channels.
-///
-/// There is no `new()` method for this struct, as it is created internally when
-/// a worker thread is started. Hence the method to kick this off is called
-/// [`start()`](Worker::start()), as it starts the worker on a thread, with a
-/// new [`Worker`] instance, but returns associated data and not the [`Worker`]
-/// instance itself.
-///
-/// Notably, everything the worker does is synchronous — it does not use async
-/// at all.
-///
-#[derive(Debug)]
-struct Worker {
-    /// If a transaction is active, associated notifications will be held back
-    /// in this buffer until the transaction is committed or rolled back, at
-    /// which point they will be sent or discarded.
-    notifications_buffer: HashMap<u64, Vec<Notification>>,
-
-    /// The list of subscribers to the stash. This is used to send notifications
-    /// whenever changes are made to the database.
-    subscribers: Vec<(QueueSender<Notification>, Option<String>)>,
-}
-
-impl Worker {
-    /// Starts a new background worker thread.
-    ///
-    /// This function creates a new [`Worker`] instance with a new SQLite
-    /// connection pool, and starts the worker. This is run in a separate thread
-    /// that is used to run blocking code, so it can execute queries in a
-    /// non-blocking manner. The worker will execute queries sequentially, as
-    /// they are received, and return the results via oneshot channels.
-    ///
-    /// The [`Worker`] instance is not returned by this function, and is kept
-    /// internal to the functionality running on the background thread. This is
-    /// because the [`PooledConnection`]s are not thread-safe.
-    ///
-    /// # Parameters
-    ///
-    /// * `path`     - The path to the SQLite database file. If `None`, an
-    ///                in-memory database is created.
-    /// * `receiver` - The receiving side of the worker's queue.
-    /// * `stash`    - The [`Stash`] instance that the worker belongs to.
-    ///
-    /// # Errors
-    ///
-    /// A [`StashError::TetherError`] is returned if there is a problem creating
-    /// the database or connection pool.
-    ///
-    #[allow(clippy::unnecessary_wraps)]
-    fn start(receiver: QueueReceiver<StashOperation>) -> Result<(), StashError> {
-        // Spawn a task to run the worker. This task will execute the queries
-        // sequentially, as they are received, and will return the results via
-        // oneshot channels.
-        // There are no blocking operations here so you will not find any `spawn_blocking` call.
-        _ = tokio::spawn(async move {
-            let mut worker = Self {
-                notifications_buffer: HashMap::new(),
-                subscribers: Vec::new(),
-            };
-
-            while let Ok(operation) = receiver.recv_async().await {
-                match operation {
-                    StashOperation::NotifyCommitTransaction(id) => {
-                        debug!(
-                            "Stash: Publishing deferred Notification list for committed transaction ({id})",
-                        );
-                        if let Some(notifications) = worker.notifications_buffer.remove(&id) {
-                            //TODO(ET-1400) - Proper unsubscribe support
-                            debug!(
-                                "Stash: Publishing {} notifications from Tether {id}",
-                                notifications.len()
-                            );
-                            for notification in notifications {
-                                #[allow(clippy::pattern_type_mismatch)]
-                                for (subscriber, table) in &worker.subscribers {
-                                    if table.as_ref().is_none_or(|t| t == &notification.table) {
-                                        _ = subscriber.send(notification.clone());
-                                    }
-                                }
-                            }
-                            debug!("Notifications published from {id}");
-                        } else {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!(
-                                "Queue error: Failed to obtain Notification list for committed transaction"
-                            );
-                        }
-                    }
-                    StashOperation::Publish(notification) => {
-                        if let Some(notifications) =
-                            worker.notifications_buffer.get_mut(&notification.id)
-                        {
-                            debug!(
-                                "Stash: Notification to publish (deferring, transaction {})",
-                                notification.id
-                            );
-                            notifications.push(notification);
-                        } else {
-                            debug!("Stash: Notification to publish");
-                            // Remove any subscribers that have perished.
-                            // TODO(ET-1400): Proper unsubscribe API.
-                            #[allow(clippy::pattern_type_mismatch)]
-                            worker.subscribers.retain(|(s, _)| !s.is_disconnected());
-                            for (subscriber, table) in &worker.subscribers {
-                                if table.as_ref().is_none_or(|t| t == &notification.table) {
-                                    // Because there is no way to unsubscribe right now
-                                    // this can fail very frequently. We used to log the
-                                    // errors here, but that can lead to log spam.
-                                    _ = subscriber.send(notification.clone());
-                                }
-                            }
-                        }
-                    }
-                    StashOperation::NotifyRollbackTransaction(trx_id) => {
-                        debug!(
-                            "Stash: Clearing deferred Notification list for aborted transaction"
-                        );
-                        drop(worker.notifications_buffer.remove(&trx_id));
-                    }
-                    StashOperation::NotifyStartTransaction(conn_handle) => {
-                        debug!("Stash: Initializing deferred Notification list for transaction");
-                        drop(worker.notifications_buffer.insert(conn_handle, vec![]));
-                    }
-                    StashOperation::Subscribe(subscription) => {
-                        debug!("Stash: Subscription request");
-
-                        let sub_queue = subscription.queue.clone();
-                        let sub_table = subscription.table.clone();
-                        worker.subscribers.push((sub_queue, sub_table));
-
-                        // Although this operation is infallible, a response still needs to be sent,
-                        // as the caller might be waiting on the oneshot channel in order to
-                        // continue.
-                        subscription.send(Ok(()));
-                    }
-                };
-            }
-        });
-
-        Ok(())
     }
 }
 
@@ -1978,81 +1535,6 @@ fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
             p
         })
         .collect()
-}
-
-/// Extension trait for the connection pool.
-///
-/// This trait provides extensions to the [`r2d2`] connection pool ([`Pool`]),
-/// combining common behaviour and abstracting it away from the main library
-/// code.
-///
-trait PoolExt<M: ManageConnection> {
-    /// Gets a connection from the pool and subscribes to changes.
-    ///
-    /// This function gets a connection from the pool, and then subscribes to
-    /// changes on the connection. Because the way [`rusqlite`] works is that
-    /// its hooks only work in context to the same connection (i.e. any
-    /// notifications of data changes made against a connection will only be
-    /// sent to the registered callback hook for that connection), we need to
-    /// ensure that all connections are subscribed to changes.
-    ///
-    /// By centralising this logic and calling it in preference to the standard
-    /// [`get()`](Pool::get()) method, we ensure that all connections are set up
-    /// to receive notifications of changes.
-    ///
-    /// The notifications are sent to the central worker via its standard
-    /// operations queue, whereupon it will then redistribute them to any
-    /// registered subscribers.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The queue to send the [`Notification`]s to. This is
-    ///                   the standard [`Operation`]s queue of the central
-    ///                   worker.
-    /// * `conn_handle` - The handle of the associated connection. This is used
-    ///                   here to provide context to the notifications. It is
-    ///                   passed in as a weak reference so that the closure does
-    ///                   not prevent clean-up. Ad-hoc queries will not have an
-    ///                   associated connection handle.
-    ///
-    /// # Errors
-    ///
-    /// A [`StashError::TetherError`] is returned if there is a problem getting
-    /// a connection from the pool.
-    ///
-    fn get_and_subscribe(
-        &self,
-        queue: QueueSender<StashOperation>,
-        id: u64,
-    ) -> Result<PooledConnection<M>, StashError>;
-}
-
-impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
-    fn get_and_subscribe(
-        &self,
-        queue: QueueSender<StashOperation>,
-        id: u64,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, StashError> {
-        let t1 = Instant::now();
-        let connection = self.get().map_err(StashError::TetherError)?;
-        connection.update_hook(Some(
-            move |action: Action, _db_name: &str, table_name: &str, row_id: i64| {
-                #[allow(clippy::cast_sign_loss)]
-                if queue
-                    .send(StashOperation::Publish(Notification {
-                        action,
-                        table: table_name.to_owned(),
-                        row: row_id as u64,
-                        id
-                    }))
-                    .is_err()
-                {
-                    error!("Queue error: Failed to publish a Notification to the worker thread. Elapsed: {:?}", t1.elapsed());
-                }
-            },
-        ));
-        Ok(connection)
-    }
 }
 
 /// Converts the query results into the desired type.
