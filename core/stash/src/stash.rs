@@ -89,101 +89,11 @@ enum OperationTransaction {
     RollbackAbort,
 }
 
-/// This trait was designed for batched queries to efficiently create the queries just by borrowing
-/// data and execute it in the actual db connection thread.
-/// This allows us to efficiently convert the data into a query, skipping having to send thousands of
-/// `Vec<Box<dyn ToSql>>`
-///
-/// This trait is automatically implemented for all `[Model]`s, so that it can be used with any
-/// smart pointer:
-/// - Vec<M>
-/// - Arc<[M]>
-/// - Box<[M]>
-///
-/// where M: Model.
-///
-/// It's theoretically possible to implement this on other types, like API types directly.
-///
-/// This trait is meant to be used as a trait object.
-/// You might notice the `RetId` part of the name, this is because the execute returns the inserted
-/// IDs. This could be extended in the future to return arbitrary data, or no data at all.
-trait BatchQueryRetId: Send {
-    fn query(&self) -> String;
-    /// This returns a `Vec<u64>`, where the u64 is of the id of the model.  
-    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError>;
-}
-
-/// Make sure that it's object safe
-#[allow(dead_code)]
-fn _f(_: &dyn BatchQueryRetId) {}
-
-// TODO: I'm not sure if this impl is strictly needed.
-impl<T: Deref<Target = [M]> + Send, M: Model + Send> BatchQueryRetId for T {
-    fn query(&self) -> String {
-        <Self as Deref>::deref(self).query()
-    }
-
-    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError> {
-        <Self as Deref>::deref(self).execute(stmt)
-    }
-}
-
-impl<M: Model + Send> BatchQueryRetId for [M] {
-    fn query(&self) -> String {
-        let field_names = M::field_names_without_id();
-        format!(
-            "INSERT INTO {} ({}) VALUES ({})
-            RETURNING {} AS id",
-            M::table_name(),
-            field_names.join(","),
-            crate::utils::placeholders(field_names.len()),
-            M::id_field_name(),
-        )
-    }
-
-    fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError> {
-        let mut out = vec![];
-        for i in self {
-            // PERF: This could be optimized in a big way.
-            let params = i.field_values_without_id();
-            let id = stmt
-                .query_row(&*prepare_params(&params), |row| row.get(0))
-                .map_err(StashError::ExecutionError)?;
-            out.push(id);
-        }
-        Ok(out)
-    }
-}
-
-/// This gets constructed from [`Tether::batch_write`] in order to perform many inserts more
-/// efficiently.
-struct BatchedWrite {
-    params: Box<dyn BatchQueryRetId>,
-
-    /// The communication channel used to send the result of the operation back
-    /// to the caller.
-    sender: OneshotSender<Result<Vec<u64>, StashError>>,
-}
-
-impl BatchedWrite {
-    /// Prepares and executes a query, and returns the ids.
-    fn run(&self, connection: &Connection) -> Result<Vec<u64>, StashError> {
-        let mut statement = connection
-            .prepare(&self.params.query())
-            .map_err(StashError::PreparationError)?;
-
-        self.params.execute(&mut statement)
-    }
-}
-
 enum OperationExec {
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
     /// not enforced.
     Instruct(Instruction),
-
-    /// A mass insert function that returns the ids of the records inserted.
-    BatchedInsertReturningIds(BatchedWrite),
 
     /// A query to be executed, where results are expected. This is typically a
     /// read query, but could be any query where results are expected, such as
@@ -636,43 +546,6 @@ impl Tether {
             .map_err(Into::into)
     }
 
-    /// Sends a batch of `INSERT`.
-    /// In order to get `params`, you just need to Box any slice (or smart ptr that derefs into one
-    /// like Vec, Box, Arc...) into it:
-    ///
-    /// ```rs
-    ///    pub async fn batch_write_arc(&self, params: Arc<[impl Model]>) -> Result<Vec<u64>, StashError> {
-    ///        &self,
-    ///        params: Vec<impl Model>,
-    ///    ) -> Result<Vec<u64>, StashError> {
-    ///        let b: Box<dyn GetParams> = Box::new(params);
-    ///        self.batch_write(b).await
-    ///    }
-    ///
-    ///    pub async fn batch_write_vec(&self, params: Vec<impl Model>) -> Result<Vec<u64>, StashError> {
-    ///        &self,
-    ///        params: Vec<impl Model>,
-    ///    ) -> Result<Vec<u64>, StashError> {
-    ///        let b: Box<dyn GetParams> = Box::new(params);
-    ///        self.batch_write(b).await
-    ///    }
-    /// ```
-    #[allow(dead_code)]
-    async fn batch_write(&self, params: Box<dyn BatchQueryRetId>) -> Result<Vec<u64>, StashError> {
-        let (sender, receiver) = oneshot::channel();
-        let operation =
-            Operation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
-                sender,
-                params,
-            }));
-        self.sender
-            .send(operation)
-            .map_err(|_| anyhow!("The stash worker dropped"))?;
-        receiver
-            .await
-            .expect("Tether closed its channel with handles still open")
-    }
-
     /// Loads a record from the database by ID.
     ///
     /// This function retrieves a single record from the database by its unique
@@ -1037,12 +910,6 @@ impl Tether {
                             };
                         }
                         Operation::Execution(OperationExec::Query(x)) => {
-                            if x.sender.send(Err(e)).is_err() {
-                                // This means that the receiver has dropped.
-                                error!("Oneshot error: Failed sending result back to caller");
-                            };
-                        }
-                        Operation::Execution(OperationExec::BatchedInsertReturningIds(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
@@ -1484,13 +1351,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(connection);
                 if instruction.sender.send(res).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                }
-            }
-            OperationExec::BatchedInsertReturningIds(instruct) => {
-                let res = instruct.run(connection);
-                if instruct.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
