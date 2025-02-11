@@ -1,6 +1,6 @@
 use super::MailUserSession;
 use crate::core::datatypes::ContactSuggestions;
-use crate::errors::{ActionError, VoidActionResult};
+use crate::errors::ActionError;
 use crate::{
     core::datatypes::{DeviceContact, GroupedContacts, Id},
     uniffi_async, WatchHandle,
@@ -23,12 +23,13 @@ use tokio::{task, time::interval};
 
 /// Returns grouped contacts by the first grapheme of the name.
 ///
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn contact_list(
     session: Arc<MailUserSession>,
 ) -> Result<Vec<GroupedContacts>, ActionError> {
+    let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = session.user_stash().connection();
+        let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(
             RealContact::contact_list(&tether)
                 .await?
@@ -43,13 +44,14 @@ pub async fn contact_list(
 
 /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query
 ///
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn contact_suggestions(
     device_contacts: Vec<DeviceContact>,
     session: Arc<MailUserSession>,
 ) -> Result<Arc<ContactSuggestions>, ActionError> {
+    let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = session.user_stash().connection();
+        let tether = stash.connection();
         Result::<_, RealProtonMailError>::Ok(Arc::new(
             RealContact::contact_suggestions(
                 device_contacts
@@ -66,9 +68,12 @@ pub async fn contact_suggestions(
     .map_err(ActionError::from)
 }
 
-#[uniffi::export]
-pub async fn delete_contact(contact_id: Id, session: Arc<MailUserSession>) -> VoidActionResult {
-    let user_context = session.ctx();
+#[uniffi_export]
+pub async fn delete_contact(
+    contact_id: Id,
+    session: Arc<MailUserSession>,
+) -> Result<(), ActionError> {
+    let user_context = session.ctx()?;
     uniffi_async(async move {
         RealContact::action_delete(user_context.action_queue(), vec![contact_id.into()])
             .await
@@ -103,18 +108,18 @@ pub struct WatchedContactList {
     handle: Arc<WatchHandle>,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn watch_contact_list(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
 ) -> Result<WatchedContactList, ActionError> {
-    let user_context = session.ctx();
+    let user_context = session.ctx()?;
+    let callback = contacts_callback(session.clone(), callback)?;
     uniffi_async(async move {
-        let callback = contacts_callback(session.clone(), callback);
         let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
-        let task_handle = watch_channel_inner(user_context.as_ref(), handle.receiver, callback);
+        let task_handle = watch_channel_inner(user_context, handle.receiver, callback);
         let watcher = Arc::new(WatchHandle::new(handle.handle, &task_handle));
 
         Result::<_, RealProtonMailError>::Ok(WatchedContactList {
@@ -134,11 +139,11 @@ pub async fn watch_contact_list(
 pub fn contacts_callback(
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> impl Fn() + Clone {
+) -> Result<impl Fn() + Clone, ActionError> {
     let must_update = Arc::new(AtomicBool::new(false));
     let must_update_weak = Arc::downgrade(&must_update);
 
-    session.ctx().spawn(async move {
+    session.ctx()?.spawn(async move {
         let mut interval = interval(Duration::from_millis(50));
         let callback = Arc::new(callback);
 
@@ -172,5 +177,5 @@ pub fn contacts_callback(
         }
     });
 
-    move || must_update.store(true, Ordering::Relaxed)
+    Ok(move || must_update.store(true, Ordering::Relaxed))
 }

@@ -5,34 +5,49 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::errors::{ActionError, VoidActionResult};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{ActionError, ProtonError};
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
+use crate::mail::state::MailUserContextPtr;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;
+use proton_mail_common::{MailUserContext, Sidebar as RealSidebar};
+use stash::stash::Stash;
 use std::sync::Arc;
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar
 #[derive(uniffi::Object)]
 pub struct Sidebar {
-    /// The inner sidebar, which is the real internal type.
-    sidebar: proton_mail_common::Sidebar,
+    /// The mail user context relevant for the sidebar.
+    ctx: MailUserContextPtr,
 }
 
-#[uniffi::export]
+impl Sidebar {
+    /// Get a strong reference to the inner user context.
+    pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
+        Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
+    }
+
+    /// Get the connection to the user database
+    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+        Ok(self.ctx()?.user_stash().to_owned())
+    }
+}
+
+#[uniffi_export]
 impl Sidebar {
     /// Create a new structure to handle sidebar.
-    #[must_use]
     #[uniffi::constructor]
-    pub fn new(ctx: &MailUserSession) -> Self {
-        Self {
-            sidebar: proton_mail_common::Sidebar::new(ctx.ctx().clone()),
-        }
+    pub fn new(session: &MailUserSession) -> Arc<Sidebar> {
+        let ctx = session.ptr();
+
+        Arc::new(Sidebar { ctx })
     }
 
     /// Set folder `expanded` field to it's collapsed state
@@ -40,10 +55,13 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: Id) -> VoidActionResult {
-        let sidebar = self.sidebar.clone();
+    pub async fn collapse_folder(&self, local_id: Id) -> Result<(), ActionError> {
+        let ctx = self.ctx()?;
+
         uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(sidebar.collapse_folder(local_id.into()).await?)
+            RealSidebar.collapse_folder(&ctx, local_id.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
         .map_err(ActionError::from)
@@ -55,10 +73,13 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: Id) -> VoidActionResult {
-        let sidebar = self.sidebar.clone();
+    pub async fn expand_folder(&self, local_id: Id) -> Result<(), ActionError> {
+        let ctx = self.ctx()?;
+
         uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(sidebar.expand_folder(local_id.into()).await?)
+            RealSidebar.expand_folder(&ctx, local_id.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
         .map_err(ActionError::from)
@@ -66,7 +87,7 @@ impl Sidebar {
     }
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl Sidebar {
     /// Get the list of the System Folder to display in the sidebar.
     ///
@@ -77,9 +98,11 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> Result<Vec<SidebarSystemLabel>, ActionError> {
-        let sidebar = self.sidebar.clone();
+        let stash = self.user_stash()?;
+
         uniffi_async(async move {
-            let labels = sidebar.system_labels().await?;
+            let tether = stash.connection();
+            let labels = RealSidebar.system_labels(&tether).await?;
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
@@ -92,9 +115,11 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, ActionError> {
-        let sidebar = self.sidebar.clone();
+        let stash = self.user_stash()?;
+
         uniffi_async(async move {
-            let labels = sidebar.custom_folders().await?;
+            let tether = stash.connection();
+            let labels = RealSidebar.custom_folders(&tether).await?;
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
@@ -107,9 +132,11 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn all_custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, ActionError> {
-        let sidebar = self.sidebar.clone();
+        let stash = self.user_stash()?;
+
         uniffi_async(async move {
-            let labels = sidebar.all_custom_folders().await?;
+            let tether = stash.connection();
+            let labels = RealSidebar.all_custom_folders(&tether).await?;
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
@@ -122,9 +149,10 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_labels(&self) -> Result<Vec<SidebarCustomLabel>, ActionError> {
-        let sidebar = self.sidebar.clone();
+        let stash = self.user_stash()?;
         uniffi_async(async move {
-            let labels = sidebar.custom_labels().await?;
+            let tether = stash.connection();
+            let labels = RealSidebar.custom_labels(&tether).await?;
             Result::<_, RealProtonMailError>::Ok(labels.map_vec())
         })
         .await
@@ -152,10 +180,11 @@ impl Sidebar {
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, ActionError> {
-        let sidebar = self.sidebar.clone();
+        let ctx = self.ctx()?;
+        let stash = self.user_stash()?;
         uniffi_async(async move {
-            let handle = RealLabelWithCounters::watch(sidebar.user_ctx.user_stash())?;
-            let handle = watch_channel(sidebar.user_ctx.as_ref(), handle, callback);
+            let handle = RealLabelWithCounters::watch(&stash)?;
+            let handle = watch_channel(ctx, handle, callback);
 
             Result::<_, RealProtonMailError>::Ok(handle)
         })

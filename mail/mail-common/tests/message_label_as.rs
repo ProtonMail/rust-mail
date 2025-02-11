@@ -99,10 +99,13 @@ async fn label_as_without_archive() {
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let tx = tether.transaction().await.unwrap();
     let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)
@@ -262,10 +265,13 @@ async fn label_as_with_archive() {
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let tx = tether.transaction().await.unwrap();
     let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tx)

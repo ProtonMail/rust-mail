@@ -3,7 +3,6 @@ use crate::models::RollbackItem;
 use crate::{actions::ActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
@@ -166,7 +165,7 @@ impl proton_action_queue::action::Handler for Handler {
             }
         };
 
-        Label::patch_expanded(remote_id, action.expand, ctx.session().api()).await?;
+        Label::patch_expanded(remote_id, action.expand, ctx.api()).await?;
 
         Ok(())
     }

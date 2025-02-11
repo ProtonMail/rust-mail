@@ -1,15 +1,8 @@
-use std::sync::Arc;
-
+use crate::mail::{MailSession, MailUserSession};
+use crate::{core::datatypes::DeviceEnvironment, errors::ActionError, uniffi_async};
 use proton_core_common::models::RegisteredDevice as RealRegisteredDevice;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-
-use crate::{
-    core::datatypes::DeviceEnvironment,
-    errors::{ActionError, VoidActionResult},
-    uniffi_async,
-};
-
-use super::{MailSession, MailUserSession};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RegisteredDevice {
@@ -32,7 +25,7 @@ pub struct RegisteredDevice {
 /// Note, this function can be executed before logging in. It loads
 /// the device token from shared account database
 ///
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn get_registered_device(
     session: Arc<MailSession>,
 ) -> Result<Option<RegisteredDevice>, ActionError> {
@@ -53,14 +46,15 @@ pub async fn get_registered_device(
 /// This function can be only executed after logging in. If you just want to store device token for
 /// the sake of registering it later, use [`save_registered_device`] instead.
 ///
-#[uniffi::export]
+#[uniffi_export]
 pub async fn register_and_save_device(
     session: Arc<MailUserSession>,
     device: RegisteredDevice,
-) -> VoidActionResult {
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+
     uniffi_async(async move {
         let mut real_device = RealRegisteredDevice::from(device);
-        let ctx = session.ctx();
 
         let mut tether = ctx
             .mail_context()
@@ -89,15 +83,14 @@ pub async fn register_and_save_device(
 /// the device token in shared account database. If you already have user session,
 /// you probably should use [`register_and_save_device`] instead.
 ///
-#[uniffi::export]
+#[uniffi_export]
 pub async fn save_registered_device(
     session: Arc<MailSession>,
     device: RegisteredDevice,
-) -> VoidActionResult {
+) -> Result<(), ActionError> {
     uniffi_async(async move {
         let mut real_device = RealRegisteredDevice::from(device);
-        let ctx = session.ctx();
-        let mut tether = ctx.session_stash().connection();
+        let mut tether = session.ctx().session_stash().connection();
         let tx = tether.transaction().await?;
         real_device.save(&tx).await?;
 

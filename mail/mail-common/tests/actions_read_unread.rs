@@ -131,10 +131,13 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Action
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
@@ -204,10 +207,13 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Action
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)

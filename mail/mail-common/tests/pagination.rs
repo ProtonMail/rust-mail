@@ -104,9 +104,10 @@ async fn paginate_conversations() {
         .await
         .expect("failed to initialize");
 
-    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .expect("failed to create mailbox");
+    let mailbox_inbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .expect("failed to create mailbox");
 
     let paginator = Conversation::paginate_in_label(
         &user_ctx,
@@ -209,9 +210,10 @@ async fn paginate_messages() {
         .await
         .expect("failed to initialize");
 
-    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .expect("failed to create mailbox");
+    let mailbox_inbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .expect("failed to create mailbox");
 
     let paginator = Message::paginate_in_label(
         &user_ctx,
@@ -369,9 +371,10 @@ async fn paginate_conversations_for_label_with_filter() {
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
-    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .expect("failed to create mailbox");
+    let mailbox_inbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .expect("failed to create mailbox");
 
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
@@ -479,9 +482,10 @@ async fn paginate_messages_for_label_with_filter() {
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
-    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .expect("failed to create mailbox");
+    let mailbox_inbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .expect("failed to create mailbox");
 
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
@@ -594,9 +598,10 @@ async fn paginate_search() {
     migrate_core_db(stash).await.unwrap();
     migrate_db(stash).await.unwrap();
 
-    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .expect("failed to create mailbox");
+    let mailbox_inbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .expect("failed to create mailbox");
 
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))

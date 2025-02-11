@@ -118,10 +118,12 @@ async fn sidebar_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], expe
 
     let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
-    let sidebar = Sidebar::new(user_ctx.clone());
+
+    let stash = user_ctx.user_stash();
+    let tether = stash.connection();
 
     // Action
-    let result = sidebar.custom_folders().await.unwrap();
+    let result = Sidebar.custom_folders(&tether).await.unwrap();
 
     // Tests
     for (res, h) in zip(result, expected) {

@@ -12,7 +12,7 @@ use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCus
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MailUserSession {
     /// Return the list of labels of type Folder into which a conversations or
     /// message can be moved.
@@ -20,11 +20,11 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserSessionError> {
-        let stash = self.ctx().user_stash().clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
             let _sys_folders = RealLabelId::movable_sys_folder_list();
-            let tether = stash.connection();
+            let tether = ctx.user_stash().connection();
             let labels = RealLabel::find_by_kind(RealLabelType::Folder, &tether).await?;
             let labels = RealCustomFolder::from_labels(labels.as_slice(), &tether).await?;
             Ok::<_, RealProtonMailError>(labels.map_vec())
@@ -39,9 +39,9 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserSessionError> {
-        let stash = self.ctx.user_stash().clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
-            let tether = stash.connection();
+            let tether = ctx.user_stash().connection();
             let labels = RealLabel::find_by_kind(RealLabelType::Label, &tether).await?;
             let labels = RealCustomLabel::from_labels(labels.as_slice(), &tether).await?;
             Ok::<_, RealProtonMailError>(labels.map_vec())

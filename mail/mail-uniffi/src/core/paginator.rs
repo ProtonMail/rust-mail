@@ -39,7 +39,7 @@ pub struct ConversationPaginator {
     pub(crate) label_id: Id,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl ConversationPaginator {
     /// Retrieves the handle to stop watching the data.
     #[must_use]
@@ -132,7 +132,7 @@ pub struct MessagePaginator {
     pub(crate) handle: Arc<WatchHandle>,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MessagePaginator {
     /// Retrieves the handle to stop watching the data.
     #[must_use]

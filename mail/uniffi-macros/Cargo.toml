@@ -14,7 +14,7 @@ uniffi = { workspace = true }
 
 [dependencies.syn]
 version = "2.0.96"
-features = ["visit-mut"]
+features = ["fold", "visit-mut"]
 
 [lints]
 workspace = true

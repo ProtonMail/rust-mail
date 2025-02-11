@@ -1,5 +1,5 @@
 use crate::core::datatypes::Id;
-use crate::errors::{DraftSaveSendError, ProtonError, VoidProtonResult};
+use crate::errors::{DraftSaveSendError, ProtonError};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_core_common::utils::MapVec;
@@ -83,12 +83,6 @@ pub trait DraftSendResultCallback: Send + Sync {
     fn on_new_send_result(&self, details: Vec<DraftSendResult>);
 }
 
-export_typed_result!(
-    NewDraftSendResultWatcherResult,
-    Arc<DraftSendResultWatcher>,
-    ProtonError
-);
-
 /// Observe draft send results.
 ///
 /// Note that this will only notify you of new records that have not been seen before.
@@ -98,13 +92,13 @@ pub struct DraftSendResultWatcher {
 }
 
 /// Create new instance of the watcher for the `session` with `callback`.
-#[uniffi::export]
+#[uniffi_export]
 pub async fn new_draft_send_watcher(
     session: Arc<MailUserSession>,
     callback: Arc<dyn DraftSendResultCallback>,
-) -> NewDraftSendResultWatcherResult {
+) -> Result<Arc<DraftSendResultWatcher>, ProtonError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
-        let ctx = session.ctx();
         let mut observer = RealDraftSendResultWatcher::new(ctx.user_stash().clone()).await?;
         let handle = async_runtime()
             .spawn(async move {
@@ -133,7 +127,7 @@ pub async fn new_draft_send_watcher(
     .into()
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl DraftSendResultWatcher {
     /// Disconnect the watcher and stop observing the table.
     pub fn disconnect(&self) {
@@ -146,11 +140,11 @@ impl DraftSendResultWatcher {
 /// # Errors
 ///
 /// Returns error if the query failed.
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn draft_send_result_unseen(
     session: &MailUserSession,
 ) -> Result<Vec<DraftSendResult>, ProtonError> {
-    let ctx = session.ctx();
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let connection = ctx.user_stash().connection();
         RealDraftSendResult::unseen(&connection)
@@ -167,12 +161,12 @@ pub async fn draft_send_result_unseen(
 /// # Errors
 ///
 /// Returns error if the query failed.
-#[uniffi::export]
+#[uniffi_export]
 pub async fn draft_send_result_mark_seen(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidProtonResult {
-    let ctx = session.ctx();
+) -> Result<(), ProtonError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
         let tx = connection.transaction().await?;
@@ -191,12 +185,12 @@ pub async fn draft_send_result_mark_seen(
 /// # Errors
 ///
 /// Returns error if the query failed.
-#[uniffi::export]
+#[uniffi_export]
 pub async fn draft_send_result_delete(
     session: &MailUserSession,
     message_ids: Vec<Id>,
-) -> VoidProtonResult {
-    let ctx = session.ctx();
+) -> Result<(), ProtonError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
         let tx = connection.transaction().await?;

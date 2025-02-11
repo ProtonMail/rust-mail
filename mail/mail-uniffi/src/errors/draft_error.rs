@@ -2,17 +2,13 @@ use super::{
     DraftDiscardErrorReason, DraftOpenErrorReason, DraftSaveSendErrorReason,
     DraftUndoSendErrorReason, ProtonError,
 };
-use crate::export_void_result;
 use crate::UniffiEnum;
+use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
-export_void_result!(VoidDraftSaveSendResult, DraftSaveSendError);
-export_void_result!(VoidDraftUndoSendResult, DraftUndoSendError);
-export_void_result!(VoidDraftDiscardResult, DraftDiscardError);
-
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum DraftSaveSendError {
     Reason(DraftSaveSendErrorReason),
     Other(ProtonError),
@@ -39,7 +35,7 @@ impl From<RealMailErrorReason> for DraftSaveSendError {
     }
 }
 
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum DraftOpenError {
     Reason(DraftOpenErrorReason),
     Other(ProtonError),
@@ -64,7 +60,7 @@ impl From<RealMailErrorReason> for DraftOpenError {
     }
 }
 
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum DraftUndoSendError {
     Reason(DraftUndoSendErrorReason),
     Other(ProtonError),
@@ -89,7 +85,7 @@ impl From<RealMailErrorReason> for DraftUndoSendError {
     }
 }
 
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum DraftDiscardError {
     Reason(DraftDiscardErrorReason),
     Other(ProtonError),

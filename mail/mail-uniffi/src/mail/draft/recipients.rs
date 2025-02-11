@@ -220,7 +220,7 @@ impl ComposerRecipientList {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl ComposerRecipientList {
     /// Set the callback to receive validation updates.
     pub fn set_callback(&self, cb: Arc<dyn ComposerRecipientValidationCallback>) {

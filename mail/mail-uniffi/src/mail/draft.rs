@@ -3,8 +3,7 @@ mod recipients;
 
 use crate::core::datatypes::Id;
 use crate::errors::{
-    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, OptIdProtonResult,
-    ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult, VoidDraftUndoSendResult,
+    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, ProtonError,
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
@@ -67,8 +66,6 @@ impl Draft {
         })
     }
 }
-export_typed_result!(NewDraftResult, Arc<Draft>, DraftOpenError);
-export_typed_result!(OpenDraftResult, OpenDraft, DraftOpenError);
 
 /// Represent an open draft.
 #[derive(uniffi::Record)]
@@ -103,9 +100,12 @@ impl From<RealDraftSyncStatus> for DraftSyncStatus {
 ///
 /// Return error if action failed.
 ///
-#[uniffi::export]
-pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) -> NewDraftResult {
-    let ctx = session.ctx();
+#[uniffi_export]
+pub async fn new_draft(
+    session: &MailUserSession,
+    create_mode: DraftCreateMode,
+) -> Result<Arc<Draft>, DraftOpenError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
@@ -134,9 +134,12 @@ pub async fn new_draft(session: &MailUserSession, create_mode: DraftCreateMode) 
 ///
 /// Returns error if the query failed or the message is not a draft.
 ///
-#[uniffi::export]
-pub async fn open_draft(session: &MailUserSession, message_id: Id) -> OpenDraftResult {
-    let ctx = session.ctx();
+#[uniffi_export]
+pub async fn open_draft(
+    session: &MailUserSession,
+    message_id: Id,
+) -> Result<OpenDraft, DraftOpenError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let (draft, status) = RealDraft::open(ctx.clone(), message_id.into()).await?;
         Ok::<_, RealProtonMailError>(OpenDraft {
@@ -149,7 +152,7 @@ pub async fn open_draft(session: &MailUserSession, message_id: Id) -> OpenDraftR
     .into()
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl Draft {
     /// Get the sender of the draft.
     pub fn sender(&self) -> String {
@@ -182,7 +185,7 @@ impl Draft {
     }
 
     /// Set the draft's `subject`.
-    pub fn set_subject(&self, subject: String) -> VoidDraftSaveSendResult {
+    pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveSendError> {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
@@ -196,7 +199,7 @@ impl Draft {
     }
 
     /// Set the draft's `body`.
-    pub fn set_body(&self, body: String) -> VoidDraftSaveSendResult {
+    pub fn set_body(&self, body: String) -> Result<(), DraftSaveSendError> {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
@@ -241,7 +244,7 @@ impl Draft {
     /// Get the Draft's message id .
     ///
     /// Returns `None` if no message was created.
-    pub async fn message_id(self: Arc<Self>) -> OptIdProtonResult {
+    pub async fn message_id(self: Arc<Self>) -> Result<Option<Id>, ProtonError> {
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
             let metadata_id = { self.instance.read().await.metadata_id };
             let tether = self.ctx.user_stash().connection();
@@ -278,10 +281,11 @@ impl Draft {
     /// See [`DecryptedMessageBody::get_embedded_attachment`] for more details.
     //NOTE: iOS request we share the same result types between
     // this function and the DecryptedMessageBody equivalent.
+    #[returns(EmbeddedAttachmentInfoResult)]
     pub async fn get_embedded_attachment(
         self: Arc<Self>,
         cid: String,
-    ) -> EmbeddedAttachmentInfoResult {
+    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
         uniffi_async(async move {
             let draft = self.instance.read().await;
             let att = draft
@@ -301,7 +305,7 @@ impl Draft {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl Draft {
     /// Save the current draft.
     ///
@@ -310,7 +314,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save(self: Arc<Self>) -> VoidDraftSaveSendResult {
+    pub async fn do_save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -331,7 +335,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn send(self: Arc<Self>) -> VoidDraftSaveSendResult {
+    pub async fn do_send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -353,7 +357,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn discard(self: Arc<Self>) -> VoidDraftDiscardResult {
+    pub async fn do_discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {
             let instance = self.instance.read().await;
             instance
@@ -372,9 +376,12 @@ impl Draft {
 /// Cancel the sending of message with `message_id`.
 ///
 /// Note that will only work if the message has been sent with a send delay.
-#[uniffi::export]
-pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidDraftUndoSendResult {
-    let ctx = session.ctx();
+#[uniffi_export]
+pub async fn draft_undo_send(
+    session: &MailUserSession,
+    message_id: Id,
+) -> Result<(), DraftUndoSendError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         RealDraft::action_undo_send(ctx.action_queue(), message_id.into()).await?;
         Ok::<_, RealProtonMailError>(())
@@ -388,9 +395,12 @@ pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidD
 ///
 /// Note that this requires that the given message interacted with any of the [`Draft`] APIs
 /// in the past.
-#[uniffi::export]
-pub async fn draft_discard(session: &MailUserSession, message_id: Id) -> VoidDraftDiscardResult {
-    let ctx = session.ctx();
+#[uniffi_export]
+pub async fn draft_discard(
+    session: &MailUserSession,
+    message_id: Id,
+) -> Result<(), DraftDiscardError> {
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
         RealDraft::action_discard(message_id.into(), &tether, ctx.action_queue()).await?;

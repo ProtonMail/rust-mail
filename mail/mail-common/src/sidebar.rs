@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 use stash::stash::StashError;
 
-use crate::{AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError};
 
 pub mod labels;
 
@@ -20,12 +18,4 @@ pub type SidebarResult<T> = Result<T, SidebarError>;
 
 /// Represents the sidebar where user can navigate between mailbox, folders, labels, settings, ...
 #[derive(Clone)]
-pub struct Sidebar {
-    pub user_ctx: Arc<MailUserContext>,
-}
-
-impl Sidebar {
-    pub fn new(user_ctx: Arc<MailUserContext>) -> Self {
-        Self { user_ctx }
-    }
-}
+pub struct Sidebar;

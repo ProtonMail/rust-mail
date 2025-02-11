@@ -1,6 +1,6 @@
 use crate::actions::labels::Expand;
 use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
-use crate::{AppError, MailContextError};
+use crate::{AppError, MailContextError, MailUserContext};
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::Label;
@@ -26,53 +26,52 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> SidebarResult<Vec<SystemLabel>> {
-        let tether = self.user_ctx.user_stash().connection();
-        let settings = MailSettings::get_or_default(&tether).await;
+    pub async fn system_labels(&self, tether: &Tether) -> SidebarResult<Vec<SystemLabel>> {
+        let settings = MailSettings::get_or_default(tether).await;
 
-        let mut labels = vec![self.get_label(LabelId::inbox(), &tether).await?];
+        let mut labels = vec![self.get_label(tether, LabelId::inbox()).await?];
         if settings.show_moved == ShowMoved::KeepInDrafts
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            labels.push(self.get_label(LabelId::all_drafts(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::all_drafts()).await?);
         } else {
-            labels.push(self.get_label(LabelId::drafts(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::drafts()).await?);
         }
         let all_scheduled = self
-            .get_label_with_counters(LabelId::all_scheduled(), &tether)
+            .get_label_with_counters(tether, LabelId::all_scheduled())
             .await?;
         if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
             labels.push(all_scheduled.label());
         }
         let outbox = self
-            .get_label_with_counters(LabelId::outbox(), &tether)
+            .get_label_with_counters(tether, LabelId::outbox())
             .await?;
         if outbox.total_conv != 0 || outbox.total_msg != 0 {
             labels.push(outbox.label());
         }
         let snoozed = self
-            .get_label_with_counters(LabelId::snoozed(), &tether)
+            .get_label_with_counters(tether, LabelId::snoozed())
             .await?;
         if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
             labels.push(snoozed.label());
         }
-        labels.push(self.get_label(LabelId::starred(), &tether).await?);
+        labels.push(self.get_label(tether, LabelId::starred()).await?);
         if settings.show_moved == ShowMoved::KeepInSent
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            labels.push(self.get_label(LabelId::all_sent(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::all_sent()).await?);
         } else {
-            labels.push(self.get_label(LabelId::sent(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::sent()).await?);
         }
-        labels.push(self.get_label(LabelId::spam(), &tether).await?);
-        labels.push(self.get_label(LabelId::archive(), &tether).await?);
-        labels.push(self.get_label(LabelId::trash(), &tether).await?);
+        labels.push(self.get_label(tether, LabelId::spam()).await?);
+        labels.push(self.get_label(tether, LabelId::archive()).await?);
+        labels.push(self.get_label(tether, LabelId::trash()).await?);
         if settings.almost_all_mail == AlmostAllMail::AllMail {
-            labels.push(self.get_label(LabelId::all_mail(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::all_mail()).await?);
         } else {
-            labels.push(self.get_label(LabelId::almost_all_mail(), &tether).await?);
+            labels.push(self.get_label(tether, LabelId::almost_all_mail()).await?);
         }
-        Ok(SystemLabel::from_labels(labels.as_slice(), &tether).await?)
+        Ok(SystemLabel::from_labels(labels.as_slice(), tether).await?)
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -83,18 +82,17 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
-        let labels = self.all_custom_folders().await?;
+    pub async fn custom_folders(&self, tether: &Tether) -> SidebarResult<Vec<CustomFolder>> {
+        let labels = self.all_custom_folders(tether).await?;
 
         Ok(custom_folder_hierarchy(&labels))
     }
 
     /// Get all the [`CustomFolder`].
-    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
-        let tether = self.user_ctx.user_stash().connection();
-        let labels = Label::find_by_kind(LabelType::Folder, &tether).await?;
+    pub async fn all_custom_folders(&self, tether: &Tether) -> SidebarResult<Vec<CustomFolder>> {
+        let labels = Label::find_by_kind(LabelType::Folder, tether).await?;
 
-        Ok(CustomFolder::from_labels(labels.as_slice(), &tether).await?)
+        Ok(CustomFolder::from_labels(labels.as_slice(), tether).await?)
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -102,11 +100,10 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> SidebarResult<Vec<CustomLabel>> {
-        let tether = self.user_ctx.user_stash().connection();
-        let labels = Label::find_by_kind(LabelType::Label, &tether).await?;
+    pub async fn custom_labels(&self, tether: &Tether) -> SidebarResult<Vec<CustomLabel>> {
+        let labels = Label::find_by_kind(LabelType::Label, tether).await?;
 
-        Ok(CustomLabel::from_labels(labels.as_slice(), &tether).await?)
+        Ok(CustomLabel::from_labels(labels.as_slice(), tether).await?)
     }
 
     /// Set folder `expanded` field to it's collapsed state
@@ -114,10 +111,13 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: LocalLabelId) -> SidebarResult<()> {
-        self.user_ctx
-            .execute_action(Expand::collapse(local_id))
-            .await?;
+    pub async fn collapse_folder(
+        &self,
+        ctx: &MailUserContext,
+        local_id: LocalLabelId,
+    ) -> SidebarResult<()> {
+        ctx.execute_action(Expand::collapse(local_id)).await?;
+
         Ok(())
     }
 
@@ -126,15 +126,18 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: LocalLabelId) -> SidebarResult<()> {
-        self.user_ctx
-            .execute_action(Expand::expand(local_id))
-            .await?;
+    pub async fn expand_folder(
+        &self,
+        ctx: &MailUserContext,
+        local_id: LocalLabelId,
+    ) -> SidebarResult<()> {
+        ctx.execute_action(Expand::expand(local_id)).await?;
+
         Ok(())
     }
 
     /// Get a [`Label`] given a [`LabelId`]
-    async fn get_label(&self, label_id: LabelId, tether: &Tether) -> SidebarResult<Label> {
+    async fn get_label(&self, tether: &Tether, label_id: LabelId) -> SidebarResult<Label> {
         Label::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?
             .ok_or_else(|| {
@@ -147,8 +150,8 @@ impl Sidebar {
 
     async fn get_label_with_counters(
         &self,
-        label_id: LabelId,
         tether: &Tether,
+        label_id: LabelId,
     ) -> SidebarResult<LabelWithCounters> {
         LabelWithCounters::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?

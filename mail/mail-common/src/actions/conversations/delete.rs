@@ -3,7 +3,6 @@ use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
-use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
@@ -105,7 +104,7 @@ impl proton_action_queue::action::Handler for Handler {
             let responses = Conversation::delete_multiple_remote(
                 action.0.remote_target_ids.clone(),
                 remote_label_id,
-                ctx.session().api(),
+                ctx.api(),
             )
             .await
             .map_err(|e| {

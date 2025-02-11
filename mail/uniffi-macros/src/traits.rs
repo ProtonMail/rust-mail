@@ -1,6 +1,5 @@
 use crate::prelude::*;
-use std::rc::Rc;
-use syn::punctuated::Punctuated;
+use syn::{fold::Fold, punctuated::Punctuated};
 
 /// Converts a type into a `syn::Expr`.
 /// Used for converting function arguments into expressions for generating function calls.
@@ -48,12 +47,6 @@ impl<T: AsIdent> AsIdent for &T {
 impl<T: AsIdent> AsIdent for Option<T> {
     fn as_ident(&self) -> Option<Ident> {
         self.as_ref().and_then(AsIdent::as_ident)
-    }
-}
-
-impl<T: AsIdent> AsIdent for Rc<T> {
-    fn as_ident(&self) -> Option<Ident> {
-        self.as_ref().as_ident()
     }
 }
 
@@ -128,14 +121,14 @@ impl AsMatch for TypeTuple {
 /// Converts a type into a function call expression.
 /// Used for generating function call syntax in code generation.
 pub trait AsCall {
-    fn as_call(&self) -> Expr;
+    fn as_call(&self, this: Option<&Type>) -> Expr;
 }
 
 impl AsCall for Signature {
-    fn as_call(&self) -> Expr {
+    fn as_call(&self, this: Option<&Type>) -> Expr {
         let name = &self.ident;
 
-        let (path, args) = if self.is_method() {
+        let (path, args) = if this.is_some() {
             (quote!(Self::#name), self.call_args())
         } else {
             (quote!(#name), self.call_args())
@@ -146,6 +139,55 @@ impl AsCall for Signature {
         } else {
             parse_quote!(#path(#(#args),*))
         }
+    }
+}
+
+/// Converts a type into the `Ok` and `Error` variants of a Result type.
+pub trait AsVariants {
+    fn as_variants(&self) -> Option<(Type, Type)>;
+}
+
+impl AsVariants for ReturnType {
+    fn as_variants(&self) -> Option<(Type, Type)> {
+        if let ReturnType::Type(_, t) = self {
+            t.as_variants()
+        } else {
+            None
+        }
+    }
+}
+
+impl AsVariants for Type {
+    fn as_variants(&self) -> Option<(Type, Type)> {
+        if let Type::Path(TypePath { path, .. }) = self {
+            path.as_variants()
+        } else {
+            None
+        }
+    }
+}
+
+impl AsVariants for Path {
+    fn as_variants(&self) -> Option<(Type, Type)> {
+        if let Some(PathSegment { arguments, .. }) = self.segments.last() {
+            arguments.as_variants()
+        } else {
+            None
+        }
+    }
+}
+
+impl AsVariants for PathArguments {
+    fn as_variants(&self) -> Option<(Type, Type)> {
+        let PathArguments::AngleBracketed(args) = self else {
+            return None;
+        };
+
+        if let [t, e] = args.args.to_vec().as_slice() {
+            return Some((parse_quote!(#t), parse_quote!(#e)));
+        }
+
+        None
     }
 }
 
@@ -160,40 +202,70 @@ impl IdentExt for Ident {
     }
 }
 
+/// Extension trait for `Path`.
+pub trait PathExt {
+    fn is_self(&self) -> bool;
+}
+
+impl PathExt for Path {
+    fn is_self(&self) -> bool {
+        self.is_ident("Self")
+    }
+}
+
+/// Extension trait for `Type`.
+pub trait TypeExt {
+    fn fold_self(&self, this: &Type) -> Type;
+}
+
+impl TypeExt for Type {
+    fn fold_self(&self, this: &Type) -> Type {
+        struct Folder<'a>(&'a Type);
+
+        impl Fold for Folder<'_> {
+            fn fold_type(&mut self, ty: Type) -> Type {
+                let Type::Path(TypePath { path, .. }) = &ty else {
+                    return fold::fold_type(self, ty);
+                };
+
+                if !path.is_self() {
+                    return fold::fold_type(self, ty);
+                }
+
+                self.0.to_owned()
+            }
+        }
+
+        Fold::fold_type(&mut Folder(this), self.to_owned())
+    }
+}
+
 /// Extension trait for `syn::Signature`.
 pub trait SignatureExt {
-    fn is_method(&self) -> bool;
     fn call_args(&self) -> Vec<Expr>;
 }
 
 impl SignatureExt for Signature {
-    fn is_method(&self) -> bool {
-        matches!(self.inputs.first(), Some(FnArg::Receiver(_)))
-    }
-
     fn call_args(&self) -> Vec<Expr> {
         self.inputs.iter().map(AsExpr::as_expr).collect()
     }
 }
 
-/// Extension trait for `syn::ReturnType`.
-pub trait ReturnTypeExt {
-    fn get_variants(&self) -> Option<(Type, Type)>;
+/// Extension trait for `Vec<Attribute>`.
+pub trait AttributesExt {
+    fn pop_arg_for<T>(&mut self, name: &str) -> Option<T>
+    where
+        T: Parse;
 }
 
-impl ReturnTypeExt for ReturnType {
-    fn get_variants(&self) -> Option<(Type, Type)> {
-        if let ReturnType::Type(_, ty) = self {
-            if let Type::Path(TypePath { path, .. }) = ty.as_ref() {
-                if let Some(PathSegment { arguments, .. }) = path.segments.last() {
-                    let PathArguments::AngleBracketed(args) = arguments else {
-                        return None;
-                    };
-
-                    if let [t, e] = args.args.to_vec().as_slice() {
-                        return Some((parse_quote!(#t), parse_quote!(#e)));
-                    }
-                }
+impl AttributesExt for Vec<Attribute> {
+    fn pop_arg_for<T>(&mut self, name: &str) -> Option<T>
+    where
+        T: Parse,
+    {
+        for (idx, att) in self.iter().enumerate() {
+            if att.path().is_ident(name) {
+                return self.remove(idx).parse_args().ok();
             }
         }
 

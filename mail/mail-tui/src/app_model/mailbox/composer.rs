@@ -422,7 +422,12 @@ impl StateHandler for Composer {
         frame.render_widget(Line::from(help_text), footer);
     }
 
-    fn handle_event(&mut self, _: &Mailbox, event: Event) -> Command<Messages> {
+    fn handle_event(
+        &mut self,
+        _: &Arc<MailUserContext>,
+        _: &Mailbox,
+        event: Event,
+    ) -> Command<Messages> {
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Esc => return Command::message(Message::CloseComposer.into()),
@@ -496,8 +501,9 @@ impl StateHandler for Composer {
     fn update(
         &mut self,
         _ctx: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
-        mbox: &Mailbox,
+        _: &Mailbox,
         _mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
         let Message::Composer(message) = message else {
@@ -505,9 +511,9 @@ impl StateHandler for Composer {
         };
 
         match message {
-            ComposerMessage::Save => self.save(mbox.user_context()),
-            ComposerMessage::Send => self.send(mbox.user_context()),
-            ComposerMessage::Discard => self.discard(mbox.user_context()),
+            ComposerMessage::Save => self.save(user_ctx.to_owned()),
+            ComposerMessage::Send => self.send(user_ctx.to_owned()),
+            ComposerMessage::Discard => self.discard(user_ctx.to_owned()),
             ComposerMessage::UpdateDraftSaveId(id) => {
                 self.draft.last_draft_save_action_id = Some(id);
                 Command::none()

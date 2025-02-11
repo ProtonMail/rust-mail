@@ -54,15 +54,22 @@ impl State {
 }
 
 pub(super) trait StateHandler {
-    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages>;
+    fn handle_event(
+        &mut self,
+        user_ctx: &Arc<MailUserContext>,
+        mbox: &Mailbox,
+        event: Event,
+    ) -> Command<Messages>;
 
     fn update(
         &mut self,
         ctx: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages>;
+
     fn view(&mut self, frame: &mut Frame, area: Rect);
 }
 pub struct Model {
@@ -84,7 +91,9 @@ pub struct Model {
 
 impl Model {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
-        let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
+        let stash = ctx.user_stash();
+        let tether = stash.connection();
+        let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox()).await?;
 
         ctx.prefetch().await?;
 
@@ -131,11 +140,14 @@ impl Model {
     fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
         self.state = State::new_syncing();
         let filter = self.filter;
+        let ctx = Arc::clone(&self.ctx);
+
         // Create the background worker.
         Command::batch([
             self.create_background_worker(),
             Command::task(async move {
-                let tether = mbox.user_context().user_stash().connection();
+                let stash = ctx.user_stash();
+                let tether = stash.connection();
                 let label = match Label::find_by_id(mbox.label_id(), &tether).await {
                     Ok(l) => {
                         if let Some(l) = l {
@@ -155,22 +167,22 @@ impl Model {
                         return Command::message(Messages::DisplayError(None, e));
                     }
                 };
+
                 if mbox.view_mode() == ViewMode::Conversations {
-                    ConversationsState::build(mbox, label, filter)
+                    ConversationsState::build(Arc::clone(&ctx), mbox, label, filter)
                 } else {
-                    MessagesState::build(mbox, label, filter)
+                    MessagesState::build(Arc::clone(&ctx), mbox, label, filter)
                 }
             }),
         ])
     }
 
     fn build_item_count_query(&mut self) -> Command<Messages> {
-        let ctx = self.mailbox.user_context();
         let label_id = self.label.local_id.unwrap();
+        let stash = self.ctx.user_stash().to_owned();
         Command::task(async move {
-            let tether = ctx.user_stash().connection();
-            let label = Label::find_by_id(label_id, &tether).await;
-            let handle = Label::watch(ctx.user_stash());
+            let label = Label::find_by_id(label_id, &stash.connection()).await;
+            let handle = Label::watch(&stash);
             let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
                 Ok((label, handle)) => {
@@ -180,9 +192,8 @@ impl Model {
                         } = handle;
                         let (watcher, background_command) =
                             WatchHandle::new(receiver, handle, move |()| {
-                                let ctx_clone = ctx.clone();
+                                let tether = stash.connection();
                                 async move {
-                                    let tether = ctx_clone.user_stash().connection();
                                     let label_id = label.local_id.unwrap();
 
                                     Label::find_by_id(label_id, &tether)
@@ -248,7 +259,7 @@ impl Model {
     }
 
     fn open_label_select_popup(&mut self) -> Command<Messages> {
-        let ctx = self.mailbox.user_context();
+        let ctx = Arc::clone(&self.ctx);
         let label = self.label.clone();
         let view_mode = self.mailbox.view_mode();
         Command::task(async move {
@@ -268,7 +279,7 @@ impl Model {
             return Command::None;
         };
 
-        let ctx = self.mailbox.user_context();
+        let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
             match MoveItemPopup::new(&ctx, item).await {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
@@ -286,7 +297,7 @@ impl Model {
             return Command::None;
         };
 
-        let ctx = self.mailbox.user_context();
+        let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
             match LabelItemPopup::new(&ctx, item).await {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
@@ -308,7 +319,9 @@ impl Model {
     fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
-            Command::message(match Mailbox::new(ctx, label_id).await {
+            let stash = ctx.user_stash();
+            let tether = stash.connection();
+            Command::message(match Mailbox::new(&tether, label_id).await {
                 Ok(mbox) => Message::Sync(mbox).into(),
                 Err(e) => {
                     let e = anyhow!("Failed to open label: {e}");
@@ -322,29 +335,28 @@ impl Model {
 
 impl AppStateHandler for Model {
     fn on_state_enter(&mut self) -> Command<Messages> {
-        let ctx = self.mailbox.user_context();
-        let ctx_clone = Arc::clone(&ctx);
-        let cancel_token = self.cancel_token.clone();
-        let cancel_token_clone = cancel_token.clone();
         Command::batch([
             self.create_background_worker(),
             Command::message(Message::Sync(self.mailbox.clone()).into()),
-            Command::background_task(move |sender| {
-                observe_draft_action_errors(ctx, cancel_token, sender).boxed()
+            Command::background_task({
+                let ctx = Arc::clone(&self.ctx);
+                let tok = self.cancel_token.clone();
+                move |sender| observe_draft_action_errors(ctx, tok, sender).boxed()
             }),
-            Command::background_task(move |sender| {
-                observe_event_loop_errors(ctx_clone, cancel_token_clone, sender).boxed()
+            Command::background_task({
+                let ctx = Arc::clone(&self.ctx);
+                let tok = self.cancel_token.clone();
+                move |sender| observe_event_loop_errors(ctx, tok, sender).boxed()
             }),
         ])
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if let Some(composer) = &mut self.composer {
-            return composer.handle_event(&self.mailbox, event);
+            return composer.handle_event(&self.ctx, &self.mailbox, event);
         } else if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    let ctx = self.mailbox.user_context();
-                    return Composer::empty(ctx);
+                    return Composer::empty(Arc::clone(&self.ctx));
                 }
                 KeyCode::Char('c') => {
                     return Command::message(Message::OpenContacts.into());
@@ -366,7 +378,7 @@ impl AppStateHandler for Model {
         }
 
         if let Some(search) = &mut self.search {
-            return search.handle_event(&self.mailbox, event);
+            return search.handle_event(&self.ctx, &self.mailbox, event);
         } else if let Event::Key(key) = &event {
             if key.code == KeyCode::Char('/') {
                 return Command::Message(Message::SearchPopup(Search::new()).into());
@@ -378,8 +390,8 @@ impl AppStateHandler for Model {
                 // Do nothing
                 Command::None
             }
-            State::Conversations(state) => state.handle_event(&self.mailbox, event),
-            State::Messages(state) => state.handle_event(&self.mailbox, event),
+            State::Conversations(state) => state.handle_event(&self.ctx, &self.mailbox, event),
+            State::Messages(state) => state.handle_event(&self.ctx, &self.mailbox, event),
         }
     }
 
@@ -394,12 +406,12 @@ impl AppStateHandler for Model {
         }
 
         if let Some(composer) = &mut self.composer {
-            return composer.update(ctx, message, &self.mailbox, &self.mail_settings);
+            return composer.update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings);
         }
 
         if let Some(search) = &mut self.search {
             let Message::CloseSearchPopup = message else {
-                return search.update(ctx, message, &self.mailbox, &self.mail_settings);
+                return search.update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings);
             };
         }
 
@@ -418,7 +430,7 @@ impl AppStateHandler for Model {
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state
-                    .update(ctx, message, &self.mailbox, &self.mail_settings)
+                    .update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings)
             }
             Message::LabelRefreshed(label) => {
                 self.label = label;
@@ -582,25 +594,35 @@ impl AppStateHandler for Model {
 }
 
 impl StateHandler for State {
-    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
+    fn handle_event(
+        &mut self,
+        ctx: &Arc<MailUserContext>,
+        mbox: &Mailbox,
+        event: Event,
+    ) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.handle_event(mbox, event),
-            State::Messages(state) => state.handle_event(mbox, event),
+            State::Conversations(state) => state.handle_event(ctx, mbox, event),
+            State::Messages(state) => state.handle_event(ctx, mbox, event),
         }
     }
 
     fn update(
         &mut self,
         ctx: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.update(ctx, message, mbox, mail_settings),
-            State::Messages(state) => state.update(ctx, message, mbox, mail_settings),
+
+            State::Conversations(state) => {
+                state.update(ctx, user_ctx, message, mbox, mail_settings)
+            }
+
+            State::Messages(state) => state.update(ctx, user_ctx, message, mbox, mail_settings),
         }
     }
 

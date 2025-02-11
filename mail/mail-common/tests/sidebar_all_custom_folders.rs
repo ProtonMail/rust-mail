@@ -28,10 +28,12 @@ async fn sidebar_all_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], 
 
     let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
-    let sidebar = Sidebar::new(user_ctx.clone());
+
+    let stash = user_ctx.user_stash();
+    let tether = stash.connection();
 
     // Action
-    let result = sidebar.all_custom_folders().await.unwrap();
+    let result = Sidebar.all_custom_folders(&tether).await.unwrap();
 
     // Tests
     let result: Vec<_> = result.into_iter().map(|l| l.name).collect();

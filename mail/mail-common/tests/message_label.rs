@@ -56,10 +56,13 @@ async fn label_message() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
@@ -115,10 +118,13 @@ async fn unlabel_message() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
@@ -183,10 +189,18 @@ async fn message_action_read_unread() {
         .expect("failed to initialize");
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox =
+        Mailbox::with_remote_id(&user_context.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
+    mailbox
+        .sync(
+            &mut user_context.user_stash().connection(),
+            user_context.api(),
+            10,
+        )
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
 
     let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await
@@ -259,10 +273,18 @@ async fn message_action_delete() {
         .expect("failed to initialize");
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox =
+        Mailbox::with_remote_id(&user_context.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
+    mailbox
+        .sync(
+            &mut user_context.user_stash().connection(),
+            user_context.api(),
+            10,
+        )
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
 
     let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
         .await

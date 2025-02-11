@@ -5,7 +5,6 @@ use crate::{
     AppError, MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult,
 };
 use anyhow::anyhow;
-use proton_api_core::session::CoreSession;
 use proton_core_common::cache::{CacheData, CacheError, CacheResult};
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
@@ -115,13 +114,12 @@ impl MailUserContext {
                 .ok_or(CacheError::Callback(anyhow!(
                     "Attachment without RemoteId {attachment_id}"
                 )))?;
-        let encrypted_content =
-            Attachment::fetch_content(remote_attachment_id.clone(), self.session().api())
-                .await
-                .map_err(|e| {
-                    error!("Failed to fetch attachment({attachment_id:?}) from API: {e:?})");
-                    CacheError::Callback(anyhow!(e))
-                })?;
+        let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), self.api())
+            .await
+            .map_err(|e| {
+                error!("Failed to fetch attachment({attachment_id:?}) from API: {e:?})");
+                CacheError::Callback(anyhow!(e))
+            })?;
         let (decrypted_content, _verification_result) = self
             .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
             .await
@@ -134,8 +132,7 @@ impl MailUserContext {
 
     /// Sync attachment metadata
     async fn sync_attachment(&self, attachment_id: LocalAttachmentId) -> MailboxResult<Attachment> {
-        let user_context = self.user_context();
-        let mut conn = user_context.stash().connection();
+        let mut conn = self.user_stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)
             .await
             .inspect_err(|e| {
@@ -145,7 +142,7 @@ impl MailUserContext {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(user_context.session().api(), &mut conn)
+                .sync_complete_metadata(self.api(), &mut conn)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id:?}) metadata: {e:?})")

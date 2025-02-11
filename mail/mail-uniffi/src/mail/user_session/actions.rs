@@ -1,27 +1,31 @@
 use super::MailUserSession;
-use crate::errors::{UserSessionError, VoidSessionResult};
+use crate::errors::{unexpected::UnexpectedError, ProtonError, UserSessionError};
+use futures::TryFutureExt;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-#[uniffi::export]
+#[uniffi_export]
 impl MailUserSession {
     /// Execute exactly one pending action.
     #[must_use]
-    pub async fn execute_pending_action(&self) -> VoidSessionResult {
-        self.ctx
-            .execute_pending_actions()
-            .await
+    pub async fn execute_pending_action(&self) -> Result<(), UserSessionError> {
+        self.ctx()?
+            .execute_pending_action()
             .map_err(RealProtonMailError::from)
             .map_err(UserSessionError::from)
-            .into()
+            .await
     }
 
     /// Execute exactly all pending actions.
-    pub async fn execute_pending_actions(&self) -> VoidSessionResult {
-        self.ctx
+    pub async fn execute_pending_actions(&self) -> Result<u64, UserSessionError> {
+        let n = self
+            .ctx()?
             .execute_pending_actions()
-            .await
             .map_err(RealProtonMailError::from)
             .map_err(UserSessionError::from)
-            .into()
+            .await?;
+
+        Ok(n.try_into()
+            .or(Err(UnexpectedError::Internal))
+            .map_err(ProtonError::Unexpected)?)
     }
 }

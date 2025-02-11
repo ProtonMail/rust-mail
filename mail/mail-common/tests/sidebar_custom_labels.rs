@@ -36,10 +36,12 @@ async fn sidebar_custom_labels(labels: &[(LabelId, String, u32)], expected: &[St
 
     let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
-    let sidebar = Sidebar::new(user_ctx);
+
+    let stash = user_ctx.user_stash();
+    let tether = stash.connection();
 
     // Action
-    let result = sidebar.custom_labels().await.unwrap();
+    let result = Sidebar.custom_labels(&tether).await.unwrap();
 
     // Tests
     let result: Vec<_> = result.into_iter().map(|l| l.name).collect();

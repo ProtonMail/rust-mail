@@ -61,7 +61,7 @@ pub struct ConversationScroller {
     pub(crate) handle: Arc<WatchHandle>,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl ConversationScroller {
     /// Retrieves the handle to stop watching the data.
     #[must_use]
@@ -150,7 +150,7 @@ pub struct MessageScroller {
     pub(crate) handle: Arc<WatchHandle>,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MessageScroller {
     /// Retrieves the handle to stop watching the data.
     #[must_use]
@@ -239,7 +239,7 @@ pub struct SearchScroller {
     pub(crate) handle: Arc<WatchHandle>,
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl SearchScroller {
     /// Retrieves the handle to stop watching the data.
     #[must_use]

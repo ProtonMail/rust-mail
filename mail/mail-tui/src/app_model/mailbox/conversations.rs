@@ -35,8 +35,12 @@ pub struct ConversationsState {
 }
 
 impl ConversationsState {
-    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
-        let ctx = mbox.user_context();
+    pub(super) fn build(
+        ctx: Arc<MailUserContext>,
+        mbox: Mailbox,
+        label: Label,
+        filter: ReadFilter,
+    ) -> Command<Messages> {
         let label_id = mbox.label_id();
         Command::task(async move {
             match Self::new_impl(ctx, label_id, filter).await {
@@ -87,9 +91,14 @@ impl ConversationsState {
     }
 
     #[must_use]
-    fn open_conversation(&mut self, mbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
+    fn open_conversation(
+        &mut self,
+        ctx: Arc<MailUserContext>,
+        mbox: &Mailbox,
+        id: LocalConversationId,
+    ) -> Command<Messages> {
         self.messages = MessagesStatus::Loading(ThrobberState::default());
-        MessagesState::from_conversation(mbox, id)
+        MessagesState::from_conversation(ctx, mbox, id)
     }
 
     fn close_conversation(&mut self) {
@@ -113,7 +122,12 @@ impl ConversationsState {
 }
 
 impl StateHandler for ConversationsState {
-    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
+    fn handle_event(
+        &mut self,
+        ctx: &Arc<MailUserContext>,
+        mbox: &Mailbox,
+        event: Event,
+    ) -> Command<Messages> {
         let Event::Key(key) = &event else {
             return Command::None;
         };
@@ -122,7 +136,7 @@ impl StateHandler for ConversationsState {
             MessagesStatus::Loading(_) => return Command::None,
             MessagesStatus::Ready(message_state) => {
                 let is_esc = key.code == KeyCode::Esc;
-                let msg = message_state.handle_event(mbox, event);
+                let msg = message_state.handle_event(ctx, mbox, event);
                 return if msg.is_none() && is_esc {
                     Command::message(ConversationMessage::CloseConversation.into())
                 } else {
@@ -192,6 +206,7 @@ impl StateHandler for ConversationsState {
     fn update(
         &mut self,
         ctx: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
@@ -204,25 +219,33 @@ impl StateHandler for ConversationsState {
 
                 match message {
                     ConversationMessage::MarkConversationRead(id) => {
-                        mark_conversation_read(mbox, id)
+                        mark_conversation_read(user_ctx.to_owned(), mbox, id)
                     }
                     ConversationMessage::MarkConversationUnread(id) => {
-                        mark_conversation_unread(mbox, id)
+                        mark_conversation_unread(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::DeleteConversation(id) => delete_conversation(mbox, id),
+                    ConversationMessage::DeleteConversation(id) => {
+                        delete_conversation(user_ctx.to_owned(), mbox, id)
+                    }
                     ConversationMessage::MoveConversation(id, label_id) => {
-                        move_conversation(mbox, id, label_id)
+                        move_conversation(user_ctx.to_owned(), mbox, id, label_id)
                     }
                     ConversationMessage::LabelConversation(label_as) => {
-                        label_conversation(mbox, *label_as)
+                        label_conversation(user_ctx.to_owned(), *label_as)
                     }
-                    ConversationMessage::OpenConversation(id) => self.open_conversation(mbox, id),
+                    ConversationMessage::OpenConversation(id) => {
+                        self.open_conversation(user_ctx.to_owned(), mbox, id)
+                    }
                     ConversationMessage::Refreshed(conversations) => {
                         self.conversations_refreshed(conversations);
                         Command::None
                     }
-                    ConversationMessage::StarConversation(id) => star_conversation(mbox, id),
-                    ConversationMessage::UnstarConversation(id) => unstar_conversation(mbox, id),
+                    ConversationMessage::StarConversation(id) => {
+                        star_conversation(user_ctx.to_owned(), id)
+                    }
+                    ConversationMessage::UnstarConversation(id) => {
+                        unstar_conversation(user_ctx.to_owned(), id)
+                    }
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
                         Command::None
@@ -261,7 +284,7 @@ impl StateHandler for ConversationsState {
                     self.close_conversation();
                     return Command::None;
                 }
-                state.update(ctx, message, mbox, mail_settings)
+                state.update(ctx, user_ctx, message, mbox, mail_settings)
             }
         }
     }
@@ -294,8 +317,11 @@ enum MessagesStatus {
     Ready(Box<MessagesState>),
 }
 
-fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn mark_conversation_read(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalConversationId,
+) -> Command<Messages> {
     let local_label_id = mailbox.label_id();
     Command::task(async move {
         match Conversation::action_mark_read(ctx.action_queue(), local_label_id, vec![id]).await {
@@ -309,8 +335,11 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command
     })
 }
 
-fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn mark_conversation_unread(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalConversationId,
+) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
@@ -325,8 +354,11 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Comma
     })
 }
 
-fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn delete_conversation(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalConversationId,
+) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
         YesNoPopup::new(
@@ -353,11 +385,11 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Me
 }
 
 fn move_conversation(
+    ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
     conversation_id: LocalConversationId,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
-    let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match Conversation::action_move(
@@ -378,8 +410,10 @@ fn move_conversation(
     })
 }
 
-fn star_conversation(mailbox: &Mailbox, conversation_id: LocalConversationId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn star_conversation(
+    ctx: Arc<MailUserContext>,
+    conversation_id: LocalConversationId,
+) -> Command<Messages> {
     Command::task(async move {
         match Conversation::action_star(ctx.action_queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
@@ -393,10 +427,9 @@ fn star_conversation(mailbox: &Mailbox, conversation_id: LocalConversationId) ->
 }
 
 fn unstar_conversation(
-    mailbox: &Mailbox,
+    ctx: Arc<MailUserContext>,
     conversation_id: LocalConversationId,
 ) -> Command<Messages> {
-    let ctx = mailbox.user_context();
     Command::task(async move {
         match Conversation::action_unstar(ctx.action_queue(), vec![conversation_id]).await {
             Ok(_) => Command::None,
@@ -410,7 +443,7 @@ fn unstar_conversation(
 }
 
 fn label_conversation(
-    mailbox: &Mailbox,
+    ctx: Arc<MailUserContext>,
     LabelAs {
         source_label_id,
         item_ids: conversation_ids,
@@ -419,7 +452,6 @@ fn label_conversation(
         must_archive,
     }: LabelAs<LocalConversationId>,
 ) -> Command<Messages> {
-    let ctx = mailbox.user_context();
     Command::task(async move {
         match Conversation::action_label_as(
             ctx.action_queue(),

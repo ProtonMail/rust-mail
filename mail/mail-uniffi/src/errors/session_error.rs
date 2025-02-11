@@ -1,13 +1,11 @@
 use super::{ProtonError, SessionErrorReason};
-use crate::export_void_result;
 use crate::UniffiEnum;
+use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
-export_void_result!(VoidSessionResult, UserSessionError);
-
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum UserSessionError {
     Reason(SessionErrorReason),
     Other(ProtonError),

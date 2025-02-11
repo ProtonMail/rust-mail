@@ -5,7 +5,6 @@ use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLa
 use crate::{MailContextError, MailUserContext};
 use futures::future::try_join;
 use futures::try_join;
-use proton_api_core::session::CoreSession;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::models::{Address, Contact, Label, User};
 use tokio::task::JoinHandle;
@@ -91,12 +90,12 @@ impl MailUserContext {
             // setup all of the rest of the futures.
             let ctx_clone2 = ctx_clone.clone();
             let contact_sync_dl_fut = ctx_clone.spawn(async move {
-                Contact::sync(ctx_clone2.session().api(), ctx_clone2.user_stash()).await
+                Contact::sync(ctx_clone2.api(), ctx_clone2.user_stash()).await
             });
 
-            let labels = Label::all_labels(ctx_clone.session().api()).await?;
+            let labels = Label::all_labels(ctx_clone.api()).await?;
 
-            let api = ctx_clone.session().api().to_owned();
+            let api = ctx_clone.api().to_owned();
             let counters = ctx_clone.spawn(async move { StoreLabelCounters::new(&api).await });
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
@@ -137,17 +136,15 @@ impl MailUserContext {
         });
         let ctx_clone = ctx.clone();
         let user_settings = ctx.spawn(async move {
-            User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
+            User::sync_user_and_settings(ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
         let mail_settings = ctx.spawn(async move {
-            MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
-                .await
+            MailSettings::sync_mail_settings(ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let addresses = ctx.spawn(async move {
-            Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
-        });
+        let addresses =
+            ctx.spawn(async move { Address::sync(ctx_clone.api(), ctx_clone.user_stash()).await });
 
         try_join!(
             Self::initial_sync_for(

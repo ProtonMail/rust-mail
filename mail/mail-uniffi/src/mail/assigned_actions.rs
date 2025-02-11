@@ -117,13 +117,14 @@ impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
 ///
 /// Returns an error if the database query fails.
 ///
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn assigned_swipe_actions(
     current_folder: Id,
     session: Arc<MailUserSession>,
 ) -> Result<AssignedSwipeActions, ActionError> {
+    let stash = session.user_stash()?;
     uniffi_async(async move {
-        let tether = session.user_stash().connection();
+        let tether = stash.connection();
         let actions = RealAssignedSwipeActions::get(current_folder.into(), &tether).await?;
 
         Ok::<_, RealProtonMailError>(AssignedSwipeActions::from(actions))

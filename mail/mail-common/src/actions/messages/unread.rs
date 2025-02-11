@@ -7,7 +7,6 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type,
 };
 use proton_api_core::consts::General;
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
@@ -90,7 +89,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = ctx.session().api();
+        let api = ctx.api();
         let message_ids = action
             .0
             .remote_target_ids

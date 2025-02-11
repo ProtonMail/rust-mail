@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use proton_api_core::services::proton::common::{LabelId, LabelType as ApiLabelType};
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::common::MessageId;
@@ -37,11 +39,13 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.mail_user_context().await).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
-        ctx.mail_user_context().await,
+        &user_ctx.user_stash().connection(),
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
             .clone(),
@@ -51,7 +55,7 @@ async fn test_new_mailbox_sync_conversations() {
 
     // Create another mailbox
     let mailbox2 = Mailbox::with_remote_id(
-        ctx.mail_user_context().await,
+        &user_ctx.user_stash().connection(),
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
             .clone(),
@@ -60,16 +64,28 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    mailbox1.sync(10).await.unwrap();
+    mailbox1
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Sync mailbox 2 - this should also fire a network request
-    mailbox2.sync(10).await.unwrap();
+    mailbox2
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Try syncing mailbox1 again - this should not fire any network requests
-    mailbox1.sync(10).await.unwrap();
+    mailbox1
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Try syncing mailbox2 again - this should not fire any network requests
-    mailbox2.sync(10).await.unwrap();
+    mailbox2
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 }
 #[tokio::test]
 #[ignore]
@@ -128,11 +144,13 @@ async fn test_new_mailbox_sync_messages() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.mail_user_context().await).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
-        ctx.mail_user_context().await,
+        &user_ctx.user_stash().connection(),
         params.labels.get(&ApiLabelType::Label).unwrap()[0]
             .id
             .clone(),
@@ -142,7 +160,7 @@ async fn test_new_mailbox_sync_messages() {
 
     // Create another mailbox
     let mailbox2 = Mailbox::with_remote_id(
-        ctx.mail_user_context().await,
+        &user_ctx.user_stash().connection(),
         params.labels.get(&ApiLabelType::Label).unwrap()[1]
             .id
             .clone(),
@@ -151,16 +169,28 @@ async fn test_new_mailbox_sync_messages() {
     .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    mailbox1.sync(10).await.unwrap();
+    mailbox1
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Sync mailbox 2 - this should also fire a network request
-    mailbox2.sync(10).await.unwrap();
+    mailbox2
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Try syncing mailbox1 again - this should not fire any network requests
-    mailbox1.sync(10).await.unwrap();
+    mailbox1
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Try syncing mailbox2 again - this should not fire any network requests
-    mailbox2.sync(10).await.unwrap();
+    mailbox2
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -222,20 +252,30 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.init_user(ctx.mail_user_context().await).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a drafts mailbox
-    let mailbox_drafts = Mailbox::with_remote_id(ctx.mail_user_context().await, LabelId::drafts())
-        .await
-        .unwrap();
+    let mailbox_drafts =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::drafts())
+            .await
+            .unwrap();
 
     // Create sent mailbox
-    let mailbox_sent = Mailbox::with_remote_id(ctx.mail_user_context().await, LabelId::sent())
+    let mailbox_sent =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::sent())
+            .await
+            .unwrap();
+
+    // Check that mailboxes always sync messages.
+    mailbox_drafts
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
         .await
         .unwrap();
 
-    // Check that mailboxes always sync messages.
-    mailbox_drafts.sync(10).await.unwrap();
-
-    mailbox_sent.sync(10).await.unwrap();
+    mailbox_sent
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 }

@@ -18,41 +18,6 @@ pub use self::proton_error::*;
 pub use self::session_error::*;
 
 #[macro_export]
-macro_rules! export_void_result {
-    ($name: ident, $type:ty) => {
-        #[allow(clippy::large_enum_variant)]
-        #[allow(dead_code)]
-        #[derive(uniffi::Enum)]
-        pub enum $name {
-            Ok,
-            Error($type),
-        }
-
-        #[automatically_derived]
-        impl<T, E> From<::std::result::Result<T, E>> for $name
-        where
-            E: Into<$type> + ::std::fmt::Debug,
-        {
-            fn from(value: ::std::result::Result<T, E>) -> Self {
-                match value {
-                    Ok(val) => Self::Ok,
-                    Err(error) => {
-                        ::tracing::error!("{error:?}");
-                        Self::Error(error.into())
-                    }
-                }
-            }
-        }
-
-        impl<E: Into<$type> + ::std::fmt::Debug> From<E> for $name {
-            fn from(error: E) -> Self {
-                Self::Error(error.into())
-            }
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! export_typed_result {
     ($name: ident, $ok_type: ty, $err_type: ty) => {
         #[allow(clippy::large_enum_variant)]

@@ -331,9 +331,12 @@ impl MailUserContext {
         self.mail_context.mail_cache_path(self.user_id())
     }
 
+    /// Logs this user out.
     pub async fn logout(&self) -> MailContextResult<()> {
-        self.user_context.session().logout().await?;
-        self.user_context.cancel_all_tasks();
+        self.mail_context
+            .logout_account(self.user_id().to_owned())
+            .await?;
+
         Ok(())
     }
 
