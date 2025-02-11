@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use futures::executor::block_on;
 use rusqlite::hooks::Action;
 use stash::params;
 use stash::stash::{Bond, Stash, Tether};
@@ -62,7 +61,7 @@ async fn query_tx(tx: &Bond<'_>, value: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod concurrency_basic_sync {
-    use super::*;
+    use stash::stash::Stash;
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
@@ -405,49 +404,24 @@ mod concurrency_async_threads {
 
 #[cfg(test)]
 mod concurrency_std_threads {
+    use tokio::runtime::Runtime;
+
     use super::*;
-
-    #[tokio::test]
-    async fn basic_query_without_transactions() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let conn = stash.connection();
-
-        let result = spawn(move || {
-            block_on(async {
-                create_table(&conn).await;
-                insert(&conn, "test").await;
-                query(&conn, "test").await
-            })
-        })
-        .join()
-        .unwrap();
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "test".to_owned());
-    }
 
     #[tokio::test]
     async fn basic_query_with_transactions() {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
 
-        let result = spawn(move || {
-            block_on(async {
-                let mut conn = stash.connection();
-                let tx = conn
-                    .transaction()
-                    .await
-                    .expect("Failed to start transaction");
-                create_table_tx(&tx).await;
-                insert_tx(&tx, "test").await;
-                let result = query_tx(&tx, "test").await;
-                tx.commit().await.expect("Failed to commit transaction");
-                result
-            })
-        })
-        .join()
-        .unwrap();
+        let mut conn = stash.connection();
+        let tx = conn
+            .transaction()
+            .await
+            .expect("Failed to start transaction");
+        create_table_tx(&tx).await;
+        insert_tx(&tx, "test").await;
+        let result = query_tx(&tx, "test").await;
+        tx.commit().await.expect("Failed to commit transaction");
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "test".to_owned());
@@ -465,7 +439,8 @@ mod concurrency_std_threads {
 
         // First thread, with first transaction
         let handle1 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn1 = stash1.connection();
                 let tx1 = conn1
                     .transaction()
@@ -480,7 +455,8 @@ mod concurrency_std_threads {
 
         // Second thread, with second transaction
         let handle2 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn2 = stash2.connection();
                 let tx2 = conn2
                     .transaction()
@@ -536,7 +512,8 @@ mod concurrency_mixed {
 
         // First thread (std), with first transaction
         let handle1 = spawn(move || {
-            Runtime::new().unwrap().block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn1 = stash1.connection();
                 let tx1 = conn1
                     .transaction()
@@ -552,7 +529,8 @@ mod concurrency_mixed {
 
         // Second thread (std), with second transaction
         let handle2 = spawn(move || {
-            block_on(async {
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async {
                 let mut conn2 = stash2.connection();
                 let tx2 = conn2
                     .transaction()
@@ -731,4 +709,132 @@ async fn test_subscriber() {
     subscriber
         .recv_timeout(Duration::from_millis(100))
         .expect_err("Should fail");
+}
+
+mod orm_tests {
+    use crate::params;
+    use stash::{
+        orm::Model,
+        stash::{Bond, Stash, StashError, Tether},
+    };
+    use stash_macros::Model;
+
+    #[derive(Clone, Debug, Eq, Model, PartialEq)]
+    #[TableName("my_model")]
+    #[ModelActions(on_load, on_save)]
+    struct MyModel {
+        #[IdField(autoincrement)]
+        id: Option<u64>,
+        #[RowIdField]
+        row_id: Option<u64>,
+
+        /// Keeps track of all queries. should be equal among all records.
+        #[DbField]
+        all_rustaceans: u64,
+
+        /// Mascot. One is ferris and the other one should be corro
+        #[DbField]
+        mascot: String,
+        other_mascot: String,
+
+        #[DbField]
+        rustacean: String,
+    }
+
+    impl MyModel {
+        pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+            bond.execute(
+                "UPDATE my_model SET all_rustaceans = all_rustaceans + 1",
+                vec![],
+            )
+            .await?;
+            self.all_rustaceans += 1;
+            Ok(())
+        }
+        pub async fn on_load(&mut self, _: &Tether) -> Result<(), StashError> {
+            if self.mascot == "ferris" {
+                self.other_mascot = "corro".to_string();
+            } else if self.mascot == "corro" {
+                self.other_mascot = "ferris".to_owned();
+            } else {
+                panic!("unknown mascot {}", self.mascot);
+            }
+            Ok(())
+        }
+        pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+            if self.mascot == "ferris" {
+                assert_eq!(self.other_mascot, "corro")
+            } else if self.mascot == "corro" {
+                assert_eq!(self.other_mascot, "ferris")
+            } else {
+                panic!("unknown mascot {}", self.mascot);
+            }
+            self.all_rustaceans = bond
+                .query_value("SELECT COUNT(*) as value from my_model", vec![])
+                .await?;
+
+            <Self as Model>::save(self, bond).await
+        }
+    }
+
+    #[tokio::test]
+    async fn test_orm() -> anyhow::Result<()> {
+        let stash = Stash::new(None)?;
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
+
+        tx.execute(
+            r#"CREATE TABLE my_model 
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                all_rustaceans INTEGER NOT NULL,
+                mascot TEXT NOT NULL,
+                rustacean TEXT NOT NULL
+            )"#,
+            vec![],
+        )
+        .await
+        .unwrap();
+
+        tx.commit().await?;
+
+        let tx = tether.transaction().await?;
+        let mut boats = MyModel {
+            id: None,
+            row_id: None,
+            all_rustaceans: 0,
+            mascot: "ferris".to_owned(),
+            other_mascot: "corro".to_owned(),
+            rustacean: "without boats".to_string(),
+        };
+        let mut niko = MyModel {
+            id: None,
+            row_id: None,
+            all_rustaceans: 0,
+            mascot: "corro".to_owned(),
+            other_mascot: "ferris".to_owned(),
+            rustacean: "niko matsakis".to_string(),
+        };
+        boats.save(&tx).await?;
+        niko.save(&tx).await?;
+
+        // Expected it to be broken
+        assert_eq!(boats.all_rustaceans, 1);
+        assert_eq!(niko.all_rustaceans, 2);
+
+        let boats2 = MyModel::find_first("WHERE id = ?", params![boats.id], &tx)
+            .await?
+            .unwrap();
+        let niko2 = MyModel::find_first("WHERE id = ?", params![niko.id], &tx)
+            .await?
+            .unwrap();
+
+        // Manual update
+        boats.all_rustaceans = 2;
+
+        assert_eq!(boats, boats2);
+        assert_eq!(niko, niko2);
+        tx.commit().await?;
+        Ok(())
+    }
 }

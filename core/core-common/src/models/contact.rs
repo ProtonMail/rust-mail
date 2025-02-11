@@ -293,14 +293,27 @@ impl Contact {
                 });
             }
         }
-
         let contacts = contacts_joinset.join_all().await;
-        let contacts = iter::once(Ok(first_contacts.contacts)).chain(contacts);
+        let contacts: Vec<Contact> = iter::once(Ok(first_contacts.contacts))
+            .chain(contacts)
+            .flatten()
+            .flatten()
+            .map(Into::into)
+            .collect();
 
         let emails = emails_joinset.join_all().await;
-        let emails = iter::once(Ok(first_emails.contact_emails)).chain(emails);
+        // We don't need the data afterwards so we don't need to Arc it.
+        let mut emails: Vec<ContactEmail> = iter::once(Ok(first_emails.contact_emails))
+            .chain(emails)
+            .flatten()
+            .flatten()
+            .map(Into::into)
+            .collect();
 
-        debug!("Downloaded all contacts in {:?}", t0.elapsed());
+        debug!(
+            "Downloaded and converted all contacts in {:?}",
+            t0.elapsed()
+        );
 
         let mut tether = stash.connection();
         // We are splitting the store and download functions in two so that it's faster.
@@ -318,46 +331,42 @@ impl Contact {
             // We require this to happen since the contact_emails need the local id of its contact.
             let mut id_map = HashMap::new();
 
-            let t = Instant::now();
-            for (page, contact_page) in contacts.enumerate() {
-                let t_inner = Instant::now();
-                for contact in contact_page? {
-                    let mut contact = Contact::from(contact);
-                    <Contact as Model>::save(&mut contact, &tx).await?;
-                    id_map.insert(contact.remote_id.unwrap(), contact.local_id.unwrap());
-                }
-                debug!("stored contacts page {page} in {:?}", t_inner.elapsed());
+            let t1 = Instant::now();
+            for mut cont in contacts {
+                cont.save(&tx).await?;
+                id_map.insert(cont.remote_id.clone().unwrap(), cont.local_id.unwrap());
             }
             debug!(
                 "Stored {} contacts to the db in {:?}",
                 id_map.len(),
-                t.elapsed()
+                t1.elapsed()
             );
 
-            let mut count = 0;
-            let t = Instant::now();
-            for (page, email_page) in emails.enumerate() {
-                let t_inner = Instant::now();
-                for em in email_page? {
-                    let Some(local_id) = id_map.get(&em.contact_id) else {
-                        error!("a contact_email has no contact");
-                        continue;
-                    };
-                    count += 1;
-                    let mut email = ContactEmail::from(em);
-                    email.local_contact_id = Some(*local_id);
-                    <ContactEmail as Model>::save(&mut email, &tx).await?;
-                }
-                debug!(
-                    "stored contact_emails page {page} in {:?}",
-                    t_inner.elapsed()
-                );
+            emails.retain_mut(|em| {
+                let Some(contact_id) = &em.remote_contact_id else {
+                    error!("a contact_email has no contact");
+                    return false;
+                };
+                let Some(local_id) = id_map.get(contact_id) else {
+                    error!("a contact_email has no saved local contact");
+                    return false;
+                };
+                em.local_contact_id = Some(*local_id);
+                true
+            });
+
+            let t2 = Instant::now();
+            let count = emails.len();
+            for mut em in emails {
+                em.save(&tx).await?;
             }
 
             debug!(
                 "Stored {count} contacts_emails to the db in {:?}",
-                t.elapsed()
+                t2.elapsed()
             );
+
+            debug!("Stored all to the db in {:?}", t1.elapsed());
             tx.commit().await?;
             debug!("Synced all contacts in {:?}", t0.elapsed());
             Ok::<(), CoreContextError>(())

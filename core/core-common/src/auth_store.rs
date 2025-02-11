@@ -113,11 +113,13 @@ impl Store for AuthStore {
     async fn get_auth(&self) -> Auth {
         info!("getting auth from store");
 
-        self.try_get_auth()
-            .map_err(|e| format!("failed to get auth: {e}"))
-            .inspect_err(|e| error!(e))
-            .unwrap_or_else(|_| Auth::None)
-            .await
+        match self.try_get_auth().await {
+            Ok(auth) => auth,
+            Err(e) => {
+                error!("failed to get auth: {e}");
+                Auth::None
+            }
+        }
     }
 
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError> {

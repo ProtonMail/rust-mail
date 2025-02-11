@@ -277,6 +277,12 @@ impl Display for Id {
     }
 }
 
+impl From<u64> for Id {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+
 impl FromSql for Id {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         u64::column_result(value).map(Id)
