@@ -45,8 +45,7 @@ use stash_macros::DbRecord;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::Sender as StdSender_;
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
@@ -172,7 +171,7 @@ enum OperationTransaction {
 /// This trait is meant to be used as a trait object.
 /// You might notice the `RetId` part of the name, this is because the execute returns the inserted
 /// IDs. This could be extended in the future to return arbitrary data, or no data at all.
-pub trait BatchQueryRetId: Send {
+trait BatchQueryRetId: Send {
     fn query(&self) -> String;
     /// This returns a `Vec<u64>`, where the u64 is of the id of the model.  
     fn execute(&self, stmt: &'_ mut rusqlite::Statement<'_>) -> Result<Vec<u64>, StashError>;
@@ -890,10 +889,8 @@ impl Tether {
     ///        self.batch_write(b).await
     ///    }
     /// ```
-    pub async fn batch_write(
-        &self,
-        params: Box<dyn BatchQueryRetId>,
-    ) -> Result<Vec<u64>, StashError> {
+    #[allow(dead_code)]
+    async fn batch_write(&self, params: Box<dyn BatchQueryRetId>) -> Result<Vec<u64>, StashError> {
         let (sender, receiver) = oneshot::channel();
         let operation =
             TetherOperation::Execution(OperationExec::BatchedInsertReturningIds(BatchedWrite {
@@ -1316,7 +1313,6 @@ This cannot happen, the main worker thread is not supposed to close.",
                 connection: &connection,
                 id,
                 queue,
-                last_op: "None yet",
             };
             sm.handle_operation(first_operation);
 
@@ -1571,7 +1567,7 @@ impl Deref for Bond<'_> {
 
 impl Drop for Bond<'_> {
     fn drop(&mut self) {
-        self.sender.send(TetherOperation::Transaction(
+        _ = self.sender.send(TetherOperation::Transaction(
             OperationTransaction::RollbackAbort,
         ));
     }

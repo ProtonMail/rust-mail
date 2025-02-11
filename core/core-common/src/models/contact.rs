@@ -2,7 +2,6 @@ use crate::utils::MapVec as _;
 use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::iter;
-use std::sync::Arc;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
@@ -295,10 +294,7 @@ impl Contact {
             }
         }
         let contacts = contacts_joinset.join_all().await;
-        // If you're wondering why this is an Arc, [T] implements GetParams. We will need it after
-        // sending the data for calculating the local ids of the ContactEmails the insert so in order to avoid
-        // cloning it again we send it as a Box<Arc<[Contact]>> which gets converted into a Box<dyn GetParams>.
-        let contacts: Arc<[Contact]> = iter::once(Ok(first_contacts.contacts))
+        let contacts: Vec<Contact> = iter::once(Ok(first_contacts.contacts))
             .chain(contacts)
             .flatten()
             .flatten()
@@ -336,12 +332,9 @@ impl Contact {
             let mut id_map = HashMap::new();
 
             let t1 = Instant::now();
-            let ids = tx.batch_write(Box::new(contacts.clone())).await?;
-            for (n, id) in ids.into_iter().enumerate() {
-                id_map.insert(
-                    contacts[n].remote_id.clone().unwrap(),
-                    LocalContactId::from(id),
-                );
+            for mut cont in contacts {
+                cont.save(&tx).await?;
+                id_map.insert(cont.remote_id.clone().unwrap(), cont.local_id.unwrap());
             }
             debug!(
                 "Stored {} contacts to the db in {:?}",
@@ -364,7 +357,9 @@ impl Contact {
 
             let t2 = Instant::now();
             let count = emails.len();
-            _ = tx.batch_write(Box::new(emails)).await;
+            for mut em in emails {
+                em.save(&tx).await?;
+            }
 
             debug!(
                 "Stored {count} contacts_emails to the db in {:?}",
