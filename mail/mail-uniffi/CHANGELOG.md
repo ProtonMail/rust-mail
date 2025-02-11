@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.41.0] - 2025-02-11
+
 ### Changed
 
   - [ET-1976] If user is already in Trash/Spam/Archive, then instead moving to Trash/Spam/Archive, return NoAction
