@@ -298,7 +298,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 let mut instance: Option<Self> = stash::orm::perform_find::<_, Self>(query_logic, params, &tether).await?.into_iter().next();
                 match instance {
                     Some(mut i) => {
-                        i.on_load(&tether).await?;
+                        i.on_load(tether).await?;
                         Ok(Some(i))
                     },
                     None => Ok(None),

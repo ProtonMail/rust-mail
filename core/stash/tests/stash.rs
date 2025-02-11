@@ -710,3 +710,131 @@ async fn test_subscriber() {
         .recv_timeout(Duration::from_millis(100))
         .expect_err("Should fail");
 }
+
+mod orm_tests {
+    use crate::params;
+    use stash::{
+        orm::Model,
+        stash::{Bond, Stash, StashError, Tether},
+    };
+    use stash_macros::Model;
+
+    #[derive(Clone, Debug, Eq, Model, PartialEq)]
+    #[TableName("my_model")]
+    #[ModelActions(on_load, on_save)]
+    struct MyModel {
+        #[IdField(autoincrement)]
+        id: Option<u64>,
+        #[RowIdField]
+        row_id: Option<u64>,
+
+        /// Keeps track of all queries. should be equal among all records.
+        #[DbField]
+        all_rustaceans: u64,
+
+        /// Mascot. One is ferris and the other one should be corro
+        #[DbField]
+        mascot: String,
+        other_mascot: String,
+
+        #[DbField]
+        rustacean: String,
+    }
+
+    impl MyModel {
+        pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+            bond.execute(
+                "UPDATE my_model SET all_rustaceans = all_rustaceans + 1",
+                vec![],
+            )
+            .await?;
+            self.all_rustaceans += 1;
+            Ok(())
+        }
+        pub async fn on_load(&mut self, _: &Tether) -> Result<(), StashError> {
+            if self.mascot == "ferris" {
+                self.other_mascot = "corro".to_string();
+            } else if self.mascot == "corro" {
+                self.other_mascot = "ferris".to_owned();
+            } else {
+                panic!("unknown mascot {}", self.mascot);
+            }
+            Ok(())
+        }
+        pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+            if self.mascot == "ferris" {
+                assert_eq!(self.other_mascot, "corro")
+            } else if self.mascot == "corro" {
+                assert_eq!(self.other_mascot, "ferris")
+            } else {
+                panic!("unknown mascot {}", self.mascot);
+            }
+            self.all_rustaceans = bond
+                .query_value("SELECT COUNT(*) as value from my_model", vec![])
+                .await?;
+
+            <Self as Model>::save(self, bond).await
+        }
+    }
+
+    #[tokio::test]
+    async fn test_orm() -> anyhow::Result<()> {
+        let stash = Stash::new(None)?;
+        let mut tether = stash.connection();
+        let tx = tether.transaction().await?;
+
+        tx.execute(
+            r#"CREATE TABLE my_model 
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                all_rustaceans INTEGER NOT NULL,
+                mascot TEXT NOT NULL,
+                rustacean TEXT NOT NULL
+            )"#,
+            vec![],
+        )
+        .await
+        .unwrap();
+
+        tx.commit().await?;
+
+        let tx = tether.transaction().await?;
+        let mut boats = MyModel {
+            id: None,
+            row_id: None,
+            all_rustaceans: 0,
+            mascot: "ferris".to_owned(),
+            other_mascot: "corro".to_owned(),
+            rustacean: "without boats".to_string(),
+        };
+        let mut niko = MyModel {
+            id: None,
+            row_id: None,
+            all_rustaceans: 0,
+            mascot: "corro".to_owned(),
+            other_mascot: "ferris".to_owned(),
+            rustacean: "niko matsakis".to_string(),
+        };
+        boats.save(&tx).await?;
+        niko.save(&tx).await?;
+
+        // Expected it to be broken
+        assert_eq!(boats.all_rustaceans, 1);
+        assert_eq!(niko.all_rustaceans, 2);
+
+        let boats2 = MyModel::find_first("WHERE id = ?", params![boats.id], &tx)
+            .await?
+            .unwrap();
+        let niko2 = MyModel::find_first("WHERE id = ?", params![niko.id], &tx)
+            .await?
+            .unwrap();
+
+        // Manual update
+        boats.all_rustaceans = 2;
+
+        assert_eq!(boats, boats2);
+        assert_eq!(niko, niko2);
+        tx.commit().await?;
+        Ok(())
+    }
+}
