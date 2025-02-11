@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
   - [ET-1976] If user is already in Trash/Spam/Archive, then instead moving to Trash/Spam/Archive, return NoAction
-    - Breaking change: `assigned_swipe_actions` takes an additional paramerer `opened_folder` which is local label id.
+    - Breaking change: `assigned_swipe_actions` takes an additional paramerer `current_folder` which is local label id.
 
 ### Fixed
 

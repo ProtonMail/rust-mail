@@ -110,7 +110,7 @@ impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
 ///
 /// # Parameters
 ///
-/// * `opened_folder` - local label ID of currently opened folder
+/// * `current_folder` - local label ID of currently opened folder
 /// * `sesion` - user session
 ///
 /// # Errors
@@ -119,12 +119,12 @@ impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
 ///
 #[proton_uniffi_macros::export_result]
 pub async fn assigned_swipe_actions(
-    opened_folder: Id,
+    current_folder: Id,
     session: Arc<MailUserSession>,
 ) -> Result<AssignedSwipeActions, ActionError> {
     uniffi_async(async move {
         let tether = session.user_stash().connection();
-        let actions = RealAssignedSwipeActions::get(opened_folder.into(), &tether).await?;
+        let actions = RealAssignedSwipeActions::get(current_folder.into(), &tether).await?;
 
         Ok::<_, RealProtonMailError>(AssignedSwipeActions::from(actions))
     })
