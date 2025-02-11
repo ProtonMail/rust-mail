@@ -289,3 +289,23 @@ fn test_write_no_html() {
     assert_eq!(&attachment.mime_type, "application/test");
     assert_eq!(attachment.name, "attachment");
 }
+
+#[test]
+fn test_write_emojis() {
+    let text = "🤩✨☄️🥲
+
+
+
+Sent with [Proton Mail][1] secure email.
+
+[1]: https://proton.me/mail/home";
+    let expected_emojis = "=F0=9F=A4=A9=E2=9C=A8=E2=98=84=EF=B8=8F=F0=9F=A5=B2";
+
+    let mut data = Vec::new();
+    InboxMimeBuilder::new()
+        .text_body(text)
+        .write_to(&mut data)
+        .unwrap();
+    let mime_content = String::from_utf8(data.clone()).unwrap();
+    assert!(mime_content.contains(expected_emojis));
+}
