@@ -26,6 +26,7 @@ use std::{
 };
 
 use mail_builder::{
+    encoders::quoted_printable::quoted_printable_encode,
     headers::content_type::ContentType,
     mime::{BodyPart, MimePart},
 };
@@ -40,7 +41,7 @@ const MULTIPART_ALTERNATIVE: &str = "multipart/alternative";
 const DEFAULT_MIME_TYPE_ATTACHMENT: &str = "application/octet-stream";
 const MIME_TYPE_PLAIN: &str = "text/plain";
 const MIME_TYPE_HTML: &str = "text/html";
-const BODY_PLAIN_TRANSFER_ENCODING: &str = "quoted-printable";
+const QUOTED_PRINTABLE_ENCODING: &str = "quoted-printable";
 const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 
 /// A builder for constructing multipart MIME message bodies for PGP/MIME.
@@ -106,7 +107,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 /// ```
 pub struct InboxMimeBuilder<'x> {
     /// The text plain body part if any.
-    text_body: Option<MimePart<'x>>,
+    text_body: Option<io::Result<MimePart<'x>>>,
 
     /// The html body part if any.
     html_body: Option<MimePart<'x>>,
@@ -133,10 +134,7 @@ impl<'x> InboxMimeBuilder<'x> {
     /// * `text_body` - The plain text body of the email.
     #[must_use]
     pub fn text_body(mut self, text_body: &'x str) -> Self {
-        self.text_body = Some(
-            MimePart::new(MIME_TYPE_PLAIN, BodyPart::Text(text_body.into()))
-                .transfer_encoding("quoted-printable"),
-        );
+        self.text_body = Some(encode_text_plain_body(text_body));
         self
     }
 
@@ -236,10 +234,12 @@ impl<'x> InboxMimeBuilder<'x> {
     pub fn write_to(self, output: impl Write) -> io::Result<()> {
         let mut parts = Vec::with_capacity(self.attachments.len() + 1);
 
+        let plain_body_part = self.text_body.transpose()?;
+
         // Determine if the email has text and/or HTML content.
-        let body_part = match (self.text_body, self.html_body) {
+        let body_part = match (plain_body_part, self.html_body) {
             (None, None) => MimePart::new("text/plain", BodyPart::Text("".into()))
-                .transfer_encoding(BODY_PLAIN_TRANSFER_ENCODING),
+                .transfer_encoding(QUOTED_PRINTABLE_ENCODING),
             (None, Some(html_part)) => html_part,
             (Some(text_part), None) => text_part,
             (Some(text_part), Some(html_part)) => {
@@ -255,6 +255,23 @@ impl<'x> InboxMimeBuilder<'x> {
 
         Ok(())
     }
+}
+
+/// Encodes the text body as quoted-printable.
+fn encode_text_plain_body(text_body: &str) -> io::Result<MimePart> {
+    let mut encoded_data = Vec::with_capacity(text_body.len());
+    quoted_printable_encode(text_body.as_bytes(), &mut encoded_data, false, true)?;
+    // The output is utf-8 encoded, thus, no error.
+    let encoded_plain_body = String::from_utf8(encoded_data).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "read non-utf8 compliant quoted-printable data",
+        )
+    })?;
+    Ok(
+        MimePart::new(MIME_TYPE_PLAIN, BodyPart::Text(encoded_plain_body.into()))
+            .transfer_encoding(QUOTED_PRINTABLE_ENCODING),
+    )
 }
 
 impl Default for InboxMimeBuilder<'_> {
