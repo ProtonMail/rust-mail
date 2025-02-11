@@ -351,16 +351,21 @@ impl DecryptedMessageBody {
     ///
     /// # Parameters
     ///
-    /// * `ctx`            - Active mail user context.
-    /// * `remote_content` - Controls behavior of remote content filtering.
-    /// * `block_quote`    - Controls block quote behavior.
+    /// * `opts`           - Transform Options.
+    /// * `tether`         - database connection.
+    /// * `session_id`     - Current session id.
     ///
     /// # Errors
     ///
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn transformed(&self, ctx: &MailUserContext, opts: TransformOpts) -> BodyOutput {
+    pub async fn transformed(
+        &self,
+        opts: TransformOpts,
+        session_id: &AuthId,
+        tether: &Tether,
+    ) -> BodyOutput {
         // FIXME: We enable all views since there is no way yet in the clients to change the
         // settings. Remove me when we can.
         // https://protonag.atlassian.net/browse/ET-1926
@@ -372,8 +377,7 @@ impl DecryptedMessageBody {
             ..opts
         };
 
-        let tether = ctx.user_stash().connection();
-        let resolved = opts.resolve(&tether, ctx.session_id()).await;
+        let resolved = opts.resolve(tether, session_id).await;
         transform_html(&self.body, resolved, self.metadata.mime_type)
     }
 

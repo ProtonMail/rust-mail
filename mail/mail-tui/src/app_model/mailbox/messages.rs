@@ -266,8 +266,10 @@ impl MessagesState {
                     MailMessage::message_body(mbox.user_context(), metadata.local_id.unwrap())
                         .await
                         .context("Failed to get message body")?;
+                let user_ctx = mbox.user_context();
+                let tether = user_ctx.user_stash().connection();
                 let html = decrypted
-                    .transformed(&mbox.user_context(), TransformOpts::default())
+                    .transformed(TransformOpts::default(), user_ctx.session_id(), &tether)
                     .await;
 
                 if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
