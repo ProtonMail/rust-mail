@@ -1,0 +1,380 @@
+use std::{cmp, sync::Arc};
+
+use proton_api_core::{
+    services::proton::common::LabelId,
+    session::{CoreSession, Session},
+};
+use proton_api_mail::services::proton::{
+    common::MessageId, prelude::GetMessagesOptions, ProtonMail,
+};
+use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
+use stash::{
+    orm::Model,
+    stash::{StashError, Tether},
+};
+use tokio::sync::Mutex;
+use tracing::debug;
+
+use crate::{
+    datatypes::SearchOptions,
+    mail_scroller::MailScrollerSource,
+    models::{Message, MessageCounters, MessageLabel, SearchScrollData},
+    MailContextError, MailUserContext,
+};
+
+use super::MailPaginatorJoinHandle;
+
+/// Mail scroller implementation for Server search.
+///
+/// The scroller keeps track of the last element returned by the server for the
+/// selected search query. This element is then used to fetch next pages
+///
+#[derive(Debug)]
+pub struct SearchScrollerSource {
+    search: SearchOptions,
+    page_size: usize,
+    initialized: bool,
+    total: Arc<Mutex<u64>>,
+    last: Option<SearchScrollData>,
+}
+
+impl SearchScrollerSource {
+    pub fn new(search: SearchOptions, page_size: usize) -> Self {
+        Self {
+            search,
+            page_size,
+            initialized: false,
+            total: Arc::new(Mutex::new(0)),
+            last: None,
+        }
+    }
+
+    async fn total(&self, tether: &Tether) -> Result<u64, StashError> {
+        let total = *self.total.lock().await;
+        Ok(match &self.last {
+            Some(last) if last.has_more(tether).await? => cmp::max(
+                total,
+                last.visible_element_count(tether).await? + self.page_size as u64,
+            ),
+            Some(last) => cmp::max(total, last.visible_element_count(tether).await?),
+            None => total,
+        })
+    }
+
+    async fn spawn_first_page_sync(
+        ctx: &MailUserContext,
+        total: Arc<Mutex<u64>>,
+        remote_label_id: LabelId,
+        search: SearchOptions,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            let mut tether = stash.connection();
+
+            Self::sync_first_page(
+                &session,
+                &total,
+                &mut tether,
+                remote_label_id,
+                search,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
+    }
+
+    async fn spawn_background_sync(
+        ctx: &MailUserContext,
+        remote_label_id: LabelId,
+        search: SearchOptions,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            let tether = stash.connection();
+
+            if let Some((remote_id, time)) =
+                SearchScrollData::last_remote_message_id_and_time(&tether).await?
+            {
+                Self::sync_next_page(
+                    &session,
+                    tether,
+                    remote_label_id,
+                    remote_id,
+                    time,
+                    search,
+                    page_size,
+                )
+                .await?;
+            }
+
+            Ok(())
+        }));
+
+        Ok(task)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,remote_label_id))]
+    async fn sync_first_page(
+        session: &Session,
+        total: &Mutex<u64>,
+        tether: &mut Tether,
+        remote_label_id: LabelId,
+        search: SearchOptions,
+        page_size: usize,
+    ) -> Result<Vec<Message>, MailContextError> {
+        debug!("Syncing first page");
+        let response = session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                label_id: Some(vec![remote_label_id]),
+                page_size: page_size as u64,
+                keyword: search.keywords,
+                ..Default::default()
+            })
+            .await?;
+        let mut total = total.lock().await;
+        *total = response.total;
+        drop(total);
+
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
+
+        if response.messages.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut messages: Vec<Message> = vec![];
+
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, tether).await?);
+        }
+
+        Self::save_messages(&mut messages, tether).await?;
+
+        Ok(messages)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,remote_label_id))]
+    #[allow(clippy::too_many_arguments)]
+    async fn sync_next_page(
+        session: &Session,
+        mut tether: Tether,
+        remote_label_id: LabelId,
+        last_element_id: MessageId,
+        last_time: u64,
+        search: SearchOptions,
+        page_size: usize,
+    ) -> Result<Vec<Message>, MailContextError> {
+        debug!("Syncing next page");
+        let mut response = session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                end: Some(last_time),
+                end_id: Some(last_element_id.clone()),
+                label_id: Some(vec![remote_label_id]),
+                page_size: page_size as u64 + 1_u64,
+                keyword: search.keywords,
+                ..Default::default()
+            })
+            .await?;
+
+        if !response.messages.is_empty() {
+            // Unless we are filtering, end id is always the first element in the returned
+            // data, even if there is are no more elements.
+            if response.messages[0].id == last_element_id {
+                response.messages.remove(0);
+            } else if response.messages.len() > page_size {
+                // sometimes we get more elements back than we need.
+                response.messages.pop();
+            }
+        }
+
+        debug!("Fetched {} elements", response.messages.len());
+
+        if response.messages.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut messages: Vec<Message> = vec![];
+
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, &tether).await?);
+        }
+
+        Self::save_messages(&mut messages, &mut tether).await?;
+
+        Ok(messages)
+    }
+
+    async fn save_messages(
+        messages: &mut [Message],
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
+
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        let mut display_order = SearchScrollData::last(&tx)
+            .await?
+            .map(|s| s.display_order.saturating_add(1))
+            .unwrap_or_default();
+
+        // Save all messages.
+        for message in messages.iter_mut() {
+            message.save(&tx).await?;
+            SearchScrollData::builder()
+                .local_message_id(message.local_id.unwrap())
+                .display_order(display_order)
+                .build()
+                .with_save(&tx)
+                .await?;
+            display_order = display_order.saturating_add(1);
+        }
+
+        let last = messages.last().unwrap();
+        let time = last.time;
+        // Unwrap safety: RemoteId is present as this method is called on message
+        // downloaded from API
+        let remote_id = last.remote_id.clone().unwrap();
+
+        debug!(
+            "New last element id={:?}, time={}, order={}",
+            remote_id, time, display_order
+        );
+
+        tx.quiet_commit().await?;
+
+        Ok(())
+    }
+}
+
+impl MailScrollerSource for SearchScrollerSource {
+    type Item = Message;
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    async fn initialize(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
+        let mut tether = ctx.user_stash().connection();
+        let bond = tether.transaction().await?;
+        SearchScrollData::delete_all(&bond).await?;
+        bond.commit().await?;
+
+        // Search will always operate on online data only
+        debug!("Paginating for the first time, getting first page & spawning sync task.");
+        let remote_label_id = SystemLabel::AllMail.label_id();
+        let page_size = self.page_size;
+
+        // Wait for the first page to be fetched
+        let task = Self::spawn_first_page_sync(
+            ctx,
+            self.total.clone(),
+            remote_label_id.clone(),
+            self.search.clone(),
+            page_size,
+        )
+        .await?;
+
+        Ok((page_size as u64 * 2, task))
+    }
+
+    async fn visible_items(
+        &self,
+        ctx: &MailUserContext,
+    ) -> Result<Vec<Self::Item>, MailContextError> {
+        let tether = ctx.user_stash().connection();
+        if !self.initialized {
+            Ok(vec![])
+        } else if let Some(ref last) = self.last {
+            Ok(last.visible_elements(&tether).await?)
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    async fn visible_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+        let tether = ctx.user_stash().connection();
+
+        if !self.initialized {
+            Ok(0)
+        } else if let Some(ref last) = self.last {
+            Ok(last.visible_element_count(&tether).await?)
+        } else {
+            Ok(0)
+        }
+    }
+
+    async fn all_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+        let tether = ctx.user_stash().connection();
+
+        Ok(self.total(&tether).await?)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    async fn sync_next(
+        &mut self,
+        ctx: &MailUserContext,
+    ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
+        let tether = ctx.user_stash().connection();
+
+        if !self.initialized {
+            self.last = SearchScrollData::last(&tether).await?;
+        }
+
+        if let Some(ref mut last) = self.last {
+            let items = if self.initialized {
+                last.fetch_more(self.page_size, &tether).await?
+            } else {
+                self.initialized = true;
+                last.visible_elements(&tether).await?
+            };
+
+            let (task, total) = if items.is_empty() {
+                (None, 0)
+            } else {
+                let total = self.total(&tether).await?;
+                let task = Self::spawn_background_sync(
+                    ctx,
+                    SystemLabel::AllMail.label_id(),
+                    self.search.clone(),
+                    self.page_size,
+                )
+                .await?;
+
+                (task, total)
+            };
+
+            Ok((items, total, task))
+        } else {
+            Ok((vec![], 0, None))
+        }
+    }
+
+    fn watched_tables(&self) -> Vec<String> {
+        vec![
+            Message::table_name().to_owned(),
+            MessageLabel::table_name().to_owned(),
+            MessageCounters::table_name().to_owned(),
+        ]
+    }
+}

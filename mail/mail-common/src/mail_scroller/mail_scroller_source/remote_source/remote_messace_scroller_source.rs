@@ -1,0 +1,269 @@
+use proton_api_core::{
+    services::proton::common::LabelId,
+    session::{CoreSession, Session},
+};
+use proton_api_mail::services::proton::{
+    common::MessageId, prelude::GetMessagesOptions, ProtonMail,
+};
+use proton_core_common::datatypes::LocalLabelId;
+use stash::stash::{Bond, Tether};
+use tracing::debug;
+
+use crate::{
+    datatypes::ReadFilter,
+    models::{Message, MessageScrollData},
+    MailContextError, MailUserContext,
+};
+
+use super::{MailPaginatorJoinHandle, RemoteSource};
+
+/// Mail scroller implementation for [`Message`] on in a [`Label`].
+///
+/// The scroller keeps track of the last element returned by the server for the
+/// selected label and read filter. This element is then used to fetch
+/// new data from the server.
+#[derive(Debug)]
+pub(super) struct RemoteMessageScrollerSource;
+
+impl RemoteSource for MessageScrollData {
+    async fn sync_first_page(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let session = ctx.session().clone();
+        let mut tether = ctx.user_stash().connection();
+        let handle = ctx.spawn(async move {
+            RemoteMessageScrollerSource::sync_first_page(
+                &session,
+                &mut tether,
+                local_label_id,
+                remote_label_id,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        });
+
+        Ok(Some(handle))
+    }
+
+    async fn spawn_background_sync(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        scroller: &Self,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        RemoteMessageScrollerSource::spawn_background_sync(
+            ctx,
+            scroller,
+            local_label_id,
+            remote_label_id,
+            unread,
+            page_size,
+        )
+        .await
+    }
+}
+
+impl RemoteMessageScrollerSource {
+    pub(super) async fn spawn_background_sync(
+        ctx: &MailUserContext,
+        scroller: &MessageScrollData,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let remote_id = scroller.remote_message_id.clone();
+        let message_time = scroller.message_time;
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            let tether = stash.connection();
+
+            Self::sync_next_page(
+                &session,
+                tether,
+                local_label_id,
+                remote_label_id,
+                remote_id,
+                message_time,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    pub(super) async fn sync_first_page(
+        session: &Session,
+        tether: &mut Tether,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<Message>, MailContextError> {
+        debug!("Syncing first page");
+        let response = session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                label_id: Some(vec![remote_label_id]),
+                page_size: page_size as u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        debug!("Fetched {} elements", response.messages.len());
+
+        if response.messages.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut messages: Vec<Message> = vec![];
+
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, tether).await?);
+        }
+
+        Self::save_messages(local_label_id, &mut messages, unread, tether).await?;
+
+        Ok(messages)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[allow(clippy::too_many_arguments)]
+    async fn sync_next_page(
+        session: &Session,
+        mut tether: Tether,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        last_element_id: MessageId,
+        last_element_time: u64,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<Message>, MailContextError> {
+        debug!("Syncing next page");
+        let mut response = session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                // time == 0 breaks the api query.
+                end: Some(last_element_time),
+                end_id: Some(last_element_id.clone()),
+                label_id: Some(vec![remote_label_id]),
+                page_size: page_size as u64 + 1_u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        if !response.messages.is_empty() {
+            // Unless we are filtering, end id is always the first element in the returned
+            // data, even if there is are no more elements.
+            if response.messages[0].id == last_element_id {
+                response.messages.remove(0);
+            } else if response.messages.len() > page_size {
+                // sometimes we get more elements back than we need.
+                response.messages.pop();
+            }
+        }
+
+        debug!("Fetched {} elements", response.messages.len());
+
+        if response.messages.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut messages: Vec<Message> = vec![];
+
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, &tether).await?);
+        }
+
+        Self::save_messages(local_label_id, &mut messages, unread, &mut tether).await?;
+
+        Ok(messages)
+    }
+
+    async fn save_messages(
+        local_label_id: LocalLabelId,
+        messages: &mut [Message],
+        unread: ReadFilter,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
+
+        if messages.is_empty() {
+            return Ok(());
+        }
+
+        // Save all conversations.
+        for message in messages.iter_mut() {
+            message.save(&tx).await?
+        }
+
+        let last = messages.last().unwrap();
+        let time = last.time;
+        // Unwrap safety: RemoteId is present as this method is called on message
+        // downloaded from API
+        let remote_id = last.remote_id.clone().unwrap();
+        let display_order = last.display_order;
+
+        Self::update_scroller_data(
+            local_label_id,
+            remote_id.clone(),
+            unread,
+            time,
+            display_order,
+            &tx,
+        )
+        .await?;
+
+        debug!(
+            "New last element id={:?}, time={}, order={}",
+            remote_id, time, display_order
+        );
+
+        tx.quiet_commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_scroller_data(
+        local_label_id: LocalLabelId,
+        remote_msg_id: MessageId,
+        unread: ReadFilter,
+        time: u64,
+        display_order: u64,
+        bond: &Bond<'_>,
+    ) -> Result<MessageScrollData, MailContextError> {
+        let mut msg_paginator = MessageScrollData::builder()
+            .local_label_id(local_label_id)
+            .unread(unread)
+            .remote_message_id(remote_msg_id)
+            .message_time(time)
+            .display_order(display_order)
+            .build();
+
+        msg_paginator.save(bond).await?;
+
+        Ok(msg_paginator)
+    }
+}
