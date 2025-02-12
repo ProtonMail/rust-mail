@@ -1257,7 +1257,8 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         _ = send_back.send(Err(StashError::TransactionError(e)));
                     }
                     None => {
-                        error!("Critical error: Rollback with no transaction open!?");
+                        let err = anyhow!("Commit with no transaction open!?");
+                        _ = send_back.send(Err(StashError::Critical(err)));
                     }
                 }
             }
@@ -1272,7 +1273,8 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         _ = send_back.send(Err(StashError::TransactionError(e)));
                     }
                     None => {
-                        error!("Critical error: Rollback with no transaction open!?");
+                        let err = anyhow!("Rollback with no transaction open!?");
+                        _ = send_back.send(Err(StashError::Critical(err)));
                     }
                 }
             }
