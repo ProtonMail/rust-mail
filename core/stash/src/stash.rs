@@ -185,6 +185,10 @@ pub enum StashError {
     /// Critical error that cannot be recovered from.
     #[error("Critical error: {0}")]
     Critical(#[from] anyhow::Error),
+
+    /// Custom variant that is not critical
+    #[error("Critical error: {0}")]
+    Custom(anyhow::Error),
 }
 
 /// An operation to be executed by the worker, which does not return any data.
@@ -969,45 +973,60 @@ impl Debug for Tether {
     }
 }
 
+#[allow(clippy::manual_async_fn)]
 impl SqlExecutorAsync for Tether {
     type Error = StashError;
     #[allow(clippy::indexing_slicing)]
-    #[allow(clippy::manual_async_fn)]
     fn sql_query_values(
         &mut self,
         query: &str,
     ) -> impl Future<Output = Result<Vec<usize>, Self::Error>> + Send {
         async {
-            let query_parts = query.split(" FROM ").collect::<Vec<&str>>();
-            if query_parts.len() != 2 {
+            let Some((one, two)) = query.split_once(" FROM ") else {
                 return Err(StashError::Critical(anyhow!(
                     "Invalid query format. Expected 'SELECT ... FROM ...'"
                 )));
-            }
-            let new_query = format!("{} as value FROM {}", query_parts[0], query_parts[1]);
-            self.query_values::<_, usize>(new_query, vec![]).await
+            };
+
+            let query = format!("{one} as value FROM {two}");
+            let res = self
+                .query_values::<_, usize>(&query, vec![])
+                .await
+                .with_context(|| {
+                    format!("rusqlite_watcher::sql_query_values: Query {query} failed")
+                })?;
+            Ok(res)
         }
     }
 
     #[allow(unused_results)]
-    #[allow(clippy::manual_async_fn)]
     fn sql_execute(&mut self, query: &str) -> impl Future<Output = Result<(), Self::Error>> + Send {
         async {
-            self.execute(query.to_owned(), vec![]).await?;
+            let query = query.to_owned();
+            self.execute(&query, vec![])
+                .await
+                .with_context(|| format!("rusqlite_watcher::sql_execute: Query {query} failed"))?;
             Ok(())
         }
     }
 }
 
+#[allow(clippy::manual_async_fn)]
 impl SqlConnectionAsync for Tether {
     fn sql_transaction(
         &mut self,
     ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
            + Send {
-        self.quiet_transaction()
+        async {
+            Ok(self
+                .quiet_transaction()
+                .await
+                .context("rusqlite_watcher::sql_transaction: Error starting transaction")?)
+        }
     }
 }
 
+#[allow(clippy::manual_async_fn)]
 impl SqlExecutorAsync for Bond<'_> {
     type Error = StashError;
     fn sql_query_values(
