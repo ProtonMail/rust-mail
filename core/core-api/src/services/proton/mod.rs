@@ -417,16 +417,4 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()>;
-
-    /// Unregister device from push notifications.
-    ///
-    /// # Parameters
-    ///
-    /// * `body` - Json body to use in the delete request.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
-    async fn unregister_device(&self, body: UnregisterDeviceRequest) -> ApiServiceResult<()>;
 }

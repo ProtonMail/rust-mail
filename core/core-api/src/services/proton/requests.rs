@@ -234,25 +234,13 @@ pub struct GetLabelsByIdsOptions {
 #[serde(rename_all = "PascalCase")]
 pub struct RegisterDeviceRequest {
     /// Device token
-    device_token: String,
+    pub device_token: String,
     /// Environment to which we register
-    environment: DeviceEnvironment,
+    pub environment: DeviceEnvironment,
     /// PGP Public Key
-    public_key: Option<String>,
+    pub public_key: Option<String>,
     /// TODO: Document this field
-    ping_notification_status: Option<i32>,
+    pub ping_notification_status: Option<i32>,
     /// TODO: Document this field
-    push_notification_status: Option<i32>,
-}
-
-/// Represents `DELETE /devices` request body
-///
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct UnregisterDeviceRequest {
-    /// Device token
-    device_token: String,
-    /// UID (hex)
-    #[serde(rename = "UID")]
-    uid: String,
+    pub push_notification_status: Option<i32>,
 }

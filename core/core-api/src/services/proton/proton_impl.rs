@@ -266,16 +266,6 @@ impl ProtonCore for Proton {
 
         Ok(())
     }
-
-    async fn unregister_device(&self, body: UnregisterDeviceRequest) -> ApiServiceResult<()> {
-        DELETE!("{CORE_V4}/devices")
-            .body_json(body)?
-            .send_with(self)
-            .await?
-            .ok()?;
-
-        Ok(())
-    }
 }
 
 #[allow(clippy::redundant_closure_for_method_calls)]
