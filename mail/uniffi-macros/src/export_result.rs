@@ -79,20 +79,17 @@ impl<'a> Visitor<'a> {
 
     /// Generates a wrapping function for the original function, returning a call to it.
     fn make_func(&mut self, this: Option<&Type>, data: FnData) -> Expr {
+        let attrs = data.attrs;
+        let vis = data.vis;
+        let blk = data.blk;
+
         let sig = data.sig.with_name(format_ident!("__{}", data.sig.ident));
+        let item = quote!(#(#attrs)* #[allow(all)] #vis #sig #blk);
 
         if let Some(this) = this {
-            let attrs = data.attrs;
-            let vis = data.vis;
-            let blk = data.blk;
-
-            self.push_item(parse_quote!(impl #this { #(#attrs)* #vis #sig #blk }));
+            self.push_item(parse_quote!(impl #this { #item }));
         } else {
-            let attrs = data.attrs;
-            let vis = data.vis;
-            let blk = data.blk;
-
-            self.push_item(parse_quote!( #(#attrs)* #vis #sig #blk));
+            self.push_item(parse_quote!(#item));
         }
 
         sig.as_call()
