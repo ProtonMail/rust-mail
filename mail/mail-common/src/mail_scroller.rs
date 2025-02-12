@@ -7,9 +7,11 @@ use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, WatcherHandle};
 use std::sync::Arc;
 
+mod mail_scroller_set;
 mod mail_scroller_source;
 mod mail_scroller_watcher;
 
+pub use mail_scroller_set::*;
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
 
@@ -108,7 +110,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         // external event updates.
         // We could use our own table observer to be notified of changes
         // but we may as well check the source for the final "truth".
-        let visible_items = self.source.visible_items_total(&self.ctx).await?;
+        let visible_items = self.seen().await?;
         Ok(visible_items < self.total)
     }
 
@@ -117,45 +119,38 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if the data could not be fetched or saved.
-    pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
+    pub async fn fetch_more(&mut self) -> Result<MailScrollerSet<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
         let is_online = self.ctx.session().status().await.is_online();
-        if self.task.is_some() && is_online {
-            let wait_task = self.task.take().unwrap();
-            let result = wait_task
+        let result = if self.task.is_some() && is_online {
+            // Unwrap is safe here since we checked for `Some` above.
+            self.task
+                .take()
+                .unwrap()
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))
                 .and_then(|res| match res {
                     AsyncTaskResult::Completed(v) => v,
                     AsyncTaskResult::Cancelled => Err(MailContextError::TaskCancelled),
-                });
-
-            if result.is_err() {
-                tracing::error!("Failed to fetch next page in the background: {:?}", result);
-                // The task will be spawned again optymistically.
-                // It is safe as we already determined that we are online.
-                // and if for any reason we are offline, we will not spawn the task at all.
-                // This call is required to be able to fetch the cached data, so the result
-                // of the failing call will be propagated only if we have nothing more to show.
-                let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
-                self.total = new_total;
-                self.task = task;
-                if items.is_empty() {
-                    // Nothing more to show, fail the call.
-                    result?;
-                } else {
-                    // We have something more, show it.
-                    return Ok(items);
-                }
-            }
-        }
+                })
+        } else {
+            Ok(())
+        };
 
         let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
         self.total = new_total;
         self.task = task;
 
-        if items.is_empty() && !is_online {
+        if result.is_err() && is_online {
+            tracing::error!("Failed to fetch next page in the background: {:?}", result);
+
+            if items.is_empty() {
+                result?;
+            }
+
+            Ok(items)
+        } else if items.is_empty() && !is_online && self.seen().await? < self.total {
             Err(MailContextError::no_connection())
         } else {
             Ok(items)

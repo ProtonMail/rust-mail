@@ -410,6 +410,15 @@ pub struct ScrollCursor<T: ScrollData> {
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
+    pub fn absolute_end(local_label_id: LocalLabelId, unread: ReadFilter) -> Self {
+        ScrollCursor {
+            local_label_id,
+            unread,
+            time: 0,
+            display_order: 0,
+            _phantom: std::marker::PhantomData,
+        }
+    }
     /// Same as [`visible_elements`] but returns only the number of items that match.
     ///
     /// # Errors
@@ -471,7 +480,7 @@ impl<T: ScrollData> ScrollCursor<T> {
 /// of data from the database. This comes crucial whene switching between views
 /// and in order to not load all available items everytime we do utilize this cache.
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CachedScrollData<T: ScrollData> {
     page_size: usize,
     end: ScrollCursor<T>,
@@ -510,28 +519,8 @@ impl<T: ScrollData> CachedScrollData<T> {
         Ok(match data {
             Some(data) => {
                 let end = data.into();
-                let data_count = end.visible_element_count(tether).await?;
-                let cursor = if data_count > page_size as u64 {
-                    // Load first page, could be improved to load only last element but
-                    // there is tiny risk that background task could be invoked between
-                    // count & page_load which would invalidate the cursor.
-                    // so safer option is to load more items to make sure we have reference point
-                    let mut items = end
-                        .visible_elements_limit(Some(page_size), None, tether)
-                        .await?;
-
-                    match items.pop() {
-                        Some(last) => ScrollCursor::builder()
-                            .local_label_id(local_label_id)
-                            .unread(unread)
-                            .time(T::time(&last))
-                            .display_order(T::display_order(&last))
-                            .build(),
-                        None => end.clone(),
-                    }
-                } else {
-                    end.clone()
-                };
+                let cursor =
+                    Self::calculate_cursor(&end, local_label_id, unread, page_size, tether).await?;
 
                 Some(Self {
                     page_size,
@@ -541,6 +530,48 @@ impl<T: ScrollData> CachedScrollData<T> {
             }
             None => None,
         })
+    }
+
+    /// Create a new cache for generic ScrollData.
+    ///
+    /// This will load the data from the database and create a cursor for the
+    /// generic ScrollData in the place where first page should end.
+    ///
+    /// # Returns
+    ///
+    /// A cursor when the data is found, otherwise `None` as the view was never displayed before.
+    ///
+    /// # Arguments
+    ///
+    /// `local_label_id` - The local label id of the label in which the scroll is performed.
+    /// `unread` - The read filter used in the scroll.
+    /// `page_size` - The size of the page to load.
+    /// `tether` - The tether to use for the database access.
+    ///
+    /// # Errors
+    ///
+    /// Specific to database access.
+    ///
+    pub async fn all(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        let end = ScrollCursor::absolute_end(local_label_id, unread);
+        let cursor =
+            Self::calculate_cursor(&end, local_label_id, unread, page_size, tether).await?;
+
+        Ok(Some(Self {
+            page_size,
+            end,
+            cursor,
+        }))
+    }
+
+    pub fn set_absolute_end(mut self) -> Self {
+        self.end = ScrollCursor::absolute_end(self.cursor.local_label_id, self.cursor.unread);
+        self
     }
 
     /// Fetch more items from the database.
@@ -640,6 +671,39 @@ impl<T: ScrollData> CachedScrollData<T> {
                     ))
                 })
             })
+    }
+
+    async fn calculate_cursor(
+        end: &ScrollCursor<T>,
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        tether: &Tether,
+    ) -> Result<ScrollCursor<T>, StashError> {
+        let data_count = end.visible_element_count(tether).await?;
+        let cursor = if data_count > page_size as u64 {
+            // Load first page, could be improved to load only last element but
+            // there is tiny risk that background task could be invoked between
+            // count & page_load which would invalidate the cursor.
+            // so safer option is to load more items to make sure we have reference point
+            let mut items = end
+                .visible_elements_limit(Some(page_size), None, tether)
+                .await?;
+
+            match items.pop() {
+                Some(last) => ScrollCursor::builder()
+                    .local_label_id(local_label_id)
+                    .unread(unread)
+                    .time(T::time(&last))
+                    .display_order(T::display_order(&last))
+                    .build(),
+                None => end.clone(),
+            }
+        } else {
+            end.clone()
+        };
+
+        Ok(cursor)
     }
 }
 

@@ -321,6 +321,7 @@ impl RemoteConversationScrollerSource {
             .conversation_time(context_time)
             .display_order(display_order)
             .build();
+        dbg!(&conv_paginator);
 
         conv_paginator.save(bond).await?;
 
