@@ -174,7 +174,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         let Some(remote_message_id) = message_metadata.remote_id.clone() else {
-            error!("Draft message {local_message_id} does not have remote id");
+            error!("Draft message {local_message_id:?} does not have remote id");
             return Err(AppError::MessageHasNoRemoteId(local_message_id).into());
         };
 
@@ -182,7 +182,7 @@ impl proton_action_queue::action::Handler for SendHandler {
             MessageBodyMetadata::for_message(local_message_id, &tether)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to load message body metadata for {local_message_id}: {e:?}")
+                    error!("Failed to load message body metadata for {local_message_id:?}: {e:?}")
                 })?
         else {
             return Err(AppError::MessageBodyMetadataMissing(local_message_id).into());
@@ -305,7 +305,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         {
             if let Some(mut parent_message) = Message::find_by_id(parent_id, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to load parent message {parent_id}: {e:?}"))?
+                .inspect_err(|e| error!("Failed to load parent message {parent_id:?}: {e:?}"))?
             {
                 match reply_mode {
                     ReplyMode::Sender => parent_message.is_replied = true,
@@ -317,7 +317,7 @@ impl proton_action_queue::action::Handler for SendHandler {
                     }
                 }
             } else {
-                error!("Could not find parent message {parent_id}, perhaps it was deleted?");
+                error!("Could not find parent message {parent_id:?}, perhaps it was deleted?");
             };
         }
 

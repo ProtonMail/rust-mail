@@ -124,7 +124,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             // No remote id, we can't issue the request, we should only delete the local data.
             Message::delete_by_id(local_message_id, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to delete message {}:{e:?}", local_message_id))?;
+                .inspect_err(|e| error!("Failed to delete message {local_message_id:?}:{e:?}"))?;
 
             // If we are not replying or forwarding, it means we have a new draft and we may
             // have to delete the conversation id as well.

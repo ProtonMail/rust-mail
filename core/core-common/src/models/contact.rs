@@ -402,7 +402,7 @@ impl Contact {
             api.get_contact(remote_id.clone())
                 .await
                 .map_err(|err| {
-                    error!("Failed to fetch full contact with id {local_id}: {err:?}");
+                    error!("Failed to fetch full contact with id {local_id:?}: {err:?}");
                     err
                 })?
                 .contact,
