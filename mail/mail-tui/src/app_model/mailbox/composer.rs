@@ -51,7 +51,7 @@ impl Composer {
                             Message::OpenComposer(Composer::new(draft, None)).into(),
                         ),
                         Err(e) => {
-                            error!("Failed to create new draft:{e}");
+                            error!("Failed to create new draft:{e:?}");
                             Command::Message(Messages::DisplayError(None, e.into()))
                         }
                     },
@@ -80,7 +80,7 @@ impl Composer {
                             Message::OpenComposer(Composer::new(draft, None)).into(),
                         ),
                         Err(e) => {
-                            error!("Failed to open message in composer: {e}");
+                            error!("Failed to open message in composer: {e:?}");
                             Command::batch([
                                 Command::message(Message::CloseComposer.into()),
                                 Command::message(Messages::DisplayError(None, e.into())),
@@ -108,7 +108,7 @@ impl Composer {
                             Message::OpenComposer(Composer::new(draft, Some(sync_status))).into(),
                         ),
                         Err(e) => {
-                            error!("Failed to open message in composer: {e}");
+                            error!("Failed to open message in composer: {e:?}");
                             Command::batch([
                                 Command::message(Message::CloseComposer.into()),
                                 Command::message(Messages::from(e)),
@@ -143,7 +143,7 @@ impl Composer {
                             Command::message(ComposerMessage::UpdateDraftSaveId(output.id).into())
                         }
                         Err(e) => {
-                            error!("Failed to save draft: {e}");
+                            error!("Failed to save draft: {e:?}");
                             Command::message(MailContextError::from(e).into())
                         }
                     },
@@ -192,7 +192,7 @@ impl Composer {
                         match send_action.queue(context.action_queue()).await {
                             Ok(_) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
-                                error!("Failed to save draft: {e}");
+                                error!("Failed to save draft: {e:?}");
                                 Command::message(e.into())
                             }
                         },

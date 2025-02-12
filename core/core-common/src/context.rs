@@ -587,14 +587,14 @@ impl Context {
         for session in &self.get_account_sessions(user_id).await? {
             let Ok(api) = self
                 .new_api_session(Some(session), None)
-                .inspect_err(|err| error!("failed to create API session: {err}"))
+                .inspect_err(|err| error!("failed to create API session: {err:?}"))
             else {
                 continue;
             };
 
             let Ok(()) = api
                 .logout()
-                .inspect_err(|err| error!("failed to logout API session: {err}"))
+                .inspect_err(|err| error!("failed to logout API session: {err:?}"))
                 .await
             else {
                 continue;
@@ -615,7 +615,7 @@ impl Context {
         if let Some(path) = self.find_user_db(&user_id) {
             tokio::fs::remove_file(&path)
                 .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
-                .inspect_err(|e| error!("{e}"))
+                .inspect_err(|e| error!("{e:?}"))
                 .await?;
         }
 
@@ -624,7 +624,7 @@ impl Context {
         let mut tether = self.account_stash().connection();
         let tx = tether.transaction().await?;
         CoreAccount::delete_by_id(user_id, &tx)
-            .inspect_err(|e| error!("Failed to delete account from db: {e}"))
+            .inspect_err(|e| error!("Failed to delete account from db: {e:?}"))
             .await?;
         tx.commit().await?;
 

@@ -220,7 +220,7 @@ impl ApiServiceError {
         match ApiErrorInfo::from_json(body) {
             Ok(e) => Some(e),
             Err(e) => {
-                error!("Failed to parse API error: {}", e);
+                error!("Failed to parse API error: {:?}", e);
                 None
             }
         }

@@ -898,7 +898,7 @@ impl Tether {
             let (first_operation, connection) = match (tether_receiver.recv(), connection()) {
                 (Ok(op), Ok(con)) => (op, con),
                 (Ok(op), Err(e)) => {
-                    error!("Critical error creating worker {e}");
+                    error!("Critical error creating worker {e:?}");
                     match op {
                         Operation::Transaction(
                             OperationTransaction::Start(ch)
@@ -1139,7 +1139,7 @@ impl<'tether> Bond<'tether> {
             .await
             .expect("Tether closed its channel with handles still open")
         {
-            error!("Commit error: {e}");
+            error!("Commit error: {e:?}");
             self.rollback().await?;
             return Ok(());
         } else if publish_changes {
@@ -1272,7 +1272,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         _ = send_back.send(Ok(()));
                     }
                     Some(Err(e)) => {
-                        error!("Error when committing a transaction: {e}");
+                        error!("Error when committing a transaction: {e:?}");
                         _ = send_back.send(Err(StashError::TransactionError(e)));
                     }
                     None => {
@@ -1288,7 +1288,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         _ = send_back.send(Ok(()));
                     }
                     Some(Err(e)) => {
-                        error!("Error when rolling back a transaction: {e}");
+                        error!("Error when rolling back a transaction: {e:?}");
                         _ = send_back.send(Err(StashError::TransactionError(e)));
                     }
                     None => {
@@ -1303,7 +1303,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         debug!("Aborted transaction")
                     }
                     Some(Err(e)) => {
-                        error!("Error when aborting a transaction (Bond drop): {e}");
+                        error!("Error when aborting a transaction (Bond drop): {e:?}");
                     }
                     None => {
                         error!("Critical error: RollbackAbort with no transaction open!?");

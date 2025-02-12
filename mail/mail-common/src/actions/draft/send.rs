@@ -71,10 +71,10 @@ impl proton_action_queue::action::Handler for SendHandler {
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
             .inspect_err(|e| {
-                error!("Failed to load draft metadata: {e}");
+                error!("Failed to load draft metadata: {e:?}");
             })?
         else {
-            error!("Could not find metadata {}", action.metadata_id);
+            error!("Could not find metadata {:?}", action.metadata_id);
             return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
@@ -85,26 +85,26 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
-            .inspect_err(|e| error!("Failed to load message: {e}"))?
+            .inspect_err(|e| error!("Failed to load message: {e:?}"))?
         else {
-            error!("Could not find draft message {}", local_message_id);
+            error!("Could not find draft message {:?}", local_message_id);
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
         message.flags.set(MessageFlags::SENT, true);
         message.save(tx).await.inspect_err(|e| {
-            error!("Failed to update message sent flag: {e}");
+            error!("Failed to update message sent flag: {e:?}");
         })?;
 
         Message::remove_label(local_draft_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove draft label: {e:?}"))?;
         Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to remove all draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove all draft label: {e:?}"))?;
         Message::apply_label(local_outbox_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to apply outbox label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply outbox label: {e:?}"))?;
 
         action.local_message_id = Some(local_message_id);
 
@@ -124,26 +124,26 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
-            .inspect_err(|e| error!("Failed to load message: {e}"))?
+            .inspect_err(|e| error!("Failed to load message: {e:?}"))?
         else {
-            error!("Could not find draft message {}", local_message_id);
+            error!("Could not find draft message {:?}", local_message_id);
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
         message.flags.set(MessageFlags::SENT, false);
         message.save(tx).await.inspect_err(|e| {
-            error!("Failed to update message sent flag (revert): {e}");
+            error!("Failed to update message sent flag (revert): {e:?}");
         })?;
 
         Message::remove_label(local_outbox_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
         Message::apply_label(local_draft_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
         Message::apply_label(local_all_draft_label_id, [local_message_id], tx)
             .await
-            .inspect_err(|e| error!("Failed to apply all draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply all draft label: {e:?}"))?;
 
         Ok(())
     }
@@ -162,10 +162,10 @@ impl proton_action_queue::action::Handler for SendHandler {
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, &tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to load draft metadata: {e}");
+                error!("Failed to load draft metadata: {e:?}");
             })?
         else {
-            error!("Could not find metadata {}", action.metadata_id);
+            error!("Could not find metadata {:?}", action.metadata_id);
             return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
@@ -182,7 +182,7 @@ impl proton_action_queue::action::Handler for SendHandler {
             MessageBodyMetadata::for_message(local_message_id, &tether)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to load message body metadata for {local_message_id}: {e}")
+                    error!("Failed to load message body metadata for {local_message_id}: {e:?}")
                 })?
         else {
             return Err(AppError::MessageBodyMetadataMissing(local_message_id).into());
@@ -191,7 +191,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         // Load the mail settings of the sending user.
         let mail_settings = MailSettings::get(&tether)
             .await
-            .inspect_err(|e| error!("Failed to load mail settings: {e}"))?
+            .inspect_err(|e| error!("Failed to load mail settings: {e:?}"))?
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
@@ -222,13 +222,13 @@ impl proton_action_queue::action::Handler for SendHandler {
             mail_settings.crypto_mail_settings(),
         )
         .await
-        .inspect_err(|err| error!("Failed to load send preferences for recipients: {err}"))?;
+        .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
 
         // Unlock sender address keys
         let address_keys = context
             .unlocked_address_keys(&pgp_provider, &tx, &message_metadata.remote_address_id)
             .await
-            .inspect_err(|err| error!("Failed to load address key for sending: {err}"))?;
+            .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
 
         tx.commit().await?;
 
@@ -246,7 +246,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         )
         .await
         .map_err(SaveOrSendError::SendMessage)
-        .inspect_err(|err| error!("Failed build packages for recipients: {err}"))?;
+        .inspect_err(|err| error!("Failed build packages for recipients: {err:?}"))?;
 
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);
 
@@ -262,7 +262,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         {
             Ok(response) => response,
             Err(err) => {
-                error!("Failed to send send email request: {err}");
+                error!("Failed to send send email request: {err:?}");
 
                 if let Some(proton_error) = err.to_proton_error() {
                     if proton_error.code == Mail::MessageAlreadySent as u32 {
@@ -280,21 +280,21 @@ impl proton_action_queue::action::Handler for SendHandler {
         conversation
             .save(&tx)
             .await
-            .inspect_err(|err| error!("Failed to update conversation after send: {err}"))?;
+            .inspect_err(|err| error!("Failed to update conversation after send: {err:?}"))?;
 
         // Update message and body metadata
         let (mut metadata, mut body_metadata, _) = Message::from_api_data(response.sent, &tx)
             .await
             .inspect_err(|e| {
-                error!("Failed to convert message from API response: {e}");
+                error!("Failed to convert message from API response: {e:?}");
             })?;
 
         metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to update message metadata after send: {e}");
+            error!("Failed to update message metadata after send: {e:?}");
         })?;
 
         body_metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to update message body metadata after send: {e}");
+            error!("Failed to update message body metadata after send: {e:?}");
         })?;
 
         // Update parent message's send flag. Only do this here since
@@ -305,7 +305,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         {
             if let Some(mut parent_message) = Message::find_by_id(parent_id, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to load parent message {parent_id}: {e}"))?
+                .inspect_err(|e| error!("Failed to load parent message {parent_id}: {e:?}"))?
             {
                 match reply_mode {
                     ReplyMode::Sender => parent_message.is_replied = true,
@@ -324,15 +324,15 @@ impl proton_action_queue::action::Handler for SendHandler {
         // Move message to sent folder
         Message::remove_label(local_outbox_label_id, [local_message_id], &tx)
             .await
-            .inspect_err(|e| error!("Failed to remove outbox label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
         Message::apply_label(local_sent_label_id, [local_message_id], &tx)
             .await
-            .inspect_err(|e| error!("Failed to apply sent label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
 
         // Delete draft metadata
         DraftMetadata::delete(action.metadata_id, &tx)
             .await
-            .inspect_err(|e| error!("Failed to delete draft metadata after send: {e}"))?;
+            .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
 
         tx.commit().await?;
         Ok((
@@ -376,7 +376,7 @@ impl proton_action_queue::action::Handler for WrappedSendHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let r = self.0.apply_remote(context, action, stash).await;
         if let Err(e) = save_send_status(action, stash, &r).await {
-            error!("Failed to save draft send result: {e}");
+            error!("Failed to save draft send result: {e:?}");
         }
         r
     }

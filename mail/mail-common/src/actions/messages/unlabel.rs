@@ -102,7 +102,7 @@ impl ActionHandler for Handler {
 
             Message::apply_label(action.0.label_id, local_ids, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to rollback unlabel on messages: {e}"))?;
+                .inspect_err(|e| error!("Failed to rollback unlabel on messages: {e:?}"))?;
             tx.commit().await?;
         }
         Ok(())

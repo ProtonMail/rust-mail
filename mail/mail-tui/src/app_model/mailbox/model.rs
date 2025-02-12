@@ -145,13 +145,13 @@ impl Model {
                                 "Failed to get label: {}",
                                 MailboxError::LabelNotFound(mbox.label_id())
                             );
-                            error!("{e}");
+                            error!("{e:?}");
                             return Command::message(Messages::DisplayError(None, e));
                         }
                     }
                     Err(e) => {
                         let e = anyhow!("Failed to get label: {e}");
-                        error!("{e}");
+                        error!("{e:?}");
                         return Command::message(Messages::DisplayError(None, e));
                     }
                 };
@@ -188,7 +188,7 @@ impl Model {
                                     Label::find_by_id(label_id, &tether)
                                         .await
                                         .inspect_err(|e| {
-                                            tracing::error!("Failed to get label: `{e}`");
+                                            tracing::error!("Failed to get label: `{e:?}`");
                                         })
                                         .ok()
                                         .flatten()
@@ -256,7 +256,7 @@ impl Model {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
                 Err(e) => {
                     let e = anyhow!("Failed to load labels: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(Messages::DisplayError(None, e))
                 }
             }
@@ -274,7 +274,7 @@ impl Model {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
                 Err(e) => {
                     let e = anyhow!("Failed to load folders: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(e.into())
                 }
             }
@@ -292,7 +292,7 @@ impl Model {
                 Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
                 Err(e) => {
                     let e = anyhow!("Failed to load labels: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(e.into())
                 }
             }
@@ -312,7 +312,7 @@ impl Model {
                 Ok(mbox) => Message::Sync(mbox).into(),
                 Err(e) => {
                     let e = anyhow!("Failed to open label: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Messages::DisplayError(None, e)
                 }
             })
@@ -644,7 +644,7 @@ fn background_worker(
                 _ = interval.tick() => {
                     if let Err(e) = context.execute_pending_actions().await {
                         let e = anyhow!("Failed to flush actions: {e}");
-                        error!("{e}");
+                        error!("{e:?}");
                         if sender
                             .send(Command::message(Messages::DisplayError(
                                 Some("Action Queue".to_owned()),
@@ -658,7 +658,7 @@ fn background_worker(
 
                         if let Err(e) = context.poll_event_loop().await {
                             let e = anyhow!("Failed to poll events: {e}");
-                            error!("{e}");
+                            error!("{e:?}");
                             if sender
                                 .send(Command::message(Messages::DisplayError(
                                     Some("Event Loop".to_owned()),
@@ -686,7 +686,7 @@ async fn observe_draft_action_errors(
     let mut observer = match DraftSendResultWatcher::new(ctx.user_stash().clone()).await {
         Ok(observer) => observer,
         Err(e) => {
-            error!("Failed to create draft send result observer:{e}");
+            error!("Failed to create draft send result observer:{e:?}");
             let _ = sender
                 .send_async(Command::message(Messages::DisplayError(
                     Some("Draft Send Result".to_owned()),
@@ -711,7 +711,7 @@ async fn observe_draft_action_errors(
                         handle_draft_failure(&ctx, &sender, failures).await;
                     }
                     Err(e) => {
-                        error!("Failed to observe: {e}");
+                        error!("Failed to observe: {e:?}");
                         return;
                     }
                 }

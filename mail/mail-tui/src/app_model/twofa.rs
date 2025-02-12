@@ -103,7 +103,7 @@ impl AppStateHandler for Model {
                             )),
                             Err(e) => {
                                 let e = anyhow!("Failed to login: {e}");
-                                tracing::error!("{e}");
+                                tracing::error!("{e:?}");
                                 Command::message(Messages::DisplayError(None, e))
                             }
                         }

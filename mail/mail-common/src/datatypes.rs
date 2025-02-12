@@ -984,7 +984,7 @@ impl EncryptedMessageBody {
         // TODO: Verify signature.
         let (decrypted_body, _) = self
             .decrypt(&pgp_provider, &address_keys)
-            .inspect_err(|e| error!("Failed to decrypt message body: {e}"))?;
+            .inspect_err(|e| error!("Failed to decrypt message body: {e:?}"))?;
 
         match decrypted_body {
             DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
@@ -1704,7 +1704,7 @@ impl MobileActions {
                 {
                     Ok(actions) => return Ok(actions),
                     Err(error) => {
-                        error!("Error parsing custom message_toolbar actions: {}", error);
+                        error!("Error parsing custom message_toolbar actions: {:?}", error);
                     }
                 }
             }

@@ -44,9 +44,9 @@ impl AuthStore {
     fn encryption_key(&self) -> Result<SessionEncryptionKey, StoreError> {
         let key = (self.key_chain.get())
             .context("failed to load secret from key chain")
-            .inspect_err(|e| error!("{e}"))?
+            .inspect_err(|e| error!("{e:?}"))?
             .context("keychain has no decryption key")
-            .inspect_err(|e| error!("{e}"))?;
+            .inspect_err(|e| error!("{e:?}"))?;
 
         SessionEncryptionKey::from_base64(&key).context("invalid encryption key")
     }
@@ -116,7 +116,7 @@ impl Store for AuthStore {
         match self.try_get_auth().await {
             Ok(auth) => auth,
             Err(e) => {
-                error!("failed to get auth: {e}");
+                error!("failed to get auth: {e:?}");
                 Auth::None
             }
         }
@@ -152,7 +152,7 @@ impl Store for AuthStore {
 
             CoreAccount::new(user_id.clone(), name_or_addr)
                 .save(&tx)
-                .inspect_err(|e| error!("failed to save account: {e}"))
+                .inspect_err(|e| error!("failed to save account: {e:?}"))
                 .await?;
         }
 
@@ -164,7 +164,7 @@ impl Store for AuthStore {
 
             CoreSession::new(user_id.clone(), session_id.clone(), tokens, &key)?
                 .save(&tx)
-                .inspect_err(|e| error!("failed to save session: {e}"))
+                .inspect_err(|e| error!("failed to save session: {e:?}"))
                 .await?;
         }
 
@@ -221,7 +221,7 @@ impl Store for AuthStore {
                 .with_tfa_mode(tfa_mode)
                 .with_mbp_mode(mbp_mode)
                 .save(&tx)
-                .inspect_err(|e| error!("failed to save account: {e}"))
+                .inspect_err(|e| error!("failed to save account: {e:?}"))
                 .await?;
         }
 

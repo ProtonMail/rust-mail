@@ -248,7 +248,10 @@ impl TableObserver for CoreAccountWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for CoreAccountWatcher: {}", e);
+                tracing::error!(
+                    "Failed to send notification for CoreAccountWatcher: {:?}",
+                    e
+                );
             })
             .ok();
     }
@@ -407,7 +410,10 @@ impl TableObserver for CoreSessionWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for CoreSessionWatcher: {}", e);
+                tracing::error!(
+                    "Failed to send notification for CoreSessionWatcher: {:?}",
+                    e
+                );
             })
             .ok();
     }

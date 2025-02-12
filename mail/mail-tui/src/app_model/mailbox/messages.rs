@@ -89,7 +89,7 @@ impl MessagesState {
                 Ok(messages) => MessageMessage::Refreshed(messages).into(),
                 Err(e) => {
                     let e = anyhow!("Message Reload Query error: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     e.into()
                 }
             },
@@ -144,7 +144,7 @@ impl MessagesState {
                 Ok(messages) => MessageMessage::Refreshed(messages).into(),
                 Err(e) => {
                     let e = anyhow!("Message Reload Query error: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     e.into()
                 }
             },
@@ -190,7 +190,7 @@ impl MessagesState {
                 ]),
                 Err(e) => {
                     let e = anyhow!("Failed to open conversation {conversation_id}: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(ConversationMessage::OpenConversationFailed(e).into())
                 }
             }
@@ -224,7 +224,7 @@ impl MessagesState {
                             Ok(m) => MessageMessage::Refreshed(m).into(),
                             Err(e) => {
                                 let e = anyhow!("Message list Query error: {e}");
-                                tracing::error!("{e}");
+                                tracing::error!("{e:?}");
                                 e.into()
                             }
                         },
@@ -773,7 +773,7 @@ fn mark_message_read(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages>
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark message as read: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -789,7 +789,7 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalMessageId) -> Command<Message
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark message as unread: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -809,7 +809,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
                 Ok(_) => Command::None,
                 Err(e) => {
                     let e = anyhow!("Failed to delete message: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(e.into())
                 }
             }
@@ -824,7 +824,7 @@ fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -838,7 +838,7 @@ fn unstar_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -869,7 +869,7 @@ fn label_message(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -890,7 +890,7 @@ fn move_message(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }

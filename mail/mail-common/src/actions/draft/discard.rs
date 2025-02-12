@@ -65,10 +65,10 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
-                error!("Failed to load draft metadata: {e}");
+                error!("Failed to load draft metadata: {e:?}");
             })?
         else {
-            error!("Could not find metadata {}", action.metadata_id);
+            error!("Could not find metadata {:?}", action.metadata_id);
             return Err(DiscardError::MetadataNotFound(action.metadata_id).into());
         };
 
@@ -76,12 +76,12 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             debug!("Local message is present, marking as deleted.");
             Message::mark_deleted(vec![local_message_id], bond)
                 .await
-                .inspect_err(|e| error!("Failed to mark message as deleted: {e}"))?;
+                .inspect_err(|e| error!("Failed to mark message as deleted: {e:?}"))?;
         }
 
         DraftMetadata::delete(action.metadata_id, bond)
             .await
-            .inspect_err(|e| error!("Failed to delete metadata: {e}"))?;
+            .inspect_err(|e| error!("Failed to delete metadata: {e:?}"))?;
 
         action.local_message_id = metadata.local_message_id;
         action.local_conversation_id = metadata.local_conversation_id;
@@ -99,7 +99,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         if let Some(local_message_id) = action.local_message_id {
             Message::mark_undeleted(vec![local_message_id], bond)
                 .await
-                .inspect_err(|e| error!("Failed to mark message undeleted: {e}"))?;
+                .inspect_err(|e| error!("Failed to mark message undeleted: {e:?}"))?;
         }
 
         Ok(())
@@ -124,7 +124,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             // No remote id, we can't issue the request, we should only delete the local data.
             Message::delete_by_id(local_message_id, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to delete message {}:{e}", local_message_id))?;
+                .inspect_err(|e| error!("Failed to delete message {}:{e:?}", local_message_id))?;
 
             // If we are not replying or forwarding, it means we have a new draft and we may
             // have to delete the conversation id as well.
@@ -158,7 +158,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             .api()
             .put_messages_delete(vec![message_id.clone()], Some(LabelId::drafts()))
             .await
-            .inspect_err(|e| error!("Failed to delete message on server: {e}"))?;
+            .inspect_err(|e| error!("Failed to delete message on server: {e:?}"))?;
 
         for result in response.responses {
             if result.id == message_id && result.response.code != General::NoError as u32 {

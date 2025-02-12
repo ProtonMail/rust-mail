@@ -61,7 +61,7 @@ impl CacheConfig for CacheAttachmentConfig {
         error!("Couldn't load existing files({failed:?}), removing them");
         for key in failed {
             let file = Self::key_to_filename(&key, None)?;
-            drop(remove_file(file).inspect_err(|e| error!("Couldn't remove file: {e}")));
+            drop(remove_file(file).inspect_err(|e| error!("Couldn't remove file: {e:?}")));
         }
         Ok(())
     }
@@ -96,7 +96,7 @@ impl CacheAttachmentKey {
     async fn get_all_cached(root_path: PathBuf) -> Result<Vec<Self>, AppError> {
         let mut keys = vec![];
         for entry in read_dir(&root_path)
-            .inspect_err(|e| error!("Could not read dir({root_path:?}): {e}"))?
+            .inspect_err(|e| error!("Could not read dir({root_path:?}): {e:?}"))?
         {
             let entry = entry?;
             let Some(key) = Self::from_dir_entry(entry) else {
@@ -177,7 +177,7 @@ impl CacheConfig for CacheMessageConfig {
         error!("Couldn't load existing files({failed:?}), removing them");
         for key in failed {
             let file = Self::key_to_filename(&key, None)?;
-            drop(remove_file(file).inspect_err(|e| error!("Couldn't remove file: {e}")));
+            drop(remove_file(file).inspect_err(|e| error!("Couldn't remove file: {e:?}")));
         }
         Ok(())
     }
@@ -202,7 +202,7 @@ impl CacheMessageKey {
     async fn get_all_cached(root_path: PathBuf) -> Result<Vec<Self>, AppError> {
         let mut keys = vec![];
         for entry in read_dir(root_path.clone())
-            .inspect_err(|e| error!("Could not read dir({root_path:?}) : {e}"))?
+            .inspect_err(|e| error!("Could not read dir({root_path:?}) : {e:?}"))?
         {
             let entry = entry?;
             let Some(key) = Self::from_dir_entry(entry) else {

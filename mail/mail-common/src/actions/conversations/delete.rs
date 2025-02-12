@@ -94,7 +94,7 @@ impl proton_action_queue::action::Handler for Handler {
             .0
             .unsynced_item_ids(&conn)
             .await
-            .inspect_err(|e| error!("Failed to load local only ids: {e})"))?;
+            .inspect_err(|e| error!("Failed to load local only ids: {e:?})"))?;
 
         let failed_ids = if action.0.remote_target_ids.is_empty() {
             vec![]
@@ -106,7 +106,7 @@ impl proton_action_queue::action::Handler for Handler {
             )
             .await
             .map_err(|e| {
-                error!("Failed to delete conversations on API: {e}");
+                error!("Failed to delete conversations on API: {e:?}");
                 e
             })?;
 
@@ -123,7 +123,7 @@ impl proton_action_queue::action::Handler for Handler {
                 Conversation::remove_label(action.0.label_id, local_ids, &tx)
                     .await
                     .map_err(|e| {
-                        error!("Failed to rollback failed conversations: {e}");
+                        error!("Failed to rollback failed conversations: {e:?}");
                         e
                     })?;
             }
@@ -132,7 +132,7 @@ impl proton_action_queue::action::Handler for Handler {
                 // All messages associated with this conversation are also purged.
                 Conversation::delete_by_id(id, &tx)
                     .await
-                    .inspect_err(|e| error!("Failed to delete local conversation: {e}"))?;
+                    .inspect_err(|e| error!("Failed to delete local conversation: {e:?}"))?;
             }
 
             tx.commit().await?;

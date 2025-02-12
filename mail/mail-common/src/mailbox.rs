@@ -174,14 +174,14 @@ impl Mailbox {
             )
             .await
             .map_err(|e| {
-                error!("Failed to sync conversations for label: {e}");
+                error!("Failed to sync conversations for label: {e:?}");
                 e
             }),
             ViewMode::Messages => {
                 Message::sync_first_message_page(remote_id, count, ctx.session().api(), &mut tether)
                     .await
                     .map_err(|e| {
-                        error!("Failed to sync messages for label: {e}");
+                        error!("Failed to sync messages for label: {e:?}");
                         e
                     })
             }
@@ -190,7 +190,7 @@ impl Mailbox {
         mailbox_label.initialized = true;
         let tx = tether.transaction().await?;
         mailbox_label.save(&tx).await.map_err(|e| {
-            error!("Failed to mark label as initialized: {e}");
+            error!("Failed to mark label as initialized: {e:?}");
             MailContextError::Stash(e)
         })?;
         tx.commit().await?;

@@ -89,16 +89,16 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         message
             .save(tx)
             .await
-            .inspect_err(|e| error!("Failed to remove sent flag: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove sent flag: {e:?}"))?;
 
         // Move message back to drafts
         Message::remove_label(local_sent_label_id, [action.id], tx)
             .await
-            .inspect_err(|e| error!("Failed to remove sent label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove sent label: {e:?}"))?;
 
         Message::apply_label(local_draft_label_id, [action.id], tx)
             .await
-            .inspect_err(|e| error!("Failed to apply draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
 
         action.remote_id = Some(remote_id);
         Ok(())
@@ -121,15 +121,15 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         message
             .save(tx)
             .await
-            .inspect_err(|e| error!("Failed to add sent flag: {e}"))?;
+            .inspect_err(|e| error!("Failed to add sent flag: {e:?}"))?;
 
         Message::remove_label(local_draft_label_id, [action.id], tx)
             .await
-            .inspect_err(|e| error!("Failed to remove draft label: {e}"))?;
+            .inspect_err(|e| error!("Failed to remove draft label: {e:?}"))?;
 
         Message::apply_label(local_sent_label_id, [action.id], tx)
             .await
-            .inspect_err(|e| error!("Failed to apply send label: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply send label: {e:?}"))?;
         Ok(())
     }
 
@@ -147,7 +147,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         let response = match ctx.api().cancel_send(remote_id.clone()).await {
             Ok(r) => r,
             Err(e) => {
-                error!("Failed to cancel send: {e}");
+                error!("Failed to cancel send: {e:?}");
                 if let Some(proton_error) = e.to_proton_error() {
                     if proton_error.code == Mail::MessageSentCanNoLongerBeUndone as u32 {
                         return Err(UndoError::SendCanNoLongerBeUndone.into());
@@ -162,12 +162,12 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
 
         let mut message = Message::from_api_metadata(response.message, &tx)
             .await
-            .inspect_err(|e| error!("Failed to convert remote metadata:{e}"))?;
+            .inspect_err(|e| error!("Failed to convert remote metadata:{e:?}"))?;
 
         message
             .save(&tx)
             .await
-            .inspect_err(|e| error!("Failed to save update message: {e}"))?;
+            .inspect_err(|e| error!("Failed to save update message: {e:?}"))?;
 
         tx.commit().await?;
 

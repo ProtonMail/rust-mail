@@ -197,7 +197,7 @@ impl Label {
         Ok(label_requests
             .into_iter()
             .map(|res| {
-                res.inspect_err(|err| error!("Failed to fetch labels: {err}"))
+                res.inspect_err(|err| error!("Failed to fetch labels: {err:?}"))
                     .map_err(LabelError::from)
             })
             .collect::<Result<Vec<_>, _>>()?
@@ -441,7 +441,7 @@ impl TableObserver for LabelWatcher {
     fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
         self.sender
             .send(())
-            .inspect_err(|e| tracing::error!("Failed to send notification for LabelWatcher: {}", e))
+            .inspect_err(|e| error!("Failed to send notification for LabelWatcher: {e:?}"))
             .ok();
     }
 }

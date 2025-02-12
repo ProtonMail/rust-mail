@@ -112,7 +112,7 @@ impl ActionHandler for Handler {
 
             Message::mark_read(local_ids, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to rollback unread on messages: {e}"))?;
+                .inspect_err(|e| error!("Failed to rollback unread on messages: {e:?}"))?;
             tx.commit().await?;
         }
         Ok(())

@@ -138,7 +138,7 @@ impl Sidebar {
         Label::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?
             .ok_or_else(|| {
-                error!("System Label don't exist: {}", label_id);
+                error!("System Label don't exist: {:?}", label_id);
                 SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
                     label_id,
                 )))
@@ -153,7 +153,7 @@ impl Sidebar {
         LabelWithCounters::find_first("WHERE remote_id = ?", params![label_id.clone()], tether)
             .await?
             .ok_or_else(|| {
-                error!("System Label don't exist: {}", label_id);
+                error!("System Label don't exist: {:?}", label_id);
                 SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
                     label_id,
                 )))

@@ -198,7 +198,7 @@ impl Contact {
             card.local_id = None;
             card.row_id = None;
             card.save(bond).await.map_err(|e| {
-                error!("Failed to update contact cards: {e}");
+                error!("Failed to update contact cards: {e:?}");
                 e
             })?;
         }
@@ -402,20 +402,20 @@ impl Contact {
             api.get_contact(remote_id.clone())
                 .await
                 .map_err(|err| {
-                    error!("Failed to fetch full contact with id {local_id}: {err}");
+                    error!("Failed to fetch full contact with id {local_id}: {err:?}");
                     err
                 })?
                 .contact,
         );
 
         contact_with_card.save(bond).await.map_err(|err| {
-            error!("Failed to sync full contact to db: {err}");
+            error!("Failed to sync full contact to db: {err:?}");
             err
         })?;
 
         for email in &mut contact_with_card.contact_emails {
             email.save(bond).await.map_err(|e| {
-                error!("Failed to update contact emails: {e}");
+                error!("Failed to update contact emails: {e:?}");
                 e
             })?;
         }
@@ -635,7 +635,7 @@ impl TableObserver for ContactListWatcher {
     fn on_tables_changed(&self, _changed_tables: &BTreeSet<String>) {
         self.sender
             .send(())
-            .inspect_err(|e| error!("Failed to send notification for ContactListWatcher: {e}"))
+            .inspect_err(|e| error!("Failed to send notification for ContactListWatcher: {e:?}"))
             .ok();
     }
 }

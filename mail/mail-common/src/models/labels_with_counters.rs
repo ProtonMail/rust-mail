@@ -274,7 +274,7 @@ impl TableObserver for LabelWithCountersWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for LabelWithCountersWatcher: {e}")
+                tracing::error!("Failed to send notification for LabelWithCountersWatcher: {e:?}")
             })
             .ok();
     }

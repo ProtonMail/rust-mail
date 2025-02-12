@@ -160,7 +160,7 @@ impl ContactGroupResolver for ProtonContactGroupResolver<'_> {
         ContactEmail::count_in_contact_group_by_name(group_name.clone().into_inner(), self.0)
             .await
             .unwrap_or_else(|e| {
-                error!("Failed to load contact group: {e}");
+                error!("Failed to load contact group: {e:?}");
                 None
             })
             .map(|v| v as u64)
@@ -216,7 +216,7 @@ impl RecipientList {
                 //in the current group.
                 list.add_group(name, [entry], 0);
             } else if let Err(e) = list.add_single(entry) {
-                error!("Failed to add single recipient: {e}");
+                error!("Failed to add single recipient: {e:?}");
             }
         }
 

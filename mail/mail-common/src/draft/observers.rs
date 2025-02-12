@@ -53,7 +53,7 @@ impl DraftSendResultWatcher {
 
             let mut all_unseen = DraftSendResult::unseen(&self.stash.connection())
                 .await
-                .inspect_err(|e| error!("Failed to load draft send results: {e}"))?;
+                .inspect_err(|e| error!("Failed to load draft send results: {e:?}"))?;
 
             if all_unseen.is_empty() {
                 // Nothing to do.

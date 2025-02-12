@@ -247,7 +247,7 @@ impl ComposerRecipientList {
             {
                 Ok(()) => {
                     if let Err(e) = self.save_draft(&self.ctx).await {
-                        error!("Failed to queue draft save after recipient add: {e}");
+                        error!("Failed to queue draft save after recipient add: {e:?}");
                         self.list.remove_single(&email);
                         AddSingleRecipientError::SaveFailed
                     } else {
@@ -286,7 +286,7 @@ impl ComposerRecipientList {
             );
 
             if let Err(e) = self.save_draft(&self.ctx).await {
-                error!("Failed to queue draft save after recipient add: {e}");
+                error!("Failed to queue draft save after recipient add: {e:?}");
                 self.list.remove_group_recipients(
                     &group_name,
                     recipients_cloned.into_iter().map(|e| e.email),

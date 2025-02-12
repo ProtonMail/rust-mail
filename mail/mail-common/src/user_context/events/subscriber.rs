@@ -27,7 +27,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     async fn on_events(&self, events: &mut [MailEvent]) -> Result<(), SubscriberError> {
         let ctx = self.0.upgrade().ok_or_else(|| {
             let e = anyhow!("MailUserContext no longer alive");
-            error!("{e}");
+            error!("{e:?}");
             SubscriberError::Other(e)
         })?;
 
@@ -46,7 +46,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     handle_conversation_events(&tx, conversations)
                         .await
                         .map_err(|e| {
-                            error!("{e}");
+                            error!("{e:?}");
                             SubscriberError::Other(e.into())
                         })?;
                 }
@@ -54,7 +54,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 if let Some(messages) = &event.messages {
                     debug!("Handling message events");
                     handle_message_events(&tx, messages).await.map_err(|e| {
-                        error!("{e}");
+                        error!("{e:?}");
                         SubscriberError::Other(e.into())
                     })?;
                 }
@@ -86,7 +86,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         }
         .map_err(|e| {
             let e = anyhow!("Failed to apply changes: {e}");
-            error!("{e}");
+            error!("{e:?}");
             SubscriberError::Other(e)
         })
     }

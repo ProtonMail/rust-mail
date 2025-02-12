@@ -280,7 +280,10 @@ impl TableObserver for MailSettingsWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for MailSettingsWatcher: {}", e)
+                tracing::error!(
+                    "Failed to send notification for MailSettingsWatcher: {:?}",
+                    e
+                )
             })
             .ok();
     }
