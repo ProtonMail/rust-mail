@@ -354,7 +354,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let Some(mut message_body_metadata) = MessageBodyMetadata::for_message(message_id, &tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to load message body metadata for {message_id}: {e:?}")
+                error!("Failed to load message body metadata for {message_id:?}: {e:?}")
             })?
         else {
             return Err(AppError::MessageBodyMetadataMissing(message_id).into());
@@ -365,7 +365,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .await
                 .inspect_err(|e| error!("Failed to resolve remote parent id: {e:?}"))?
             else {
-                error!("Could not find parent message with id {parent_id}");
+                error!("Could not find parent message with id {parent_id:?}");
                 return Err(AppError::MessageMissing(parent_id).into());
             };
 
