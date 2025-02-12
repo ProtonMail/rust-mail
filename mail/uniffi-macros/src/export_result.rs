@@ -79,12 +79,22 @@ impl<'a> Visitor<'a> {
 
     /// Generates a wrapping function for the original function, returning a call to it.
     fn make_func(&mut self, this: Option<&Type>, data: FnData) -> Expr {
+        let ident = data.sig.ident.private();
         let attrs = data.attrs;
         let vis = data.vis;
         let blk = data.blk;
 
-        let sig = data.sig.with_name(format_ident!("__{}", data.sig.ident));
-        let item = quote!(#(#attrs)* #[allow(all)] #vis #sig #blk);
+        let sig = Signature {
+            ident,
+            ..data.sig.clone()
+        };
+
+        let item = quote! {
+            #[allow(all)]
+            #[doc(hidden)]
+            #[automatically_derived]
+            #(#attrs)* #vis #sig #blk
+        };
 
         if let Some(this) = this {
             self.push_item(parse_quote!(impl #this { #item }));

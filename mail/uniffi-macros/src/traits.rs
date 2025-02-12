@@ -149,12 +149,21 @@ impl AsCall for Signature {
     }
 }
 
-/// Extension trait for `syn::Signature` providing utility methods for function analysis and manipulation.
-/// Used for method detection, argument handling, and function name modifications.
+/// Extension trait for `syn::Ident`.
+pub trait IdentExt {
+    fn private(&self) -> Ident;
+}
+
+impl IdentExt for Ident {
+    fn private(&self) -> Ident {
+        format_ident!("__{self}")
+    }
+}
+
+/// Extension trait for `syn::Signature`.
 pub trait SignatureExt {
     fn is_method(&self) -> bool;
     fn call_args(&self) -> Vec<Expr>;
-    fn with_name(&self, ident: Ident) -> Self;
 }
 
 impl SignatureExt for Signature {
@@ -165,22 +174,14 @@ impl SignatureExt for Signature {
     fn call_args(&self) -> Vec<Expr> {
         self.inputs.iter().map(AsExpr::as_expr).collect()
     }
-
-    fn with_name(&self, ident: Ident) -> Self {
-        Self {
-            ident,
-            ..self.to_owned()
-        }
-    }
 }
 
-/// Extension trait for analyzing Result types in function return signatures.
-/// Used to extract Ok and Err type variants from Result return types.
-pub trait ResultTypeExt {
+/// Extension trait for `syn::ReturnType`.
+pub trait ReturnTypeExt {
     fn get_variants(&self) -> Option<(Type, Type)>;
 }
 
-impl ResultTypeExt for ReturnType {
+impl ReturnTypeExt for ReturnType {
     fn get_variants(&self) -> Option<(Type, Type)> {
         if let ReturnType::Type(_, ty) = self {
             if let Type::Path(TypePath { path, .. }) = ty.as_ref() {
@@ -200,13 +201,12 @@ impl ResultTypeExt for ReturnType {
     }
 }
 
-/// Converts a Punctuated sequence into a Vec.
-/// Utility trait for working with syn's Punctuated sequences.
-pub trait ToVec<T> {
+/// Extension trait for `syn::Punctuated`.
+pub trait PunctuatedExt<T> {
     fn to_vec(&self) -> Vec<&T>;
 }
 
-impl<T, P> ToVec<T> for Punctuated<T, P> {
+impl<T, P> PunctuatedExt<T> for Punctuated<T, P> {
     fn to_vec(&self) -> Vec<&T> {
         self.iter().collect()
     }
