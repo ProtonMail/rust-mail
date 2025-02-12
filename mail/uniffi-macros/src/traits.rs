@@ -1,7 +1,10 @@
 use quote::quote;
 use std::rc::Rc;
 use syn::punctuated::Punctuated;
-use syn::*;
+use syn::{
+    parse_quote, Expr, Fields, FnArg, Ident, PatType, PathArguments, PathSegment, Receiver,
+    ReturnType, Signature, Type, TypePath, TypeTuple,
+};
 
 pub trait AsExpr {
     fn as_expr(&self) -> Expr;
@@ -34,6 +37,12 @@ impl AsExpr for PatType {
 
 pub trait AsIdent {
     fn as_ident(&self) -> Option<Ident>;
+}
+
+impl<T: AsIdent> AsIdent for &T {
+    fn as_ident(&self) -> Option<Ident> {
+        (*self).as_ident()
+    }
 }
 
 impl<T: AsIdent> AsIdent for Option<T> {
@@ -163,27 +172,21 @@ pub trait ResultTypeExt {
 
 impl ResultTypeExt for ReturnType {
     fn get_variants(&self) -> Option<(Type, Type)> {
-        let ReturnType::Type(_, ty) = self else {
-            return None;
-        };
+        if let ReturnType::Type(_, ty) = self {
+            if let Type::Path(TypePath { path, .. }) = ty.as_ref() {
+                if let Some(PathSegment { arguments, .. }) = path.segments.last() {
+                    let PathArguments::AngleBracketed(args) = arguments else {
+                        return None;
+                    };
 
-        let Type::Path(TypePath { path, .. }) = ty.as_ref() else {
-            return None;
-        };
-
-        let Some(PathSegment { arguments, .. }) = path.segments.last() else {
-            return None;
-        };
-
-        let PathArguments::AngleBracketed(args) = arguments else {
-            return None;
-        };
-
-        if let [t, e] = args.args.to_vec().as_slice() {
-            Some((parse_quote!(#t), parse_quote!(#e)))
-        } else {
-            None
+                    if let [t, e] = args.args.to_vec().as_slice() {
+                        return Some((parse_quote!(#t), parse_quote!(#e)));
+                    }
+                }
+            }
         }
+
+        None
     }
 }
 

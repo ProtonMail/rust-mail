@@ -1,10 +1,13 @@
-use crate::traits::*;
+use crate::traits::{AsCall, AsFields, AsIdent, AsMatch, ResultTypeExt, SignatureExt};
 use cruet::Inflector;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use std::rc::Rc;
 use syn::visit_mut::VisitMut;
-use syn::*;
+use syn::{
+    parse_macro_input, parse_quote, visit_mut, Block, Expr, Ident, ImplItemFn, Item, ItemFn,
+    ItemImpl, ReturnType, Signature, Type,
+};
 
 /// Helper traits for working with `syn` types.
 mod traits;
@@ -77,7 +80,7 @@ struct Visitor<'a> {
     stack: Vec<Rc<Type>>,
 }
 
-impl<'a> VisitMut for Visitor<'a> {
+impl VisitMut for Visitor<'_> {
     fn visit_item_fn_mut(&mut self, i: &mut ItemFn) {
         visit_mut::visit_item_fn_mut(self, i);
 
@@ -98,7 +101,7 @@ impl<'a> VisitMut for Visitor<'a> {
     fn visit_impl_item_fn_mut(&mut self, i: &mut ImplItemFn) {
         visit_mut::visit_impl_item_fn_mut(self, i);
 
-        if let Some((out, blk)) = self.on_visit_fn(self.self_type(), &i.sig, &i.block) {
+        if let Some((out, blk)) = self.on_visit_fn(self.self_type().as_ref(), &i.sig, &i.block) {
             i.sig.output = out;
             i.block = blk;
         }
@@ -115,14 +118,14 @@ impl<'a> Visitor<'a> {
 
     fn on_visit_fn(
         &mut self,
-        this: Option<Rc<Type>>,
+        this: Option<&Rc<Type>>,
         sig: &Signature,
         blk: &Block,
     ) -> Option<(ReturnType, Block)> {
         let (t, e) = sig.output.get_variants()?;
 
-        let out = self.make_enum(&this, &sig.ident, t, e);
-        let exp = self.make_func(&this, sig, blk);
+        let out = self.make_enum(this, &sig.ident, &t, &e);
+        let exp = self.make_func(this, sig, blk);
 
         let blk = parse_quote!({ #out::from(#exp) });
         let out = parse_quote!(-> #out);
@@ -130,7 +133,7 @@ impl<'a> Visitor<'a> {
         Some((out, blk))
     }
 
-    fn make_enum(&mut self, this: &Option<Rc<Type>>, func: &Ident, t: Type, e: Type) -> Ident {
+    fn make_enum(&mut self, this: Option<&Rc<Type>>, func: &Ident, t: &Type, e: &Type) -> Ident {
         let name = if let Some(this) = this.as_ident() {
             format_ident!("{}", format!("{this}_{func}_result").to_pascal_case())
         } else {
@@ -168,13 +171,13 @@ impl<'a> Visitor<'a> {
         name
     }
 
-    fn make_func(&mut self, this: &Option<Rc<Type>>, sig: &Signature, blk: &Block) -> Expr {
+    fn make_func(&mut self, this: Option<&Rc<Type>>, sig: &Signature, blk: &Block) -> Expr {
         let sig = sig.with_name(format_ident!("__{}", sig.ident));
 
         if let Some(this) = this {
-            self.push_item(parse_quote!(impl #this { #sig #blk }))
+            self.push_item(parse_quote!(impl #this { #sig #blk }));
         } else {
-            self.push_item(parse_quote!(#sig #blk))
+            self.push_item(parse_quote!(#sig #blk));
         }
 
         sig.as_call()
