@@ -1,0 +1,329 @@
+use anyhow::anyhow;
+use proton_api_core::{
+    services::proton::common::LabelId,
+    session::{CoreSession, Session},
+};
+use proton_api_mail::services::proton::{
+    common::ConversationId,
+    prelude::{GetConversationsOptions, GetConversationsResponse},
+    ProtonMail,
+};
+use proton_core_common::datatypes::LocalLabelId;
+use stash::stash::{Bond, Tether};
+use tracing::debug;
+
+use crate::{
+    datatypes::{ContextualConversation, ReadFilter},
+    models::{Conversation, ConversationScrollData},
+    MailContextError, MailUserContext,
+};
+
+use super::{MailPaginatorJoinHandle, RemoteSource};
+
+/// Mail scroller implementation for [`Conversation`] on in a [`Label`].
+///
+/// The scroller keeps track of the last element returned by the server for the
+/// selected label and read filter. This element is then used to fetch
+/// new data from the server.
+#[derive(Debug)]
+pub(super) struct RemoteConversationScrollerSource;
+
+impl RemoteSource for ConversationScrollData {
+    async fn sync_first_page(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let session = ctx.session().clone();
+        let mut tether = ctx.user_stash().connection();
+        let handle = ctx.spawn(async move {
+            RemoteConversationScrollerSource::sync_first_page(
+                &session,
+                &mut tether,
+                local_label_id,
+                remote_label_id,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        });
+
+        Ok(Some(handle))
+    }
+
+    async fn spawn_background_sync(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        scroller: &Self,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        RemoteConversationScrollerSource::spawn_background_sync(
+            ctx,
+            scroller,
+            local_label_id,
+            remote_label_id,
+            unread,
+            page_size,
+        )
+        .await
+    }
+}
+
+impl RemoteConversationScrollerSource {
+    pub(super) async fn spawn_background_sync(
+        ctx: &MailUserContext,
+        scroller: &ConversationScrollData,
+        label_local_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let remote_id = scroller.remote_conversation_id.clone();
+        let conversation_time = scroller.conversation_time;
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            let tether = stash.connection();
+
+            Self::sync_next_page(
+                &session,
+                tether,
+                label_local_id,
+                remote_label_id,
+                remote_id,
+                conversation_time,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    pub(super) async fn sync_first_page(
+        session: &Session,
+        tether: &mut Tether,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<ContextualConversation>, MailContextError> {
+        debug!("Syncing first page");
+        let response = session
+            .api()
+            .get_conversations(GetConversationsOptions {
+                desc: Some(true),
+                label_id: Some(remote_label_id),
+                page_size: page_size as u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        debug!("Fetched {} elements", response.conversations.len());
+
+        if response.conversations.is_empty() {
+            return Ok(vec![]);
+        }
+        let context_time = Self::context_time(&response, unread);
+
+        let mut conversations: Vec<Conversation> = response
+            .conversations
+            .into_iter()
+            .map(|c| c.into())
+            .collect();
+
+        Self::save_conversations(
+            local_label_id,
+            &mut conversations,
+            unread,
+            context_time,
+            tether,
+        )
+        .await?;
+
+        Ok(Self::contextual_conversations(
+            local_label_id,
+            conversations,
+        ))
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn sync_next_page(
+        session: &Session,
+        mut tether: Tether,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        last_element_id: ConversationId,
+        last_element_time: u64,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<ContextualConversation>, MailContextError> {
+        debug!("Syncing next page");
+        let mut response = session
+            .api()
+            .get_conversations(GetConversationsOptions {
+                desc: Some(true),
+                // time == 0 breaks the api query.
+                end: Some(last_element_time),
+                end_id: Some(last_element_id.clone()),
+                label_id: Some(remote_label_id),
+                page_size: page_size as u64 + 1_u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        if !response.conversations.is_empty() {
+            // Unless we are filtering, end id is always the first element in the returned
+            // data, even if there is are no more elements.
+            if response.conversations[0].id == last_element_id {
+                response.conversations.remove(0);
+            } else if response.conversations.len() > page_size {
+                // sometimes we get more elements back than we need.
+                response.conversations.pop();
+            }
+        }
+
+        debug!("Fetched {} elements", response.conversations.len());
+
+        if response.conversations.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let context_time = Self::context_time(&response, unread);
+
+        let mut conversations: Vec<Conversation> = response
+            .conversations
+            .into_iter()
+            .map(|c| c.into())
+            .collect();
+
+        Self::save_conversations(
+            local_label_id,
+            &mut conversations,
+            unread,
+            context_time,
+            &mut tether,
+        )
+        .await?;
+
+        Ok(Self::contextual_conversations(
+            local_label_id,
+            conversations,
+        ))
+    }
+
+    fn context_time(response: &GetConversationsResponse, unread: ReadFilter) -> Option<u64> {
+        if unread != ReadFilter::All {
+            // When filtering conversations, we need to use the contextual time
+            // perform the next page query or the data will not be displayed
+            // correctly.
+            // This contextual time also does not match the ConversationLabel.context_time
+            // we use to display the query results. This means that the data
+            // will change after it is written to the database.
+            response.conversations.last()?.context_time
+        } else {
+            None
+        }
+    }
+
+    fn contextual_conversations(
+        local_label_id: LocalLabelId,
+        conversations: Vec<Conversation>,
+    ) -> Vec<ContextualConversation> {
+        conversations
+            .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, local_label_id))
+            .collect()
+    }
+
+    async fn save_conversations(
+        local_label_id: LocalLabelId,
+        conversations: &mut [Conversation],
+        unread: ReadFilter,
+        context_time: Option<u64>,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        let tx = tether.quiet_transaction().await?;
+
+        // Save all conversations.
+        for conversation in conversations.iter_mut() {
+            conversation.save(&tx).await?
+        }
+
+        let Some((last, label)) = conversations
+            .iter()
+            .rev()
+            .filter_map(|conv| {
+                let conv_label = conv.label(local_label_id)?;
+                Some((conv, conv_label))
+            })
+            .next()
+        else {
+            return Err(MailContextError::Other(anyhow!(
+                "There is no conversation with labels"
+            )));
+        };
+
+        let context_time = context_time.unwrap_or(label.context_time);
+        // Unwrap safety: RemoteId is present as this method is called on conversation
+        // downloaded from API
+        let remote_id = last.remote_id.clone().unwrap();
+        let display_order = last.display_order;
+
+        Self::update_scroller_data(
+            local_label_id,
+            remote_id.clone(),
+            unread,
+            context_time,
+            display_order,
+            &tx,
+        )
+        .await?;
+
+        debug!(
+            "New last element id={:?}, time={}, order={}",
+            remote_id, context_time, display_order
+        );
+
+        tx.quiet_commit().await?;
+
+        Ok(())
+    }
+
+    async fn update_scroller_data(
+        local_label_id: LocalLabelId,
+        remote_conv_id: ConversationId,
+        unread: ReadFilter,
+        context_time: u64,
+        display_order: u64,
+        bond: &Bond<'_>,
+    ) -> Result<ConversationScrollData, MailContextError> {
+        let mut conv_paginator = ConversationScrollData::builder()
+            .local_label_id(local_label_id)
+            .unread(unread)
+            .remote_conversation_id(remote_conv_id)
+            .conversation_time(context_time)
+            .display_order(display_order)
+            .build();
+
+        conv_paginator.save(bond).await?;
+
+        Ok(conv_paginator)
+    }
+}
