@@ -81,3 +81,70 @@ fn disable_remote_elements() {
     let expected = kuchikiki::parse_html().one(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
     assert_eq!(expected.to_string(), output.to_string());
 }
+
+#[test]
+fn proxy_and_undo_proxy_images() {
+    let mut html = Transformer::new(TEST_DOCUMENT);
+    let original = html.to_string();
+
+    html.proxy_images("MYTOKEN123");
+    html.undo_proxy_images();
+    let current = html.to_string();
+
+    assert_eq!(original, current);
+}
+
+#[test]
+fn proxy_images() {
+    let mut html = Transformer::new(TEST_DOCUMENT);
+    html.proxy_images("MYTOKEN123");
+    insta::assert_snapshot!(html.to_string());
+}
+
+const SRCSET_HTML: &str = r#"
+<div class="box">
+  <img
+    src="/en-US/docs/Web/HTML/Element/img/clock-demo-200px.png"
+    alt="Clock"
+    srcset="/en-US/docs/Web/HTML/Element/img/clock-demo-400px.png 2x, header640.png 640w, header960.png 960w, header1024.png 1024w" />
+  <img
+    src="/en-US/docs/Web/HTML/Element/img/clock-demo-200px.png"
+    alt="Clock"
+    srcset="/en-US/docs/Web/HTML/Element/img/clock-demo-900px.png, header640.png 640w" />
+  <img
+    src="/en-US/docs/Web/HTML/Element/img/clock-demo-200px.png"
+    alt="Clock"
+    srcset="headert40.png 640w" />
+</div>
+    "#;
+
+#[test]
+fn proxy_src_set() {
+    let mut html = Transformer::new(SRCSET_HTML);
+    html.proxy_images("MYTOKEN123");
+    insta::assert_snapshot!(html.to_string());
+}
+
+#[test]
+fn proxy_src_set_and_undo() {
+    let mut html = Transformer::new(SRCSET_HTML);
+    let original = html.to_string();
+    html.proxy_images("MYTOKEN123");
+    html.undo_proxy_images();
+    let current = html.to_string();
+    assert_eq!(original, current);
+}
+
+#[test]
+fn proxy_img_tags() {
+    let html = r#"
+        <body>
+        <img id="1" src="bad url">
+        <img id="2" src="https://ads.com">
+        <img id="2" src="https://ads.com?utm_source=tracker">
+        </body>
+        "#;
+    let mut html = Transformer::new(html);
+    html.proxy_images("MYTOKEN123");
+    insta::assert_snapshot!(html.to_string());
+}

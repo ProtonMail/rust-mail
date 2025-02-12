@@ -75,16 +75,3 @@ fn insert_links_text() {
     html.insert_links(InsertLinkToken(()));
     insta::assert_snapshot!(html.to_string());
 }
-#[test]
-fn proxy_images() {
-    let html = r#"
-        <body>
-        <img id="1" src="bad url">
-        <img id="2" src="https://ads.com">
-        <img id="2" src="https://ads.com?utm_source=tracker">
-        </body>
-        "#;
-    let mut html = Transformer::new(html);
-    html.proxy_images("MYTOKEN123");
-    insta::assert_snapshot!(html.to_string());
-}
