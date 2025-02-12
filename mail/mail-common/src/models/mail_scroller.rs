@@ -1,6 +1,7 @@
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use crate::AppError;
+use anyhow::anyhow;
 use indoc::formatdoc;
 use proton_api_mail::services::proton::prelude::{ConversationId, MessageId};
 use proton_core_common::datatypes::LocalLabelId;
@@ -633,7 +634,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             .await
             .and_then(|op| {
                 op.ok_or_else(|| {
-                    StashError::Custom(format!(
+                    StashError::Critical(anyhow!(
                         "Non-generic ScrollData not found for label_id: {}, unread: {:?}. This is serious issue.",
                         end.local_label_id, end.unread
                     ))

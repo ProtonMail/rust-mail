@@ -202,9 +202,9 @@ impl SenderImage {
                 self.row_id = value.row_id;
             }
             _ => {
-                return Err(StashError::Custom(
-                    "Custom Unique constraint for SenderImage failed".to_owned(),
-                ))
+                return Err(StashError::Critical(anyhow!(
+                    "Custom Unique constraint for SenderImage failed"
+                )))
             }
         }
 
