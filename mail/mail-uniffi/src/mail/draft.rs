@@ -242,9 +242,9 @@ impl Draft {
     ///
     /// Returns `None` if no message was created.
     pub async fn message_id(self: Arc<Self>) -> OptIdProtonResult {
-        let metadata_id = { self.instance.read().await.metadata_id };
-        let tether = self.ctx.user_stash().connection();
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
+            let metadata_id = { self.instance.read().await.metadata_id };
+            let tether = self.ctx.user_stash().connection();
             DraftMetadata::message_id(metadata_id, &tether)
                 .await
                 .map(|v| v.map(Into::into))
