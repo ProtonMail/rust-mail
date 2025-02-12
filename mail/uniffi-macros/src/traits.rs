@@ -1,10 +1,6 @@
-use quote::quote;
+use crate::prelude::*;
 use std::rc::Rc;
 use syn::punctuated::Punctuated;
-use syn::{
-    parse_quote, Expr, Fields, FnArg, Ident, PatType, PathArguments, PathSegment, Receiver,
-    ReturnType, Signature, Type, TypePath, TypeTuple,
-};
 
 pub trait AsExpr {
     fn as_expr(&self) -> Expr;

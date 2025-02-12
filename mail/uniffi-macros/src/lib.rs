@@ -1,13 +1,10 @@
-use crate::traits::{AsCall, AsFields, AsIdent, AsMatch, ResultTypeExt, SignatureExt};
+use crate::prelude::*;
 use cruet::Inflector;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
 use std::rc::Rc;
-use syn::visit_mut::VisitMut;
-use syn::{
-    parse_macro_input, parse_quote, visit_mut, Block, Expr, Ident, ImplItemFn, Item, ItemFn,
-    ItemImpl, ReturnType, Signature, Type,
-};
+
+/// Prelude for the crate.
+mod prelude;
 
 /// Helper traits for working with `syn` types.
 mod traits;
@@ -70,7 +67,7 @@ pub fn export_result(_: TokenStream, input: TokenStream) -> TokenStream {
     let mut input = parse_macro_input!(input as Item);
     let mut items = Vec::new();
 
-    Visitor::new(&mut items).visit_item_mut(&mut input);
+    visit_mut::visit_item_mut(&mut Visitor::new(&mut items), &mut input);
 
     quote!(#[::uniffi::export] #input #(#items)*).into()
 }
@@ -80,7 +77,7 @@ struct Visitor<'a> {
     stack: Vec<Rc<Type>>,
 }
 
-impl VisitMut for Visitor<'_> {
+impl visit_mut::VisitMut for Visitor<'_> {
     fn visit_item_fn_mut(&mut self, i: &mut ItemFn) {
         visit_mut::visit_item_fn_mut(self, i);
 
