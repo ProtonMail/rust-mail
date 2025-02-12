@@ -1,10 +1,37 @@
 [workspace]
 resolver = "2"
-members = ["core/*", "crypto/*", "mail/*", "xtask"]
-package.edition = "2021"
+
+members = [
+    "core/action-queue",
+    "core/core-api",
+    "core/core-common",
+    "core/core-test-utils",
+    "core/event-loop",
+    "core/proton-canonical-email",
+    "core/sqlite3",
+    "core/stash",
+    "core/stash-macros",
+    "core/vcard",
+    "crypto/crypto-account",
+    "crypto/crypto-inbox",
+    "crypto/crypto-inbox-mime",
+    "mail/mail-api",
+    "mail/mail-common",
+    "mail/mail-html-transformer",
+    "mail/mail-ids",
+    "mail/mail-test-utils",
+    "mail/mail-tui",
+    "mail/mail-uniffi",
+    "mail/mail-wasm",
+    "mail/uniffi-bindgen",
+    "mail/uniffi-macros",
+    "xtask",
+]
+
+[workspace.package]
+edition = "2021"
 
 [workspace.dependencies]
-
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
 anyhow = "1.0"
 async-trait = "0.1"
