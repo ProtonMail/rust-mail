@@ -2,6 +2,8 @@ use crate::prelude::*;
 use std::rc::Rc;
 use syn::punctuated::Punctuated;
 
+/// Converts a type into a `syn::Expr`.
+/// Used for converting function arguments into expressions for generating function calls.
 pub trait AsExpr {
     fn as_expr(&self) -> Expr;
 }
@@ -31,6 +33,8 @@ impl AsExpr for PatType {
     }
 }
 
+/// Attempts to convert a type into a `syn::Ident`.
+/// Used for type name resolution and identifier extraction from various syn types.
 pub trait AsIdent {
     fn as_ident(&self) -> Option<Ident>;
 }
@@ -69,6 +73,8 @@ impl AsIdent for TypePath {
     }
 }
 
+/// Converts a type into `syn::Fields`.
+/// Used for generating enum variant fields from types, particularly in Result type handling.
 pub trait AsFields {
     fn as_fields(&self) -> Fields;
 }
@@ -93,6 +99,8 @@ impl AsFields for TypeTuple {
     }
 }
 
+/// Generates match expression right-hand-side for a type.
+/// Used in Result enum conversion implementations for pattern matching.
 pub trait AsMatch {
     fn as_match_rhs(&self, v: &Ident) -> Option<Expr>;
 }
@@ -117,6 +125,8 @@ impl AsMatch for TypeTuple {
     }
 }
 
+/// Converts a type into a function call expression.
+/// Used for generating function call syntax in code generation.
 pub trait AsCall {
     fn as_call(&self) -> Expr;
 }
@@ -139,6 +149,8 @@ impl AsCall for Signature {
     }
 }
 
+/// Extension trait for `syn::Signature` providing utility methods for function analysis and manipulation.
+/// Used for method detection, argument handling, and function name modifications.
 pub trait SignatureExt {
     fn is_method(&self) -> bool;
     fn call_args(&self) -> Vec<Expr>;
@@ -162,6 +174,8 @@ impl SignatureExt for Signature {
     }
 }
 
+/// Extension trait for analyzing Result types in function return signatures.
+/// Used to extract Ok and Err type variants from Result return types.
 pub trait ResultTypeExt {
     fn get_variants(&self) -> Option<(Type, Type)>;
 }
@@ -186,6 +200,8 @@ impl ResultTypeExt for ReturnType {
     }
 }
 
+/// Converts a Punctuated sequence into a Vec.
+/// Utility trait for working with syn's Punctuated sequences.
 pub trait ToVec<T> {
     fn to_vec(&self) -> Vec<&T>;
 }
