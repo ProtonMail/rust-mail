@@ -119,14 +119,14 @@ impl MailUserContext {
             Attachment::fetch_content(remote_attachment_id.clone(), self.session().api())
                 .await
                 .map_err(|e| {
-                    error!("Failed to fetch attachment({attachment_id}) from API: {e})");
+                    error!("Failed to fetch attachment({attachment_id}) from API: {e:?})");
                     CacheError::Callback(anyhow!(e))
                 })?;
         let (decrypted_content, _verification_result) = self
             .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
             .await
             .map_err(|e| {
-                error!("Failed to decrypt attachment({attachment_id}): {e})");
+                error!("Failed to decrypt attachment({attachment_id}): {e:?})");
                 CacheError::Callback(anyhow!(e))
             })?;
         Ok(decrypted_content)
@@ -138,7 +138,7 @@ impl MailUserContext {
         let mut conn = user_context.stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)
             .await
-            .inspect_err(|e| error!("Failed to load attachment({attachment_id}) from DB: {e})"))?
+            .inspect_err(|e| error!("Failed to load attachment({attachment_id}) from DB: {e:?})"))?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
@@ -146,7 +146,7 @@ impl MailUserContext {
                 .sync_complete_metadata(user_context.session().api(), &mut conn)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to sync attachment({attachment_id}) metadata: {e})")
+                    error!("Failed to sync attachment({attachment_id}) metadata: {e:?})")
                 })
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.

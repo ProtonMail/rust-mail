@@ -93,11 +93,11 @@ impl MailUserContext {
                 };
                 let mut tether = ctx.user_stash().connection();
                 if let Err(e) = Conversation::delete_expired(&mut tether).await {
-                    error!("Error in background task deleting expired conversations: {e}");
+                    error!("Error in background task deleting expired conversations: {e:?}");
                 }
 
                 if let Err(e) = Message::delete_expired(&mut tether).await {
-                    error!("Error in background task deleting expired messages: {e}");
+                    error!("Error in background task deleting expired messages: {e:?}");
                 }
                 drop(tether);
                 drop(ctx);
@@ -267,7 +267,7 @@ impl MailUserContext {
 
         // If the email is from an owned address by the user, use the corresponding keys.
         if let Some(address) = Address::by_email(email, tx).await.inspect_err(|err| {
-            error!("send preferences: failed to search address by email: {err}")
+            error!("send preferences: failed to search address by email: {err:?}")
         })? {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                 MailContextError::App(AppError::AddressHasNoRemoteId(
@@ -278,10 +278,10 @@ impl MailUserContext {
             let address_keys = self
                 .unlocked_address_keys(pgp_provider, tx, address_rid)
                 .await
-                .inspect_err(|err| error!("send preferences for self: {err}"))?;
+                .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
             let send_preferences =
                 SendPreferences::new_for_self(&address_keys, encryption_time, settings)
-                    .inspect_err(|err| error!("send preferences for self: {err}"))?;
+                    .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
             return Ok(send_preferences);
         }
 
@@ -321,7 +321,7 @@ impl MailUserContext {
             &settings,
             composer_preference,
         )
-        .inspect_err(|err| error!("send preferences: {err}"))?;
+        .inspect_err(|err| error!("send preferences: {err:?}"))?;
 
         Ok(send_preferences)
     }

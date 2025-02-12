@@ -448,7 +448,7 @@ fn init_log(log_path: impl AsRef<Path>) -> Result<WorkerGuard, Box<dyn Error>> {
 fn log_backtrace_on_panic() {
     let previous_hook = take_hook();
     set_hook(Box::new(move |info| {
-        error!("Backtrace: {info}\n{}", Backtrace::force_capture());
+        error!("Backtrace: {info}\n{:?}", Backtrace::force_capture());
         previous_hook(info);
     }));
 }

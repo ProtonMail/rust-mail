@@ -147,7 +147,7 @@ where
         let conv_ids = T::local_ids_counterpart(self.target_ids.clone(), tether)
             .await
             .map_err(|e| {
-                error!("Failed to resolve ids: {e}");
+                error!("Failed to resolve ids: {e:?}");
                 e
             })?;
 
@@ -276,7 +276,7 @@ where
             Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
         self.remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
             .await
-            .inspect_err(|e| error!("Failed to resolve ids: {e}"))?;
+            .inspect_err(|e| error!("Failed to resolve ids: {e:?}"))?;
         Ok(())
     }
 }

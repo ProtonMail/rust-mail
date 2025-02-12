@@ -38,7 +38,7 @@ pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResul
     uniffi_async(async move {
         let mbox = proton_mail_common::Mailbox::new(ctx, label_id.into()).await?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
-            error!("Could not sync mailbox: {e}");
+            error!("Could not sync mailbox: {e:?}");
         }
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
     })

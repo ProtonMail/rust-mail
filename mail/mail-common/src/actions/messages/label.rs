@@ -101,7 +101,7 @@ impl ActionHandler for Handler {
 
             Message::remove_label(action.0.label_id, local_ids, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to rollback label on messages: {e}"))?;
+                .inspect_err(|e| error!("Failed to rollback label on messages: {e:?}"))?;
             tx.commit().await?;
         }
         Ok(())

@@ -92,7 +92,7 @@ impl ActionHandler for Handler {
             .0
             .unsynced_item_ids(&conn)
             .await
-            .inspect_err(|e| error!("Failed to load local only ids: {e}"))?;
+            .inspect_err(|e| error!("Failed to load local only ids: {e:?}"))?;
 
         let failed_ids = if action.0.remote_target_ids.is_empty() {
             vec![]
@@ -124,7 +124,7 @@ impl ActionHandler for Handler {
 
                 Message::mark_undeleted(local_ids, &tx)
                     .await
-                    .inspect_err(|e| error!("Failed to rollback delete on messages: {e}"))?;
+                    .inspect_err(|e| error!("Failed to rollback delete on messages: {e:?}"))?;
             }
 
             for id in local_ids_without_remote_id {
@@ -143,7 +143,7 @@ impl ActionHandler for Handler {
                     Ok(conv_id) => Some(conv_id),
                     Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => None,
                     Err(e) => return {
-                        error!("Failed to get conversation id: {e}");
+                        error!("Failed to get conversation id: {e:?}");
                         Err(e.into())
                     },
                 } {
@@ -154,14 +154,14 @@ impl ActionHandler for Handler {
                         Conversation::delete_by_id(conv_id, &tx)
                             .await
                             .inspect_err(|e| {
-                                error!("Failed to delete orphaned conversation: {e}")
+                                error!("Failed to delete orphaned conversation: {e:?}")
                             })?;
                     }
                 }
 
                 Message::delete_by_id(id, &tx)
                     .await
-                    .inspect_err(|e| error!("Failed to delete message: {e}"))?;
+                    .inspect_err(|e| error!("Failed to delete message: {e:?}"))?;
             }
 
             tx.commit().await?;

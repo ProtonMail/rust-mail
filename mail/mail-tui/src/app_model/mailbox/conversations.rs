@@ -67,7 +67,7 @@ impl ConversationsState {
                 Ok(conversation) => ConversationMessage::Refreshed(conversation).into(),
                 Err(e) => {
                     let e = anyhow!("Conversation Reload Query error: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     e.into()
                 }
             },
@@ -302,7 +302,7 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -318,7 +318,7 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Comma
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -344,7 +344,7 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Me
                 Ok(_) => Command::None,
                 Err(e) => {
                     let e = anyhow!("Failed to delete conversation: {e}");
-                    tracing::error!("{e}");
+                    tracing::error!("{e:?}");
                     Command::message(e.into())
                 }
             }
@@ -371,7 +371,7 @@ fn move_conversation(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -385,7 +385,7 @@ fn star_conversation(mailbox: &Mailbox, conversation_id: LocalConversationId) ->
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -402,7 +402,7 @@ fn unstar_conversation(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }
@@ -434,7 +434,7 @@ fn label_conversation(
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
+                tracing::error!("{e:?}");
                 Command::message(e.into())
             }
         }

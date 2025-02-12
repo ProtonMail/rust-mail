@@ -101,7 +101,7 @@ impl AppStateHandler for Model {
                     .on_accept(Command::task(async move {
                         if let Err(e) = ctx.delete_account(remote_id).await {
                             let e = anyhow!("Failed to delete session: {e}");
-                            error!("{e}");
+                            error!("{e:?}");
                             return Command::message(Messages::DisplayError(None, e));
                         }
 
@@ -163,7 +163,7 @@ impl AppStateHandler for Model {
                     match tri {
                         Ok(c) => c,
                         Err(e) => {
-                            error!("{e}");
+                            error!("{e:?}");
                             Command::message(Messages::DisplayError(None, e))
                         }
                     }

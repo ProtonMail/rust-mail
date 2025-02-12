@@ -332,7 +332,7 @@ impl Draft {
                     tether,
                 )
                 .await
-                .inspect_err(|e| error!("Failed to load decrypted data from cache: {e}"))?
+                .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
                 else {
                     return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };
@@ -343,7 +343,7 @@ impl Draft {
         let metadata_id = if let Some(metadata) =
             DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
                 .await
-                .inspect_err(|e| error!("Failed to load draft metadata: {e}"))?
+                .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
         {
             debug!("Found existing metadata with id {}", metadata.id.unwrap());
             metadata.id.unwrap()
@@ -361,14 +361,14 @@ impl Draft {
             metadata
                 .save(&tx)
                 .await
-                .inspect_err(|e| error!("Failed to create new metadata: {e}"))?;
+                .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
             tx.commit().await?;
             metadata.id.unwrap()
         };
 
         let send_result = DraftSendResult::find_by_id(message.local_id.unwrap(), tether)
             .await
-            .inspect_err(|e| error!("Failed to load send result: {e}"))?;
+            .inspect_err(|e| error!("Failed to load send result: {e:?}"))?;
 
         let contact_group_resolver = ProtonContactGroupResolver::new(tether);
         let (to_list, cc_list, bcc_list) = join3(
@@ -407,7 +407,7 @@ impl Draft {
         let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to load addresses: {e}");
+                error!("Failed to load addresses: {e:?}");
             })?;
 
         if addresses.is_empty() {
@@ -420,7 +420,7 @@ impl Draft {
         let tx = tether.transaction().await?;
         let metadata = DraftMetadata::empty(&tx)
             .await
-            .inspect_err(|e| error!("Failed to create new empty draft metadata: {e}"))?;
+            .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
         tx.commit().await?;
 
         Ok(Self::new_empty_draft(
@@ -503,7 +503,7 @@ impl Draft {
                 context, message_id, &tether,
             )
             .await
-            .inspect_err(|e| error!("Failed to get source decrypted message: {e}"))?
+            .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
         else {
             return Err(OpenError::MessageBodyMissing(message_id).into());
         };
@@ -517,7 +517,7 @@ impl Draft {
             &tx,
         )
         .await
-        .inspect_err(|e| error!("Failed to create new reply draft metadata: {e}"))?;
+        .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
         tx.commit().await?;
 
         let contact_group_resolver = ProtonContactGroupResolver::new(&tether);

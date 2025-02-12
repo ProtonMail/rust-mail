@@ -552,10 +552,8 @@ impl Queue {
         metadata: Metadata,
     ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
         debug!(
-            "Replacing {} or Queueing action: {} {:?}",
-            existing_id,
+            "Replacing {existing_id:?} or Queueing action: {} {metadata:?}",
             T::TYPE,
-            metadata
         );
         if metadata.dependencies.contains(&existing_id) {
             return Err(Error::SelfReferenceDependency.into());
@@ -636,7 +634,7 @@ impl Queue {
         mut action: T,
         metadata: Metadata,
     ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
-        debug!("Applying action: {} {:?}", T::TYPE, metadata,);
+        debug!("Applying action: {} {metadata:?}", T::TYPE);
         if !self.shared.has_action::<T>() {
             error!("Unknown action applied: {}", T::TYPE);
             return Err(Error::UnknownAction(T::TYPE.to_string()).into());
@@ -891,12 +889,12 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 .revert_local(&context, &mut self.action, tx)
                 .await
             {
-                error!("Failed to revert local changes: {e}");
+                error!("Failed to revert local changes: {e:?}");
             }
             StoredAction::delete(tx, self.action_id)
                 .await
                 .map_err(|e| {
-                    error!("Failed to delete action: {e}");
+                    error!("Failed to delete action: {e:?}");
                     e
                 })
                 .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
@@ -1037,7 +1035,7 @@ impl BackgroundWorker {
     /// return the id of the executed action.
     async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some(action) = self.next_action(tether).await.map_err(|e| {
-            error!("Failed to retrieve action: {e}");
+            error!("Failed to retrieve action: {e:?}");
             e
         })?
         else {
@@ -1067,7 +1065,7 @@ impl BackgroundWorker {
             let tx = tether.transaction().await?;
             StoredAction::mark_as_executing(action_id, &tx)
                 .await
-                .inspect_err(|e| error!("Failed to mark as executing: {e}"))?;
+                .inspect_err(|e| error!("Failed to mark as executing: {e:?}"))?;
             tx.commit().await?;
 
             let exec_output = decoded
@@ -1166,12 +1164,12 @@ async fn execute_action_local<T: Action>(
         .apply_local(context, action, &tx)
         .await
         .map_err(|e| {
-            error!("Failed to apply local changes: {e}");
+            error!("Failed to apply local changes: {e:?}");
             ActionError::Action(e)
         })?;
 
     let mut stored_action = StoredAction::new::<T>(action, metadata).map_err(|e| {
-        error!("Failed to convert into stored action: {e}");
+        error!("Failed to convert into stored action: {e:?}");
         Error::from(e)
     })?;
 
@@ -1180,12 +1178,12 @@ async fn execute_action_local<T: Action>(
             .create_or_update(exising_id, &tx)
             .await
             .map_err(|e| {
-                error!("Failed to create or update action: {e}");
+                error!("Failed to create or update action: {e:?}");
                 e
             })?;
     } else {
         stored_action.save(&tx).await.map_err(|e| {
-            error!("Failed to store action: {e}");
+            error!("Failed to store action: {e:?}");
             e
         })?;
     }
@@ -1217,7 +1215,7 @@ async fn execute_action_remote<T: Action>(
             Ok(ActionRemoteOutput::Executed(result))
         }
         Err(e) => {
-            error!("Failed to apply on server: {e}");
+            error!("Failed to apply on server: {e:?}");
             if e.is_network_failure() {
                 debug!("Action remains in queue due to lack of network");
                 // if this failed due to network error we should leave it in the queue.
@@ -1229,7 +1227,7 @@ async fn execute_action_remote<T: Action>(
                     cancelled_actions = ids;
                 }
                 Err(e) => {
-                    error!("Failed to cancel action and depeendees: {e}");
+                    error!("Failed to cancel action and depeendees: {e:?}");
                 }
             }
 
@@ -1262,7 +1260,7 @@ async fn cancel_action_with_dependees(
         let dependees = StoredAction::dependees(bond, action_id)
             .await
             .map_err(|e| {
-                error!("Failed to load action dependees: {e}");
+                error!("Failed to load action dependees: {e:?}");
                 e
             })?;
         debug!("Action {action_id} has {:?} as dependees", dependees);
@@ -1309,7 +1307,7 @@ fn decode_action(
 ) -> QueuedResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
     factory.read().decode(stored_action).map_err(|e| {
-        error!("Failed to decode action: {e}");
+        error!("Failed to decode action: {e:?}");
         QueuedError::Factory(action_id, e)
     })
 }

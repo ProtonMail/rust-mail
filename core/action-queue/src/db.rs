@@ -160,7 +160,7 @@ impl StoredAction {
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
-            .await.inspect_err(|e| error!("failed to load action deps: {e}"))?;
+            .await.inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
         self.dependencies.extend(dependencies);
 
         // Resources
@@ -173,7 +173,7 @@ impl StoredAction {
         {
             Ok(r) => self.resources = r,
             Err(e) => {
-                error!("failed to load resources: {e}");
+                error!("failed to load resources: {e:?}");
                 if !matches!(
                     e,
                     StashError::ExecutionError(SqliteError::QueryReturnedNoRows)

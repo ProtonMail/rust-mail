@@ -77,7 +77,7 @@ async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
         for _ in 0..3 {
             match flow.submit_totp(read("2nd factor")?).await {
                 Ok(()) => break,
-                Err(err) => error!("failed to submit TOTP: {err}"),
+                Err(err) => error!("failed to submit TOTP: {err:?}"),
             }
         }
     }
@@ -86,18 +86,18 @@ async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
         for _ in 0..3 {
             match flow.submit_mailbox_password(read("2nd password")?).await {
                 Ok(()) => break,
-                Err(err) => error!("failed to submit mailbox password: {err}"),
+                Err(err) => error!("failed to submit mailbox password: {err:?}"),
             }
         }
     }
 
     let user_ctx = ctx
         .user_context_from_login_flow(&mut flow)
-        .inspect_err(|err| error!("failed to create user context: {err}"))
+        .inspect_err(|err| error!("failed to create user context: {err:?}"))
         .await?;
 
     MailUserContext::initialize_async(user_ctx.clone(), &InitCb)
-        .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err}"))
+        .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
         .map_err(|(_, err)| err)
         .await?;
 

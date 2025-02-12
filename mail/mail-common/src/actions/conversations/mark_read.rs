@@ -108,7 +108,7 @@ impl proton_action_queue::action::Handler for Handler {
             Conversation::mark_unread(action.0.label_id, local_ids, &tx)
                 .await
                 .map_err(|e| {
-                    error!("Failed to rollback failed conversations: {e}");
+                    error!("Failed to rollback failed conversations: {e:?}");
                     e
                 })?;
 

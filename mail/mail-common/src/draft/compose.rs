@@ -164,7 +164,7 @@ pub(super) async fn encrypt_draft_body(
     draft_body
         .encrypt_draft_body(&pgp_provider, &draft_encryption_key)
         .map_err(|e| {
-            error!("Failed to encrypt draft: {e}");
+            error!("Failed to encrypt draft: {e:?}");
             MailContextError::Crypto
         })
 }
@@ -242,7 +242,7 @@ pub fn html_to_text(input: impl AsRef<str>) -> String {
     match config.string_from_read(cursor, 80) {
         Ok(text_body) => text_body,
         Err(e) => {
-            error!("Failed to convert html to text: {e}");
+            error!("Failed to convert html to text: {e:?}");
             input.to_owned()
         }
     }

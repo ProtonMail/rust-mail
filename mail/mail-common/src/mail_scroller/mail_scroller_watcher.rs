@@ -16,7 +16,10 @@ impl TableObserver for MailScrollerWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for MailScrollerWatcher: {}", e);
+                tracing::error!(
+                    "Failed to send notification for MailScrollerWatcher: {:?}",
+                    e
+                );
             })
             .ok();
     }

@@ -478,7 +478,7 @@ impl Message {
             Message::mark_multiple_as_read(message_ids.to_vec(), bond)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to mark messages as read when moving to trash: {e}")
+                    error!("Failed to mark messages as read when moving to trash: {e:?}")
                 })?;
         }
 
@@ -486,14 +486,14 @@ impl Message {
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
             Message::remove_all_labels(message_ids.to_vec(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to remove labels: {e}"))?;
+                .inspect_err(|e| error!("Failed to remove labels: {e:?}"))?;
         } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
             // When moving out of Trash or Spam, add AlmostAllMail label
             let almost_all_mail =
                 Label::resolve_local_label_id(LabelId::almost_all_mail(), bond).await?;
             Message::apply_label(almost_all_mail, message_ids.to_vec(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to add messages to almost_all_mail when moving out of spam/trash: {e}"))?;
+                .inspect_err(|e| error!("Failed to add messages to almost_all_mail when moving out of spam/trash: {e:?}"))?;
         }
 
         let Some(source) = Label::load(source_id, bond).await? else {
@@ -502,12 +502,12 @@ impl Message {
         if source.is_movable_folder() {
             Message::remove_label(source_id, message_ids.to_vec(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to remove source label from messages: {e}"))?;
+                .inspect_err(|e| error!("Failed to remove source label from messages: {e:?}"))?;
         }
 
         Message::apply_label(destination_id, message_ids.to_vec(), bond)
             .await
-            .inspect_err(|e| error!("Failed to apply destination label to messages: {e}"))?;
+            .inspect_err(|e| error!("Failed to apply destination label to messages: {e:?}"))?;
 
         Ok(())
     }
@@ -645,7 +645,7 @@ impl Message {
             match response {
                 Ok(res) => failed_ids.extend(filter_responses(res.responses)),
                 Err(e) => {
-                    error!("Failed to add message to added label: {e}");
+                    error!("Failed to add message to added label: {e:?}");
                     failed_ids.extend(message_ids);
                 }
             }
@@ -663,7 +663,7 @@ impl Message {
             match response {
                 Ok(res) => failed_ids.extend(filter_responses(res.responses)),
                 Err(e) => {
-                    error!("Failed to add message to added label: {e}");
+                    error!("Failed to add message to added label: {e:?}");
                     failed_ids.extend(message_ids);
                 }
             }
@@ -1318,7 +1318,7 @@ impl Message {
                     attachment
                         .save(bond)
                         .await
-                        .inspect_err(|e| error!("Failed to save attachment from message: {e}"))?;
+                        .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
                     let local_id = attachment.local_id.expect("Should be set");
                     metadata.local_id = Some(local_id);
 
@@ -2555,16 +2555,16 @@ impl Message {
         let (mut message, mut body_metadata, body) = Message::from_api_data(message, tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to convert message from api: {e}");
+                error!("Failed to convert message from api: {e:?}");
             })?;
 
         let tx = tether.transaction().await?;
         message.save(&tx).await.inspect_err(|e| {
-            error!("Failed to save message metadata: {e}");
+            error!("Failed to save message metadata: {e:?}");
         })?;
 
         body_metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to save message body metadata: {e}");
+            error!("Failed to save message body metadata: {e:?}");
         })?;
         tx.commit().await?;
 
@@ -2600,7 +2600,7 @@ impl Message {
         encrypted_message_body
             .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
             .map_err(|e| {
-                error!("Failed to decrypt message body: {e}");
+                error!("Failed to decrypt message body: {e:?}");
                 MailContextError::Crypto
             })
     }
@@ -2636,7 +2636,7 @@ impl Message {
     ) -> Result<PathBuf, MailContextError> {
         let storable_message = &message
             .serialize()
-            .inspect_err(|e| error!("Failed to serialize decrypted message body: {e}"))?;
+            .inspect_err(|e| error!("Failed to serialize decrypted message body: {e:?}"))?;
 
         let cache_key = CacheMessageKey::from(local_id);
 
@@ -2644,7 +2644,7 @@ impl Message {
             .messages_cache()
             .add_item(cache_key, storable_message)
             .inspect_err(|e| {
-                error!("Failed to store message body in cache: {e}");
+                error!("Failed to store message body in cache: {e:?}");
             })?)
     }
 
@@ -2663,7 +2663,7 @@ impl Message {
 
         let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
             .await
-            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e:?}"))?
         else {
             return Ok(None);
         };
@@ -2694,7 +2694,7 @@ impl Message {
 
         let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
             .await
-            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e:?}"))?
         else {
             return Ok(None);
         };
@@ -2754,7 +2754,7 @@ impl TableObserver for MessageWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for MessageWatcher: {}", e)
+                tracing::error!("Failed to send notification for MessageWatcher: {:?}", e)
             })
             .ok();
     }
@@ -3116,7 +3116,7 @@ impl MessageBodyMetadata {
     pub async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.attachments = Attachment::for_message(self.local_message_id.unwrap(), tether)
             .await
-            .inspect_err(|e| error!("Failed to load attachments for body metadata: {e}"))?;
+            .inspect_err(|e| error!("Failed to load attachments for body metadata: {e:?}"))?;
 
         Ok(())
     }
@@ -3406,7 +3406,7 @@ impl TableObserver for MessageCounterWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for MessageCounterWatcher: {e}")
+                tracing::error!("Failed to send notification for MessageCounterWatcher: {e:?}")
             })
             .ok();
     }

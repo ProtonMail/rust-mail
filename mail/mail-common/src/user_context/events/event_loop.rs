@@ -42,7 +42,7 @@ impl Store for MailUserContext {
                 ) {
                     Ok(None)
                 } else {
-                    error!("Failed to load event id from db:{e}");
+                    error!("Failed to load event id from db:{e:?}");
                     Err(anyhow!("Failed to load event id {e}"))
                 }
             }
@@ -63,7 +63,7 @@ impl Store for MailUserContext {
             Ok(())
         }
         .map_err(|e: StashError| {
-            error!("Failed to store event id in db:{e}");
+            error!("Failed to store event id in db:{e:?}");
             anyhow!("Failed to store event id {e}")
         })
     }

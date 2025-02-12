@@ -320,7 +320,7 @@ impl CacheKey for SenderImage {
             let _ = self
                 .delete(&tx)
                 .await
-                .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
+                .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e:?}"));
             tx.commit().await.unwrap();
         });
     }

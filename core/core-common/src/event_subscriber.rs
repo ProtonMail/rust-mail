@@ -72,13 +72,13 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
             .get_user_id_and_db_connection()
             .await
             .map_err(|e| {
-                error!("Failed to get DB connection :{e}");
+                error!("Failed to get DB connection :{e:?}");
                 SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
             })?;
         {
             let mut conn = stash.connection();
             let tx = conn.transaction().await.map_err(|e| {
-                error!("Failed to start transaction: {e}");
+                error!("Failed to start transaction: {e:?}");
                 SubscriberError::Other(anyhow!("Failed to start transaction: {e}"))
             })?;
 
@@ -86,7 +86,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 if let Some(user) = event.get_core_event_user_mut() {
                     debug!("Handling user event");
                     user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update user: {e}");
+                        error!("Failed to update user: {e:?}");
                         e
                     })?;
                 }
@@ -94,7 +94,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     debug!("Handling user setting event");
                     settings.remote_id = Some(user_id.clone());
                     settings.save(&tx).await.map_err(|e| {
-                        error!("Failed to update user settings:{e}");
+                        error!("Failed to update user settings:{e:?}");
                         e
                     })?;
                 }
@@ -103,7 +103,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
                     user.used_space = used_space;
                     user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e}");
+                        error!("Failed to update used space:{e:?}");
                         e
                     })?;
                 }
@@ -112,7 +112,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                     let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
                     user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e}");
+                        error!("Failed to update used space:{e:?}");
                         e
                     })?;
                 }
@@ -152,7 +152,7 @@ async fn handle_address_event(
                 if let Some(ref mut address) = event.address {
                     address
                         .save(tx)
-                        .inspect_err(|e| error!("Failed to create or update address: {e}"))
+                        .inspect_err(|e| error!("Failed to create or update address: {e:?}"))
                         .await?;
                 }
             }
@@ -180,13 +180,13 @@ async fn handle_contact_event(
                 .await
                 .map(|_| ())
                 .map_err(|e| {
-                    error!("Failed to delete contact: {e}");
+                    error!("Failed to delete contact: {e:?}");
                     e
                 })?,
             Action::Create | Action::Update => {
                 if let Some(ref mut contact) = event.contact {
                     contact.save(tx).await.map_err(|e| {
-                        error!("Failed to create or update contact: {e}");
+                        error!("Failed to create or update contact: {e:?}");
                         e
                     })?;
                 }
@@ -211,13 +211,13 @@ async fn handle_contact_email_event(
                 .await
                 .map(|_| ())
                 .map_err(|e| {
-                    error!("Failed to delete contact mail: {e}");
+                    error!("Failed to delete contact mail: {e:?}");
                     e
                 })?,
             Action::Create | Action::Update => {
                 if let Some(ref mut contact_email) = event.contact_email {
                     contact_email.save(tx).await.map_err(|e| {
-                        error!("Failed to create or update contact mail: {e}");
+                        error!("Failed to create or update contact mail: {e:?}");
                         e
                     })?;
                 }

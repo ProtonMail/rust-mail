@@ -51,7 +51,7 @@ impl MailUserContext {
             Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
             Ok(AsyncTaskResult::Completed(Err(e))) => {
                 let e = e.into();
-                error!("Failed to sync {stage:?}: {e}");
+                error!("Failed to sync {stage:?}: {e:?}");
                 Err((stage, e))
             }
             Ok(AsyncTaskResult::Cancelled) => {
@@ -60,7 +60,7 @@ impl MailUserContext {
             }
             Err(e) => {
                 let e = e.into();
-                error!("Panicked while syncing {stage:?}: {e}");
+                error!("Panicked while syncing {stage:?}: {e:?}");
                 Err((stage, e))
             }
         }

@@ -297,7 +297,7 @@ impl<T: Model, R: DataSource<Item = T>> TableObserver for PaginatorWatcher<T, R>
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for PaginatorWatcher: {}", e);
+                tracing::error!("Failed to send notification for PaginatorWatcher: {:?}", e);
             })
             .ok();
     }

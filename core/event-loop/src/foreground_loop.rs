@@ -56,7 +56,7 @@ impl EventLoop {
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
             let e = anyhow!("No EventId in store");
-            error!("{e}");
+            error!("{e:?}");
             return Err(EventLoopError::StoreRead(e));
         };
 
@@ -66,7 +66,7 @@ impl EventLoop {
             .collect_events(provider, &last_event_id)
             .await
             .map_err(|e| {
-                error!("Failed to collect events: {e}");
+                error!("Failed to collect events: {e:?}");
                 e
             })?;
 
@@ -99,7 +99,7 @@ impl EventLoop {
             .event_id();
 
         if let Err(e) = store.store(new_event_id.clone()).await {
-            error!("Failed to store new event id: {e}");
+            error!("Failed to store new event id: {e:?}");
             return Err(EventLoopError::StoreWrite(e));
         }
 
@@ -137,7 +137,7 @@ impl EventLoop {
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
             if let Err(e) = subscriber.on_events(events).await {
-                error!("Failed to publish events to '{}': {e}", subscriber.name());
+                error!("Failed to publish events to '{}': {e:?}", subscriber.name());
                 return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
             }
         }

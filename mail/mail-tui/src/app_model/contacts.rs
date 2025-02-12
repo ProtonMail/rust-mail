@@ -191,7 +191,7 @@ impl Model {
         let (watcher, background_command) = match Self::init_watch(ctx) {
             Ok(t) => t,
             Err(e) => {
-                error!("{e}");
+                error!("{e:?}");
                 return Command::batch([
                     Command::Message(Messages::DismissBackgroundProgress),
                     Command::message(Messages::DisplayError(None, e)),
@@ -203,7 +203,7 @@ impl Model {
         let ctx = self.ctx.clone();
         Command::task(async move {
             (Self::init_contact_list(ctx, background_command).await)
-                .inspect_err(|e| error!("{e}"))
+                .inspect_err(|e| error!("{e:?}"))
                 .unwrap_or_else(|e| {
                     Command::batch([
                         Command::Message(Messages::DismissBackgroundProgress),
@@ -232,7 +232,7 @@ impl Model {
                         Ok(list) => Message::LoadContacts(list).into(),
                         Err(e) => {
                             let e = anyhow::anyhow!("Contact list query error: {e}");
-                            error!("{e}");
+                            error!("{e:?}");
                             e.into()
                         }
                     })

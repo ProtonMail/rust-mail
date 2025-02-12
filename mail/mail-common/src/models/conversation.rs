@@ -2321,7 +2321,7 @@ impl Conversation {
             Conversation::mark_read(conversation_ids.clone(), bond)
                 .await
                 .map_err(|e| {
-                    error!("Failed to mark conversations as read when moving to trash: {e}");
+                    error!("Failed to mark conversations as read when moving to trash: {e:?}");
                     e
                 })?
         }
@@ -2330,7 +2330,7 @@ impl Conversation {
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
             Conversation::remove_all_labels(conversation_ids.clone(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to remove labels: {e}"))?;
+                .inspect_err(|e| error!("Failed to remove labels: {e:?}"))?;
         } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
             // When moving out of Trash or Spam, add AlmostAllMail label
             let almost_all_mail =
@@ -2793,7 +2793,7 @@ impl Conversation {
             }
 
             let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
-                error!("failed to download conversation messages: {e}");
+                error!("failed to download conversation messages: {e:?}");
                 AppError::from(e)
             })?;
 
@@ -2809,7 +2809,7 @@ impl Conversation {
             Message::create_or_update_messages_from_metadata(message_metadata, &tx)
                 .await
                 .map_err(|e| {
-                    error!("Failed to write message metadata: {e}");
+                    error!("Failed to write message metadata: {e:?}");
                     e
                 })?;
 
@@ -2818,7 +2818,7 @@ impl Conversation {
             new_conversation.has_messages = true;
 
             new_conversation.save(&tx).await.map_err(|e| {
-                error!("Failed to write conversation: {e}");
+                error!("Failed to write conversation: {e:?}");
                 e
             })?;
 
@@ -3090,7 +3090,10 @@ impl TableObserver for ConversationActionWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for ConversationWatcher: {}", e)
+                tracing::error!(
+                    "Failed to send notification for ConversationWatcher: {:?}",
+                    e
+                )
             })
             .ok();
     }
@@ -3865,7 +3868,7 @@ impl TableObserver for ConversationCounterWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for ConversationCounterWatcher: {e}")
+                tracing::error!("Failed to send notification for ConversationCounterWatcher: {e:?}")
             })
             .ok();
     }

@@ -105,7 +105,7 @@ impl proton_action_queue::action::Handler for Handler {
             let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Conversation::mark_read(local_ids, &tx).await.map_err(|e| {
-                error!("Failed to rollback failed conversations: {e}");
+                error!("Failed to rollback failed conversations: {e:?}");
                 e
             })?;
 

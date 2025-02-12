@@ -131,26 +131,26 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to load draft metadata: {e}");
+                error!("Failed to load draft metadata: {e:?}");
             })?
         else {
-            error!("Could not find metadata {}", action.metadata_id);
+            error!("Could not find metadata {:?}", action.metadata_id);
             return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
         let body_len = action.body.len() as u64;
         let Some(address) = Address::find_by_remote_id(action.address_id.clone(), tether)
             .await
-            .inspect_err(|e| error!("Failed to load address: {e}"))?
+            .inspect_err(|e| error!("Failed to load address: {e:?}"))?
         else {
-            error!("Address with remote id {} not found.", action.address_id);
+            error!("Address with remote id {:?} not found.", action.address_id);
             return Err(SaveOrSendError::AddressNotFound(action.address_id.clone()).into());
         };
 
         let attachments = action
             .attachments(tether)
             .await
-            .inspect_err(|e| error!("Failed to load attachments: {e}"))?;
+            .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
         let attachment_metadata = Save::attachment_metadata(&attachments);
 
         let conversation_id = if let Some(id) = metadata.local_conversation_id {
@@ -159,7 +159,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             debug!("Conversation does not exist, creating");
             let display_order = Conversation::next_display_order(tether)
                 .await
-                .inspect_err(|e| error!("Failed to get next conversation display order: {e}"))?;
+                .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
             let mut conversation = action.create_new_conversation(
                 &address,
                 display_order,
@@ -171,7 +171,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             conversation
                 .save(tether)
                 .await
-                .inspect_err(|e| error!("Failed to create new conversation: {e}"))?;
+                .inspect_err(|e| error!("Failed to create new conversation: {e:?}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
             conversation.local_id.unwrap()
         };
@@ -181,7 +181,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             debug!("Local message id is set, update");
             let Some(mut message) = Message::find_by_id(message_id, tether)
                 .await
-                .inspect_err(|e| error!("Failed to load message: {e}"))?
+                .inspect_err(|e| error!("Failed to load message: {e:?}"))?
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
@@ -204,12 +204,12 @@ impl proton_action_queue::action::Handler for SaveHandler {
             );
 
             message.save(tether).await.inspect_err(|e| {
-                error!("Failed to update draft message: {e}");
+                error!("Failed to update draft message: {e:?}");
             })?;
 
             let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, tether)
                 .await
-                .inspect_err(|e| error!("Failed to load message metadata: {e}"))?
+                .inspect_err(|e| error!("Failed to load message metadata: {e:?}"))?
             else {
                 return Err(AppError::MessageMissing(message_id).into());
             };
@@ -218,7 +218,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             body_metadata.mime_type = action.mime_type;
 
             body_metadata.save(tether).await.inspect_err(|e| {
-                error!("Failed to update draft body metadata: {e}");
+                error!("Failed to update draft body metadata: {e:?}");
             })?;
 
             message
@@ -226,7 +226,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             debug!("Local message id is not set, creating new draft");
             let display_order = Message::next_display_order(tether)
                 .await
-                .inspect_err(|e| error!("Failed to get next message display order: {e}"))?;
+                .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
             let mut message = action.create_new_message(
                 &address,
                 attachments.len() as u64,
@@ -239,7 +239,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             message
                 .save(tether)
                 .await
-                .inspect_err(|e| error!("Failed to save message: {e}"))?;
+                .inspect_err(|e| error!("Failed to save message: {e:?}"))?;
 
             let mut message_body_metadata = MessageBodyMetadata {
                 local_message_id: Some(message.local_id.unwrap()),
@@ -254,7 +254,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             message_body_metadata
                 .save(tether)
                 .await
-                .inspect_err(|e| error!("Failed to save message body metadata: {e}"))?;
+                .inspect_err(|e| error!("Failed to save message body metadata: {e:?}"))?;
 
             Message::apply_label(
                 local_draft_id,
@@ -263,7 +263,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             )
             .await
             .inspect_err(|e| {
-                error!("Failed to apply draft label to new message: {e}");
+                error!("Failed to apply draft label to new message: {e:?}");
             })?;
 
             Message::apply_label(
@@ -273,7 +273,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             )
             .await
             .inspect_err(|e| {
-                error!("Failed to apply all_draft label to new message: {e}");
+                error!("Failed to apply all_draft label to new message: {e:?}");
             })?;
 
             Message::apply_label(
@@ -283,7 +283,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             )
             .await
             .inspect_err(|e| {
-                error!("Failed to apply all_mail label to new message: {e}");
+                error!("Failed to apply all_mail label to new message: {e:?}");
             })?;
 
             message
@@ -297,13 +297,13 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         Message::store_raw_message_in_cache(ctx, message.local_id.unwrap(), raw_body).inspect_err(
             |e| {
-                error!("Failed to store draft body in cache :{e}");
+                error!("Failed to store draft body in cache :{e:?}");
             },
         )?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
         metadata.save(tether).await.inspect_err(|e| {
-            error!("Failed to save draft metadata: {e}");
+            error!("Failed to save draft metadata: {e:?}");
         })?;
 
         action.message_id = metadata.local_message_id;
@@ -354,7 +354,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let Some(mut message_body_metadata) = MessageBodyMetadata::for_message(message_id, &tether)
             .await
             .inspect_err(|e| {
-                error!("Failed to load message body metadata for {message_id}: {e}")
+                error!("Failed to load message body metadata for {message_id}: {e:?}")
             })?
         else {
             return Err(AppError::MessageBodyMetadataMissing(message_id).into());
@@ -363,7 +363,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
             let Some(remote_id) = Message::local_id_counterpart(parent_id, &tether)
                 .await
-                .inspect_err(|e| error!("Failed to resolve remote parent id: {e}"))?
+                .inspect_err(|e| error!("Failed to resolve remote parent id: {e:?}"))?
             else {
                 error!("Could not find parent message with id {parent_id}");
                 return Err(AppError::MessageMissing(parent_id).into());
@@ -405,7 +405,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             )
             .await
             .inspect_err(|e| {
-                error!("Failed to create draft on remote: {e}");
+                error!("Failed to create draft on remote: {e:?}");
             })?
         } else {
             Draft::remote_update(
@@ -418,7 +418,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             )
             .await
             .inspect_err(|e| {
-                error!("Failed to update draft on remote: {e}");
+                error!("Failed to update draft on remote: {e:?}");
             })?
         };
 
@@ -438,23 +438,22 @@ impl proton_action_queue::action::Handler for SaveHandler {
             &bond,
         )
         .await
-        .inspect_err(|e| error!("Failed to update the conversation remote id: {e}"))?;
+        .inspect_err(|e| error!("Failed to update the conversation remote id: {e:?}"))?;
 
         // Because we can't have custom update function in stash we need to
         // first set the remote id on the message body metadata and then
         // we can save the metadata returned by the server.
         message_body_metadata.remote_message_id = message.remote_id.clone();
-        message_body_metadata
-            .save(&bond)
-            .await
-            .inspect_err(|e| error!("Failed to save message body metadata with remote id: {e}"))?;
+        message_body_metadata.save(&bond).await.inspect_err(|e| {
+            error!("Failed to save message body metadata with remote id: {e:?}")
+        })?;
 
         // Update message data
         let (mut new_local_message, mut new_message_body_metadata, _) =
             Message::from_api_data(new_message, &bond)
                 .await
                 .inspect_err(|e| {
-                    error!("Failed to convert api message: {e}");
+                    error!("Failed to convert api message: {e:?}");
                 })?;
 
         // Do not override all the data as it may override local data that we modified
@@ -470,7 +469,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         new_local_message.row_id = row_id;
         new_local_message.local_id = Some(message_id);
         new_local_message.save(&bond).await.inspect_err(|e| {
-            error!("Failed to update the message: {e}");
+            error!("Failed to update the message: {e:?}");
         })?;
 
         // Update body metadata
@@ -483,7 +482,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .save(&bond)
             .await
             .inspect_err(|e| {
-                error!("Failed to update message body metadata: {e}");
+                error!("Failed to update message body metadata: {e:?}");
             })?;
 
         bond.commit().await?;
@@ -666,7 +665,7 @@ impl proton_action_queue::action::Handler for WrappedSaveHandler {
         let r = self.0.apply_remote(context, action, stash).await;
         if let Err(e) = &r {
             if let Err(e) = save_send_error(action, stash, e).await {
-                error!("Failed to save draft send result: {e}");
+                error!("Failed to save draft send result: {e:?}");
             }
         }
         r

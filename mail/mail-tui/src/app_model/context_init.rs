@@ -53,7 +53,7 @@ impl AppStateHandler for Model {
                     let msg = if let Err((stage, e)) =
                         MailUserContext::initialize_async(user_ctx, &cb).await
                     {
-                        tracing::error!("Failed to initialize account ({:?}): {e}", stage);
+                        tracing::error!("Failed to initialize account ({:?}): {e:?}", stage);
                         Message::InitFailed(e).into()
                     } else {
                         Message::InitComplete.into()
@@ -102,7 +102,7 @@ impl MailUserContextInitializationCallback for InitCallback {
     }
 
     fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
-        tracing::error!("Failed to initialize account ({:?}): {err}", stage);
+        tracing::error!("Failed to initialize account ({:?}): {err:?}", stage);
     }
 }
 
