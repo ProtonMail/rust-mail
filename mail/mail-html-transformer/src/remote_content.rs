@@ -11,7 +11,8 @@ mod tests;
 
 use html5ever::{namespace_url, ns, Namespace};
 use kuchikiki::iter::NodeEdge;
-use kuchikiki::{ExpandedName, NodeRef};
+use kuchikiki::{Attribute, ExpandedName, NodeRef};
+use url::Url;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -122,6 +123,162 @@ pub fn undo_disable_remote_content(document: &NodeRef) {
             attributes.map.insert(item.enabled.clone(), attribute);
         }
     }
+}
+
+const PROXY_BASE_URL: &str = "https://mail.proton.me/api/core/v4/images";
+
+/// Proxies all images through proton's proxy.
+///
+/// `auth_id` must be a valid `UID`.
+#[allow(clippy::missing_panics_doc)] // url parsing should not fail
+pub fn proxy_images(document: NodeRef, auth_id: &str) -> u64 {
+    // Unfortunately the selector library does not allow use to query attributes that are not part
+    // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
+    // we need to traverse the document manually and check each attribute ourselves.
+    let attribute_list = AttributeInfo::default_list();
+
+    let mut base = Url::parse(PROXY_BASE_URL).expect("Should always be valid");
+    base.query_pairs_mut().append_pair("UID", auth_id);
+    let mut count = 0;
+
+    for node in document.traverse_inclusive() {
+        let NodeEdge::Start(node_ref) = node else {
+            continue;
+        };
+
+        let Some(element) = node_ref.as_element() else {
+            continue;
+        };
+
+        if WHITELISTED_ELEMENTS.contains(&element.name.local.as_ref()) {
+            continue;
+        }
+
+        let proxy_value = |value: &str| -> Option<String> {
+            // We should not proxy cid images.
+            if value.starts_with("cid:") {
+                return None;
+            }
+
+            // We can't proxy embedded data.
+            if value.starts_with("data:") {
+                return None;
+            }
+
+            let mut new = base.clone();
+            new.query_pairs_mut().append_pair("Url", value);
+            Some(new.to_string())
+        };
+
+        let mut attributes = element.attributes.borrow_mut();
+        for item in &attribute_list {
+            if let Some(attr) = attributes.map.get_mut(&item.enabled) {
+                if item.enabled.local.as_ref() == "srcset" {
+                    count += handle_srcset(attr, proxy_value);
+                } else if let Some(value) = proxy_value(&attr.value) {
+                    attr.value = value;
+                    count += 1;
+                }
+            }
+        }
+    }
+
+    count
+}
+
+/// Undo the proxying of images through proton server.
+#[allow(clippy::missing_panics_doc)] // url parsing should not fail
+pub fn undo_proxy_images(document: NodeRef) -> u64 {
+    // Unfortunately the selector library does not allow use to query attributes that are not part
+    // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
+    // we need to traverse the document manually and check each attribute ourselves.
+    let attribute_list = AttributeInfo::default_list();
+
+    let base = Url::parse(PROXY_BASE_URL).expect("Should always be valid");
+    let mut count = 0;
+
+    for node in document.traverse_inclusive() {
+        let NodeEdge::Start(node_ref) = node else {
+            continue;
+        };
+
+        let Some(element) = node_ref.as_element() else {
+            continue;
+        };
+
+        if WHITELISTED_ELEMENTS.contains(&element.name.local.as_ref()) {
+            continue;
+        }
+
+        let undo_proxy = |value: &str| -> Option<String> {
+            // We should not proxy cid images
+            if value.starts_with("cid:") {
+                return None;
+            }
+
+            // if the data is not an url, we can't proxy it.
+            let Ok(url) = Url::parse(value) else {
+                return None;
+            };
+
+            if url.path() != base.path() {
+                // this is not a proxied image, ignore
+                return None;
+            }
+
+            for (key, value) in url.query_pairs() {
+                if key == "Url" {
+                    return Some(value.into());
+                }
+            }
+
+            None
+        };
+
+        let mut attributes = element.attributes.borrow_mut();
+        for item in &attribute_list {
+            if let Some(attr) = attributes.map.get_mut(&item.enabled) {
+                if item.enabled.local.as_ref() == "srcset" {
+                    count += handle_srcset(attr, undo_proxy);
+                } else if let Some(value) = undo_proxy(&attr.value) {
+                    attr.value = value;
+                    count += 1;
+                }
+            }
+        }
+    }
+
+    count
+}
+
+/// Proxy srcset elements.
+///
+/// See [specification](https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/srcset)
+/// for more details about format.
+fn handle_srcset(attribute: &mut Attribute, closure: impl Fn(&str) -> Option<String>) -> u64 {
+    let mut elements = Vec::new();
+    let mut count = 0_u64;
+    for entry in attribute.value.trim().split(',') {
+        let values = entry.trim().splitn(2, ' ').collect::<Vec<&str>>();
+        if values.is_empty() {
+            continue;
+        }
+        let Some(mut new_value) = closure(values[0]) else {
+            elements.push(entry.to_owned());
+            continue;
+        };
+        if values.len() > 1 {
+            new_value.push(' ');
+            new_value.push_str(values[1]);
+        }
+
+        count += 1;
+
+        elements.push(new_value);
+    }
+
+    attribute.value = elements.join(", ");
+    count
 }
 
 /// Details on how the attributes should be represented when enabled or disabled.

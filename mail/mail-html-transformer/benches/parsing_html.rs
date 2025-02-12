@@ -97,7 +97,7 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("proxy images", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                transforms::proxy_images(tr.document(), "THISISATOKEN")
+                remote_content::proxy_images(tr.document(), "THISISATOKEN")
             })
         });
 
@@ -122,7 +122,7 @@ pub fn parse(c: &mut Criterion) {
     c.bench_function("proxy 100 images", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            transforms::proxy_images(tr.document(), "THISISATOKEN")
+            remote_content::proxy_images(tr.document(), "THISISATOKEN")
         })
     });
 

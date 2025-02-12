@@ -155,7 +155,13 @@ impl Transformer {
     /// Proxies all images through proton's proxy.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn proxy_images(&mut self, user_session_id: &str) -> u64 {
-        transforms::proxy_images(self.document(), user_session_id)
+        remote_content::proxy_images(self.document(), user_session_id)
+    }
+
+    /// Performs the reverse transformation of [`proxy_images()`].
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    pub fn undo_proxy_images(&mut self) -> u64 {
+        remote_content::undo_proxy_images(self.document())
     }
 
     /// Disables embedded images

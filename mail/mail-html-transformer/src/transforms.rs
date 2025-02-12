@@ -130,33 +130,6 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     Some(node_ref_from_str(&rep, "div"))
 }
 
-/// Proxies all images through proton's proxy.
-///
-/// `auth_id` must be a valid `UID`.
-#[allow(clippy::missing_panics_doc)] // the select is well formed.
-pub fn proxy_images(document: NodeRef, auth_id: &str) -> u64 {
-    let elements = document.select("img").unwrap();
-    let mut base = Url::parse("https://mail.proton.me/api/core/v4/images").unwrap();
-    base.query_pairs_mut().append_pair("UID", auth_id);
-
-    let mut count = 0;
-    for element in elements {
-        let mut attrs = element.attributes.borrow_mut();
-
-        attrs.entry("src").and_modify(|src| {
-            // We should not proxy cid images
-            if src.value.starts_with("cid:") {
-                return;
-            }
-            let mut new = base.clone();
-            new.query_pairs_mut().append_pair("Url", &src.value);
-            src.value = new.into();
-            count += 1;
-        });
-    }
-    count
-}
-
 /// Disable embedded images
 #[allow(clippy::missing_panics_doc)] // the select is well formed.
 pub fn disable_embedded_images(document: NodeRef) -> u64 {
