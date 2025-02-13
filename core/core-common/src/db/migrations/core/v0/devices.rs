@@ -9,7 +9,7 @@ pub async fn create_tables(tx: &Bond<'_>) -> Result<(), StashError> {
             environment INTEGER NOT NULL,
             public_key TEXT DEFAULT NULL,
             ping_notification_status INTEGER DEFAULT NULL,
-            push_notification_status INTEGER DEFAULT NULL,
+            push_notification_status INTEGER DEFAULT NULL
         )
     ",
         vec![],

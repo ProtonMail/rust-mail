@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../tests/models/device.rs"]
+mod tests;
+
 use proton_api_core::{
     service::ApiServiceError,
     services::proton::{prelude::RegisterDeviceRequest, ProtonCore},
