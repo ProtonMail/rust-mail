@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Fixed
+
+  - [ET-2903] Sent message no longer appears in drafts.
+
+## [0.41.1] - 2025-02-12
+
+  - App no longer crashes when requesting Draft id.
+
 ## [0.41.0] - 2025-02-11
 
 ### Changed

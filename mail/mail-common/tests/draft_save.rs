@@ -32,7 +32,7 @@ async fn create_empty_draft() {
     let params = draft_test_params();
     let user_ctx = ctx.mail_user_context().await;
 
-    let message = draft_message();
+    let mut message = draft_message();
 
     let expected_draft_params = expected_create_draft_params();
 
@@ -45,6 +45,9 @@ async fn create_empty_draft() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+    // Add some other label ids to this message to make sure they are skipped.
+    message.metadata.label_ids.push(LabelId::starred());
+
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
@@ -61,18 +64,6 @@ async fn create_empty_draft() {
 
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
-    let draft_message = Message::load(draft_message_id, &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
-
-    // Check the draft has the draft label.
-    // We check this here as the message will be overridden by what the server returns.
-    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
-    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
-    assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
-    assert!(draft_message.is_draft());
-
     // Execute action.
     user_ctx.execute_pending_actions().await.unwrap();
 
@@ -81,6 +72,14 @@ async fn create_empty_draft() {
         .unwrap()
         .expect("failed to load message");
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+
+    // Check the draft has the draft label.
+    assert_eq!(draft_message.label_ids.len(), 3);
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
+    assert!(!draft_message.label_ids.contains(&LabelId::starred()));
+    assert!(draft_message.is_draft());
 
     // Local conversation id should have been assigned.
     assert!(draft_message.local_conversation_id.is_some());

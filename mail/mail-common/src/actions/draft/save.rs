@@ -468,6 +468,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
         new_local_message.sender = message.sender;
         new_local_message.num_attachments = message.num_attachments;
         new_local_message.attachments_metadata = message.attachments_metadata;
+        // Not preserving the labels will cause the message to be returned back to
+        // drafts on save.
+        new_local_message.label_ids = message.label_ids;
 
         new_local_message.row_id = row_id;
         new_local_message.local_id = Some(message_id);
