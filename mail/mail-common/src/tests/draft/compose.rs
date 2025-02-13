@@ -131,15 +131,124 @@ fn message_signature_with_all_signatures() {
     insta::assert_snapshot!(signature);
 }
 
+#[tokio::test]
+async fn sanitize_draft_reply_html() {
+    // Draft replies need to be sanitized.
+    let (mut draft, _) = create_reply_with_mime_and_body(
+        ReplyMode::All,
+        MimeType::TextHtml,
+        sanitize_message_body_metadata(MimeType::TextHtml),
+        DRAFT_BODY_HTML.to_owned(),
+    )
+    .await;
+
+    assert_snapshot!(draft.decrypted_body.body);
+
+    let sanitized = draft.decrypted_body.body.clone();
+
+    // Saving the draft will revert the proxying of images
+    let to_save = sanitize_draft_save(&draft.decrypted_body);
+    assert_snapshot!(to_save);
+    draft.decrypted_body.body = to_save;
+
+    // On open should re-instate the proxy of images.
+    let session_id = AuthId::from("auth-id");
+    sanitize_draft_open(&session_id, &mut draft.decrypted_body);
+
+    // This should be identical before the save.
+    assert_eq!(sanitized, draft.decrypted_body.body);
+}
+
+#[tokio::test]
+async fn sanitize_draft_reply_plain_text() {
+    // Draft replies need to be sanitized. For plain text we sanitize the body before converting
+    // to text and afterwards there should be no further changes.
+    let (mut draft, _) = create_reply_with_mime_and_body(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        sanitize_message_body_metadata(MimeType::TextHtml),
+        DRAFT_BODY_HTML.to_owned(),
+    )
+    .await;
+
+    assert_snapshot!(draft.decrypted_body.body);
+
+    let sanitized = draft.decrypted_body.body.clone();
+
+    // Saving the draft - nothing should change
+    let to_save = sanitize_draft_save(&draft.decrypted_body);
+    assert_eq!(to_save, sanitized);
+
+    // On open should also be a noo-oop;
+    let session_id = AuthId::from("auth-id");
+    sanitize_draft_open(&session_id, &mut draft.decrypted_body);
+
+    // This should be identical before the save.
+    assert_eq!(sanitized, draft.decrypted_body.body);
+}
+
+fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
+    MessageBodyMetadata {
+        mime_type,
+        ..Default::default()
+    }
+}
+
+const DRAFT_BODY_HTML: &str = r##"
+<html>
+<body>
+<section>
+    <svg id="svigi" width="5cm" height="4cm" version="1.1"
+    xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+        <image x="0" y="0" height="50px" width="50px" xlink:href="firefox.jpg" />
+        <image x="0" y="0" height="50px" width="50px" xlink:href="chrome.jpg" />
+        <image x="0" y="0" height="50px" width="50px" href="svg-href.jpg" />
+    </svg>
+    <div>
+        <img border="0" usemap="#fp" src="cats.jpg ">
+        <map name="fp">
+            <area coords="0,0,800,800" href="proton_exploit.html" shape="rect" target="_blank" >
+        </map>
+    </div>
+
+    <img width="" height="" alt="" src="mon-image.jpg" srcset="mon-imageHD.jpg 2x">
+    <img width="" height="" alt="" src="lol-image.jpg" srcset="lol-imageHD.jpg 2x">
+    <img width="" height="" alt="" data-src="lol-image.jpg">
+    <a href="lol-image.jpg">Alll</a>
+    <a href="jeanne-image.jpg">Alll</a>
+    <div background="jeanne-image.jpg">Alll</div>
+    <div background="jeanne-image2.jpg">Alll</div>
+    <p style="font-size:10.0pt;font-family:\\2018Calibri\\2019;color:black">
+        Example style that caused regexps to crash
+    </p>
+    <img id="babase64" src="data:image/jpg;base64,iVBORw0KGgoAAAANSUhEUgAABoIAAAVSCAYAAAAisOk2AAAMS2lDQ1BJQ0MgUHJv
+ZmlsZQAASImVVwdYU8kWnltSSWiBUKSE3kQp0qWE0CIISBVshCSQUGJMCCJ2FlkF
+1y4ioK7oqoiLrgWQtaKudVHs/aGIysq6WLCh8iYF1tXvvfe9831z758z5/ynZO69
+MwDo1PKk0jxUF4B8SYEsITKUNTEtnUXqAgSgD1AwGozk8eVSdnx8DIAydP+nvLkO"
+    />
+</section>
+</body>
+<html>
+"##;
+
 async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
     create_reply_with(reply_mode, MimeType::default()).await
 }
 
 async fn create_reply_with(reply_mode: ReplyMode, mime_type: MimeType) -> (Draft, Message) {
-    let address = address_with_signature("");
-    let source_message = existing_message();
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
+    create_reply_with_mime_and_body(reply_mode, mime_type, source_body_metadata, source_body).await
+}
+
+async fn create_reply_with_mime_and_body(
+    reply_mode: ReplyMode,
+    mime_type: MimeType,
+    source_body_metadata: MessageBodyMetadata,
+    source_body: String,
+) -> (Draft, Message) {
+    let source_message = existing_message();
+    let address = address_with_signature("");
     let mail_settings = MailSettings {
         draft_mime_type: mime_type,
         ..MailSettings::default()
@@ -152,6 +261,8 @@ async fn create_reply_with(reply_mode: ReplyMode, mime_type: MimeType) -> (Draft
         in_flight: Default::default(),
     };
 
+    let session_id = AuthId::from("auth-id");
+
     let resolver = NullContactGroupResolver {};
     (
         Draft::new_draft_reply(
@@ -163,6 +274,7 @@ async fn create_reply_with(reply_mode: ReplyMode, mime_type: MimeType) -> (Draft
             &source_message,
             source_body,
             true,
+            &session_id,
         )
         .await,
         source_message,

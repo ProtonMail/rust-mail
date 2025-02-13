@@ -6,7 +6,7 @@ use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType}
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply,
+    prepare_html_reply, prepare_plain_text_reply, sanitize_draft_open, sanitize_draft_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -20,7 +20,7 @@ use proton_action_queue::action::{Id, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::common::{AddressId, AuthId};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
@@ -322,7 +322,7 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         };
 
-        let decrypted = match decrypted {
+        let mut decrypted = match decrypted {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
@@ -377,6 +377,10 @@ impl Draft {
             RecipientList::from_message_recipients(&contact_group_resolver, message.bcc_list.value),
         )
         .await;
+
+        // Transform body.
+        sanitize_draft_open(context.session_id(), &mut decrypted);
+
         Ok((
             Self {
                 metadata_id,
@@ -531,6 +535,7 @@ impl Draft {
             &source_message,
             source_message_body,
             use_utc,
+            context.session_id(),
         )
         .await)
     }
@@ -545,6 +550,7 @@ impl Draft {
     /// `source_message`       - Metadata of the message we are replying to.
     /// `source_message_body`  - Body of the message we are replying to.
     /// `use_utc`              - Whether to use utc over local timezone.
+    /// `session_id`           - Id of the current network session.
     ///
     /// Note: This function is separate so it is easier to test.
     #[allow(clippy::too_many_arguments)]
@@ -557,6 +563,7 @@ impl Draft {
         source_message: &Message,
         source_message_body: DecryptedMessageBody,
         use_utc: bool,
+        session_id: &AuthId,
     ) -> Self {
         let mut body = get_signature(address, mail_settings);
 
@@ -617,6 +624,8 @@ impl Draft {
             address,
         )
         .await;
+
+        sanitize_draft_reply(session_id, &mut draft.decrypted_body);
 
         draft
     }

@@ -378,7 +378,55 @@ impl DecryptedMessageBody {
         };
 
         let resolved = opts.resolve(tether, session_id).await;
-        transform_html(&self.body, resolved, self.metadata.mime_type)
+        transform_html(&self.body, resolved, self.metadata.mime_type, true)
+    }
+
+    pub async fn transform_draft_reply(
+        &self,
+        opts: TransformOpts,
+        session_id: &AuthId,
+        tether: &Tether,
+    ) -> BodyOutput {
+        // FIXME: We enable all views since there is no way yet in the clients to change the
+        // settings. Remove me when we can.
+        // https://protonag.atlassian.net/browse/ET-1926
+        let opts = TransformOpts {
+            hide_remote_images: Some(false),
+            hide_embedded_images: Some(false),
+            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
+            image_proxy: Some(false),
+            ..opts
+        };
+
+        let resolved = opts.resolve(tether, session_id).await;
+        transform_html(&self.body, resolved, self.metadata.mime_type, true)
+    }
+
+    pub async fn transform_draft_open(
+        &self,
+        opts: TransformOpts,
+        session_id: &AuthId,
+        tether: &Tether,
+    ) -> BodyOutput {
+        // FIXME: We enable all views since there is no way yet in the clients to change the
+        // settings. Remove me when we can.
+        // https://protonag.atlassian.net/browse/ET-1926
+        let opts = TransformOpts {
+            hide_remote_images: Some(false),
+            hide_embedded_images: Some(false),
+            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
+            image_proxy: Some(false),
+            ..opts
+        };
+
+        let resolved = opts.resolve(tether, session_id).await;
+        transform_html(&self.body, resolved, self.metadata.mime_type, true)
+    }
+
+    /// Undo all known transformations other than sanitization.
+    pub fn transform_draft_save(&self) -> String {
+        let transformer = Transformer::new(&self.body);
+        transformer.to_string()
     }
 
     /// Create `DecryptedMessageBody` from a `StorableMessageBody` and a `MessageBodyMetadata`.
@@ -554,6 +602,7 @@ pub fn transform_html(
     html: &str,
     opts: TransformOptsResolved<'_>,
     mime_type: MimeType,
+    inject_style: bool,
 ) -> BodyOutput {
     trace!(
         "\
@@ -610,7 +659,9 @@ mime_type: {mime_type:?}"
         transformer.inject_ios_content_size();
     }
 
-    transformer.inject_style();
+    if inject_style {
+        transformer.inject_style();
+    }
 
     let output = BodyOutput {
         body: transformer.to_string(),
