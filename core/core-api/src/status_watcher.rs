@@ -13,6 +13,7 @@ use tokio::{
     sync::{Mutex, RwLock},
     task::JoinHandle,
 };
+use tracing::trace;
 
 use crate::{
     connection_status::ConnectionStatus,
@@ -198,6 +199,8 @@ impl StatusWatcher {
         let mut self_status = self.status.write().await;
         self_status.last_check = Instant::now();
         self_status.status = status;
+
+        trace!("Status has been updated to {:?}", status);
     }
 
     async fn ping(api: Proton, timeout: u64) {
