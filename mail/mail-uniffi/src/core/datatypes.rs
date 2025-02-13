@@ -59,14 +59,14 @@ use proton_api_core::session::{Config as RealApiConfig, EnvId};
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
-    DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
-    Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
-    HighSecurity as RealHighSecurity, LocalAddressId, LocalContactEmailId, LocalContactId,
-    LocalLabelId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
-    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral,
-    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
-    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
-    WeekStart as RealWeekStart,
+    DateFormat as RealDateFormat, Density as RealDensity,
+    DeviceEnvironment as RealDeviceEnvironment, EarlyAccess as RealEarlyAccess, Email as RealEmail,
+    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity, LocalAddressId,
+    LocalContactEmailId, LocalContactId, LocalLabelId, LogAuth as RealLogAuth,
+    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
+    Referral as RealReferral, SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus,
+    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus,
+    UserType as RealUserType, WeekStart as RealWeekStart,
 };
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
@@ -552,6 +552,39 @@ impl From<RealWeekStart> for WeekStart {
             RealWeekStart::Monday => Self::Monday,
             RealWeekStart::Saturday => Self::Saturday,
             RealWeekStart::Sunday => Self::Sunday,
+        }
+    }
+}
+
+/// In which environment are we going to register the device
+/// for the push notification.
+///
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
+pub enum DeviceEnvironment {
+    Google,
+    AppleProd,
+    AppleBeta,
+    AppleDev,
+}
+
+impl From<RealDeviceEnvironment> for DeviceEnvironment {
+    fn from(value: RealDeviceEnvironment) -> Self {
+        match value {
+            RealDeviceEnvironment::Google => Self::Google,
+            RealDeviceEnvironment::AppleProd => Self::AppleProd,
+            RealDeviceEnvironment::AppleBeta => Self::AppleBeta,
+            RealDeviceEnvironment::AppleDev => Self::AppleDev,
+        }
+    }
+}
+
+impl From<DeviceEnvironment> for RealDeviceEnvironment {
+    fn from(value: DeviceEnvironment) -> Self {
+        match value {
+            DeviceEnvironment::Google => Self::Google,
+            DeviceEnvironment::AppleProd => Self::AppleProd,
+            DeviceEnvironment::AppleBeta => Self::AppleBeta,
+            DeviceEnvironment::AppleDev => Self::AppleDev,
         }
     }
 }

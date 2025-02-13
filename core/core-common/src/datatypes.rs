@@ -716,6 +716,9 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::System,
 ];
 
+/// In which environment are we going to register the device
+/// for the push notification.
+///
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
