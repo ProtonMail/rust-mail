@@ -4,7 +4,7 @@ use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, DefaultVersionConverter, Handler as ActionHandler, Type,
+    Action, DefaultVersionConverter, Handler as ActionHandler, Id, Type,
 };
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -143,6 +143,7 @@ impl ActionHandler for Handler {
 
     async fn apply_local(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -166,6 +167,7 @@ impl ActionHandler for Handler {
 
     async fn revert_local(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -191,6 +193,7 @@ impl ActionHandler for Handler {
 
     async fn apply_remote(
         &self,
+        _: Id,
         ctx: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

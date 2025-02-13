@@ -72,15 +72,26 @@ pub struct StoredAction {
 }
 
 impl StoredAction {
+    /// Create a new stored action with the given `action` state and `metadata`.
+    #[allow(dead_code)]
     pub(crate) fn new<T: Action>(
         action: &T,
         metadata: Metadata,
     ) -> Result<Self, rmp_serde::encode::Error> {
         let serialized_state = action::serialize(action)?;
+        Ok(Self::new_impl::<T>(serialized_state, metadata))
+    }
+
+    /// Create a stored action without any state and the given `metadata`.
+    pub(crate) fn without_state<T: Action>(metadata: Metadata) -> Self {
+        Self::new_impl::<T>(vec![], metadata)
+    }
+
+    fn new_impl<T: Action>(state: Vec<u8>, metadata: Metadata) -> Self {
         let delayed = metadata
             .delay
             .map_or(metadata.created, |delay| metadata.created.add(delay));
-        Ok(Self {
+        Self {
             id: None,
             action_type: T::TYPE.to_string(),
             created: metadata.created,
@@ -89,11 +100,41 @@ impl StoredAction {
             priority: metadata.priority_override.unwrap_or(T::PRIORITY),
             resources: metadata.resources,
             scheduled: delayed,
-            state: serialized_state,
+            state,
             version: T::VERSION,
             row_id: None,
             executing: false,
-        })
+        }
+    }
+
+    /// Update the action state for this store action.
+    ///
+    /// Note this does not save to the database, use [`update_action_state()`] for that purpose.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the serialization of the action failed.
+    pub(crate) fn set_action_state<T: Action>(
+        &mut self,
+        action: &T,
+    ) -> Result<(), rmp_serde::encode::Error> {
+        let serialized_state = action::serialize(action)?;
+        self.state = serialized_state;
+        Ok(())
+    }
+
+    /// Update the action state for this stored action.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub(crate) async fn update_action_state(&self, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.execute(
+            format!("UPDATE {} SET state=? WHERE id = ?", Self::table_name()),
+            params![self.state.clone(), self.id.unwrap()],
+        )
+        .await?;
+        Ok(())
     }
 
     pub(crate) fn short_dbg_str(&self) -> String {

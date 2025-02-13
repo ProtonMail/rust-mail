@@ -886,7 +886,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
             // Revert local changes and remove action from queue.
             if let Err(e) = self
                 .handler
-                .revert_local(&context, &mut self.action, tx)
+                .revert_local(self.action_id, &context, &mut self.action, tx)
                 .await
             {
                 error!("Failed to revert local changes: {e:?}");
@@ -1160,19 +1160,8 @@ async fn execute_action_local<T: Action>(
     let mut tether = shared.stash.connection();
     let tx = tether.transaction().await?;
 
-    let local_output = handler
-        .apply_local(context, action, &tx)
-        .await
-        .map_err(|e| {
-            error!("Failed to apply local changes: {e:?}");
-            ActionError::Action(e)
-        })?;
-
-    let mut stored_action = StoredAction::new::<T>(action, metadata).map_err(|e| {
-        error!("Failed to convert into stored action: {e:?}");
-        Error::from(e)
-    })?;
-
+    // Create the action record.
+    let mut stored_action = StoredAction::without_state::<T>(metadata);
     if let Some(exising_id) = existing_id {
         stored_action
             .create_or_update(exising_id, &tx)
@@ -1187,6 +1176,28 @@ async fn execute_action_local<T: Action>(
             e
         })?;
     }
+
+    // Execute the local changes
+    let local_output = handler
+        .apply_local(stored_action.id.unwrap(), context, action, &tx)
+        .await
+        .map_err(|e| {
+            error!("Failed to apply local changes: {e:?}");
+            ActionError::Action(e)
+        })?;
+
+    // Update action state.
+    stored_action.set_action_state(action).map_err(|e| {
+        error!("Failed to set action state: {e:?}");
+        Error::from(e)
+    })?;
+    stored_action
+        .update_action_state(&tx)
+        .await
+        .inspect_err(|e| {
+            error!("Failed to update action state: {e:?}");
+        })?;
+
     tx.commit().await?;
 
     Ok((local_output, stored_action.id.unwrap()))
@@ -1203,7 +1214,9 @@ async fn execute_action_remote<T: Action>(
     debug!("Applying action on remote");
 
     // let post_remote: Result< = post_remote(handler, action, session).await;
-    let result = handler.apply_remote(context, action, &shared.stash).await;
+    let result = handler
+        .apply_remote(id, context, action, &shared.stash)
+        .await;
     let mut cancelled_actions = vec![];
     let mut tether = shared.stash.connection();
     let bond = tether.transaction().await?;
