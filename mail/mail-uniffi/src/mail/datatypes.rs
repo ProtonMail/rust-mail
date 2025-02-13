@@ -52,6 +52,7 @@ mod attachment;
 mod available_action;
 pub(crate) mod labels;
 mod mail_scroller;
+mod message_banner;
 mod system_folder;
 mod system_label;
 
