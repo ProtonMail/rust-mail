@@ -123,7 +123,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn apply_local(
         &self,
-        _: ActionId,
+        action_id: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         tether: &Bond<'_>,
@@ -306,6 +306,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         )?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
+        metadata.save_action_id = Some(action_id);
         metadata.save(tether).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e:?}");
         })?;

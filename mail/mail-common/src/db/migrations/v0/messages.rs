@@ -165,6 +165,8 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
             local_conversation_id INTEGER DEFAULT NULL,
             local_parent_id INTEGER DEFAULT NULL,
             reply_mode INTEGER DEFAULT NULL,
+            save_action_id INTEGER DEFAULT NULL,
+            send_action_id INTEGER DEFAULT NULL,
 
             CONSTRAINT create_draft_metadata_message_id
                 FOREIGN KEY (local_message_id)
@@ -179,6 +181,16 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
             CONSTRAINT create_draft_metadata_parent_id
                 FOREIGN KEY (local_parent_id)
                 REFERENCES messages (local_id)
+                ON DELETE SET NULL
+
+            CONSTRAINT draft_metadata_save_action_id
+                FOREIGN KEY (save_action_id)
+                REFERENCES action_queue (id)
+                ON DELETE SET NULL
+
+            CONSTRAINT draft_metadata_send_action_id
+                FOREIGN KEY (send_action_id)
+                REFERENCES action_queue (id)
                 ON DELETE SET NULL
         )"
         },

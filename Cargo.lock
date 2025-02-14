@@ -4492,6 +4492,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "pretty_assertions",
+ "proton-action-queue",
  "proton-api-core",
  "proton-api-mail",
  "proton-core-common",

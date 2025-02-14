@@ -7,6 +7,7 @@ use crate::models::Message;
 use crate::MailContextError;
 use chrono::Utc;
 use derive_more::derive::TryFrom;
+use proton_action_queue::action::ActionId;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -68,6 +69,13 @@ pub struct DraftMetadata {
     /// Reply mode used for the draft, if `None` is an empty draft.
     #[DbField]
     pub reply_mode: Option<ReplyMode>,
+    /// Last save action id.
+    #[DbField]
+    pub save_action_id: Option<ActionId>,
+    /// Last send action id.
+    #[DbField]
+    pub send_action_id: Option<ActionId>,
+
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
@@ -88,6 +96,8 @@ impl DraftMetadata {
             local_conversation_id: None,
             local_parent_id: None,
             reply_mode: None,
+            save_action_id: None,
+            send_action_id: None,
             row_id: None,
         };
 
@@ -113,6 +123,8 @@ impl DraftMetadata {
             local_conversation_id: Some(source_conversation_id),
             local_parent_id: Some(source_message_id),
             reply_mode: Some(reply_mode),
+            send_action_id: None,
+            save_action_id: None,
             row_id: None,
         };
 
@@ -211,6 +223,13 @@ impl DraftMetadata {
             return Ok(false);
         };
         Ok(Self::find_by_message_id(local_id, tether).await?.is_some())
+    }
+
+    /// Check whether this draft has pending changes that have not been communicated to the server.
+    ///
+    /// Pending change are action that have been queued but not yet executed.
+    pub fn has_pending_changes(&self) -> bool {
+        self.send_action_id.is_some() || self.send_action_id.is_some()
     }
 }
 

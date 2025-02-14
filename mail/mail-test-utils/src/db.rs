@@ -21,6 +21,12 @@ pub async fn new_test_connection() -> Stash {
     let stash = Stash::new(None).expect("failed to create stash");
     migrate_core_db(&stash).await.unwrap();
     migrate_db(&stash).await.expect("failed to migrate");
+    // We need the action queue table due to message delete triggering
+    // some foreign key constrains in draft metadata that relate to the action queue
+    // table.
+    let _ = proton_action_queue::queue::Queue::new(stash.clone())
+        .await
+        .unwrap();
     stash
 }
 
@@ -43,5 +49,11 @@ pub async fn new_test_connection_file() -> (Stash, TempDir) {
     let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("failed to create stash");
     migrate_core_db(&stash).await.unwrap();
     migrate_db(&stash).await.expect("failed to migrate");
+    // We need the action queue table due to message delete triggering
+    // some foreign key constrains in draft metadata that relate to the action queue
+    // table.
+    let _ = proton_action_queue::queue::Queue::new(stash.clone())
+        .await
+        .unwrap();
     (stash, db_dir)
 }

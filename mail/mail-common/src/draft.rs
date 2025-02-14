@@ -302,9 +302,41 @@ impl Draft {
             return Err(OpenError::MessageNotADraft(message_id).into());
         }
 
+        let metadata = if let Some(metadata) =
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
+                .await
+                .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
+        {
+            debug!("Found existing metadata with id {}", metadata.id.unwrap());
+            metadata
+        } else {
+            debug!("No metadata found, creating new entry");
+            let mut metadata = DraftMetadata {
+                id: None,
+                local_message_id: Some(message.local_id.unwrap()),
+                local_conversation_id: Some(message.local_conversation_id.unwrap()),
+                local_parent_id: None,
+                reply_mode: None,
+                send_action_id: None,
+                save_action_id: None,
+                row_id: None,
+            };
+            let tx = tether.transaction().await?;
+            metadata
+                .save(&tx)
+                .await
+                .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
+            tx.commit().await?;
+            metadata
+        };
+
         // First let's try to sync the body and metadata. If we can't we will fill it
         // ourselves.
-        let (decrypted, sync_status) = if let Some(remote_id) = message.remote_id.clone() {
+        let (decrypted, sync_status) = if metadata.has_pending_changes() {
+            // If we have pending changes we should not sync the data from the server
+            // as that will override local state.
+            (None, DraftSyncStatus::Synced)
+        } else if let Some(remote_id) = message.remote_id.clone() {
             match Message::force_sync_message_and_body(context.clone(), remote_id, true).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
@@ -319,6 +351,7 @@ impl Draft {
         } else {
             // If we have no remote id do not return cached status. As this implies the
             // draft was created locally and the save action has not yet executed.
+            // We only trigger this code path if the save action failed to execute.
             (None, DraftSyncStatus::Synced)
         };
 
@@ -340,32 +373,6 @@ impl Draft {
             }
         };
 
-        let metadata_id = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
-                .await
-                .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
-        {
-            debug!("Found existing metadata with id {}", metadata.id.unwrap());
-            metadata.id.unwrap()
-        } else {
-            debug!("No metadata found, creating new entry");
-            let mut metadata = DraftMetadata {
-                id: None,
-                local_message_id: Some(message.local_id.unwrap()),
-                local_conversation_id: Some(message.local_conversation_id.unwrap()),
-                local_parent_id: None,
-                reply_mode: None,
-                row_id: None,
-            };
-            let tx = tether.transaction().await?;
-            metadata
-                .save(&tx)
-                .await
-                .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-            tx.commit().await?;
-            metadata.id.unwrap()
-        };
-
         let send_result = DraftSendResult::find_by_id(message.local_id.unwrap(), tether)
             .await
             .inspect_err(|e| error!("Failed to load send result: {e:?}"))?;
@@ -383,7 +390,7 @@ impl Draft {
 
         Ok((
             Self {
-                metadata_id,
+                metadata_id: metadata.id.unwrap(),
                 sender: message.sender.address,
                 to_list,
                 cc_list,

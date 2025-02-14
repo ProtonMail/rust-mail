@@ -18,6 +18,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError};
 use std::time::Duration;
 use tracing::error;
@@ -60,7 +61,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
     async fn apply_local(
         &self,
-        _: ActionId,
+        action_id: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -69,7 +70,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
 
-        let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
+        let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
             .inspect_err(|e| {
                 error!("Failed to load draft metadata: {e:?}");
@@ -108,6 +109,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             .inspect_err(|e| error!("Failed to apply outbox label: {e:?}"))?;
 
         action.local_message_id = Some(local_message_id);
+
+        metadata.send_action_id = Some(action_id);
+        metadata
+            .save(tx)
+            .await
+            .inspect_err(|e| error!("Failed to save updated metadata: {e:?}"))?;
 
         Ok(())
     }
