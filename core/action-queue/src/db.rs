@@ -3,7 +3,7 @@
 mod tests;
 
 use crate::action;
-use crate::action::{Action, Id, Metadata, Priority, Resources};
+use crate::action::{Action, ActionId, Metadata, Priority, Resources};
 use chrono::{DateTime, Utc};
 use indoc::indoc;
 use proton_sqlite3::{Migration, MigratorError};
@@ -23,7 +23,7 @@ pub struct StoredAction {
     /// Id assigned to any action that is stored in the queue for future
     /// execution.
     #[IdField(autoincrement)]
-    pub id: Option<Id>,
+    pub id: Option<ActionId>,
 
     /// Type of the action, used to re-construct this action from a [`Factory`]
     #[DbField]
@@ -34,7 +34,7 @@ pub struct StoredAction {
     pub debug_string: Option<String>,
 
     /// Other actions this action depends on.
-    pub dependencies: Vec<Id>,
+    pub dependencies: Vec<ActionId>,
 
     /// Time at which this action was created.
     #[DbField]
@@ -166,9 +166,9 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn contains(tether: &Tether, id: Id) -> Result<bool, StashError> {
+    pub async fn contains(tether: &Tether, id: ActionId) -> Result<bool, StashError> {
         match tether
-            .query_value::<_, Id>(
+            .query_value::<_, ActionId>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
                 params![id],
             )
@@ -197,7 +197,7 @@ impl StoredAction {
     pub async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         // Dependencies
         let dependencies = tether
-            .query_values::<_, Id>(
+            .query_values::<_, ActionId>(
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
@@ -260,7 +260,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(bond: &Bond<'_>, id: Id) -> Result<Option<String>, StashError> {
+    pub async fn delete(bond: &Bond<'_>, id: ActionId) -> Result<Option<String>, StashError> {
         match bond
             .query_value::<_, String>(
                 "DELETE FROM action_queue WHERE id = ? RETURNING action_type AS value",
@@ -279,9 +279,9 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(tehter: &Tether, id: Id) -> Result<Vec<Id>, StashError> {
+    pub async fn dependees(tehter: &Tether, id: ActionId) -> Result<Vec<ActionId>, StashError> {
         tehter
-            .query_values::<_, Id>(
+            .query_values::<_, ActionId>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
             )
@@ -322,7 +322,7 @@ impl StoredAction {
     /// Return error if the query fails.
     pub async fn create_or_update(
         &mut self,
-        existing_id: Id,
+        existing_id: ActionId,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         if let Some(existing) =
@@ -345,7 +345,7 @@ impl StoredAction {
     }
 
     /// Mark an action as executing by the queue.
-    pub async fn mark_as_executing(id: Id, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn mark_as_executing(id: ActionId, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
             format!("UPDATE {} SET executing=? WHERE id =?", Self::table_name()),
             params![true, id],

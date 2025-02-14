@@ -11,7 +11,7 @@ use crate::models::{
     MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::Mail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
@@ -60,7 +60,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -114,7 +114,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -152,7 +152,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,
@@ -355,7 +355,7 @@ impl proton_action_queue::action::Handler for WrappedSendHandler {
     type Context = <SendHandler as proton_action_queue::action::Handler>::Context;
     async fn apply_local(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -365,7 +365,7 @@ impl proton_action_queue::action::Handler for WrappedSendHandler {
 
     async fn revert_local(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -375,7 +375,7 @@ impl proton_action_queue::action::Handler for WrappedSendHandler {
 
     async fn apply_remote(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

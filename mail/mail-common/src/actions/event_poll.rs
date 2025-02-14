@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 use serde::{Deserialize, Serialize};
@@ -48,7 +48,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -59,7 +59,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -70,7 +70,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         context: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,

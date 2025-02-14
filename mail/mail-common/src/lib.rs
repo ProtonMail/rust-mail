@@ -35,7 +35,7 @@ use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use stash::stash::StashError;
 
-use proton_action_queue::action::Id as ActionId;
+use proton_action_queue::action::ActionId;
 use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
 use thiserror::Error;

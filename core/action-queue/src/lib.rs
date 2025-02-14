@@ -21,7 +21,7 @@
 //! use std::future::Future;
 //! use std::sync::Arc;
 //! use serde::{Deserialize, Serialize};
-//! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, Id, Metadata, Priority, Type};
+//! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, ActionId, Metadata, Priority, Type};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
 //! use stash::stash::{Stash, Bond};
 //!
@@ -63,15 +63,15 @@
 //!     type Action = MyAction;
 //!     type Context = ();
 //!
-//!     async fn apply_local(&self, action_id:Id, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, action_id:ActionId, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, action_id:Id, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, action_id:ActionId, ctx: &Self::Context, action: &mut Self::Action, bond: &Bond<'_>) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action_id:Id, ctx: &Self::Context, action: &mut Self::Action, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, action_id:ActionId, ctx: &Self::Context, action: &mut Self::Action, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }

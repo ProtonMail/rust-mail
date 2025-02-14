@@ -2,7 +2,7 @@ use crate::actions::{filter_responses, ActionError, GenericActionData};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
@@ -45,7 +45,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -58,7 +58,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -74,7 +74,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

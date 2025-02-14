@@ -5,7 +5,7 @@ use crate::common::{new_factory, DefaultError};
 use common::{new_queue_with_stash, new_stash};
 use proton_action_queue::action;
 use proton_action_queue::action::{
-    Action, DefaultVersionConverter, FactoryResult, Handler, Id, Type, VersionConverter,
+    Action, ActionId, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
 };
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -61,7 +61,7 @@ impl Handler for V1ActionHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -72,7 +72,7 @@ impl Handler for V1ActionHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -82,7 +82,7 @@ impl Handler for V1ActionHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,
@@ -131,7 +131,7 @@ impl Handler for V2ActionHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -141,7 +141,7 @@ impl Handler for V2ActionHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -151,7 +151,7 @@ impl Handler for V2ActionHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         _: &Stash,
