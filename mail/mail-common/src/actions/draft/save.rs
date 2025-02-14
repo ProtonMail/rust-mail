@@ -14,7 +14,7 @@ use crate::models::{
     DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -123,6 +123,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn apply_local(
         &self,
+        _: Id,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         tether: &Bond<'_>,
@@ -319,6 +320,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn revert_local(
         &self,
+        _: Id,
         _: &MailUserContext,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -330,6 +332,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn apply_remote(
         &self,
+        _: Id,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         stash: &Stash,
@@ -646,29 +649,32 @@ impl proton_action_queue::action::Handler for WrappedSaveHandler {
 
     async fn apply_local(
         &self,
+        id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        self.0.apply_local(context, action, tx).await
+        self.0.apply_local(id, context, action, tx).await
     }
 
     async fn revert_local(
         &self,
+        id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        self.0.revert_local(context, action, tx).await
+        self.0.revert_local(id, context, action, tx).await
     }
 
     async fn apply_remote(
         &self,
+        id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = self.0.apply_remote(context, action, stash).await;
+        let r = self.0.apply_remote(id, context, action, stash).await;
         if let Err(e) = &r {
             if let Err(e) = save_send_error(action, stash, e).await {
                 error!("Failed to save draft send result: {e:?}");

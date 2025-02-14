@@ -1,7 +1,7 @@
 mod common;
 
 use crate::common::{new_queue_typed, DefaultError};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Id, Type};
 use proton_action_queue::observers::{ActionAwaiter, ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::BroadcastMessage;
 use serde::{Deserialize, Serialize};
@@ -139,6 +139,7 @@ impl Handler for ErrorActionHandler {
 
     fn apply_local(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
@@ -150,6 +151,7 @@ impl Handler for ErrorActionHandler {
 
     fn revert_local(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
@@ -159,6 +161,7 @@ impl Handler for ErrorActionHandler {
 
     fn apply_remote(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Stash,
@@ -192,6 +195,7 @@ impl Handler for SuccessActionHandler {
 
     fn apply_local(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
@@ -203,6 +207,7 @@ impl Handler for SuccessActionHandler {
 
     fn revert_local(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
@@ -212,6 +217,7 @@ impl Handler for SuccessActionHandler {
 
     fn apply_remote(
         &self,
+        _: Id,
         (): &Self::Context,
         _: &mut Self::Action,
         _: &Stash,

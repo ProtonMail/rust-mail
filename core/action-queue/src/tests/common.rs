@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 #![allow(clippy::ignored_unit_patterns)]
 
-use crate::action::{Action, Handler};
+use crate::action::{Action, Handler, Id};
 use stash::stash::{Bond, Stash};
 use std::future::Future;
 use std::marker::PhantomData;
@@ -24,6 +24,7 @@ where
 
     async fn apply_local(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -33,6 +34,7 @@ where
 
     fn revert_local(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -42,6 +44,7 @@ where
 
     fn apply_remote(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,

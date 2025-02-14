@@ -3,7 +3,7 @@ mod common;
 
 use crate::common::{DefaultError, TestReadExtension, TestWriteExtension};
 use common::{new_factory, new_queue};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Id, Type};
 use proton_action_queue::queue::ActionRemoteOutput;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
@@ -78,6 +78,7 @@ impl Handler for TestActionHandler {
 
     async fn apply_local(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -91,6 +92,7 @@ impl Handler for TestActionHandler {
 
     async fn revert_local(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -100,6 +102,7 @@ impl Handler for TestActionHandler {
 
     async fn apply_remote(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

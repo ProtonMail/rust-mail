@@ -1,7 +1,7 @@
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Type};
 use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
@@ -45,6 +45,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_local(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -65,6 +66,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn revert_local(
         &self,
+        _: Id,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -80,6 +82,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
+        _: Id,
         ctx: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

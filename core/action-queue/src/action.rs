@@ -218,6 +218,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the operation failed.
     fn apply_local(
         &self,
+        this_id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
@@ -236,6 +237,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the operation failed.
     fn revert_local(
         &self,
+        this_id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
@@ -257,6 +259,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the network request failed.
     fn apply_remote(
         &self,
+        this_id: Id,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

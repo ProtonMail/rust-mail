@@ -2,7 +2,7 @@ mod common;
 
 use crate::common::DefaultError;
 use common::new_queue_typed;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Id, Type};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Stash};
 use std::any::Any;
@@ -75,6 +75,7 @@ where
 
     async fn apply_local(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -84,6 +85,7 @@ where
 
     async fn revert_local(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -93,6 +95,7 @@ where
 
     async fn apply_remote(
         &self,
+        _: Id,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,
