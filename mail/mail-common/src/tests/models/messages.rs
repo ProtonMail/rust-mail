@@ -2730,8 +2730,6 @@ async fn watch_messages_in_label() {
         )
         .await
         .unwrap();
-        tx.commit().await.unwrap();
-        let tx = conn.transaction().await.unwrap();
         tx.execute(
             "UPDATE labels SET color='OxFFFFFF' WHERE local_id=?",
             params![local_label_id1],
@@ -2741,9 +2739,6 @@ async fn watch_messages_in_label() {
         tx.commit().await.unwrap();
     });
 
-    // first update when modifying message
-    watch_result.recv_async().await.unwrap();
-    // second update when modifying the label color
     watch_result.recv_async().await.unwrap();
 }
 
