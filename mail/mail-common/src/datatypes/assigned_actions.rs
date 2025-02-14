@@ -107,7 +107,7 @@ impl AssignedSwipeAction {
         let label_id = move_to
             .local_id(tether)
             .await?
-            .expect("System label to have a local ID");
+            .ok_or_else(|| AppError::RemoteLabelDoesNotExist(move_to.remote_id()))?;
 
         if label_id == current_folder {
             return Ok(Self::NoAction);
