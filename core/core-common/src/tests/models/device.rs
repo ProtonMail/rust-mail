@@ -18,7 +18,6 @@ async fn test_save_registered_device_and_retrieve_it() {
 
         push_notification_status: None,
 
-        local_id: None,
         row_id: None,
     };
 
@@ -67,7 +66,6 @@ async fn only_last_device_token_can_be_retrieved() {
 
         push_notification_status: None,
 
-        local_id: None,
         row_id: None,
     };
 
@@ -93,7 +91,6 @@ async fn only_last_device_token_can_be_retrieved() {
 
         push_notification_status: None,
 
-        local_id: None,
         row_id: None,
     };
 

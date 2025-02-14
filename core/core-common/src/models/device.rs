@@ -22,13 +22,8 @@ use crate::datatypes::DeviceEnvironment;
 #[derive(Clone, Debug, Eq, PartialEq, Model)]
 #[TableName("registered_devices")]
 pub struct RegisteredDevice {
-    /// The local ID of the record. Note, that it is required by Stash, but since
-    /// we do not have remote id counterpart it is not very useful.
-    #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
-
-    /// Device token
-    #[DbField]
+    /// Device token, used as primary key
+    #[IdField]
     pub device_token: String,
 
     /// Environment to which we register
@@ -63,7 +58,9 @@ impl RegisteredDevice {
     ///
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         // There should be always max one registered device in the table
-        Self::find_first("", vec![], tether).await
+        // The order by logic is an extra failsafe. If for any reason there are more than two rows in the table,
+        // we will always return the latest one, guaranteeing at least some kind of consistency.
+        Self::find_first("ORDER BY row_id DESC", vec![], tether).await
     }
 
     /// Registers the device for Push Notifications.
@@ -90,17 +87,18 @@ impl RegisteredDevice {
     /// ensure that the information is updated correctly in the database.
     ///
     /// This method ensures that there is only one registered device in the table.
-    /// Otherwise, it removes old record.
+    /// Otherwise, it overwrites old record.
     ///
     /// # Errors
     ///
     /// Returns an error if the query fails
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Make sure there will be only one row.
-        // Remove ALL other rows
-        bond.execute(format!("DELETE FROM {}", Self::table_name()), vec![])
-            .await?;
+        // // Make sure there will be only one row.
+        if let Some(existing) = Self::find_first("", vec![], bond).await? {
+            self.row_id = existing.row_id;
+        }
+
         <Self as Model>::save(self, bond).await
     }
 }

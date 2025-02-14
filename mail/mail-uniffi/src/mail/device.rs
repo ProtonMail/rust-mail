@@ -81,9 +81,6 @@ impl From<RealRegisteredDevice> for RegisteredDevice {
 impl From<RegisteredDevice> for RealRegisteredDevice {
     fn from(value: RegisteredDevice) -> Self {
         Self {
-            // We do not care really about local ID.
-            // There can be only one row in the database anyway
-            local_id: None,
             device_token: value.device_token,
             environment: value.environment.into(),
             public_key: value.public_key,
