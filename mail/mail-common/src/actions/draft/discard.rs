@@ -1,5 +1,5 @@
 use crate::datatypes::SystemLabelId;
-use crate::draft::{DiscardError, Draft};
+use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
@@ -26,9 +26,9 @@ pub struct Discard {
 
 impl Discard {
     /// Create a new instance for the `draft`.
-    pub fn new(draft: &Draft) -> Self {
+    pub fn new(metadata_id: MetadataId) -> Self {
         Self {
-            metadata_id: draft.metadata_id,
+            metadata_id,
             local_message_id: None,
             local_conversation_id: None,
         }

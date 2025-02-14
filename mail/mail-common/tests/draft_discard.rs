@@ -49,6 +49,39 @@ async fn discard_before_save_only_deletes_metadata() {
 }
 
 #[tokio::test]
+async fn discard_by_message_id() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.discard(user_ctx.action_queue()).await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    assert!(
+        DraftMetadata::find_by_id(draft.metadata_id, &user_ctx.user_stash().connection())
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn discard_draft_after_save_marks_message_deleted() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
@@ -104,6 +137,91 @@ async fn discard_draft_after_save_marks_message_deleted() {
 
     // Check the message is marked as deleted.
 
+    let message = Message::find_by_remote_id(
+        message.metadata.id.clone(),
+        &user_ctx.user_stash().connection(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(message.deleted);
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    Draft::open(user_ctx, message.local_id.unwrap())
+        .await
+        .expect_err("Should not work");
+}
+
+#[tokio::test]
+async fn discard_draft_by_message_id() {
+    // Same as `discard_draft_after_save_marks_message_deleted` but using standalone discard.
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.label_ids.clear();
+    message.metadata.label_ids.push(LabelId::drafts());
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_message_delete(
+        [message.metadata.id.clone()],
+        Some(LabelId::drafts()),
+        PutMessagesDeleteResponse {
+            responses: vec![OperationResult {
+                id: message.metadata.id.clone(),
+                response: ApiErrorInfo {
+                    code: General::NoError as u32,
+                    error: None,
+                    details: None,
+                },
+            }],
+        },
+    )
+    .await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft.save(user_ctx.action_queue()).await.unwrap();
+
+    let message_id = draft
+        .message_id(&user_ctx.user_stash().connection())
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_pending_actions().await.unwrap();
+
+    // queue discard.
+    Draft::action_discard(
+        message_id,
+        &user_ctx.user_stash().connection(),
+        user_ctx.action_queue(),
+    )
+    .await
+    .unwrap();
+
+    // Check the message is marked as deleted.
     let message = Message::find_by_remote_id(
         message.metadata.id.clone(),
         &user_ctx.user_stash().connection(),

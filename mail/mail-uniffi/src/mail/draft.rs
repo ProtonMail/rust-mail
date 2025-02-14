@@ -384,6 +384,23 @@ pub async fn draft_undo_send(session: &MailUserSession, message_id: Id) -> VoidD
     .into()
 }
 
+/// Discard a Draft by with the given `message_id`.
+///
+/// Note that this requires that the given message interacted with any of the [`Draft`] APIs
+/// in the past.
+#[uniffi::export]
+pub async fn draft_discard(session: &MailUserSession, message_id: Id) -> VoidDraftDiscardResult {
+    let ctx = session.ctx();
+    uniffi_async(async move {
+        let tether = ctx.user_stash().connection();
+        RealDraft::action_discard(message_id.into(), &tether, ctx.action_queue()).await?;
+        Ok::<_, RealProtonMailError>(())
+    })
+    .await
+    .map_err(DraftDiscardError::from)
+    .into()
+}
+
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
     draft
         .save(ctx.action_queue())

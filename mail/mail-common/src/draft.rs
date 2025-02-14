@@ -813,6 +813,35 @@ impl Draft {
         Ok(self.to_discard_action().queue(queue).await?)
     }
 
+    /// Discard a draft with the given `message_id`.
+    ///
+    /// This is functionally equivalent to [`Draft::discard()`] but does not
+    /// require an instance of the [`Draft`] type.
+    ///
+    /// # Remarks
+    ///
+    /// This still requires that this message has been opened with `Draft::open` at least
+    /// once.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message is not a draft or the action failed to execute.
+    pub async fn action_discard(
+        message_id: LocalMessageId,
+        tether: &Tether,
+        queue: &Queue,
+    ) -> Result<QueuedActionOutput<Discard>, MailContextError> {
+        let Some(metadata) = DraftMetadata::find_by_message_id(message_id, tether).await? else {
+            return Err(Error::Open(OpenError::MessageNotADraft(message_id)).into());
+        };
+
+        Ok(
+            DraftDiscardActionQueuer::new(metadata.id.unwrap(), Discard::new(metadata.id.unwrap()))
+                .queue(queue)
+                .await?,
+        )
+    }
+
     /// Create a save action for the current state of the draft.
     ///
     /// This method is here to provide greater flexibility of integration
@@ -862,7 +891,7 @@ impl Draft {
     /// This method is here to provide greater flexibility of integration
     /// when used in multithreaded contexts.
     pub fn to_discard_action(&self) -> DraftDiscardActionQueuer {
-        DraftDiscardActionQueuer::new(self.metadata_id, Discard::new(self))
+        DraftDiscardActionQueuer::new(self.metadata_id, Discard::new(self.metadata_id))
     }
 
     /// Get the message id associated with this draft.
