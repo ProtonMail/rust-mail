@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+
+  - [ET-2165] Add standalone `draft_discard` function.
+
 ### Fixed
 
   - [ET-2903] Sent message no longer appears in drafts.
