@@ -2,7 +2,7 @@ use crate::datatypes::SystemLabelId;
 use crate::draft::{DiscardError, Draft};
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -58,7 +58,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
     type Context = MailUserContext;
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
@@ -91,7 +91,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
@@ -109,7 +109,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         stash: &Stash,

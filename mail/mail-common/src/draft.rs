@@ -16,7 +16,7 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use derive_more::derive::TryFrom;
 use futures::future::join3;
-use proton_action_queue::action::{Id, MetadataBuilder};
+use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
@@ -255,7 +255,7 @@ pub struct Draft {
     /// `None` if there is no associated send result.
     pub send_result: Option<DraftSendResult>,
     /// Records the last queued draft save id.
-    pub last_draft_save_action_id: Option<Id>,
+    pub last_draft_save_action_id: Option<ActionId>,
     #[debug(skip)]
     /// The decrypted message body.
     pub decrypted_body: DecryptedMessageBody,
@@ -814,7 +814,7 @@ impl Draft {
     /// While we have our own instance variable for the `last_save_action_id`, it may
     /// be beneficial for users of this method to pass in an alternate source.
     ///
-    pub fn to_save_action(&self, last_save_action_id: Option<Id>) -> DraftSaveActionQueuer {
+    pub fn to_save_action(&self, last_save_action_id: Option<ActionId>) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
             Save::new(self, DraftSendResultOrigin::Save),
@@ -834,7 +834,7 @@ impl Draft {
     /// Returns error if the action failed to execute.
     pub fn to_send_action(
         &self,
-        last_draft_save_action_id: Option<Id>,
+        last_draft_save_action_id: Option<ActionId>,
     ) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SaveOrSendError::NoRecipients.into());
@@ -922,11 +922,11 @@ impl Draft {
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
     action: Save,
-    previous_action_id: Option<Id>,
+    previous_action_id: Option<ActionId>,
 }
 
 impl DraftSaveActionQueuer {
-    fn new(id: MetadataId, action: Save, previous_action_id: Option<Id>) -> Self {
+    fn new(id: MetadataId, action: Save, previous_action_id: Option<ActionId>) -> Self {
         Self {
             id,
             action,
@@ -959,7 +959,7 @@ pub struct DraftSendActionQueuer {
     id: MetadataId,
     save_action: Save,
     send_action: draft::Send,
-    last_draft_save_action_id: Option<Id>,
+    last_draft_save_action_id: Option<ActionId>,
 }
 
 impl DraftSendActionQueuer {
@@ -967,7 +967,7 @@ impl DraftSendActionQueuer {
         id: MetadataId,
         save_action: Save,
         send_action: draft::Send,
-        last_draft_save_action_id: Option<Id>,
+        last_draft_save_action_id: Option<ActionId>,
     ) -> Self {
         Self {
             id,

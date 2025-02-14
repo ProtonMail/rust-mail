@@ -1,5 +1,5 @@
 //! Implementation of common observer patterns that are useful to follow queued actions.
-use crate::action::{Action, Id};
+use crate::action::{Action, ActionId};
 use crate::queue::{BroadcastMessage, Queue, QueuedMetadata};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ pub enum ActionFailureReason {
     /// Cancelled via user request or dependency execution error.
     Cancelled(Arc<QueuedMetadata>),
     /// Deleted via user request.
-    Deleted(Id),
+    Deleted(ActionId),
 }
 
 impl<T: Action> ActionFailureObserver<T> {
@@ -68,13 +68,13 @@ impl<T: Action> ActionFailureObserver<T> {
 /// Completion does not necessary mean the action finished executing correctly.
 pub struct ActionAwaiter {
     receiver: Receiver<BroadcastMessage>,
-    action_id: Id,
+    action_id: ActionId,
 }
 
 impl ActionAwaiter {
     /// Create a new instance to wait on the action with `action_id` queue in the given `queue`.
     #[must_use]
-    pub fn new(queue: &Queue, action_id: Id) -> Self {
+    pub fn new(queue: &Queue, action_id: ActionId) -> Self {
         Self {
             action_id,
             receiver: queue.new_broadcast_receiver(),

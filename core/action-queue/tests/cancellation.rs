@@ -4,7 +4,7 @@ mod common;
 use crate::common::DefaultError;
 use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
-    Action, DefaultVersionConverter, Handler, Id, MetadataBuilder, Type,
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type,
 };
 use proton_action_queue::queue::QueuedError;
 use serde::{Deserialize, Serialize};
@@ -173,7 +173,7 @@ impl Handler for CancelActionHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -183,7 +183,7 @@ impl Handler for CancelActionHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -193,7 +193,7 @@ impl Handler for CancelActionHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,
@@ -230,7 +230,7 @@ impl Handler for ChainCancelActionHandler {
     type Context = ();
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -242,7 +242,7 @@ impl Handler for ChainCancelActionHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -252,7 +252,7 @@ impl Handler for ChainCancelActionHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
         _: &Stash,

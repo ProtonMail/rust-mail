@@ -218,7 +218,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the operation failed.
     fn apply_local(
         &self,
-        this_id: Id,
+        this_id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
@@ -237,7 +237,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the operation failed.
     fn revert_local(
         &self,
-        this_id: Id,
+        this_id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
@@ -259,7 +259,7 @@ pub trait Handler: Default + 'static + Send + Sync {
     /// Returns error if the network request failed.
     fn apply_remote(
         &self,
-        this_id: Id,
+        this_id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,
@@ -272,27 +272,27 @@ pub trait Handler: Default + 'static + Send + Sync {
 ///
 /// This can be used to interact with certain API's available on the [`crate::queue::Queue`].
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Id(pub u64);
+pub struct ActionId(pub u64);
 
-impl Display for Id {
+impl Display for ActionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
 
-impl From<u64> for Id {
+impl From<u64> for ActionId {
     fn from(value: u64) -> Self {
         Self(value)
     }
 }
 
-impl FromSql for Id {
+impl FromSql for ActionId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        u64::column_result(value).map(Id)
+        u64::column_result(value).map(ActionId)
     }
 }
 
-impl ToSql for Id {
+impl ToSql for ActionId {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
@@ -344,7 +344,7 @@ sql_using_serde!(Resources);
 pub struct Metadata {
     /// List of queued actions the action depends upon. The action will only execute if all
     /// the dependencies have been executed.
-    pub(crate) dependencies: Vec<Id>,
+    pub(crate) dependencies: Vec<ActionId>,
     /// Optional debug string which can be assigned to diagnose issues or provide more context.
     pub(crate) debug_string: Option<String>,
     /// A list of resources to associate with this action. Can be any of any type as long as it is
@@ -428,7 +428,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependency(mut self, action_id: Id) -> Self {
+    pub fn with_dependency(mut self, action_id: ActionId) -> Self {
         self.metadata.dependencies.push(action_id);
         self
     }
@@ -441,7 +441,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = Id>) -> Self {
+    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = ActionId>) -> Self {
         self.metadata.dependencies.extend(action_ids);
         self
     }
@@ -488,7 +488,7 @@ impl MetadataBuilder {
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
-    UnknownType(Id, String),
+    UnknownType(ActionId, String),
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
     #[error("Failed to deserialize: {0}")]

@@ -14,7 +14,7 @@ use crate::models::{
     DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -123,7 +123,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         tether: &Bond<'_>,
@@ -320,7 +320,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &MailUserContext,
         _: &mut Self::Action,
         _: &Bond<'_>,
@@ -332,7 +332,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
         stash: &Stash,
@@ -649,7 +649,7 @@ impl proton_action_queue::action::Handler for WrappedSaveHandler {
 
     async fn apply_local(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -659,7 +659,7 @@ impl proton_action_queue::action::Handler for WrappedSaveHandler {
 
     async fn revert_local(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -669,7 +669,7 @@ impl proton_action_queue::action::Handler for WrappedSaveHandler {
 
     async fn apply_remote(
         &self,
-        id: Id,
+        id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,

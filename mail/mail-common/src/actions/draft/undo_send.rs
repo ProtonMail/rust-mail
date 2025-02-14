@@ -3,7 +3,7 @@ use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Id, Priority, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -57,7 +57,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
     type Context = MailUserContext;
     async fn apply_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -107,7 +107,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
 
     async fn revert_local(
         &self,
-        _: Id,
+        _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
@@ -137,7 +137,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
 
     async fn apply_remote(
         &self,
-        _: Id,
+        _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
         stash: &Stash,
