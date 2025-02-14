@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-2903] Sent message no longer appears in drafts.
   - [ET-1972] Do not update Draft with pending changes on `Draft::open`.
+  - [ET-1976] Swipe gesture returns an error instead of crashing if the label is missing local id
 
 ## [0.41.1] - 2025-02-12
 
