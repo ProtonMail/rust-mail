@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - [ET-2903] Sent message no longer appears in drafts.
+  - [ET-1972] Do not update Draft with pending changes on `Draft::open`.
 
 ## [0.41.1] - 2025-02-12
 
