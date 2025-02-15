@@ -534,7 +534,7 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     /// Create a new cache for generic ScrollData.
     ///
-    /// This will load the data from the database and create a cursor for the
+    /// This will load all available data from the database and create a cursor for the
     /// generic ScrollData in the place where first page should end.
     ///
     /// # Returns
@@ -569,6 +569,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         }))
     }
 
+    /// Transform the cursor to read absolutly all items from the database.
     pub fn set_absolute_end(mut self) -> Self {
         self.end = ScrollCursor::absolute_end(self.cursor.local_label_id, self.cursor.unread);
         self
@@ -673,6 +674,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             })
     }
 
+    /// Calculate the cursor for the next page of items.
     async fn calculate_cursor(
         end: &ScrollCursor<T>,
         local_label_id: LocalLabelId,

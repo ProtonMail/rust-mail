@@ -247,11 +247,7 @@ impl StatusWatcher {
         self_status.last_check = Instant::now();
         self_status.status = status;
 
-<<<<<<< HEAD
         trace!("Status has been updated to {:?}", status);
-=======
-        dbg!(status);
->>>>>>> a49b0f3e (chore: WIP)
     }
 
     async fn ping(api: Proton, timeout: Duration, retry: RetryPolicy) {

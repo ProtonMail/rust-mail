@@ -759,7 +759,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     assert_eq!(actual.len(), 50);
     assert!(scroller.has_more().await.unwrap());
 
-    // We reached cached mark, lets serve the rest from cache even if unordered
+    // We reached api cached mark, lets serve the rest from cache even if unordered
     let actual = scroller.fetch_more().await.unwrap();
 
     assert_eq!(actual.len(), 50);
