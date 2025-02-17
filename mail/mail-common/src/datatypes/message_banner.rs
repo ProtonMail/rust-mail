@@ -1,0 +1,48 @@
+/// Represents different types of banners that can be displayed for a given message.
+/// These banners indicate various security warnings, expiration notices,
+/// or content-related alerts.
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+pub enum MessageBanner {
+    /// The sender of this message is blocked.
+    BlockedSender,
+
+    /// The message might be a phishing attempt.
+    PhishingAttempt,
+
+    /// The message has been marked as spam.
+    Spam,
+
+    /// The message has an expiration date.
+    Expiry {
+        /// The Unix timestamp indicating when the message expires.
+        timestamp: u64,
+    },
+
+    /// The message is scheduled for automatic deletion at a specific time.
+    AutoDelete {
+        /// The Unix timestamp indicating when the message will be deleted.
+        timestamp: u64,
+    },
+
+    /// The message provides an option to unsubscribe from a newsletter.
+    UnsubscribeNewsletter,
+
+    /// The message is scheduled to be sent at a future time.
+    ScheduledSend {
+        /// The Unix timestamp indicating when the message is scheduled to be sent.
+        timestamp: u64,
+    },
+
+    /// The message has been snoozed and will reappear later.
+    Snoozed {
+        /// The Unix timestamp indicating when the message will reappear.
+        timestamp: u64,
+    },
+
+    /// The message contains embedded images.
+    EmbeddedImages,
+
+    /// The message contains remote content (e.g., external images or links).
+    RemoteContent,
+}
