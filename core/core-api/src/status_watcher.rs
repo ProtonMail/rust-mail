@@ -32,6 +32,7 @@ static STATUS: LazyLock<Arc<RwLock<Status>>> = LazyLock::new(|| {
     }))
 });
 
+/// The connection status and the last time it was checked.
 #[derive(Clone, Debug)]
 struct Status {
     status: ConnectionStatus,
@@ -46,18 +47,29 @@ impl Deref for Status {
     }
 }
 
+/// A background ping request.
+///
+/// It keeps track of the request background task and the receiver to know when it's finished.
+///
 #[derive(Debug)]
 struct BackgroundPing {
     _request: StatusJoinHandle,
     finished: flume::Receiver<()>,
 }
 
+/// Configuration for the `StatusWatcher`.
+///
 #[derive(Clone, Debug)]
 struct SwConfig {
+    /// Forground ping's retry policy.
     fg_retry: RetryPolicy,
+    /// Forground ping's timeout.
     fg_timeout: Duration,
+    /// Background ping's retry policy.
     bg_retry: RetryPolicy,
+    /// Background ping's timeout.
     bg_timeout: Duration,
+    /// Number of seconds before the status is considered stale.
     up_to_date: Duration,
 }
 
@@ -68,6 +80,7 @@ impl Default for SwConfig {
 }
 
 impl SwConfig {
+    /// Create a new `SwConfig` with default production values.
     fn new() -> Self {
         Self {
             up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
@@ -78,6 +91,7 @@ impl SwConfig {
         }
     }
 
+    /// Create a new `SwConfig` with default test values.
     fn test() -> Self {
         // Make single requests
         let test_retry_policy = RetryPolicy::default().max_count(0);
@@ -95,6 +109,13 @@ impl SwConfig {
     }
 }
 
+/// A `StatusWatcher` that will keep track of the connection status.
+///
+/// It will ping the server to get the current status if the status is stale.
+/// If the status is `Offline`, it will start a background check.
+/// The status is initialized to `Online`.
+/// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
+///
 #[derive(Clone, Debug)]
 pub struct StatusWatcher {
     status: Arc<RwLock<Status>>,

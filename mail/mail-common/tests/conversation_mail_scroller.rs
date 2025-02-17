@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use maplit::hashmap;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::{service::ApiServiceError, services::proton::common::LabelId};
 use proton_api_mail::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
@@ -13,6 +13,7 @@ use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
     mail_scroller::{DataScrollerSource, MailScroller, MailScrollerSet},
     models::{Conversation, ConversationCounters, ConversationScrollData},
+    MailContextError,
 };
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
@@ -392,6 +393,10 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
 
     // The items can be read only when we progress with `fetch_more`
     let actual = scroller.fetch_more().await.unwrap_err();
+    assert!(matches!(
+        actual,
+        MailContextError::Api(ApiServiceError::OtherHttpError(..))
+    ));
     assert_eq!(
         actual.to_string(),
         "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()

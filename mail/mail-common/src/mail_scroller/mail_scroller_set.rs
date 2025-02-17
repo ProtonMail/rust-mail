@@ -1,5 +1,9 @@
 use std::ops::Deref;
 
+/// A set of mail items that MailScroller returns
+///
+/// They indicate if items can be appended or have to be replaced.
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MailScrollerSet<T> {
     Append(Vec<T>),
