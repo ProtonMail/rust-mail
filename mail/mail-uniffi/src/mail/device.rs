@@ -9,7 +9,7 @@ use crate::{
     uniffi_async,
 };
 
-use super::MailUserSession;
+use super::{MailSession, MailUserSession};
 
 #[derive(Clone, Debug, uniffi::Record)]
 pub struct RegisteredDevice {
@@ -27,12 +27,17 @@ pub struct RegisteredDevice {
 
 /// Return already registered device information.
 ///
+/// # Session
+///
+/// Note, this function can be executed before logging in. It loads
+/// the device token from shared account database
+///
 #[proton_uniffi_macros::export_result]
 pub async fn get_registered_device(
-    session: Arc<MailUserSession>,
+    session: Arc<MailSession>,
 ) -> Result<Option<RegisteredDevice>, ActionError> {
     uniffi_async(async move {
-        let tether = session.user_stash().connection();
+        let tether = session.session_stash().connection();
         let real_device = RealRegisteredDevice::get(&tether).await?;
         let device = real_device.map(From::from);
         Ok::<_, RealProtonMailError>(device)
@@ -41,7 +46,12 @@ pub async fn get_registered_device(
     .map_err(ActionError::from)
 }
 
-/// Register device & save the details in cache
+/// Register and save device into the database
+///
+/// # Session
+///
+/// This function can be only executed after logging in. If you just want to store device token for
+/// the sake of registering it later, use [`save_registered_device`] instead.
 ///
 #[uniffi::export]
 pub async fn register_and_save_device(
@@ -51,10 +61,44 @@ pub async fn register_and_save_device(
     uniffi_async(async move {
         let mut real_device = RealRegisteredDevice::from(device);
         let ctx = session.ctx();
-        let mut tether = ctx.user_stash().connection();
+
+        let mut tether = ctx
+            .mail_context()
+            .core_context()
+            .account_stash()
+            .connection();
         let tx = tether.transaction().await?;
 
         real_device.register(ctx.api()).await?;
+        real_device.save(&tx).await?;
+
+        tx.commit().await?;
+
+        Ok::<_, RealProtonMailError>(())
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}
+
+/// Save device details in cache.
+///
+/// # Session
+///
+/// Note, this function can be executed before logging in. It stores
+/// the device token in shared account database. If you already have user session,
+/// you probably should use [`register_and_save_device`] instead.
+///
+#[uniffi::export]
+pub async fn save_registered_devide(
+    session: Arc<MailSession>,
+    device: RegisteredDevice,
+) -> VoidActionResult {
+    uniffi_async(async move {
+        let mut real_device = RealRegisteredDevice::from(device);
+        let ctx = session.ctx();
+        let mut tether = ctx.session_stash().connection();
+        let tx = tether.transaction().await?;
         real_device.save(&tx).await?;
 
         tx.commit().await?;

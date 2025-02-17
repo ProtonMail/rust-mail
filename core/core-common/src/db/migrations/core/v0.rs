@@ -4,7 +4,6 @@ use tracing::{debug_span, Instrument};
 
 mod addresses;
 mod contacts;
-mod devices;
 mod labels;
 mod sender_image_cache;
 mod user;
@@ -40,10 +39,6 @@ impl Migration for V0 {
 
         labels::create_labels_tables(tx)
             .instrument(debug_span!("labels"))
-            .await?;
-
-        devices::create_tables(tx)
-            .instrument(debug_span!("devices"))
             .await?;
 
         Ok(())

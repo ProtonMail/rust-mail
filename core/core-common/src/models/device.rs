@@ -60,7 +60,7 @@ impl RegisteredDevice {
         // There should be always max one registered device in the table
         // The order by logic is an extra failsafe. If for any reason there are more than two rows in the table,
         // we will always return the latest one, guaranteeing at least some kind of consistency.
-        Self::find_first("ORDER BY row_id DESC", vec![], tether).await
+        Self::find_first("ORDER BY rowid DESC", vec![], tether).await
     }
 
     /// Registers the device for Push Notifications.
