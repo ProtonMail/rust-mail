@@ -26,7 +26,7 @@ use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 use smart_default::SmartDefault;
 
-use super::LabelType;
+use super::{DeviceEnvironment, LabelType};
 
 /// Parameters for getting Captcha details.
 #[serde_as]
@@ -226,4 +226,21 @@ pub struct GetLabelsByIdsOptions {
     /// Label IDs to get.
     #[serde(rename = "LabelIDs")]
     pub label_ids: Vec<LabelId>,
+}
+
+/// Represents `POST /devices` request body.
+///
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RegisterDeviceRequest {
+    /// Device token
+    pub device_token: String,
+    /// Environment to which we register
+    pub environment: DeviceEnvironment,
+    /// PGP Public Key
+    pub public_key: Option<String>,
+    /// TODO: Document this field
+    pub ping_notification_status: Option<i32>,
+    /// TODO: Document this field
+    pub push_notification_status: Option<i32>,
 }

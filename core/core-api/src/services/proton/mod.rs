@@ -403,4 +403,18 @@ pub trait ProtonCore {
         label_id: LabelId,
         body: PatchLabelRequest,
     ) -> ApiServiceResult<PatchLabelResponse>;
+
+    /// This method is used to register device for push notifications.
+    /// The registering will delete any duplicate having the same (User ID, Product, Device Token) from different sessions.
+    /// If the registering is done from a session already having a registered device, the existing device will be replaced with the new one.
+    ///
+    /// # Parameters
+    ///
+    /// * `body` - Json body to use in the post request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()>;
 }

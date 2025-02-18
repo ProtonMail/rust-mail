@@ -256,6 +256,16 @@ impl ProtonCore for Proton {
             .ok()?
             .into_body_json()?)
     }
+
+    async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()> {
+        POST!("{CORE_V4}/devices")
+            .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
 }
 
 #[allow(clippy::redundant_closure_for_method_calls)]

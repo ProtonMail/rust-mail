@@ -1,4 +1,7 @@
 use stash::stash::{Bond, StashError};
+use tracing::{debug_span, Instrument};
+
+mod devices;
 
 pub struct V0 {}
 
@@ -8,8 +11,17 @@ impl proton_sqlite3::Migration for V0 {
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
-        create_table_core_accounts(tx).await?;
-        create_table_core_sessions(tx).await?;
+        create_table_core_accounts(tx)
+            .instrument(debug_span!("core accounts"))
+            .await?;
+
+        create_table_core_sessions(tx)
+            .instrument(debug_span!("core accounts"))
+            .await?;
+
+        devices::create_tables(tx)
+            .instrument(debug_span!("devices"))
+            .await?;
 
         Ok(())
     }

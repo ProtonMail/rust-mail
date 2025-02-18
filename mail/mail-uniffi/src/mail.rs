@@ -3,6 +3,7 @@ mod avatar_information;
 mod contacts;
 pub mod conversations;
 pub mod datatypes;
+mod device;
 mod draft;
 mod logging;
 mod login;
@@ -15,6 +16,7 @@ mod settings;
 mod sidebar;
 mod user_session;
 
+pub use device::*;
 pub use login::*;
 pub use mailbox::*;
 pub use session::*;

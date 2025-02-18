@@ -34,6 +34,7 @@ mod tests;
 pub mod contact;
 pub mod contact_card;
 pub mod contact_email;
+pub mod device;
 pub mod labels;
 pub mod sender_image_cache;
 
@@ -42,6 +43,7 @@ use std::future::Future;
 pub use self::contact::*;
 pub use self::contact_card::*;
 pub use self::contact_email::*;
+pub use self::device::*;
 pub use self::labels::*;
 
 use crate::datatypes::{

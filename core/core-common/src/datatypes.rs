@@ -51,8 +51,8 @@ use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use num_enum::IntoPrimitive;
 use proton_api_core::services::proton::common::{
-    AddressId, ContactEmailId, ContactId, LabelId, LabelType as ApiLabelType,
-    LightOrDarkMode as ApiLightOrDarkMode,
+    AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
+    LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
 };
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
@@ -715,6 +715,43 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::Folder,
     LabelType::System,
 ];
+
+/// In which environment are we going to register the device
+/// for the push notification.
+///
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
+#[try_from(repr)]
+#[repr(u8)]
+pub enum DeviceEnvironment {
+    Google = 4,
+    AppleProd = 6,
+    AppleBeta = 7,
+    AppleDev = 16,
+}
+
+impl FromSql for DeviceEnvironment {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
+    }
+}
+
+impl ToSql for DeviceEnvironment {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl From<DeviceEnvironment> for ApiDeviceEnvironment {
+    fn from(value: DeviceEnvironment) -> Self {
+        match value {
+            DeviceEnvironment::Google => Self::Google,
+            DeviceEnvironment::AppleProd => Self::AppleProd,
+            DeviceEnvironment::AppleBeta => Self::AppleBeta,
+            DeviceEnvironment::AppleDev => Self::AppleDev,
+        }
+    }
+}
 
 //  STRUCTS
 //==============================================================================

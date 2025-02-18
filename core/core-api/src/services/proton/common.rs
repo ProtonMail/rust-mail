@@ -73,6 +73,18 @@ pub enum LabelType {
     System = 4,
 }
 
+/// In which environment are we going to register the device
+/// for the push notification.
+///
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq, Serialize_repr)]
+#[repr(u8)]
+pub enum DeviceEnvironment {
+    Google = 4,
+    AppleProd = 6,
+    AppleBeta = 7,
+    AppleDev = 16,
+}
+
 //  STRUCTS
 //==============================================================================
 
