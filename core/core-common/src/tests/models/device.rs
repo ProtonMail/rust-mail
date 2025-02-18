@@ -1,4 +1,6 @@
 use proton_core_test_utils::test_context::TestContext;
+use proton_sqlite3::rusqlite::ErrorCode;
+use stash::{orm::Model, stash::StashError};
 
 use crate::{datatypes::DeviceEnvironment, models::RegisteredDevice};
 
@@ -114,4 +116,82 @@ async fn only_last_device_token_can_be_retrieved() {
         cached_device.push_notification_status,
         second.push_notification_status
     );
+}
+
+// # Context
+//
+// There is a constraint, that only one row in `registered_devices` might exist.
+// It is guarded by DB trigger.
+//
+// Additionally, [`RegisteredDevice::save`] prevents it by overwriting the last row.
+//
+// # What we test
+//
+// Since `::save` ensures there is only one row, we never test whether the database trigger is
+// correct or not. Therefore let's make a scenario where developer
+// by accident used `Model::save` instead.
+#[tokio::test]
+async fn should_trigger_db_guard_if_incorrectly_used_trait_method() {
+    {
+        let ctx = TestContext::new().await;
+        let user_ctx = ctx.user_context().await;
+
+        let mut tether = user_ctx.stash().connection();
+        let tx = tether.transaction().await.unwrap();
+
+        let mut first = RegisteredDevice {
+            device_token: "ABCD".to_string(),
+
+            environment: DeviceEnvironment::Google,
+
+            public_key: None,
+
+            ping_notification_status: None,
+
+            push_notification_status: None,
+
+            row_id: None,
+        };
+
+        Model::save(&mut first, &tx).await.unwrap();
+        tx.commit().await.unwrap();
+
+        // Crash
+        //
+        // ...
+        //
+        // Recovery
+        let mut tether = user_ctx.stash().connection();
+        let tx = tether.transaction().await.unwrap();
+
+        let mut second = RegisteredDevice {
+            device_token: "ABCD".to_string(),
+
+            environment: DeviceEnvironment::Google,
+
+            public_key: None,
+
+            ping_notification_status: None,
+
+            push_notification_status: None,
+
+            row_id: None,
+        };
+
+        let stash_error = Model::save(&mut second, &tx).await.unwrap_err();
+        tx.rollback().await.expect("Rolled back");
+
+        let StashError::DeserializationError(stash::orm::ConversionError::SqliteError(
+            sqlite_error,
+        )) = stash_error
+        else {
+            panic!("Expected Sqlite Error, found {stash_error:?}")
+        };
+        assert_eq!(
+            "registered_devices may have only one row. This is a bug in a model layer",
+            sqlite_error.to_string()
+        );
+        let error = sqlite_error.sqlite_error().expect("Error");
+        assert_eq!(error.code, ErrorCode::ConstraintViolation);
+    }
 }
