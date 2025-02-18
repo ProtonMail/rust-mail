@@ -90,7 +90,7 @@ pub async fn register_and_save_device(
 /// you probably should use [`register_and_save_device`] instead.
 ///
 #[uniffi::export]
-pub async fn save_registered_devide(
+pub async fn save_registered_device(
     session: Arc<MailSession>,
     device: RegisteredDevice,
 ) -> VoidActionResult {
