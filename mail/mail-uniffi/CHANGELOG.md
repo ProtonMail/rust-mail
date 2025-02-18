@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.43.0] - 2025-02-18
+
 ### Added
 
   - [ET-404] Functions for registering and retrieving cached device tokens, used for push notifications
