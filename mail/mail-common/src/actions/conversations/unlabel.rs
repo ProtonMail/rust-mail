@@ -2,13 +2,13 @@ use crate::actions::{filter_responses, ActionError, GenericActionData};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::error;
 
 /// Action which removes a label from conversations.
@@ -73,7 +73,7 @@ impl proton_action_queue::action::Handler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let response = Conversation::remove_label_from_multiple_remote::<Proton>(
             action.0.remote_label_id.clone().expect("Should be set"),
@@ -87,8 +87,7 @@ impl proton_action_queue::action::Handler for Handler {
         if !failed_ids.is_empty() {
             error!("Unlabel operation failed for: {:?}", failed_ids);
 
-            let mut conn = stash.connection();
-            let tx = conn.transaction().await?;
+            let tx = guard.transaction().await?;
             let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Conversation::apply_label(action.0.label_id, local_ids, &tx)

@@ -841,7 +841,7 @@ async fn handle_event_loop_error(error: ActionFailureReason, sender: &Sender<Com
             match details {
                 ActionError::Action(e) => Command::message(Messages::DisplayError(
                     Some("Event Loop".to_owned()),
-                    anyhow!("Event Poll Failure: {}", e.0),
+                    anyhow!("Event Poll Failure: {}", e),
                 )),
                 ActionError::Queue(e) => Command::message(Messages::DisplayError(
                     Some("Event Loop".to_owned()),

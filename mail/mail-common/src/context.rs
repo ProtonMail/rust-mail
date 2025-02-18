@@ -1,7 +1,7 @@
 use crate::actions::ActionError;
 use crate::{draft, AppError, MailUserContext};
 use futures::executor::block_on;
-use proton_action_queue::action::Action;
+use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
@@ -79,6 +79,8 @@ pub enum MailContextError {
     DuplicateContext(UserId),
     #[error("A task was cancelled")]
     TaskCancelled,
+    #[error("Queue Write Guard Expired")]
+    QueueWriterGuardExpired,
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -95,6 +97,19 @@ impl proton_action_queue::action::Error for MailContextError {
             e.is_network_failure()
         } else {
             false
+        }
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, Self::QueueWriterGuardExpired)
+    }
+}
+
+impl From<WriterGuardError> for MailContextError {
+    fn from(value: WriterGuardError) -> Self {
+        match value {
+            WriterGuardError::Expired => MailContextError::QueueWriterGuardExpired,
+            WriterGuardError::Stash(e) => MailContextError::Stash(e),
         }
     }
 }
@@ -117,6 +132,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::CacheError(err) => MailContextError::CacheError(err),
             CoreContextError::ContactError(err) => MailContextError::ContactError(err),
             CoreContextError::DuplicateContext(user_id) => Self::DuplicateContext(user_id),
+            CoreContextError::QueueWriterGuardExpired => Self::QueueWriterGuardExpired,
         }
     }
 }

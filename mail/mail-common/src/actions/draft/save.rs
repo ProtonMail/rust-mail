@@ -14,14 +14,16 @@ use crate::models::{
     DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+};
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, StashError};
+use stash::stash::{Bond, StashError};
 use tracing::{debug, error};
 
 /// Action which creates or updates a draft on the server.
@@ -104,7 +106,7 @@ impl Action for Save {
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = WrappedSaveHandler;
+    type Handler = SaveHandler;
     type RemoteOutput = ();
 
     type LocalOutput = ();
@@ -330,16 +332,30 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // These items will be removed via a discard action.
         Ok(())
     }
-
     async fn apply_remote(
         &self,
         _: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let r = Save::apply_remote_impl(ctx, action, &mut guard).await;
+        if let Err(e) = &r {
+            if let Err(e) = save_send_error(action, &mut guard, e).await {
+                error!("Failed to save draft send result: {e:?}");
+            }
+        }
+        r
+    }
+}
+
+impl Save {
+    async fn apply_remote_impl(
+        ctx: &MailUserContext,
+        action: &mut Self,
+        guard: &mut WriterGuard<'_>,
+    ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let session = ctx.session();
-        let mut tether = stash.connection();
 
         let message_id = action.message_id.expect("Should be set");
         let conversation_id = action.conversation_id.expect("Should be set");
@@ -347,28 +363,29 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // Load all dependencies to make sure they are up to date. For drafts
         // this is fine so we can always access the latest value of the data
         // without having to queue multiple actions.
-        let Some(mut message) = Message::find_by_id(message_id, &tether).await? else {
+        let Some(mut message) = Message::find_by_id(message_id, guard.tether()).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
-        if Conversation::find_by_id(conversation_id, &tether)
+        if Conversation::find_by_id(conversation_id, guard.tether())
             .await?
             .is_none()
         {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let Some(mut message_body_metadata) = MessageBodyMetadata::for_message(message_id, &tether)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to load message body metadata for {message_id:?}: {e:?}")
-            })?
+        let Some(mut message_body_metadata) =
+            MessageBodyMetadata::for_message(message_id, guard.tether())
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to load message body metadata for {message_id:?}: {e:?}")
+                })?
         else {
             return Err(AppError::MessageBodyMetadataMissing(message_id).into());
         };
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
-            let Some(remote_id) = Message::local_id_counterpart(parent_id, &tether)
+            let Some(remote_id) = Message::local_id_counterpart(parent_id, guard.tether())
                 .await
                 .inspect_err(|e| error!("Failed to resolve remote parent id: {e:?}"))?
             else {
@@ -431,7 +448,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
-        let bond = tether.transaction().await?;
+        let bond = guard.transaction().await?;
         let row_id = message.row_id;
 
         // Update remote ids
@@ -499,9 +516,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         Ok(())
     }
-}
-
-impl Save {
     fn create_new_message(
         &self,
         address: &Address,
@@ -639,58 +653,12 @@ impl Save {
     }
 }
 
-/// Wraps the execution of the default draft [`SaveHandler`] to record
-/// remote execution failure.
-#[derive(Default)]
-pub struct WrappedSaveHandler(SaveHandler);
-
-impl proton_action_queue::action::Handler for WrappedSaveHandler {
-    type Action = <SaveHandler as proton_action_queue::action::Handler>::Action;
-    type Context = <SaveHandler as proton_action_queue::action::Handler>::Context;
-
-    async fn apply_local(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        self.0.apply_local(id, context, action, tx).await
-    }
-
-    async fn revert_local(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        self.0.revert_local(id, context, action, tx).await
-    }
-
-    async fn apply_remote(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        stash: &Stash,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = self.0.apply_remote(id, context, action, stash).await;
-        if let Err(e) = &r {
-            if let Err(e) = save_send_error(action, stash, e).await {
-                error!("Failed to save draft send result: {e:?}");
-            }
-        }
-        r
-    }
-}
-
 // Simple wrapper function to catch errors
 async fn save_send_error(
     action: &Save,
-    stash: &Stash,
+    guard: &mut WriterGuard<'_>,
     error: &MailContextError,
-) -> Result<(), StashError> {
+) -> Result<(), WriterGuardError> {
     let error = DraftSendFailure::from_mail_context_error(error);
     if error.is_skippable() {
         return Ok(());
@@ -700,8 +668,7 @@ async fn save_send_error(
         action.save_origin,
         error,
     );
-    let mut conn = stash.connection();
-    let tx = conn.transaction().await?;
+    let tx = guard.transaction().await?;
     send_result.save(&tx).await?;
-    tx.commit().await
+    Ok(tx.commit().await?)
 }

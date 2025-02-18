@@ -6,9 +6,10 @@ use common::{new_queue_with_stash, new_stash};
 use proton_action_queue::action;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
+    WriterGuard,
 };
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 const STARTING_VALUE: u32 = 30;
 const END_VALUE: &str = "foo=30";
@@ -85,7 +86,7 @@ impl Handler for V1ActionHandler {
         _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -154,7 +155,7 @@ impl Handler for V2ActionHandler {
         _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.value, END_VALUE);
         Ok(())

@@ -190,6 +190,7 @@ impl From<MailContextError> for ProtonMailError {
             }
             MailContextError::Label(label_error) => Self::from(label_error),
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
+            MailContextError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
         }
     }
 }
@@ -372,6 +373,7 @@ impl From<ActionError> for ProtonMailError {
             ActionError::NoInput => Self::Unexpected(Unexpected::Internal),
             ActionError::Label(label_error) => Self::from(label_error),
             ActionError::Other(anyhow) => Self::from(anyhow),
+            ActionError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
         }
     }
 }

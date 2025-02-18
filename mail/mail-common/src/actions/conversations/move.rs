@@ -3,14 +3,14 @@ use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use crate::MailUserContext;
 use itertools::Itertools;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::error;
 
 /// Action which moves conversations between two labels.
@@ -103,7 +103,7 @@ impl ActionHandler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = ctx.api();
         let conversation_ids = action
@@ -131,8 +131,7 @@ impl ActionHandler for Handler {
 
         error!("Move operation failed for: {:?}", failed_ids);
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
+        let tx = guard.transaction().await?;
         let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
         Conversation::move_conversations(

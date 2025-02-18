@@ -11,7 +11,7 @@ use crate::models::RollbackItem;
 use crate::AppError;
 use indoc::formatdoc;
 use itertools::Itertools;
-use proton_action_queue::action::Factory;
+use proton_action_queue::action::{Factory, WriterGuardError};
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
@@ -39,6 +39,8 @@ pub enum ActionError {
     Label(#[from] LabelError),
     #[error("No input provided")]
     NoInput,
+    #[error("Queue Writer Guard Expired")]
+    QueueWriterGuardExpired,
     #[error("Other: {0}")]
     Other(anyhow::Error),
 }
@@ -49,6 +51,19 @@ impl proton_action_queue::action::Error for ActionError {
             e.is_network_failure()
         } else {
             false
+        }
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, Self::QueueWriterGuardExpired)
+    }
+}
+
+impl From<WriterGuardError> for ActionError {
+    fn from(value: WriterGuardError) -> Self {
+        match value {
+            WriterGuardError::Expired => ActionError::QueueWriterGuardExpired,
+            WriterGuardError::Stash(e) => Self::Stash(e),
         }
     }
 }

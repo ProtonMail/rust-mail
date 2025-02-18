@@ -1,13 +1,13 @@
 use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
 use crate::{actions::ActionError, AppError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -128,7 +128,7 @@ impl proton_action_queue::action::Handler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let action_equal_original_state = action
             .original_state
@@ -142,7 +142,7 @@ impl proton_action_queue::action::Handler for Handler {
         let remote_id = match action.remote_id.clone() {
             Some(remote_id) => remote_id,
             None => {
-                let tx = stash.connection();
+                let tx = guard.transaction().await?;
                 let label = Label::load(action.local_id, &tx)
                     .await?
                     .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;

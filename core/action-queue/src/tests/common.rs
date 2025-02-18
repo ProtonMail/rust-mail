@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 #![allow(clippy::ignored_unit_patterns)]
 
-use crate::action::{Action, ActionId, Handler};
-use stash::stash::{Bond, Stash};
+use crate::action::{Action, ActionId, Handler, WriterGuard};
+use stash::stash::Bond;
 use std::future::Future;
 use std::marker::PhantomData;
 
@@ -47,7 +47,7 @@ where
         _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard,
     ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {
         std::future::ready(Ok(T::RemoteOutput::default()))
     }

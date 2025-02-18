@@ -11,7 +11,9 @@ use crate::models::{
     MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+};
 use proton_api_core::consts::Mail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
@@ -19,7 +21,7 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, StashError};
+use stash::stash::Bond;
 use std::time::Duration;
 use tracing::error;
 
@@ -45,7 +47,7 @@ impl Action for Send {
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = WrappedSendHandler;
+    type Handler = SendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);
     type LocalOutput = ();
     type Error = MailContextError;
@@ -162,14 +164,27 @@ impl proton_action_queue::action::Handler for SendHandler {
         _: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let local_message_id = action.local_message_id.expect("Should be set");
-        let mut tether = stash.connection();
-        let local_outbox_label_id = local_outbox_label_id(&tether).await?;
-        let local_sent_label_id = local_sent_label_id(&tether).await?;
+        let r = Send::apply_remote_impl(context, action, &mut guard).await;
+        if let Err(e) = save_send_status(action, &mut guard, &r).await {
+            error!("Failed to save draft send result: {e:?}");
+        }
+        r
+    }
+}
 
-        let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, &tether)
+impl Send {
+    async fn apply_remote_impl(
+        context: &<Self as Action>::Context,
+        action: &mut Self,
+        guard: &mut WriterGuard<'_>,
+    ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
+        let local_message_id = action.local_message_id.expect("Should be set");
+        let local_outbox_label_id = local_outbox_label_id(guard.tether()).await?;
+        let local_sent_label_id = local_sent_label_id(guard.tether()).await?;
+
+        let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, guard.tether())
             .await
             .inspect_err(|e| {
                 error!("Failed to load draft metadata: {e:?}");
@@ -179,7 +194,8 @@ impl proton_action_queue::action::Handler for SendHandler {
             return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
         };
 
-        let Some(message_metadata) = Message::find_by_id(local_message_id, &tether).await? else {
+        let Some(message_metadata) = Message::find_by_id(local_message_id, guard.tether()).await?
+        else {
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
@@ -189,7 +205,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         let Some(message_body_metadata) =
-            MessageBodyMetadata::for_message(local_message_id, &tether)
+            MessageBodyMetadata::for_message(local_message_id, guard.tether())
                 .await
                 .inspect_err(|e| {
                     error!("Failed to load message body metadata for {local_message_id:?}: {e:?}")
@@ -199,7 +215,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         // Load the mail settings of the sending user.
-        let mail_settings = MailSettings::get(&tether)
+        let mail_settings = MailSettings::get(guard.tether())
             .await
             .inspect_err(|e| error!("Failed to load mail settings: {e:?}"))?
             .unwrap_or_default();
@@ -222,7 +238,7 @@ impl proton_action_queue::action::Handler for SendHandler {
 
         let pgp_provider = new_pgp_provider();
 
-        let tx = tether.transaction().await?;
+        let tx = guard.transaction().await?;
         // Load send preferences for each recipient of the message.
         let send_preferences = load_send_preferences_for_recipients(
             context,
@@ -285,7 +301,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         // Update conversation
-        let tx = tether.transaction().await?;
+        let tx = guard.transaction().await?;
         let mut conversation: Conversation = response.conversation.into();
         conversation
             .save(&tx)
@@ -352,55 +368,12 @@ impl proton_action_queue::action::Handler for SendHandler {
     }
 }
 
-/// Wraps the execution of the default draft [`SendHandler`] to record
-/// remote execution failure.
-#[derive(Default)]
-pub struct WrappedSendHandler(SendHandler);
-
-impl proton_action_queue::action::Handler for WrappedSendHandler {
-    type Action = <SendHandler as proton_action_queue::action::Handler>::Action;
-    type Context = <SendHandler as proton_action_queue::action::Handler>::Context;
-    async fn apply_local(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        self.0.apply_local(id, context, action, tx).await
-    }
-
-    async fn revert_local(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        self.0.revert_local(id, context, action, tx).await
-    }
-
-    async fn apply_remote(
-        &self,
-        id: ActionId,
-        context: &Self::Context,
-        action: &mut Self::Action,
-        stash: &Stash,
-    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = self.0.apply_remote(id, context, action, stash).await;
-        if let Err(e) = save_send_status(action, stash, &r).await {
-            error!("Failed to save draft send result: {e:?}");
-        }
-        r
-    }
-}
-
 // Simple wrapper function to catch errors
 async fn save_send_status(
     action: &Send,
-    stash: &Stash,
+    guard: &mut WriterGuard<'_>,
     status: &Result<<Send as Action>::RemoteOutput, MailContextError>,
-) -> Result<(), StashError> {
+) -> Result<(), WriterGuardError> {
     let mut send_result = match status {
         Ok((remote_id, delivery_time)) => DraftSendResult::success(
             action.local_message_id.expect("Should be set"),
@@ -421,8 +394,7 @@ async fn save_send_status(
         }
     };
 
-    let mut conn = stash.connection();
-    let tx = conn.transaction().await?;
+    let tx = guard.transaction().await?;
     send_result.save(&tx).await?;
-    tx.commit().await
+    Ok(tx.commit().await?)
 }

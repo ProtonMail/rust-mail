@@ -2,9 +2,11 @@ mod common;
 
 use crate::common::DefaultError;
 use common::new_queue_typed;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -98,7 +100,7 @@ where
         _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         Ok(<Self::Action as Action>::RemoteOutput::default())
     }

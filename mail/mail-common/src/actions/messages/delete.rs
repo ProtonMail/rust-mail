@@ -2,7 +2,7 @@ use crate::actions::{filter_responses, ActionError, GenericActionData};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Conversation, Message};
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError};
+use stash::stash::{Bond, StashError};
 use tracing::error;
 
 /// Action which marks messages as deleted.
@@ -84,15 +84,13 @@ impl ActionHandler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let mut conn = stash.connection();
-
-        action.0.resolve_ids(&conn).await?;
+        action.0.resolve_ids(guard.tether()).await?;
 
         let local_ids_without_remote_id = action
             .0
-            .unsynced_item_ids(&conn)
+            .unsynced_item_ids(guard.tether())
             .await
             .inspect_err(|e| error!("Failed to load local only ids: {e:?}"))?;
 
@@ -119,7 +117,7 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             error!("Delete messages operation failed for: {failed_ids:?}");
 
-            let tx = conn.transaction().await?;
+            let tx = guard.transaction().await?;
 
             if !failed_ids.is_empty() {
                 let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
