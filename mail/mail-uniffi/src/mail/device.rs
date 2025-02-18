@@ -67,12 +67,12 @@ pub async fn register_and_save_device(
             .core_context()
             .account_stash()
             .connection();
+
         let tx = tether.transaction().await?;
+        real_device.save(&tx).await?;
+        tx.commit().await?;
 
         real_device.register(ctx.api()).await?;
-        real_device.save(&tx).await?;
-
-        tx.commit().await?;
 
         Ok::<_, RealProtonMailError>(())
     })
