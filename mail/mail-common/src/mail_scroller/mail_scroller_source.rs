@@ -6,6 +6,8 @@ use tokio::task::JoinHandle;
 use crate::{MailContextError, MailUserContext};
 
 mod data_scroller_source;
+#[allow(clippy::wrong_self_convention)]
+mod mail_scroller_state;
 mod remote_source;
 
 pub use self::data_scroller_source::*;

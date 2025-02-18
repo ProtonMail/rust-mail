@@ -183,7 +183,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_message_pages(&ctx, page_size, 4).await;
+    let params = setup_api_message_pages(&ctx, page_size, 3).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
