@@ -15,7 +15,7 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::errors::{ActionError, ProtonError};
+use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -790,6 +790,7 @@ pub async fn watch_messages_for_label(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn apply_label_to_messages(
     session: Arc<MailUserSession>,
     label_id: Id,
@@ -823,6 +824,7 @@ pub async fn apply_label_to_messages(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn star_messages(
     session: Arc<MailUserSession>,
     message_ids: Vec<Id>,
@@ -851,6 +853,7 @@ pub async fn star_messages(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn unstar_messages(
     session: Arc<MailUserSession>,
     message_ids: Vec<Id>,
@@ -880,6 +883,7 @@ pub async fn unstar_messages(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn remove_label_from_messages(
     session: Arc<MailUserSession>,
     label_id: Id,
@@ -913,6 +917,7 @@ pub async fn remove_label_from_messages(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn mark_messages_read(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
@@ -946,6 +951,7 @@ pub async fn mark_messages_read(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn mark_messages_unread(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
@@ -979,6 +985,7 @@ pub async fn mark_messages_unread(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn delete_messages(
     mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
@@ -999,14 +1006,6 @@ pub async fn delete_messages(
     .map_err(ActionError::from)
     .into()
 }
-
-// A common type to be shared between the `get_embedded_attachment` methods
-// of `Draft` and `DecryptedMessage`.
-export_typed_result!(
-    EmbeddedAttachmentInfoResult,
-    EmbeddedAttachmentInfo,
-    ProtonError
-);
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
 #[derive(Clone, uniffi::Record)]
@@ -1078,6 +1077,7 @@ pub async fn label_messages_as(
 /// Returns an error if the action can not be executed.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn move_messages(
     mailbox: Arc<Mailbox>,
     destination_id: Id,

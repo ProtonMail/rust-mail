@@ -1,5 +1,5 @@
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{EventError, EventErrorReason, ProtonError};
+use crate::errors::{EventError, EventErrorReason, ProtonError, VoidEventResult};
 use crate::mail::MailUserSession;
 use crate::{spawn_async, uniffi_async};
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
@@ -48,6 +48,7 @@ impl MailUserSession {
     /// Errors returned here are only related to queuing of the action. To get information
     /// about the event loop execution, please use [`MailUserSession::observe_event_loop_errors`].
     #[allow(clippy::unused_async)]
+    #[returns(VoidEventResult)]
     pub async fn poll_events(&self) -> Result<(), EventError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {

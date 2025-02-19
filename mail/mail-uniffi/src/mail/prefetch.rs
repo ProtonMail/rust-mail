@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-use crate::{errors::ActionError, uniffi_async};
+use crate::{
+    errors::{ActionError, VoidActionResult},
+    uniffi_async,
+};
 
 use super::MailUserSession;
 
@@ -13,6 +16,7 @@ use super::MailUserSession;
 /// The bacground task will be spawned only once. Subsequent calls to this function will
 /// notify the task to start prefetching but the task will be executed only once per whole cycle.
 #[uniffi_export]
+#[returns(VoidActionResult)]
 async fn prefetch(session: Arc<MailUserSession>) -> Result<(), ActionError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {

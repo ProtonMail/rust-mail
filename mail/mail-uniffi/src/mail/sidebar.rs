@@ -6,7 +6,7 @@
 
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{ActionError, ProtonError};
+use crate::errors::{ActionError, ProtonError, VoidActionResult};
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
@@ -55,6 +55,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
+    #[returns(VoidActionResult)]
     pub async fn collapse_folder(&self, local_id: Id) -> Result<(), ActionError> {
         let ctx = self.ctx()?;
 
@@ -73,6 +74,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
+    #[returns(VoidActionResult)]
     pub async fn expand_folder(&self, local_id: Id) -> Result<(), ActionError> {
         let ctx = self.ctx()?;
 

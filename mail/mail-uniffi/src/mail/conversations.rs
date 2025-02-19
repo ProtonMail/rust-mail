@@ -11,7 +11,7 @@
 
 use crate::core::datatypes::Id;
 use crate::core::paginator::ConversationPaginator;
-use crate::errors::ActionError;
+use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
@@ -53,6 +53,7 @@ use super::messages::WatchedLabelAs;
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn apply_label_to_conversations(
     session: Arc<MailUserSession>,
     label_id: Id,
@@ -86,6 +87,7 @@ pub async fn apply_label_to_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn delete_conversations(
     mailbox: Arc<Mailbox>,
     conversation_ids: Vec<Id>,
@@ -433,6 +435,7 @@ pub async fn load_conversation(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn mark_conversations_as_read(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
@@ -465,6 +468,7 @@ pub async fn mark_conversations_as_read(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn mark_conversations_as_unread(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
@@ -502,6 +506,7 @@ pub async fn mark_conversations_as_unread(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
     label_id: Id,
@@ -628,6 +633,7 @@ pub async fn scroll_conversations_for_label(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn remove_label_from_conversations(
     session: Arc<MailUserSession>,
     label_id: Id,
@@ -703,6 +709,7 @@ pub async fn search_for_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn star_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
@@ -731,6 +738,7 @@ pub async fn star_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn unstar_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,

@@ -3,11 +3,13 @@ mod recipients;
 
 use crate::core::datatypes::Id;
 use crate::errors::{
-    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, ProtonError,
+    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError,
+    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
+    VoidDraftUndoSendResult,
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::{EmbeddedAttachmentInfo, EmbeddedAttachmentInfoResult};
+use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
@@ -314,7 +316,8 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn do_save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSaveSendResult)]
+    pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -335,7 +338,8 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn do_send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSaveSendResult)]
+    pub async fn send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -357,7 +361,8 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn do_discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
+    #[returns(VoidDraftDiscardResult)]
+    pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {
             let instance = self.instance.read().await;
             instance
@@ -377,6 +382,7 @@ impl Draft {
 ///
 /// Note that will only work if the message has been sent with a send delay.
 #[uniffi_export]
+#[returns(VoidDraftUndoSendResult)]
 pub async fn draft_undo_send(
     session: &MailUserSession,
     message_id: Id,
