@@ -18,10 +18,9 @@ use base64::Engine;
 use derive_more::{AsRef, Deref};
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::{AuthId, UserId};
-use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::SqliteError;
+use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
@@ -552,7 +551,7 @@ impl AsRef<[u8]> for EncryptedData {
 }
 
 impl ToSql for EncryptedData {
-    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.ciphertext_nonce.to_sql()
     }
 }
