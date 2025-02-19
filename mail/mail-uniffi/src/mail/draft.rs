@@ -3,12 +3,13 @@ mod recipients;
 
 use crate::core::datatypes::Id;
 use crate::errors::{
-    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, ProtonError,
-    VoidDraftDiscardResult, VoidDraftSaveSendResult, VoidDraftUndoSendResult,
+    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError,
+    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
+    VoidDraftUndoSendResult,
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::{EmbeddedAttachmentInfo, EmbeddedAttachmentInfoResult};
+use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;

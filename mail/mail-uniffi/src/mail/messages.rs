@@ -15,7 +15,7 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
-use crate::errors::{ActionError, ProtonError, VoidActionResult};
+use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -1006,14 +1006,6 @@ pub async fn delete_messages(
     .map_err(ActionError::from)
     .into()
 }
-
-// A common type to be shared between the `get_embedded_attachment` methods
-// of `Draft` and `DecryptedMessage`.
-export_typed_result!(
-    EmbeddedAttachmentInfoResult,
-    EmbeddedAttachmentInfo,
-    ProtonError
-);
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
 #[derive(Clone, uniffi::Record)]

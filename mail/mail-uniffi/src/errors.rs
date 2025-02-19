@@ -9,6 +9,8 @@ mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;
 
+use crate::mail::messages::EmbeddedAttachmentInfo;
+
 pub use self::action_error::*;
 pub use self::draft_error::*;
 pub use self::error_reason::*;
@@ -54,7 +56,7 @@ macro_rules! export_void_result {
 
 #[macro_export]
 macro_rules! export_typed_result {
-    ($name: ident, $ok_type: ty, $err_type: ty) => {
+    ($($name:ident($ok_type:ty, $err_type:ty)),* $(,)?) => {$(
         #[allow(clippy::large_enum_variant)]
         #[allow(dead_code)]
         #[derive(uniffi::Enum)]
@@ -79,7 +81,7 @@ macro_rules! export_typed_result {
                 }
             }
         }
-    };
+    )*};
 }
 
 export_void_result! {
@@ -91,4 +93,11 @@ export_void_result! {
     VoidLoginResult: LoginError,
     VoidProtonResult: ProtonError,
     VoidSessionResult: UserSessionError,
+}
+
+// A common type to be shared between:
+// - `Draft::get_embedded_attachment`,
+// - `DecryptedMessage::get_embedded_attachment`.
+export_typed_result! {
+   EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
 }
