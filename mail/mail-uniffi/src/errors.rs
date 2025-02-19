@@ -21,7 +21,7 @@ pub use self::session_error::*;
 
 #[macro_export]
 macro_rules! export_void_result {
-    ($($name:ident: $type:ty),* $(,)?) => {$(
+    ($($(#[$meta:meta])* $name:ident($type:ty)),* $(,)?) => {$(
         #[allow(clippy::large_enum_variant)]
         #[allow(dead_code)]
         #[derive(uniffi::Enum)]
@@ -56,7 +56,8 @@ macro_rules! export_void_result {
 
 #[macro_export]
 macro_rules! export_typed_result {
-    ($($name:ident($ok_type:ty, $err_type:ty)),* $(,)?) => {$(
+    ($($(#[$meta:meta])* $name:ident($ok_type:ty, $err_type:ty)),* $(,)?) => {$(
+        $(#[$meta])*
         #[allow(clippy::large_enum_variant)]
         #[allow(dead_code)]
         #[derive(uniffi::Enum)]
@@ -85,19 +86,19 @@ macro_rules! export_typed_result {
 }
 
 export_void_result! {
-    VoidActionResult: ActionError,
-    VoidDraftDiscardResult: DraftDiscardError,
-    VoidDraftSaveSendResult: DraftSaveSendError,
-    VoidDraftUndoSendResult: DraftUndoSendError,
-    VoidEventResult: EventError,
-    VoidLoginResult: LoginError,
-    VoidProtonResult: ProtonError,
-    VoidSessionResult: UserSessionError,
+    VoidActionResult(ActionError),
+    VoidDraftDiscardResult(DraftDiscardError),
+    VoidDraftSaveSendResult(DraftSaveSendError),
+    VoidDraftUndoSendResult(DraftUndoSendError),
+    VoidEventResult(EventError),
+    VoidLoginResult(LoginError),
+    VoidProtonResult(ProtonError),
+    VoidSessionResult(UserSessionError),
 }
 
-// A common type to be shared between:
-// - `Draft::get_embedded_attachment`,
-// - `DecryptedMessage::get_embedded_attachment`.
 export_typed_result! {
-   EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
+    /// A common type to be shared between:
+    /// - `Draft::get_embedded_attachment`,
+    /// - `DecryptedMessage::get_embedded_attachment`.
+    EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
 }
