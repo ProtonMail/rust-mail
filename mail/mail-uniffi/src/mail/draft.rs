@@ -316,7 +316,7 @@ impl Draft {
     ///
     /// Returns error if the query failed.
     #[returns(VoidDraftSaveSendResult)]
-    pub async fn do_save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -338,7 +338,7 @@ impl Draft {
     ///
     /// Returns error if the query failed.
     #[returns(VoidDraftSaveSendResult)]
-    pub async fn do_send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    pub async fn send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -361,7 +361,7 @@ impl Draft {
     ///
     /// Returns error if the query failed.
     #[returns(VoidDraftDiscardResult)]
-    pub async fn do_discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
+    pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {
             let instance = self.instance.read().await;
             instance
