@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.45.0] - 2025-02-19
+
+### Changed
+
+  - Password is now stored temporarily in the database during 2FA stage of the login flow;
+    it is encrypted in the same way as the auth tokens and is removed when 2FA is successful.
+
 ## [0.44.0] - 2025-02-19
 
 ### Added
