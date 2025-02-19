@@ -55,6 +55,9 @@ pub struct StoredAction {
     #[DbField]
     pub state: Vec<u8>,
 
+    #[DbField]
+    pub action_group: String,
+
     /// Resources associated with the action.
     pub resources: Resources,
 
@@ -101,6 +104,7 @@ impl StoredAction {
             scheduled: delayed,
             state,
             version: T::VERSION,
+            action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
             row_id: None,
         }
     }
@@ -286,7 +290,7 @@ impl StoredAction {
             .await
     }
 
-    /// Get the next action to be executed.
+    /// Get the next action to be executed in the given `action_group`.
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
@@ -294,11 +298,14 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub(crate) async fn next(tether: &Tether) -> Result<Option<StoredAction>, StashError> {
-        Self::next_with_timeout(DEFAULT_LOCK_TIMEOUT, tether).await
+    pub(crate) async fn next(
+        action_group: &str,
+        tether: &Tether,
+    ) -> Result<Option<StoredAction>, StashError> {
+        Self::next_with_timeout(action_group, DEFAULT_LOCK_TIMEOUT, tether).await
     }
 
-    /// Get the next action to be executed.
+    /// Get the next action to be executed in the given `action_group`.
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
@@ -307,6 +314,7 @@ impl StoredAction {
     ///
     /// Returns error if the query fails.
     async fn next_with_timeout(
+        action_group: &str,
         timeout: Duration,
         tether: &Tether,
     ) -> Result<Option<StoredAction>, StashError> {
@@ -315,6 +323,7 @@ impl StoredAction {
             "
                 LEFT JOIN action_queue_lock ON action_queue.id = action_queue_lock.action_id
                 WHERE
+                    action_group = ?3 AND
                     (
                         action_queue_lock.action_id IS NULL OR
                         unixepoch(datetime(?1)) - unixepoch(datetime(action_queue_lock.acquired_at)) >= ?2
@@ -325,7 +334,7 @@ impl StoredAction {
                 ORDER BY
                     priority ASC, created ASC
             ",
-            params![now, timeout.as_secs()],
+            params![now, timeout.as_secs(), action_group.to_owned()],
             tether,
         )
         .await
@@ -364,7 +373,7 @@ impl StoredAction {
         self.save(bond).await
     }
 
-    /// Pop an action from the queue.
+    /// Pop an action from the queue for a given `action_group`.
     ///
     /// This takes into account dependencies, priority and execution delays. If `None` is returned
     /// from this function there are no actions that can be executed at this point.
@@ -375,10 +384,11 @@ impl StoredAction {
     #[allow(clippy::missing_panics_doc)] // next_action.id.unwrap will never happen.
     pub async fn pop(
         executor_id: String,
+        action_group: &str,
         tether: &mut Tether,
     ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
         let tx = tether.transaction().await?;
-        let next_action = Self::next(&tx).await?;
+        let next_action = Self::next(action_group, &tx).await?;
 
         let Some(next_action) = next_action else {
             tx.rollback().await?;
@@ -581,7 +591,8 @@ impl Migration for MigrationV1 {
                 created INTEGER DEFAULT (datetime('now')),
                 scheduled INTEGER DEFAULT (datetime('now')),
                 state BLOB NOT NULL,
-                debug_string TEXT DEFAULT NULL
+                debug_string TEXT DEFAULT NULL,
+                action_group TEXT NOT NULL
             )
         "};
 

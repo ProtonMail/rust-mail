@@ -3,8 +3,8 @@
 mod tests;
 
 use crate::action::{
-    Action, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler,
-    Metadata, Priority, Resources, Type, WriterGuard,
+    Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
+    Handler, Metadata, Priority, Resources, Type, WriterGuard,
 };
 use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction};
 use chrono::DateTime;
@@ -198,6 +198,8 @@ pub struct QueuedMetadata {
     pub debug_string: Option<String>,
     /// Resources which were associated with this action.
     pub resources: Resources,
+    /// Execution group for this action.
+    pub action_group: String,
 }
 
 impl From<StoredAction> for QueuedMetadata {
@@ -212,6 +214,7 @@ impl From<StoredAction> for QueuedMetadata {
             dependencies: value.dependencies,
             debug_string: value.debug_string,
             resources: value.resources,
+            action_group: value.action_group,
         }
     }
 }
@@ -811,7 +814,7 @@ impl Queue {
         &self,
     ) -> std::result::Result<Option<StoredAction>, StashError> {
         let tether = self.shared.stash.connection();
-        StoredAction::next(&tether).await
+        StoredAction::next(ActionGroup::default().as_ref(), &tether).await
     }
 
     /// Create a new broadcast receiver to observe the state of queued actions.
@@ -1113,7 +1116,12 @@ impl BackgroundWorker {
         &self,
         tether: &mut Tether,
     ) -> std::result::Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
-        StoredAction::pop("BackgroundExecutor".to_owned(), tether).await
+        StoredAction::pop(
+            "BackgroundExecutor".to_owned(),
+            ActionGroup::default().as_ref(),
+            tether,
+        )
+        .await
     }
     /// See [`Queue::delete()`] for more details.
     async fn delete(&mut self, action_id: ActionId) -> QueuedResult<()> {
