@@ -15,12 +15,12 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use derive_more::{AsRef, Deref};
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::{AuthId, UserId};
-use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::SqliteError;
+use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
@@ -54,6 +54,10 @@ pub struct CoreAccount {
     #[DbField]
     pub username: Option<String>,
 
+    /// The account's password (encrypted, temporary).
+    #[DbField]
+    pub password: Option<EncryptedPassword>,
+
     /// The account's display name (once known).
     #[DbField]
     pub display_name: Option<String>,
@@ -85,6 +89,7 @@ impl CoreAccount {
 
             // --- Optional fields ---
             username: None,
+            password: None,
             display_name: None,
             primary_addr: None,
             second_factor_mode: None,
@@ -108,6 +113,35 @@ impl CoreAccount {
     pub fn with_username(self, username: String) -> Self {
         Self {
             username: Some(username),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Update the password of the account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the encryption fails.
+    pub fn with_password(
+        self,
+        pass: &str,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, CoreSessionError> {
+        Ok(Self {
+            password: Some(EncryptedPassword::new(pass, key)?),
+
+            // --- preserve ---
+            ..self
+        })
+    }
+
+    /// Clear the password of the account.
+    #[must_use]
+    pub fn without_password(self) -> Self {
+        Self {
+            password: None,
 
             // --- preserve ---
             ..self
@@ -517,7 +551,7 @@ impl AsRef<[u8]> for EncryptedData {
 }
 
 impl ToSql for EncryptedData {
-    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.ciphertext_nonce.to_sql()
     }
 }
@@ -562,6 +596,34 @@ impl AsRef<[u8]> for EncryptedKeySecret {
 }
 
 sql_using_serde!(EncryptedKeySecret);
+
+/// Encrypted account password wrapper.
+#[derive(Clone, Debug, AsRef, Deref, Deserialize, Eq, PartialEq, Serialize)]
+pub struct EncryptedPassword(pub(crate) EncryptedData);
+
+impl EncryptedPassword {
+    /// Encrypt the password.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
+    pub fn new(password: &str, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(password.as_bytes()).map(Self)
+    }
+}
+
+impl ToSql for EncryptedPassword {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+        self.0.to_sql()
+    }
+}
+
+impl FromSql for EncryptedPassword {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        Ok(Self(EncryptedData {
+            ciphertext_nonce: Vec::<u8>::column_result(value)?,
+        }))
+    }
+}
 
 //TODO: This could potentially be reused in other contexts.
 /// Encryption key for encryption of session data.

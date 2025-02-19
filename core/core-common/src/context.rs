@@ -498,17 +498,29 @@ impl Context {
         user_id: UserId,
         session_id: AuthId,
     ) -> CoreContextResult<Flow> {
+        let key = self.get_encryption_key()?;
         let tether = self.account_stash().connection();
+
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
+            return Err(CoreContextError::Other(anyhow!("account not found")));
+        };
 
         let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
             return Err(CoreContextError::Other(anyhow!("session not found")));
         };
+
+        let password = (account.password)
+            .map(|p| p.decrypt_to_string(&key))
+            .transpose()
+            .or(Err(CoreContextError::Crypto))?
+            .map(|p| p.expose_secret().to_owned());
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
                 self.new_api_session(Some(&session), None)?,
                 user_id,
                 session_id,
+                password,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(

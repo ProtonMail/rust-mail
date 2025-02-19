@@ -107,9 +107,14 @@ impl Flow {
 
     /// Resume the login flow at the 2FA step.
     #[must_use]
-    pub fn new_from_tfa(session: Session, user_id: UserId, session_id: AuthId) -> Self {
+    pub fn new_from_tfa(
+        session: Session,
+        user_id: UserId,
+        session_id: AuthId,
+        pass: Option<String>,
+    ) -> Self {
         let parts = session.to_parts();
-        let state = State::new_from_tfa(parts, user_id, session_id, None);
+        let state = State::new_from_tfa(parts, user_id, session_id, pass);
 
         Self { session, state }
     }

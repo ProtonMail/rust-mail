@@ -67,6 +67,7 @@ impl WantLogin {
 
                 let info = get_auth_info(&flow_data, flow.has_totp(), flow.has_fido());
                 self.store.write().await.set_auth_info(info).await?;
+                self.store.write().await.set_temp_pass(&pass).await?;
                 let data = get_state_data(&flow_data, self.config, self.store);
 
                 match flow_data.password_mode {
