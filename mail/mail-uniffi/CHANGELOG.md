@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.44.0] - 2025-02-19
+
 ### Added
 
   - [ET-2095] `ConversationScrollerSet` and `MessageScrollerSet` enum wrappers on respective Vec types to represent append or replace actions on `fetch_more` method call.
@@ -15,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-2095] `ConversationScroller::fetch_more()` now returns `ConversationScrollerSet` instead of the `Vec<Converation>`
   - [ET-2095] `MessageScroller::fetch_more()` now returns `MessageScrollerSet` instead of the `Vec<Message>`
+  - Change the strong reference to `MailUserContext` inside `MailUserSession`, `Mailbox` and `Sidebar` into a weak reference
+  - Return errors from any method when the weak reference to `MailUserContext` fails to be upgraded to a strong reference
+
+### Removed
+
+  - Replace `VoidFooResult` type with method-specific types
 
 ### Fixed
 
