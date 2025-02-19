@@ -239,6 +239,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 // To check if there is more data to download before asking for more.
                 let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
+                    let items = scroller.visible_elements(&tether).await?;
+
                     MailScrollerSet::Replace(items)
                 } else {
                     MailScrollerSet::Append(items)
