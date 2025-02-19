@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use maplit::hashmap;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::{service::ApiServiceError, services::proton::common::LabelId};
 use proton_api_mail::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
@@ -11,8 +11,9 @@ use proton_core_common::{
 };
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
-    mail_scroller::MailScroller,
+    mail_scroller::{DataScrollerSource, MailScroller, MailScrollerSet},
     models::{Conversation, ConversationCounters, ConversationScrollData},
+    MailContextError,
 };
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
@@ -23,6 +24,7 @@ use stash::{
     stash::{Bond, Tether, WatcherHandle},
 };
 use std::{collections::HashMap, time::Duration, vec};
+use tokio::time::sleep;
 use wiremock::{
     matchers::{method, path, query_param_contains},
     Mock, ResponseTemplate,
@@ -43,7 +45,7 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
         local_conversation_id: conversation.local_id,
         remote_label_id: label.remote_id.clone(),
         local_label_id: label.local_id,
-        context_time: conversation.display_order
+        context_time: 0
     );
 
     conv_label.save(bond).await.unwrap();
@@ -201,7 +203,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size, 4).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, 3).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -221,50 +223,27 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
             .unwrap();
     // Conversations can be accessed only when progressed.
     scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        5,
+        &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
+    )
+    .await;
     assert!(scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
     let actual_page = scroller.fetch_more().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-            conv_id!("myconv_4"),
-            conv_id!("myconv_3"),
-            conv_id!("myconv_2"),
-            conv_id!("myconv_1"),
-            conv_id!("myconv_0"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        10,
+        &[
+            "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
+            "myconv_2", "myconv_1", "myconv_0",
+        ],
+    )
+    .await;
     assert!(!scroller.has_more().await.unwrap());
 
     // Cached - it will trigger two more background requests for pages as we fetch more
@@ -274,46 +253,24 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
         .await
         .unwrap();
     scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        5,
+        &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
+    )
+    .await;
     assert!(scroller.has_more().await.unwrap());
 
     scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-            conv_id!("myconv_4"),
-            conv_id!("myconv_3"),
-            conv_id!("myconv_2"),
-            conv_id!("myconv_1"),
-            conv_id!("myconv_0"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        10,
+        &[
+            "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
+            "myconv_2", "myconv_1", "myconv_0",
+        ],
+    )
+    .await;
     assert!(!scroller.has_more().await.unwrap());
 }
 
@@ -325,7 +282,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size, 2).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
     let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
@@ -353,22 +310,12 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     assert!(receiver.is_empty());
 
     scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        5,
+        &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
+    )
+    .await;
     // Fetching more will never trigger any notifications
     assert!(receiver.is_empty());
 
@@ -380,27 +327,15 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     // Fetching more will never trigger any notifications
     assert!(receiver.is_empty());
 
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-            conv_id!("myconv_4"),
-            conv_id!("myconv_3"),
-            conv_id!("myconv_2"),
-            conv_id!("myconv_1"),
-            conv_id!("myconv_0"),
-        ]
-    );
+    assert_scroller_content(
+        &mut scroller,
+        10,
+        &[
+            "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
+            "myconv_2", "myconv_1", "myconv_0",
+        ],
+    )
+    .await;
 
     // Lets create a new conversation and check if it is added to the scroller
     let test_conversation = test_conversations(1, 100).pop().unwrap();
@@ -409,33 +344,463 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     bond.commit().await.unwrap();
     // Getting an update will trigger a notification
     receiver.recv_async().await.unwrap();
+    assert_scroller_content(
+        &mut scroller,
+        11,
+        &[
+            "myconv_100",
+            "myconv_9",
+            "myconv_8",
+            "myconv_7",
+            "myconv_6",
+            "myconv_5",
+            "myconv_4",
+            "myconv_3",
+            "myconv_2",
+            "myconv_1",
+            "myconv_0",
+        ],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request(
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+
+    mock_api_forbidden(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 1;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 5;
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items can be read only when we progress with `fetch_more`
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert!(matches!(
+        actual,
+        MailContextError::Api(ApiServiceError::OtherHttpError(..))
+    ));
+    assert_eq!(
+        actual.to_string(),
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+    );
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    assert!(scroller.has_more().await.unwrap());
+
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+    );
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_is_empty(
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 1;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 5;
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items can be read only when we progress with `fetch_more`
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: Network error: No connection".to_string()
+    );
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+    assert!(scroller.has_more().await.unwrap());
+
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: Network error: No connection".to_string()
+    );
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_one_item(
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+        remote_label_id.as_str() => test_conversations(1, 100),
+        "rid2" => test_conversations(50, 0),
+    };
+    save_to_database(&mut data, &mut tether).await;
+
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 10;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 5;
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items will be read from cache as the API is unreachable
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 1);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 1);
+    assert!(scroller.has_more().await.unwrap());
+
+    // No more cached, no API connection, return error
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: Network error: No connection".to_string()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_multiple_pages(
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+        remote_label_id.as_str() => test_conversations(11, 100),
+        "rid2" => test_conversations(50, 0),
+    };
+    save_to_database(&mut data, &mut tether).await;
+
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 15;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 5;
+    let mut scroller =
+        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items will be read from cache as the API is unreachable
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 5);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 5);
+    assert!(scroller.has_more().await.unwrap());
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 6);
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 11);
+
+    // No more cached, no API connection, return error
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: Network error: No connection".to_string()
+    );
+
+    // Go online suddenly
+    ctx.mock_server().reset().await;
+    mock_ping_success(&ctx).await;
+    setup_api_conversation_pages(&ctx, page_size, 200, 2).await;
+    // Make sure all pending requests are done (https://protonag.atlassian.net/browse/MUON-44)
+    sleep(Duration::from_secs(3)).await;
+
+    // `all_items` will react to the online data being available
+    // listing will be done in correct the order of the cache
+    // note: asserting here leads to races between request, db transaction, and the read instant.
+    // But `fetch_more` will force replacing unordered items with correct order from API
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 5);
+    assert!(matches!(actual, MailScrollerSet::Replace(_)));
+    assert_scroller_content(
+        &mut scroller,
+        5,
+        &[
+            "myconv_209",
+            "myconv_208",
+            "myconv_207",
+            "myconv_206",
+            "myconv_205",
+        ],
+    )
+    .await;
+    // progress to the next page from API
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 5);
+
+    assert_scroller_content(
+        &mut scroller,
+        10,
+        &[
+            "myconv_209",
+            "myconv_208",
+            "myconv_207",
+            "myconv_206",
+            "myconv_205",
+            "myconv_204",
+            "myconv_203",
+            "myconv_202",
+            "myconv_201",
+            "myconv_200",
+        ],
+    )
+    .await;
+
+    // There is no more data in API
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The unordered items are not included in the api response
+    // they will not be shown untill we go offline again
+    // this is test specific behavior, in real app we should not have such a situation
+    // though simillar case is tested here where we do have big location and not all items were fetched
+    // during online period
+    ctx.mock_server().reset().await;
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+    sleep(Duration::from_secs(3)).await;
+
+    assert_scroller_content(
+        &mut scroller,
+        10,
+        &[
+            "myconv_209",
+            "myconv_208",
+            "myconv_207",
+            "myconv_206",
+            "myconv_205",
+            "myconv_204",
+            "myconv_203",
+            "myconv_202",
+            "myconv_201",
+            "myconv_200",
+        ],
+    )
+    .await;
+
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 5);
+
+    assert_scroller_content(
+        &mut scroller,
+        15,
+        &[
+            "myconv_209",
+            "myconv_208",
+            "myconv_207",
+            "myconv_206",
+            "myconv_205",
+            "myconv_204",
+            "myconv_203",
+            "myconv_202",
+            "myconv_201",
+            "myconv_200",
+            "myconv_110",
+            "myconv_109",
+            "myconv_108",
+            "myconv_107",
+            "myconv_106",
+        ],
+    )
+    .await;
+
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 6);
+
+    assert_scroller_content(
+        &mut scroller,
+        21,
+        &[
+            "myconv_209",
+            "myconv_208",
+            "myconv_207",
+            "myconv_206",
+            "myconv_205",
+            "myconv_204",
+            "myconv_203",
+            "myconv_202",
+            "myconv_201",
+            "myconv_200",
+            "myconv_110",
+            "myconv_109",
+            "myconv_108",
+            "myconv_107",
+            "myconv_106",
+            "myconv_105",
+            "myconv_104",
+            "myconv_103",
+            "myconv_102",
+            "myconv_101",
+            "myconv_100",
+        ],
+    )
+    .await;
+
+    // No more items in the cache and we are offline but we satisfied the counter
+    // Return empty page instead of the Network error
+    let actual = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual.len(), 0);
+}
+
+#[tokio::test]
+async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_offline_fetch_more()
+{
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let unread = ReadFilter::All;
+
+    // Set up cached data
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
+        remote_label_id.as_str() => test_conversations(100, 100),
+        "rid2" => test_conversations(50, 0),
+    };
+
+    save_to_database(&mut data, &mut tether).await;
+    let last_conversation =
+        Conversation::find_by_remote_id(ConversationId::from("myconv_150"), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let last_label = last_conversation.label(local_label_id).unwrap();
+    let mut scroller = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(unread)
+        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
+        .conversation_time(last_label.context_time)
+        .display_order(last_conversation.display_order)
+        .build();
+
+    let bond = tether.transaction().await.unwrap();
+    scroller.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    // Mock offline
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 150;
+    let bond = tether.transaction().await.unwrap();
+    counters.save(&bond).await.unwrap();
+    bond.commit().await.unwrap();
+
+    let page_size = 50;
+    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // First call is empty
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 0);
+
+    // The items can be read only when we progress with `fetch_more`
+    let actual = scroller.fetch_more().await.unwrap();
+
+    assert_eq!(actual.len(), 50);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 50);
+    assert!(scroller.has_more().await.unwrap());
+
+    // We reached api cached mark, lets serve the rest from cache even if unordered
+    let actual = scroller.fetch_more().await.unwrap();
+
+    assert_eq!(actual.len(), 50);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 100);
+    assert!(scroller.has_more().await.unwrap());
+
+    let actual = scroller.fetch_more().await.unwrap_err();
+    assert_eq!(
+        actual.to_string(),
+        "API Error: Network error: No connection".to_string()
+    );
+}
+
+async fn assert_scroller_content(
+    scroller: &mut MailScroller<DataScrollerSource<ConversationScrollData>>,
+    len: usize,
+    expected: &'static [&'static str],
+) {
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), len);
+
     let actual_rids = actual
         .iter()
         .map(|conv| conv.remote_id.clone())
         .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            conv_id!("myconv_100"),
-            conv_id!("myconv_9"),
-            conv_id!("myconv_8"),
-            conv_id!("myconv_7"),
-            conv_id!("myconv_6"),
-            conv_id!("myconv_5"),
-            conv_id!("myconv_4"),
-            conv_id!("myconv_3"),
-            conv_id!("myconv_2"),
-            conv_id!("myconv_1"),
-            conv_id!("myconv_0"),
-        ]
-    );
+
+    let expected_rids = expected.iter().map(|rid| conv_id!(*rid)).collect_vec();
+
+    assert_eq!(actual_rids, expected_rids);
 }
 
 async fn setup_api_conversation_pages(
     ctx: &MailTestContext,
     page_size: usize,
+    starting_display_order: u64,
     empty_pages_requests: u64,
 ) -> TestParams {
     let mut params = TestParams::default_basic();
@@ -444,18 +809,22 @@ async fn setup_api_conversation_pages(
     let second_page = (0..page_size)
         .rev()
         .map(|i| {
+            let order = starting_display_order + i as u64;
             let mut new = test_conversation.clone();
-            new.id = format!("{}_{}", new.id, i).into();
-            new.order = i as u64;
+            new.id = format!("{}_{}", new.id, order).into();
+            new.order = order;
+            new.context_time = Some(order);
             new
         })
         .collect_vec();
     let first_page = (page_size..(page_size * 2))
         .rev()
         .map(|i| {
+            let order = starting_display_order + i as u64;
             let mut new = test_conversation.clone();
-            new.id = format!("{}_{}", new.id, i).into();
-            new.order = i as u64;
+            new.id = format!("{}_{}", new.id, order).into();
+            new.order = order;
+            new.context_time = Some(order);
             new
         })
         .collect_vec();
@@ -499,15 +868,7 @@ pub async fn mock_get_conversations_page(
 pub async fn mock_not_responsive_api(ctx: &MailTestContext) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(GetConversationsResponse {
-                    conversations: vec![],
-                    stale: false,
-                    total: 1,
-                })
-                .set_delay(Duration::from_secs(30)),
-        )
+        .respond_with(ResponseTemplate::new(500))
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
@@ -526,165 +887,14 @@ pub async fn mock_api_forbidden(ctx: &MailTestContext) {
         .named(function_name!())
         .mount(ctx.mock_server())
         .await;
+
+    mock_ping_success(ctx).await;
+}
+
+pub async fn mock_ping_success(ctx: &MailTestContext) {
     Mock::given(method("GET"))
         .and(path("/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
         .mount(ctx.mock_server())
         .await;
-}
-
-#[tokio::test]
-async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request(
-) {
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let unread = ReadFilter::All;
-
-    mock_api_forbidden(&ctx).await;
-    ctx.catch_all().await;
-
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 1;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
-
-    let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
-
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
-    );
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-    assert!(scroller.has_more().await.unwrap());
-
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
-    );
-}
-
-#[tokio::test]
-async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time() {
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let unread = ReadFilter::All;
-
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 1;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
-
-    let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
-
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
-    );
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-    assert!(scroller.has_more().await.unwrap());
-
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
-    );
-}
-
-#[tokio::test]
-async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_offline_fetch_more()
-{
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let unread = ReadFilter::All;
-
-    // Set up cached data
-    let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
-        remote_label_id.as_str() => test_conversations(100, 100),
-        "rid2" => test_conversations(50, 0),
-    };
-
-    save_to_database(&mut data, &mut tether).await;
-    let last_conversation =
-        Conversation::find_by_remote_id(ConversationId::from("myconv_150"), &tether)
-            .await
-            .unwrap()
-            .unwrap();
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let last_label = last_conversation.label(local_label_id).unwrap();
-    let mut scroller = ConversationScrollData::builder()
-        .local_label_id(local_label_id)
-        .unread(unread)
-        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
-        .conversation_time(last_label.context_time)
-        .display_order(last_conversation.display_order)
-        .build();
-
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
-
-    // Mock online
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 100;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
-
-    let page_size = 50;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
-
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap();
-
-    assert_eq!(actual.len(), 50);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 50);
-    assert!(scroller.has_more().await.unwrap());
-
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
-    );
 }

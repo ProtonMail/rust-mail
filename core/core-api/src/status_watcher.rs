@@ -5,7 +5,7 @@ use std::{
 };
 
 use muon::{
-    common::{BoxFut, Sender, SenderLayer},
+    common::{BoxFut, RetryPolicy, Sender, SenderLayer},
     error::ErrorKind,
     ProtonRequest, ProtonResponse, Result as MuonResult,
 };
@@ -17,7 +17,7 @@ use tracing::trace;
 
 use crate::{
     connection_status::ConnectionStatus,
-    services::proton::{Proton, ProtonCore, ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT},
+    services::proton::{Proton, ProtonCore, HALF_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT},
 };
 
 type StatusJoinHandle = JoinHandle<()>;
@@ -32,6 +32,7 @@ static STATUS: LazyLock<Arc<RwLock<Status>>> = LazyLock::new(|| {
     }))
 });
 
+/// The connection status and the last time it was checked.
 #[derive(Clone, Debug)]
 struct Status {
     status: ConnectionStatus,
@@ -46,17 +47,80 @@ impl Deref for Status {
     }
 }
 
+/// A background ping request.
+///
+/// It keeps track of the request background task and the receiver to know when it's finished.
+///
 #[derive(Debug)]
 struct BackgroundPing {
     _request: StatusJoinHandle,
     finished: flume::Receiver<()>,
 }
 
+/// Configuration for the `StatusWatcher`.
+///
+#[derive(Clone, Debug)]
+struct SwConfig {
+    /// Forground ping's retry policy.
+    fg_retry: RetryPolicy,
+    /// Forground ping's timeout.
+    fg_timeout: Duration,
+    /// Background ping's retry policy.
+    bg_retry: RetryPolicy,
+    /// Background ping's timeout.
+    bg_timeout: Duration,
+    /// Number of seconds before the status is considered stale.
+    up_to_date: Duration,
+}
+
+impl Default for SwConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SwConfig {
+    /// Create a new `SwConfig` with default production values.
+    fn new() -> Self {
+        Self {
+            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
+            fg_retry: RetryPolicy::default().max_count(0),
+            fg_timeout: Duration::from_millis(ONE_SECOND_TIMEOUT),
+            bg_retry: RetryPolicy::default(),
+            bg_timeout: Duration::from_millis(HALF_MINUTE_TIMEOUT),
+        }
+    }
+
+    /// Create a new `SwConfig` with default test values.
+    fn test() -> Self {
+        // Make single requests
+        let test_retry_policy = RetryPolicy::default().max_count(0);
+        let fg_timeout = Duration::from_millis(ONE_SECOND_TIMEOUT);
+        let bg_timeout = Duration::from_millis(ONE_SECOND_TIMEOUT * 2);
+        let up_to_date = Duration::from_secs(2);
+
+        Self {
+            up_to_date,
+            fg_retry: test_retry_policy,
+            fg_timeout,
+            bg_retry: test_retry_policy,
+            bg_timeout,
+        }
+    }
+}
+
+/// A `StatusWatcher` that will keep track of the connection status.
+///
+/// It will ping the server to get the current status if the status is stale.
+/// If the status is `Offline`, it will start a background check.
+/// The status is initialized to `Online`.
+/// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
+///
 #[derive(Clone, Debug)]
 pub struct StatusWatcher {
     status: Arc<RwLock<Status>>,
     request: Arc<Mutex<Option<BackgroundPing>>>,
-    up_to_date: Duration,
+    config: SwConfig,
 }
 
 impl StatusWatcher {
@@ -118,7 +182,7 @@ impl StatusWatcher {
         Self {
             status: STATUS.clone(),
             request: Arc::new(Mutex::new(None)),
-            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
+            config: SwConfig::default(),
         }
     }
     /// Create a new test `StatusWatcher` without shared state.
@@ -134,16 +198,18 @@ impl StatusWatcher {
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn test() -> Self {
+        let config = SwConfig::test();
         let stale_instant = Instant::now()
-            .checked_sub(Duration::from_secs(UP_TO_DATE_SECONDS + 1))
+            .checked_sub(Duration::from_secs(config.up_to_date.as_secs() + 1))
             .unwrap();
+
         Self {
             status: Arc::new(RwLock::new(Status {
                 status: ConnectionStatus::Online,
                 last_check: stale_instant,
             })),
             request: Arc::new(Mutex::new(None)),
-            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
+            config,
         }
     }
 
@@ -159,12 +225,14 @@ impl StatusWatcher {
     ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub async fn with_up_to_date(self, up_to_date: Duration) -> Self {
+    pub async fn with_up_to_date(mut self, up_to_date: Duration) -> Self {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
             .unwrap();
         self.status.write().await.last_check = stale_instant;
-        Self { up_to_date, ..self }
+        self.config.up_to_date = up_to_date;
+
+        self
     }
 
     /// Get the current status of the connection.
@@ -183,16 +251,16 @@ impl StatusWatcher {
             }
             drop(request);
 
-            Self::ping(api.clone(), ONE_SECOND_TIMEOUT).await;
+            Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
         }
 
-        let status = self.status.read().await;
+        let status = self.get_status().await;
 
         if status.is_offline() {
             self.background_check(api).await;
         }
 
-        status.status
+        status
     }
 
     async fn update(&self, status: ConnectionStatus) {
@@ -203,18 +271,20 @@ impl StatusWatcher {
         trace!("Status has been updated to {:?}", status);
     }
 
-    async fn ping(api: Proton, timeout: u64) {
-        let _ = api.get_tests_ping(Some(timeout), None).await;
+    async fn ping(api: Proton, timeout: Duration, retry: RetryPolicy) {
+        let _ = api.get_tests_ping(Some(timeout), Some(retry)).await;
     }
 
     #[allow(clippy::let_underscore_future)]
     async fn background_check(&self, api: Proton) {
         let mut request = self.request.lock().await;
+        let timeout = self.config.bg_timeout;
+        let retry = self.config.bg_retry;
         if request.is_none() {
             let (sender, receiver) = flume::unbounded();
             let _ = request.insert(BackgroundPing {
                 _request: tokio::spawn(async move {
-                    Self::ping(api, ONE_MINUTE_TIMEOUT).await;
+                    Self::ping(api, timeout, retry).await;
                     let _ = sender.send_async(()).await;
                 }),
                 finished: receiver,
@@ -223,7 +293,11 @@ impl StatusWatcher {
     }
 
     async fn is_up_to_date(&self) -> bool {
-        self.status.read().await.last_check.elapsed() < self.up_to_date
+        self.status.read().await.last_check.elapsed() < self.config.up_to_date
+    }
+
+    async fn get_status(&self) -> ConnectionStatus {
+        self.status.read().await.status
     }
 }
 

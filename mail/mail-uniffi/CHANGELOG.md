@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+
+  - [ET-2095] `ConversationScrollerSet` and `MessageScrollerSet` enum wrappers on respective Vec types to represent append or replace actions on `fetch_more` method call.
+
+### Changed
+
+  - [ET-2095] `ConversationScroller::fetch_more()` now returns `ConversationScrollerSet` instead of the `Vec<Converation>`
+  - [ET-2095] `MessageScroller::fetch_more()` now returns `MessageScrollerSet` instead of the `Vec<Message>`
+
 ### Fixed
 
   - [ET-404] A typo in function name "devide" -> "device"

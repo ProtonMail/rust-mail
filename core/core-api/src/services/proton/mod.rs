@@ -50,6 +50,7 @@
 
 use std::future::Future;
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::Bytes;
 use muon::client::middleware::{DisplayLogger, Tagger};
@@ -82,7 +83,9 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-pub use self::proton_impl::{ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, QUARTER_SECOND_TIMEOUT};
+pub use self::proton_impl::{
+    HALF_MINUTE_TIMEOUT, ONE_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, QUARTER_SECOND_TIMEOUT,
+};
 
 mod proton_impl;
 
@@ -285,7 +288,7 @@ pub trait ProtonCore {
     ///
     fn get_tests_ping(
         &self,
-        timeout_ms: Option<u64>,
+        timeout: Option<Duration>,
         retry: Option<RetryPolicy>,
     ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 

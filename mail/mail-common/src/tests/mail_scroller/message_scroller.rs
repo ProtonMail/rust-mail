@@ -224,7 +224,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
             .await
             .unwrap()
             .unwrap();
-
+    cached_scroller.fetch_more(&tether).await.unwrap();
     // Test if the scroller can read visible elements within its own range
     let expected_count = 5_usize;
     let count = cached_scroller
@@ -326,6 +326,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
             .await
             .unwrap()
             .unwrap();
+    cached_scroller.fetch_more(&tether).await.unwrap();
     let expected_count = 5_usize;
     let count = cached_scroller
         .visible_element_count(&tether)
@@ -456,6 +457,15 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
             .await
             .unwrap()
             .unwrap();
+
+    let items = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(items, 0);
+
+    cached_scroller.fetch_more(&tether).await.unwrap();
 
     let items = cached_scroller
         .visible_element_count(&tether)

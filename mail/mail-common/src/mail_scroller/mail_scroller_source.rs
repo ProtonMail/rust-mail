@@ -6,10 +6,14 @@ use tokio::task::JoinHandle;
 use crate::{MailContextError, MailUserContext};
 
 mod data_scroller_source;
+#[allow(clippy::wrong_self_convention)]
+mod mail_scroller_state;
 mod remote_source;
 
 pub use self::data_scroller_source::*;
 pub use self::remote_source::*;
+
+use super::MailScrollerSet;
 
 pub type MailPaginatorJoinHandle =
     Option<JoinHandle<AsyncTaskResult<Result<(), MailContextError>>>>;
@@ -79,7 +83,10 @@ pub trait MailScrollerSource: Send + Sync {
         &mut self,
         ctx: &MailUserContext,
     ) -> impl Future<
-        Output = Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError>,
+        Output = Result<
+            (MailScrollerSet<Self::Item>, u64, MailPaginatorJoinHandle),
+            MailContextError,
+        >,
     > + Send;
 
     fn watched_tables(&self) -> Vec<String>;

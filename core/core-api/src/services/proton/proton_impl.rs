@@ -31,6 +31,7 @@ use crate::store::Store;
 
 pub const QUARTER_SECOND_TIMEOUT: u64 = 250;
 pub const ONE_SECOND_TIMEOUT: u64 = 1000;
+pub const HALF_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 30;
 pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 
 impl ProtonCore for Proton {
@@ -166,10 +167,9 @@ impl ProtonCore for Proton {
 
     async fn get_tests_ping(
         &self,
-        timeout_ms: Option<u64>,
+        timeout: Option<Duration>,
         retry: Option<RetryPolicy>,
     ) -> ApiServiceResult<()> {
-        let timeout = timeout_ms.map(Duration::from_millis);
         let mut request = GET!("{CORE_V4}/tests/ping");
 
         if let Some(timeout) = timeout {
