@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+
+  - [ET-405]  Two `DeviceEnvironment` cases for ET: sandbox and production
+
 ### Fixed
   - [ET-2205] Mail settings are now stored as always one row. This prevents a bug where mail settings were properly updated and retrieved only once, requiring fresh reinstall
   whenever user changed setting.

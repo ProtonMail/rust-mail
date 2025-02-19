@@ -564,6 +564,8 @@ pub enum DeviceEnvironment {
     Google,
     AppleProd,
     AppleBeta,
+    AppleProdET,
+    AppleDevET,
     AppleDev,
 }
 
@@ -573,6 +575,8 @@ impl From<RealDeviceEnvironment> for DeviceEnvironment {
             RealDeviceEnvironment::Google => Self::Google,
             RealDeviceEnvironment::AppleProd => Self::AppleProd,
             RealDeviceEnvironment::AppleBeta => Self::AppleBeta,
+            RealDeviceEnvironment::AppleProdET => Self::AppleProdET,
+            RealDeviceEnvironment::AppleDevET => Self::AppleDevET,
             RealDeviceEnvironment::AppleDev => Self::AppleDev,
         }
     }
@@ -584,6 +588,8 @@ impl From<DeviceEnvironment> for RealDeviceEnvironment {
             DeviceEnvironment::Google => Self::Google,
             DeviceEnvironment::AppleProd => Self::AppleProd,
             DeviceEnvironment::AppleBeta => Self::AppleBeta,
+            DeviceEnvironment::AppleProdET => Self::AppleProdET,
+            DeviceEnvironment::AppleDevET => Self::AppleDevET,
             DeviceEnvironment::AppleDev => Self::AppleDev,
         }
     }
