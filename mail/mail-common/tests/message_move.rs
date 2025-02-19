@@ -62,10 +62,14 @@ async fn move_between_folders() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), source_label_id.clone())
+    let mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), source_label_id.clone())
+            .await
+            .unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
 
     let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
         .await
@@ -147,10 +151,13 @@ async fn move_from_label_does_not_unlabel() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
         .await
@@ -235,10 +242,13 @@ async fn move_into_trash_remove_label_and_mark_read() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
@@ -307,10 +317,13 @@ async fn move_into_spam_remove_labels() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let custom = Label::find_first("WHERE remote_id = ?", params!["custom"], &tether)
         .await
@@ -385,10 +398,13 @@ async fn move_out_of_spam_set_almost_all_mail() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::spam())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::spam())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert_eq!(message.label_ids.len(), 1);

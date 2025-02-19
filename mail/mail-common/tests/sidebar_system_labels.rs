@@ -65,10 +65,12 @@ async fn sidebar_system_labels(
 
     let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
-    let sidebar = Sidebar::new(user_ctx.clone());
+
+    let stash = user_ctx.user_stash();
+    let tether = stash.connection();
 
     // Action
-    let result = sidebar.system_labels().await.unwrap();
+    let result = Sidebar.system_labels(&tether).await.unwrap();
 
     // Tests
     let result: Vec<_> = result.iter().map(|l| l.local_id).collect();

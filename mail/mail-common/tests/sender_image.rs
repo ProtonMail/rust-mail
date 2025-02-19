@@ -42,11 +42,14 @@ async fn get_sender_image() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
 
-    mailbox.sync(1).await.expect("mailbox sync failed");
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 1)
+        .await
+        .expect("mailbox sync failed");
     let tether = user_ctx.user_stash().connection();
     let local_conversation = Conversation::find_first("", vec![], &tether)
         .await

@@ -32,7 +32,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, Level};
+use tracing::{error, info, warn, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -584,9 +584,11 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
-        for session in &self.get_account_sessions(user_id).await? {
+        self.cancel_user_tasks(&user_id).await;
+
+        for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
-                .new_api_session(Some(session), None)
+                .new_api_session(Some(&session), None)
                 .inspect_err(|err| error!("failed to create API session: {err:?}"))
             else {
                 continue;
@@ -599,9 +601,21 @@ impl Context {
             else {
                 continue;
             };
-
             info!("logged out session {}", session.remote_id);
         }
+
+        for session in self.get_account_sessions(user_id.clone()).await? {
+            warn!("Orphan session found in database: {}", session.remote_id);
+
+            let mut tether = self.account_stash().connection();
+            let tx = tether.transaction().await?;
+
+            session.delete(&tx).await?;
+
+            tx.commit().await?;
+        }
+
+        info!("logged out all sessions for account {user_id}");
 
         Ok(())
     }
@@ -612,6 +626,8 @@ impl Context {
     ///
     /// Returns an error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
+        self.cancel_user_tasks(&user_id).await;
+
         if let Some(path) = self.find_user_db(&user_id) {
             tokio::fs::remove_file(&path)
                 .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
@@ -756,6 +772,16 @@ impl Context {
         active_contexts.insert(user_id, Arc::downgrade(&user_context));
 
         Ok(user_context)
+    }
+
+    /// Cancel all tasks associated with a user.
+    pub async fn cancel_user_tasks(&self, user_id: &UserId) {
+        if let Some(ctx) = (self.active_user_contexts.lock().await)
+            .get(user_id)
+            .and_then(Weak::upgrade)
+        {
+            ctx.cancel_all_tasks();
+        }
     }
 
     /// Spawn an async `task` associated to this context.

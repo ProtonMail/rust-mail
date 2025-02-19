@@ -43,7 +43,7 @@ impl StoredAccount {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl StoredAccount {
     /// Get the account's user id.
     #[must_use]
@@ -106,7 +106,7 @@ impl StoredSession {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl StoredSession {
     /// Get the ID of the session.
     #[must_use]

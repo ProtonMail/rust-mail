@@ -12,9 +12,9 @@ use super::MailUserSession;
 /// This function spawns a background task that will prefetch messages and conversations
 /// The bacground task will be spawned only once. Subsequent calls to this function will
 /// notify the task to start prefetching but the task will be executed only once per whole cycle.
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 async fn prefetch(session: Arc<MailUserSession>) -> Result<(), ActionError> {
-    let ctx = session.ctx();
+    let ctx = session.ctx()?;
     uniffi_async(async move {
         ctx.prefetch().await?;
         Result::<_, RealProtonMailError>::Ok(())

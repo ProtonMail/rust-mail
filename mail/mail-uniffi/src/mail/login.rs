@@ -1,10 +1,12 @@
-use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{LoginError, ProtonError, VoidLoginResult};
+use crate::errors::LoginError;
+use crate::mail::state::MailUserContextMap;
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
+use futures::TryFutureExt;
 use proton_api_core::login::Flow as CoreLoginFlow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailContext;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -27,19 +29,25 @@ use tokio::sync::Mutex;
 #[derive(uniffi::Object)]
 pub struct LoginFlow {
     flow: Arc<Mutex<CoreLoginFlow>>,
-    ctx: Arc<proton_mail_common::MailContext>,
+    mail_ctx: Arc<MailContext>,
+    user_ctx: Arc<MailUserContextMap>,
 }
 
 impl LoginFlow {
-    pub(crate) fn new(flow: CoreLoginFlow, ctx: Arc<proton_mail_common::MailContext>) -> Arc<Self> {
+    pub(crate) fn new(
+        flow: CoreLoginFlow,
+        mail_ctx: Arc<MailContext>,
+        user_ctx: Arc<MailUserContextMap>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             flow: Arc::new(Mutex::new(flow)),
-            ctx,
+            mail_ctx,
+            user_ctx,
         })
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl LoginFlow {
     /// Login with user, password and optional fingerprints payload (for anti-abuse).
     /// * `fingerprint_payload` - a JSON array of objects serialized to a `String`.
@@ -48,18 +56,14 @@ impl LoginFlow {
         email: String,
         password: String,
         fingerprint_payload: Option<String>,
-    ) -> VoidLoginResult {
+    ) -> Result<(), LoginError> {
         let flow = self.flow.clone();
 
         let fingerprint_result = fingerprint_payload.as_ref().map(|f| f.parse()).transpose();
         let extra_info = match fingerprint_result {
             Ok(Some(f)) => LoginExtraInfo::builder().with_fingerprint(f).build(),
             Ok(None) => LoginExtraInfo::default(),
-            Err(_) => {
-                return VoidLoginResult::Error(LoginError::Other(ProtonError::Unexpected(
-                    UnexpectedError::InvalidArgument,
-                )))
-            }
+            Err(_) => todo!(),
         };
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -75,7 +79,7 @@ impl LoginFlow {
     }
 
     /// Submit 2FA totp code.
-    pub async fn submit_totp(&self, code: String) -> VoidLoginResult {
+    pub async fn submit_totp(&self, code: String) -> Result<(), LoginError> {
         let flow = self.flow.clone();
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
@@ -90,7 +94,10 @@ impl LoginFlow {
     }
 
     /// Submit mailbox password.
-    pub async fn submit_mailbox_password(&self, mailbox_password: String) -> VoidLoginResult {
+    pub async fn submit_mailbox_password(
+        &self,
+        mailbox_password: String,
+    ) -> Result<(), LoginError> {
         let flow = self.flow.clone();
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let mut guard = flow.lock().await;
@@ -105,7 +112,7 @@ impl LoginFlow {
     }
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl LoginFlow {
     /// Check whether the login flow has completed.
     #[must_use]
@@ -165,12 +172,13 @@ impl LoginFlow {
         async_runtime()
             .block_on(async {
                 let mut guard = self.flow.lock().await;
-                let user_ctx = self
-                    .ctx
+
+                self.mail_ctx
                     .user_context_from_login_flow(&mut guard)
+                    .map_ok(|ctx| self.user_ctx.insert(ctx))
+                    .map_ok(MailUserSession::new)
+                    .map_err(RealProtonMailError::from)
                     .await
-                    .map_err(RealProtonMailError::from)?;
-                Ok::<_, RealProtonMailError>(MailUserSession::new(user_ctx))
             })
             .map_err(LoginError::from)
     }

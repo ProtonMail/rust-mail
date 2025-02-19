@@ -4,11 +4,13 @@ use crate::core::{
     StoredSessionState,
 };
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
+use crate::errors::{LoginError, UserSessionError};
 use crate::mail::logging::init_log;
+use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{watch_channel_async, AsyncLiveQueryCallback};
+use futures::TryFutureExt;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -27,7 +29,8 @@ use tracing_appender::non_blocking::WorkerGuard;
 ///
 #[derive(uniffi::Object)]
 pub struct MailSession {
-    ctx: Arc<MailContext>,
+    mail_ctx: Arc<MailContext>,
+    user_ctx: Arc<MailUserContextMap>,
     _log_guard: WorkerGuard,
 }
 
@@ -67,7 +70,7 @@ pub struct MailSessionParams {
 /// TODO: An error type needs to be added for this later.
 ///
 #[must_use]
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub fn create_mail_session(
     params: MailSessionParams,
     key_chain: Box<dyn OSKeyChain>,
@@ -124,21 +127,25 @@ pub fn create_mail_session(
             .await?;
 
             Result::<_, RealProtonMailError>::Ok(Arc::new(MailSession {
-                ctx: mail_ctx,
+                mail_ctx,
+                user_ctx: MailUserContextMap::new(),
                 _log_guard: log_guard,
             }))
         })
         .map_err(UserSessionError::from)
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MailSession {
     /// Start new login flow.
     pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, LoginError> {
-        let ctx = self.ctx.clone();
+        let mail_ctx = self.mail_ctx.clone();
+        let user_ctx = self.user_ctx.clone();
+
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            ctx.new_login_flow()
-                .map(|flow| LoginFlow::new(flow, ctx))
+            mail_ctx
+                .new_login_flow()
+                .map(|flow| LoginFlow::new(flow, mail_ctx, user_ctx))
                 .map_err(RealProtonMailError::from)
         })
         .await
@@ -151,15 +158,15 @@ impl MailSession {
         user_id: String,
         session_id: String,
     ) -> Result<Arc<LoginFlow>, LoginError> {
-        let ctx = self.ctx.clone();
+        let mail_ctx = self.mail_ctx.clone();
+        let user_ctx = self.user_ctx.clone();
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let flow = ctx
+            Arc::clone(&mail_ctx)
                 .resume_login_flow(user_id.into(), session_id.into())
+                .map_ok(|flow| LoginFlow::new(flow, mail_ctx, user_ctx))
+                .map_err(RealProtonMailError::from)
                 .await
-                .map_err(RealProtonMailError::from)?;
-
-            Ok(LoginFlow::new(flow, ctx))
         })
         .await
         .map_err(LoginError::from)
@@ -170,14 +177,15 @@ impl MailSession {
         &self,
         session: Arc<StoredSession>,
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
         async_runtime()
             .block_on(async move {
-                let ctx = self
-                    .ctx
-                    .user_context_from_session(session.session(), None)
-                    .await?;
-
-                Result::<_, RealProtonMailError>::Ok(MailUserSession::new(ctx))
+                ctx.user_context_from_session(session.session(), None)
+                    .map_ok(|ctx| self.user_ctx.insert(ctx))
+                    .map_ok(MailUserSession::new)
+                    .map_err(RealProtonMailError::from)
+                    .await
             })
             .map_err(UserSessionError::from)
     }
@@ -192,7 +200,7 @@ impl MailSession {
     ///
     /// Returns an error if we fail to retrieve the accounts from the db.
     pub async fn get_accounts(&self) -> Result<Vec<Arc<StoredAccount>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut accounts = Vec::new();
@@ -219,7 +227,7 @@ impl MailSession {
         &self,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<WatchedAccounts, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut accounts = Vec::new();
@@ -234,10 +242,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
-                ctx.as_ref(),
-                accounts,
-                rx,
-                callback,
+                ctx, accounts, rx, callback,
             ))
         })
         .await
@@ -253,7 +258,7 @@ impl MailSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<WatchedAccounts, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut accounts = Vec::new();
@@ -268,10 +273,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
-                ctx.as_ref(),
-                accounts,
-                rx,
-                callback,
+                ctx, accounts, rx, callback,
             ))
         })
         .await
@@ -284,7 +286,7 @@ impl MailSession {
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> Result<Vec<Arc<StoredSession>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
@@ -311,7 +313,7 @@ impl MailSession {
         &self,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<WatchedSessions, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
@@ -326,10 +328,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
-                ctx.as_ref(),
-                sessions,
-                rx,
-                callback,
+                ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -345,7 +344,7 @@ impl MailSession {
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> Result<WatchedSessions, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
@@ -360,10 +359,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(
-                ctx.as_ref(),
-                sessions,
-                rx,
-                callback,
+                ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -379,7 +375,7 @@ impl MailSession {
         &self,
         account: Arc<StoredAccount>,
     ) -> Result<Vec<Arc<StoredSession>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let account = account.account();
@@ -409,7 +405,7 @@ impl MailSession {
         account: Arc<StoredAccount>,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<WatchedSessions, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let mut sessions = Vec::new();
@@ -424,10 +420,7 @@ impl MailSession {
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
-                ctx.as_ref(),
-                sessions,
-                rx,
-                callback,
+                ctx, sessions, rx, callback,
             ))
         })
         .await
@@ -443,7 +436,7 @@ impl MailSession {
         &self,
         user_id: String,
     ) -> Result<Option<Arc<StoredAccount>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let Some(account) = ctx.get_account(user_id.into()).await? else {
@@ -470,7 +463,7 @@ impl MailSession {
         &self,
         session_id: String,
     ) -> Result<Option<Arc<StoredSession>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let Some(session) = ctx.get_session(session_id.into()).await? else {
@@ -497,7 +490,7 @@ impl MailSession {
         &self,
         user_id: String,
     ) -> Result<Option<StoredAccountState>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let state = ctx
@@ -520,7 +513,7 @@ impl MailSession {
         &self,
         session_id: String,
     ) -> Result<Option<StoredSessionState>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let state = ctx
@@ -542,7 +535,7 @@ impl MailSession {
     pub async fn get_primary_account(
         &self,
     ) -> Result<Option<Arc<StoredAccount>>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
             let Some(account) = ctx.get_primary_account().await? else {
@@ -560,15 +553,15 @@ impl MailSession {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl MailSession {
     /// Set the account considered to be the primary account.
     ///
     /// # Errors
     ///
     /// Returns an error if the account is not found.
-    pub async fn set_primary_account(&self, user_id: String) -> VoidSessionResult {
-        let ctx = self.ctx.clone();
+    pub async fn set_primary_account(&self, user_id: String) -> Result<(), UserSessionError> {
+        let ctx = self.mail_ctx.clone();
         let user_id = user_id.into();
 
         uniffi_async(async move {
@@ -584,12 +577,17 @@ impl MailSession {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn logout_account(&self, user_id: String) -> VoidSessionResult {
-        let ctx = self.ctx.clone();
+    pub async fn logout_account(&self, user_id: String) -> Result<(), UserSessionError> {
+        let user_ctx = self.user_ctx.clone();
         let user_id = user_id.into();
 
         uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(ctx.logout_account(user_id).await?)
+            user_ctx
+                .remove(&user_id)
+                .ok_or(Unexpected::Internal)?
+                .logout()
+                .map_err(RealProtonMailError::from)
+                .await
         })
         .await
         .map_err(UserSessionError::from)
@@ -601,12 +599,20 @@ impl MailSession {
     /// # Errors
     ///
     /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, user_id: String) -> VoidSessionResult {
-        let ctx = self.ctx.clone();
+    pub async fn delete_account(&self, user_id: String) -> Result<(), UserSessionError> {
+        let mail_ctx = self.mail_ctx.clone();
+        let user_ctx = self.user_ctx.clone();
         let user_id = user_id.into();
 
         uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(ctx.delete_account(user_id).await?)
+            if user_ctx.remove(&user_id).is_none() {
+                debug!("Deleting account without any active context");
+            }
+
+            mail_ctx
+                .delete_account(user_id)
+                .map_err(RealProtonMailError::from)
+                .await
         })
         .await
         .map_err(UserSessionError::from)
@@ -616,16 +622,16 @@ impl MailSession {
     /// Check whether the network is connected/online.
     #[must_use]
     pub fn is_network_connected(&self) -> bool {
-        self.ctx.is_network_connected()
+        self.mail_ctx.is_network_connected()
     }
 
     /// Externally notify the context that the network connection has changed.
     pub fn set_network_connected(&self, online: bool) {
-        self.ctx.set_network_connected(online);
+        self.mail_ctx.set_network_connected(online);
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl MailSession {
     /// A blocking form of `get_accounts`.
     #[must_use]
@@ -680,13 +686,13 @@ impl MailSession {
     /// Get the mail context.
     #[must_use]
     pub fn ctx(&self) -> &MailContext {
-        &self.ctx
+        &self.mail_ctx
     }
 
     /// Get the session database connection.
     #[must_use]
     pub fn session_stash(&self) -> &Stash {
-        self.ctx.session_stash()
+        self.mail_ctx.session_stash()
     }
 }
 
@@ -706,7 +712,7 @@ impl WatchedAccounts {
     }
 
     fn new_sync(
-        ctx: &MailContext,
+        ctx: impl AsRef<MailContext>,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
@@ -715,7 +721,7 @@ impl WatchedAccounts {
     }
 
     fn new_async(
-        ctx: &MailContext,
+        ctx: impl AsRef<MailContext>,
         accounts: Vec<Arc<StoredAccount>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,
@@ -740,7 +746,7 @@ impl WatchedSessions {
     }
 
     fn new_sync(
-        ctx: &MailContext,
+        ctx: impl AsRef<MailContext>,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Box<dyn LiveQueryCallback>,
@@ -749,7 +755,7 @@ impl WatchedSessions {
     }
 
     fn new_async(
-        ctx: &MailContext,
+        ctx: impl AsRef<MailContext>,
         sessions: Vec<Arc<StoredSession>>,
         handle: WatcherHandle,
         callback: Arc<dyn AsyncLiveQueryCallback>,

@@ -5,7 +5,7 @@ use proton_core_common::datatypes::LightOrDarkMode;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MailUserSession {
     /// Get a path to the sender image.
     ///
@@ -33,7 +33,7 @@ impl MailUserSession {
         mode: Option<String>,
         format: Option<String>,
     ) -> Result<Option<String>, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
             if let Some(path) = ctx

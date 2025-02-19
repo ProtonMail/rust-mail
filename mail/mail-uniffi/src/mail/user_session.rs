@@ -5,12 +5,15 @@ mod initialization;
 mod labels;
 
 use crate::core::datatypes::ConnectionStatus;
-use crate::errors::{ActionError, UserSessionError, VoidSessionResult};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{ActionError, ProtonError, UserSessionError};
+use crate::mail::state::MailUserContextPtr;
 use crate::MapIntoResult;
 use crate::{
     core::datatypes::{AccountDetails, Id, User},
     uniffi_async,
 };
+use futures::TryFutureExt;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
@@ -33,47 +36,61 @@ use super::datatypes::AttachmentMetadata;
 /// This object needs to be kept alive for the duration of an active user session.
 #[derive(uniffi::Object)]
 pub struct MailUserSession {
-    ctx: Arc<MailUserContext>,
+    ctx: MailUserContextPtr,
 }
 
 impl MailUserSession {
-    pub(crate) fn new(ctx: Arc<MailUserContext>) -> Arc<Self> {
+    pub(crate) fn new(ctx: MailUserContextPtr) -> Arc<Self> {
         Arc::new(Self { ctx })
     }
-    pub(crate) fn ctx(&self) -> Arc<MailUserContext> {
-        Arc::clone(&self.ctx)
+
+    /// Get a clone of the inner weak reference to the user context.
+    pub(crate) fn ptr(&self) -> MailUserContextPtr {
+        self.ctx.clone()
+    }
+
+    /// Get a strong reference to the inner user context.
+    pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
+        Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
+    }
+
+    /// Take ownership of the inner user context.
+    pub(crate) fn take_ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
+        Ok(self.ctx.consume().ok_or(UnexpectedError::Internal)?)
+    }
+
+    /// Get the connection to the user database
+    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+        Ok(self.ctx()?.user_stash().to_owned())
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl MailUserSession {
     /// Get the User ID of the current user.
     #[must_use]
-    pub fn user_id(&self) -> String {
-        self.ctx.user_context().user_id().to_owned().into_inner()
+    pub fn user_id(&self) -> Result<String, ProtonError> {
+        Ok(self.ctx()?.user_id().to_owned().into_inner())
     }
 
     /// Get the Session ID of the current user's session.
     #[must_use]
-    pub fn session_id(&self) -> String {
-        self.ctx.user_context().session_id().to_owned().into_inner()
+    pub fn session_id(&self) -> Result<String, ProtonError> {
+        Ok(self.ctx()?.session_id().to_owned().into_inner())
     }
 
     /// Log out a session.
-    pub async fn logout(&self) -> VoidSessionResult {
-        let ctx = self.ctx.clone();
-        uniffi_async(async move {
-            ctx.logout().await?;
+    pub async fn logout(&self) -> Result<(), UserSessionError> {
+        let ctx = self.take_ctx()?;
 
-            Result::<_, RealProtonMailError>::Ok(())
-        })
-        .await
-        .map_err(UserSessionError::from)
-        .into()
+        uniffi_async(async move { ctx.logout().map_err(RealProtonMailError::from).await })
+            .await
+            .map_err(UserSessionError::from)
+            .into()
     }
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl MailUserSession {
     /// Fork the current session.
     ///
@@ -90,7 +107,7 @@ impl MailUserSession {
     /// there is a problem with the HTTP request.
     ///
     pub async fn fork(&self) -> Result<String, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.session()
                 .fork_with_version("web-account-lite".to_owned())
@@ -107,7 +124,7 @@ impl MailUserSession {
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> Result<User, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             let user = ctx.user().await?;
             Result::<_, RealProtonMailError>::Ok(user.into())
@@ -122,10 +139,10 @@ impl MailUserSession {
     ///
     /// # Errors
     /// - Returns `UserSessionError` if the account details cannot be retrieved.
-    pub async fn account_details(self: Arc<Self>) -> Result<AccountDetails, UserSessionError> {
+    pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
+        let ctx = self.ctx()?;
         uniffi_async(async move {
-            let context = self.ctx.clone();
-            let account_details = context.account_details().await?;
+            let account_details = ctx.account_details().await?;
             Result::<_, RealProtonMailError>::Ok(account_details.into())
         })
         .await
@@ -155,7 +172,7 @@ impl MailUserSession {
         &self,
         local_attachment_id: Id,
     ) -> Result<DecryptedAttachment, ActionError> {
-        let ctx = self.ctx();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.get_attachment(local_attachment_id.into())
                 .await
@@ -177,7 +194,7 @@ impl MailUserSession {
     /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
     ///
     pub async fn connection_status(&self) -> Result<ConnectionStatus, UserSessionError> {
-        let ctx = self.ctx.clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             let status = ctx.connection_status().await.into();
             // unfortunatelly there is join error here which need to be handled
@@ -204,12 +221,4 @@ pub struct DecryptedAttachment {
     pub attachment_metadata: AttachmentMetadata,
     /// The attachment content.
     pub data_path: String,
-}
-
-impl MailUserSession {
-    /// Get the connection to the user database
-    #[must_use]
-    pub fn user_stash(&self) -> &Stash {
-        self.ctx.user_stash()
-    }
 }

@@ -61,8 +61,12 @@ enum Mode {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub(super) fn build(mbox: Mailbox, label: Label, filter: ReadFilter) -> Command<Messages> {
-        let ctx = mbox.user_context();
+    pub(super) fn build(
+        ctx: Arc<MailUserContext>,
+        mbox: Mailbox,
+        label: Label,
+        filter: ReadFilter,
+    ) -> Command<Messages> {
         let label_id = mbox.label_id();
         Command::task(async move {
             match Self::new_impl(ctx, label_id, filter).await {
@@ -109,8 +113,11 @@ impl MessagesState {
         ))
     }
 
-    pub(super) fn from_search(mbox: Mailbox, search_phrase: String) -> Command<Messages> {
-        let ctx = mbox.user_context();
+    pub(super) fn from_search(
+        ctx: Arc<MailUserContext>,
+        mbox: Mailbox,
+        search_phrase: String,
+    ) -> Command<Messages> {
         Command::task(async move {
             match Self::from_search_impl(ctx, search_phrase).await {
                 Ok((state, background_command)) => Command::batch([
@@ -175,10 +182,10 @@ impl MessagesState {
     }
 
     pub(super) fn from_conversation(
+        ctx: Arc<MailUserContext>,
         mbox: &Mailbox,
         conversation_id: LocalConversationId,
     ) -> Command<Messages> {
-        let ctx = mbox.user_context();
         let label_id = mbox.label_id();
         Command::task(async move {
             match Self::from_conversation_impl(ctx, label_id, conversation_id).await {
@@ -250,26 +257,28 @@ impl MessagesState {
         ))
     }
 
-    pub fn open_message_body(&mut self, mbox: &Mailbox) -> Command<Messages> {
+    pub fn open_message_body(&mut self, ctx: Arc<MailUserContext>) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
             return Command::None;
         };
 
-        let mbox = mbox.clone();
         self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
 
         Command::task(async {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: anyhow::Result<_> = (|| async move {
-                let decrypted =
-                    MailMessage::message_body(mbox.user_context(), metadata.local_id.unwrap())
-                        .await
-                        .context("Failed to get message body")?;
-                let user_ctx = mbox.user_context();
-                let tether = user_ctx.user_stash().connection();
+                let stash = ctx.user_stash();
+                let tether = stash.connection();
+                let local_id = metadata.local_id.unwrap();
+                let session_id = ctx.session_id().to_owned();
+
+                let decrypted = MailMessage::message_body(ctx, local_id)
+                    .await
+                    .context("Failed to get message body")?;
+
                 let html = decrypted
-                    .transformed(TransformOpts::default(), user_ctx.session_id(), &tether)
+                    .transformed(TransformOpts::default(), &session_id, &tether)
                     .await;
 
                 if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
@@ -348,7 +357,12 @@ impl MessagesState {
 
 impl StateHandler for MessagesState {
     #[allow(clippy::too_many_lines)]
-    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
+    fn handle_event(
+        &mut self,
+        user_ctx: &Arc<MailUserContext>,
+        mbox: &Mailbox,
+        event: Event,
+    ) -> Command<Messages> {
         let Event::Key(key) = event else {
             return Command::None;
         };
@@ -418,19 +432,23 @@ impl StateHandler for MessagesState {
                 Command::None
             }
             KeyCode::Char('a') => {
+                let user_ctx = user_ctx.to_owned();
+
                 let message = self
                     .selected_message()
                     .expect("Should have a message selected");
+
                 debug!(
                     "Downloading the attachments for message {}",
                     message.subject
                 );
-                let context = mbox.user_context();
+
                 let download = Command::task(async move {
                     let all = message.attachments_metadata.into_iter().map(|mdata| {
-                        let context = context.clone();
+                        let user_ctx = Arc::clone(&user_ctx);
+
                         async move {
-                            context
+                            user_ctx
                                 .get_attachment(mdata.local_id.unwrap())
                                 .await
                                 .map(|att| {
@@ -442,6 +460,7 @@ impl StateHandler for MessagesState {
                                 })
                         }
                     });
+
                     let tri = try_join_all(all)
                         .await
                         .context("Failed to download attachments");
@@ -466,12 +485,10 @@ impl StateHandler for MessagesState {
                     download,
                 ])
             }
-            KeyCode::Char('e') => {
-                let context = mbox.user_context();
-                self.selected_message_id()
-                    .map(|id| Composer::open(context, id))
-                    .unwrap_or_default()
-            }
+            KeyCode::Char('e') => self
+                .selected_message_id()
+                .map(|id| Composer::open(user_ctx.to_owned(), id))
+                .unwrap_or_default(),
             KeyCode::Char('u') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
@@ -481,9 +498,9 @@ impl StateHandler for MessagesState {
                 .map(|id| {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         if key.modifiers.contains(KeyModifiers::SHIFT) {
-                            Composer::reply(mbox.user_context(), id, ReplyMode::All)
+                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::All)
                         } else {
-                            Composer::reply(mbox.user_context(), id, ReplyMode::Sender)
+                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::Sender)
                         }
                     } else {
                         Command::message(MessageMessage::MarkMessageRead(id).into())
@@ -493,7 +510,7 @@ impl StateHandler for MessagesState {
             KeyCode::Char('f') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(mbox.user_context(), id, ReplyMode::Forward))
+                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::Forward))
                         .unwrap_or_default()
                 } else {
                     self.selected_message_id()
@@ -508,7 +525,7 @@ impl StateHandler for MessagesState {
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(mbox.user_context(), id, ReplyMode::All))
+                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::All))
                         .unwrap_or_default()
                 } else {
                     Command::None
@@ -539,6 +556,7 @@ impl StateHandler for MessagesState {
     fn update(
         &mut self,
         _: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
         _: &Arc<MailSettings>,
@@ -549,7 +567,7 @@ impl StateHandler for MessagesState {
 
         match message {
             MessageMessage::OpenMessageBody => {
-                return self.open_message_body(mbox);
+                return self.open_message_body(user_ctx.to_owned());
             }
             MessageMessage::OpenMessageBodyResult(r) => {
                 self.display_message(r);
@@ -559,27 +577,29 @@ impl StateHandler for MessagesState {
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
             MessageMessage::DeleteMessage(id) => {
-                return delete_message(mbox, id);
+                return delete_message(user_ctx.to_owned(), mbox, id);
             }
             MessageMessage::MoveMessage(msg_id, id) => {
-                return move_message(mbox, msg_id, id);
+                return move_message(user_ctx.to_owned(), mbox, msg_id, id);
             }
             MessageMessage::LabelMessage(label_as) => {
-                return label_message(mbox, *label_as);
+                return label_message(user_ctx.to_owned(), *label_as);
             }
             MessageMessage::MarkMessageRead(id) => {
-                return mark_message_read(mbox, id);
+                return mark_message_read(user_ctx.to_owned(), mbox, id);
             }
             MessageMessage::MarkMessageUnread(id) => {
-                return mark_message_unread(mbox, id);
+                return mark_message_unread(user_ctx.to_owned(), mbox, id);
             }
             MessageMessage::StarMessage(id) => {
-                return star_message(mbox, id);
+                return star_message(user_ctx.to_owned(), id);
             }
             MessageMessage::UnstarMessage(id) => {
-                return unstar_message(mbox, id);
+                return unstar_message(user_ctx.to_owned(), id);
             }
-            MessageMessage::NextPage(messages) => self.messages.extend(messages),
+            MessageMessage::NextPage(messages) => {
+                self.messages.extend(messages);
+            }
             MessageMessage::HasMore => {
                 if let Mode::Label(paginator) = &self.mode {
                     let paginator_clone = paginator.clone_paginator();
@@ -765,8 +785,11 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
-fn mark_message_read(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn mark_message_read(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalMessageId,
+) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match MailMessage::action_mark_read(ctx.action_queue(), current_label_id, vec![id]).await {
@@ -780,8 +803,11 @@ fn mark_message_read(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages>
     })
 }
 
-fn mark_message_unread(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn mark_message_unread(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalMessageId,
+) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match MailMessage::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
@@ -796,8 +822,11 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalMessageId) -> Command<Message
     })
 }
 
-fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn delete_message(
+    ctx: Arc<MailUserContext>,
+    mailbox: &Mailbox,
+    id: LocalMessageId,
+) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
         YesNoPopup::new(
@@ -817,8 +846,7 @@ fn delete_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     ))
 }
 
-fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn star_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
     Command::task(async move {
         match MailMessage::action_star(ctx.action_queue(), vec![id]).await {
             Ok(_) => Command::None,
@@ -831,8 +859,7 @@ fn star_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     })
 }
 
-fn unstar_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
+fn unstar_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
     Command::task(async move {
         match MailMessage::action_unstar(ctx.action_queue(), vec![id]).await {
             Ok(_) => Command::None,
@@ -845,7 +872,7 @@ fn unstar_message(mailbox: &Mailbox, id: LocalMessageId) -> Command<Messages> {
     })
 }
 fn label_message(
-    mailbox: &Mailbox,
+    ctx: Arc<MailUserContext>,
     LabelAs {
         source_label_id,
         item_ids: conversation_ids,
@@ -854,7 +881,6 @@ fn label_message(
         must_archive,
     }: LabelAs<LocalMessageId>,
 ) -> Command<Messages> {
-    let ctx = mailbox.user_context();
     Command::task(async move {
         match MailMessage::action_label_as(
             ctx.action_queue(),
@@ -877,11 +903,11 @@ fn label_message(
 }
 
 fn move_message(
+    ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
     id: LocalMessageId,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
-    let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
     Command::task(async move {
         match MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, vec![id])

@@ -159,6 +159,9 @@ use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tokio::task::JoinHandle;
 
+#[macro_use]
+extern crate proton_uniffi_macros;
+
 pub mod core;
 #[macro_use]
 pub mod errors;
@@ -217,7 +220,7 @@ impl WatchHandle {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl WatchHandle {
     pub fn disconnect(self: Arc<Self>) {
         self.0.disconnect();
@@ -239,13 +242,13 @@ pub fn async_runtime() -> &'static Runtime {
 }
 
 /// Spawn an async function on the runtime.
-fn spawn_async<S, T, F>(ctx: &S, future: F) -> JoinHandle<AsyncTaskResult<T>>
+fn spawn_async<S, T, F>(ctx: impl AsRef<S>, future: F) -> JoinHandle<AsyncTaskResult<T>>
 where
     S: AsyncSpawnable,
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
 {
-    ctx.spawn(future)
+    ctx.as_ref().spawn(future)
 }
 
 /// Run an async function on the Tokio runtime.
@@ -305,8 +308,8 @@ impl TaskSpawner for UniffiTaskSpawner {
 /// once a message has been received.
 ///
 #[must_use]
-pub fn watch_channel<T: AsyncSpawnable>(
-    ctx: &T,
+pub fn watch_channel<S: AsyncSpawnable>(
+    ctx: impl AsRef<S>,
     handle: WatcherHandle,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Arc<WatchHandle> {
@@ -318,7 +321,7 @@ pub fn watch_channel<T: AsyncSpawnable>(
 }
 
 fn watch_channel_inner<S: AsyncSpawnable, T: Send + 'static>(
-    ctx: &S,
+    ctx: impl AsRef<S>,
     channel: flume::Receiver<T>,
     callback: impl Fn() + Send + Sync + 'static,
 ) -> JoinHandle<AsyncTaskResult<()>> {
@@ -342,7 +345,7 @@ fn watch_channel_inner<S: AsyncSpawnable, T: Send + 'static>(
 ///
 #[must_use]
 pub fn watch_channel_async<S: AsyncSpawnable>(
-    ctx: &S,
+    ctx: impl AsRef<S>,
     handle: WatcherHandle,
     callback: Arc<dyn AsyncLiveQueryCallback>,
 ) -> Arc<WatchHandle> {

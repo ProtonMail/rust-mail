@@ -1,8 +1,10 @@
 use proc_macro::TokenStream;
-use syn::parse_macro_input;
 
-/// Implements the `#[export_result]` attribute macro.
-mod export_result;
+#[macro_use]
+mod macros;
+
+/// Implements the `#[uniffi_export]` attribute macro.
+mod uniffi_export;
 
 /// Prelude for the crate.
 mod prelude;
@@ -11,7 +13,8 @@ mod prelude;
 mod traits;
 
 /// This `proc_macro` rewrites the function which return Result<T, E> to return non genric enum type.
-/// If used on a function that does not return Result, it will return the original function.
+/// If used on a function that does not return Result, or which does not have exactly two generic arguments,
+/// it will return the original function.
 ///
 /// This is usefull for `#[uniffi::export]` to not throw panics on client side.
 /// This macro can be used interchangable with `#[uniffi::export]` attribute as it expands to include it.
@@ -49,12 +52,12 @@ mod traits;
 /// ### Panics
 ///
 /// This macro will panic if the `TokenStream` is not a function or impl block.
-/// Also if the function returns a Result type, it need to have exactly two generic arguments.
 ///
 /// ### Limitations
 ///
 /// Return type must be exactly `Result<T, E>` where `T` and `E` are generic types.
-/// There is no support for type aliases or other generic types.
+/// There is no support for type aliases or other generic types; the macro will be a
+/// no-op on such functions.
 ///
 /// Take into considaration that if there is a function with the same name as
 /// the method in impl block and both are using this macro, there will be a compile error
@@ -64,6 +67,6 @@ mod traits;
 /// But for now use unique and descripitive names for exported functions and methods.
 ///
 #[proc_macro_attribute]
-pub fn export_result(_: TokenStream, input: TokenStream) -> TokenStream {
-    export_result::expand(parse_macro_input!(input as syn::Item)).into()
+pub fn uniffi_export(_: TokenStream, item: TokenStream) -> TokenStream {
+    render!(item, { uniffi_export::expand(item) })
 }

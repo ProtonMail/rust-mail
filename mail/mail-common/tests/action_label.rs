@@ -1,7 +1,6 @@
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::LabelType as ApiLabelType;
 use proton_api_core::services::proton::response_data::{Address as ApiAddress, Label as ApiLabel};
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
@@ -36,9 +35,10 @@ async fn test_labeling_conversation_with_custom_label() {
     let remote_labels = hash_map! {
         ApiLabelType::Label: vec![remote_label.clone()],
     };
-    let inbox_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .unwrap();
+    let inbox_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
     let inbox_local_label = inbox_mailbox.get_local_label(&tether).await;
 
@@ -68,15 +68,19 @@ async fn test_labeling_conversation_with_custom_label() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
-    inbox_mailbox.sync(10).await.unwrap();
+    inbox_mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let local_conversation = Conversation::load(1.into(), &tether)
         .await
         .unwrap()
         .unwrap();
-    let custom_label_mailbox = Mailbox::with_remote_id(user_ctx.clone(), remote_label_id.clone())
-        .await
-        .expect("failed to create mailbox");
+    let custom_label_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), remote_label_id.clone())
+            .await
+            .expect("failed to create mailbox");
     let custom_label_local_label = custom_label_mailbox.get_local_label(&tether).await;
     let local_conversation_id = local_conversation.id().unwrap();
 
@@ -149,17 +153,19 @@ async fn test_labeling_conversation_with_starred_label() {
     let tether = user_ctx.user_stash().connection();
 
     let remote_conversation_id = "first";
-    let inbox_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .unwrap();
+    let inbox_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
     let inbox_local_label = Label::load(inbox_mailbox.label_id(), &tether)
         .await
         .unwrap()
         .unwrap();
-    let starred_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::starred())
-        .await
-        .expect("failed to create mailbox");
+    let starred_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::starred())
+            .await
+            .expect("failed to create mailbox");
     let starred_local_label = Label::load(starred_mailbox.label_id(), &tether)
         .await
         .unwrap()
@@ -187,7 +193,10 @@ async fn test_labeling_conversation_with_starred_label() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
-    inbox_mailbox.sync(10).await.unwrap();
+    inbox_mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let local_conversation = Conversation::load(1.into(), &tether)
         .await
@@ -265,9 +274,10 @@ async fn test_labeling_fails_when_labelling_folders() {
 
     // Set up test data
     let remote_conversation_id = "first";
-    let inbox_mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
-        .await
-        .unwrap();
+    let inbox_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
     let remote_conversation =
         ApiConversation::test_conversation(remote_conversation_id, vec![inbox_remote_label]);
@@ -280,7 +290,10 @@ async fn test_labeling_fails_when_labelling_folders() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Sync the mailbox
-    inbox_mailbox.sync(10).await.unwrap();
+    inbox_mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     let label = Label::load(inbox_mailbox.label_id(), &tether)
         .await
@@ -298,7 +311,7 @@ async fn test_labeling_fails_when_labelling_folders() {
         label.remote_id.unwrap(),
         vec![local_conversation.remote_id.unwrap()],
         None,
-        ctx.mail_user_context().await.session().api(),
+        ctx.mail_user_context().await.api(),
     )
     .await
     .unwrap_err();

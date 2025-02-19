@@ -31,12 +31,15 @@ async fn test_load_attachment_buffer() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
 
     // Sync mails.
-    mailbox.sync(1).await.expect("mailbox sync failed");
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 1)
+        .await
+        .expect("mailbox sync failed");
     let tether = user_ctx.user_stash().connection();
     // Get default conversation with the default attachment.
     let local_conversation = Conversation::find_first("", vec![], &tether)
@@ -85,12 +88,15 @@ async fn load_attachment_from_cache() {
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
 
     // Sync mails.
-    mailbox.sync(1).await.expect("mailbox sync failed");
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 1)
+        .await
+        .expect("mailbox sync failed");
     let tether = user_ctx.user_stash().connection();
     // Get default conversation with the default attachment.
     let local_conversation = Conversation::find_first("", vec![], &tether)

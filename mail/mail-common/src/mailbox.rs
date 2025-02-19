@@ -6,19 +6,18 @@ use crate::datatypes::{LocalAttachmentId, ViewMode};
 use crate::models::{
     Conversation, ConversationCounters, MailLabel, MailboxLabels, Message, MessageCounters,
 };
-use crate::{AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError};
 pub use attachments::DecryptedAttachment;
+use futures::TryFutureExt;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, WatcherHandle};
-use std::sync::Arc;
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, error};
 
 #[derive(Debug, thiserror::Error)]
@@ -71,61 +70,36 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 /// which is the correct mode.
 #[derive(Clone)]
 pub struct Mailbox {
-    user_ctx: Arc<MailUserContext>,
     label_id: LocalLabelId,
     view_mode: ViewMode,
 }
 
 impl Mailbox {
-    pub async fn new(
-        user_ctx: Arc<MailUserContext>,
-        label_id: LocalLabelId,
-    ) -> MailboxResult<Self> {
-        let tether = user_ctx.user_stash().connection();
-        let Some(label) = Label::load(label_id, &tether).await? else {
-            return Err(MailboxError::LabelNotFound(label_id));
-        };
-        let view_mode = label.view_mode(&tether).await?;
+    pub async fn new(tether: &Tether, label_id: LocalLabelId) -> MailboxResult<Self> {
+        let label = Label::load(label_id, tether)
+            .await?
+            .ok_or(MailboxError::LabelNotFound(label_id))?;
+
+        let view_mode = label.view_mode(tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
+
         Ok(Self {
             label_id,
             view_mode,
-            user_ctx,
         })
     }
 
-    pub async fn with_remote_id(
-        user_ctx: Arc<MailUserContext>,
-        label_id: LabelId,
-    ) -> MailboxResult<Self> {
-        let tether = user_ctx.user_stash().connection();
-        let label = Label::find_by_remote_id(label_id, &tether).await?.unwrap();
-        let view_mode = label.view_mode(&tether).await?;
-        debug!(
-            "Creating Mailbox ({}, view_mode={:?})",
-            label.local_id.unwrap(),
-            view_mode
-        );
+    pub async fn with_remote_id(tether: &Tether, label_id: LabelId) -> MailboxResult<Self> {
+        let label = Label::find_by_remote_id(label_id, tether).await?.unwrap();
+
+        let label_id = label.local_id.unwrap();
+        let view_mode = label.view_mode(tether).await?;
+        debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
+
         Ok(Self {
-            label_id: label.local_id.unwrap(),
+            label_id,
             view_mode,
-            user_ctx,
         })
-    }
-
-    /// Get the user context.
-    pub fn user_context(&self) -> Arc<MailUserContext> {
-        Arc::clone(&self.user_ctx)
-    }
-
-    /// Get the API service.
-    pub fn api(&self) -> &Proton {
-        self.user_ctx.api()
-    }
-
-    /// Get the database connection.
-    pub fn stash(&self) -> &Stash {
-        self.user_ctx.user_stash()
     }
 
     pub fn label_id(&self) -> LocalLabelId {
@@ -140,10 +114,8 @@ impl Mailbox {
     /// # Errors
     /// Returns error if API request or database changes failed.
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, count))]
-    pub async fn sync(&self, count: usize) -> MailboxResult<()> {
-        let ctx = self.user_ctx.clone();
-        let mut tether = ctx.user_stash().connection();
-        let Some(label) = Label::load(self.label_id, &tether).await? else {
+    pub async fn sync(&self, tether: &mut Tether, api: &Proton, count: usize) -> MailboxResult<()> {
+        let Some(label) = Label::load(self.label_id, tether).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 
@@ -153,7 +125,7 @@ impl Mailbox {
 
         debug!("Syncing {}({})", self.label_id, &remote_id);
 
-        let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, &tether)
+        let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, tether)
             .await?
             .unwrap_or_else(|| MailboxLabels::new(self.label_id));
         if mailbox_label.initialized {
@@ -166,24 +138,16 @@ impl Mailbox {
         );
 
         match self.view_mode {
-            ViewMode::Conversations => Conversation::sync_first_conversation_page(
-                remote_id,
-                count,
-                ctx.session().api(),
-                &mut tether,
-            )
-            .await
-            .map_err(|e| {
-                error!("Failed to sync conversations for label: {e:?}");
-                e
-            }),
-            ViewMode::Messages => {
-                Message::sync_first_message_page(remote_id, count, ctx.session().api(), &mut tether)
+            ViewMode::Conversations => {
+                Conversation::sync_first_conversation_page(remote_id, count, api, tether)
+                    .inspect_err(|e| error!("Failed to sync conversations for label: {e:?}"))
                     .await
-                    .map_err(|e| {
-                        error!("Failed to sync messages for label: {e:?}");
-                        e
-                    })
+            }
+
+            ViewMode::Messages => {
+                Message::sync_first_message_page(remote_id, count, api, tether)
+                    .inspect_err(|e| error!("Failed to sync messages for label: {e:?}"))
+                    .await
             }
         }?;
 
@@ -209,16 +173,14 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn unread_count(&self) -> Result<u64, MailboxError> {
-        let tether = self.user_ctx.user_stash().connection();
-
+    pub async fn unread_count(&self, tether: &Tether) -> Result<u64, MailboxError> {
         Ok(match self.view_mode {
             ViewMode::Conversations => {
-                let counters = ConversationCounters::find_by_id(self.label_id, &tether).await?;
+                let counters = ConversationCounters::find_by_id(self.label_id, tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
             ViewMode::Messages => {
-                let counters = MessageCounters::find_by_id(self.label_id, &tether).await?;
+                let counters = MessageCounters::find_by_id(self.label_id, tether).await?;
                 counters.map(|c| c.unread).unwrap_or_default()
             }
         })
@@ -231,9 +193,7 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     ///
-    pub async fn watch_unread_count(&self) -> Result<WatcherHandle, MailboxError> {
-        let stash = self.user_ctx.user_stash();
-
+    pub async fn watch_unread_count(&self, stash: &Stash) -> Result<WatcherHandle, MailboxError> {
         let watcher = match self.view_mode {
             ViewMode::Conversations => ConversationCounters::watch(stash)?,
             ViewMode::Messages => MessageCounters::watch(stash)?,

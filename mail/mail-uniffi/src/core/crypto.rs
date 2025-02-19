@@ -26,7 +26,7 @@ pub struct SignatureVerificationResult {
     signature_info: Option<VerificationInformation>,
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl SignatureVerificationResult {
     /// The result of the signature verification with an enum type.
     #[must_use]

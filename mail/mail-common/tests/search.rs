@@ -1,5 +1,4 @@
 use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_mail_common::models::{Conversation, Message};
@@ -10,7 +9,7 @@ async fn unsynced_conversations() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
-    let api = user_context.session().api();
+    let api = user_context.api();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
     ctx.mock_get_conversations(ctx.get_test_convers(), 1).await;
@@ -40,7 +39,7 @@ async fn unsynced_messages() {
     let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
-    let api = user_context.session().api();
+    let api = user_context.api();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
     let addrs = ctx.get_test_addrs();

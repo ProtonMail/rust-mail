@@ -5,7 +5,6 @@ use crate::MailUserContext;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;
@@ -91,7 +90,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_read_remote::<Proton>(
             action.0.remote_target_ids.clone(),
-            ctx.session().api(),
+            ctx.api(),
         )
         .await?;
 

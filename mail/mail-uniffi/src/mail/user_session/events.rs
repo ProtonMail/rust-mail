@@ -1,5 +1,5 @@
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{EventError, EventErrorReason, ProtonError, VoidEventResult};
+use crate::errors::{EventError, EventErrorReason, ProtonError};
 use crate::mail::MailUserSession;
 use crate::{spawn_async, uniffi_async};
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
@@ -31,7 +31,7 @@ impl Drop for EventLoopErrorObserverHandle {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl EventLoopErrorObserverHandle {
     /// Disconnect this observer and release all associated resources.
     pub fn disconnect(&self) {
@@ -39,7 +39,7 @@ impl EventLoopErrorObserverHandle {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl MailUserSession {
     /// Queue an event loop poll action.
     ///
@@ -48,8 +48,8 @@ impl MailUserSession {
     /// Errors returned here are only related to queuing of the action. To get information
     /// about the event loop execution, please use [`MailUserSession::observe_event_loop_errors`].
     #[allow(clippy::unused_async)]
-    pub async fn poll_events(&self) -> VoidEventResult {
-        let ctx = self.ctx.clone();
+    pub async fn poll_events(&self) -> Result<(), EventError> {
+        let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.poll_event_loop()
                 .await
@@ -70,9 +70,9 @@ impl MailUserSession {
     pub fn observe_event_loop_errors(
         &self,
         callback: Arc<dyn EventLoopErrorObserver>,
-    ) -> Arc<EventLoopErrorObserverHandle> {
-        let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx().action_queue());
-        let handle = spawn_async(self.ctx.as_ref(), async move {
+    ) -> Result<Arc<EventLoopErrorObserverHandle>, EventError> {
+        let mut observer = ActionFailureObserver::<EventPoll>::new(self.ctx()?.action_queue());
+        let handle = spawn_async(self.ctx()?, async move {
             while let Ok(v) = observer.next().await {
                 if let ActionFailureReason::Error(err, _) = v {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {
@@ -101,6 +101,8 @@ impl MailUserSession {
             }
         });
 
-        Arc::new(EventLoopErrorObserverHandle(handle.abort_handle()))
+        Ok(Arc::new(EventLoopErrorObserverHandle(
+            handle.abort_handle(),
+        )))
     }
 }

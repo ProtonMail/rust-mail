@@ -7,7 +7,7 @@ use proton_mail_common::datatypes::MessageSender as RealMessageSender;
 
 /// Creates an [`AvatarInformation`] by taking then display name and email address
 /// and uses these to determine the text and color the avatar should be.
-#[uniffi::export]
+#[uniffi_export]
 pub fn avatar_information_from_name_and_email(
     display_name: &str,
     email: &str,
@@ -18,7 +18,7 @@ pub fn avatar_information_from_name_and_email(
 }
 
 /// Creates an [`AvatarInformation`] struct using the details of the first [`MessageAddress`] in the provided slice.
-#[uniffi::export]
+#[uniffi_export]
 pub fn avatar_information_from_message_senders(
     address_list: Vec<MessageSender>,
 ) -> AvatarInformation {
@@ -26,13 +26,13 @@ pub fn avatar_information_from_message_senders(
 }
 
 /// Creates an [`AvatarInformation`] struct using a [`MessageAddress`].
-#[uniffi::export]
+#[uniffi_export]
 pub fn avatar_information_from_message_sender(address: MessageSender) -> AvatarInformation {
     RealAvatarInformation::from(RealMessageSender::from(address)).into()
 }
 
 /// Creates an [`AvatarInformation`] struct using the details of the first [`MessageAddress`] in the provided slice.
-#[uniffi::export]
+#[uniffi_export]
 pub fn avatar_information_from_message_recipients(
     address_list: Vec<MessageRecipient>,
 ) -> AvatarInformation {
@@ -40,7 +40,7 @@ pub fn avatar_information_from_message_recipients(
 }
 
 /// Creates an [`AvatarInformation`] struct using a [`MessageAddress`].
-#[uniffi::export]
+#[uniffi_export]
 pub fn avatar_information_from_message_recipient(address: MessageRecipient) -> AvatarInformation {
     RealAvatarInformation::from(RealMessageRecipient::from(address)).into()
 }

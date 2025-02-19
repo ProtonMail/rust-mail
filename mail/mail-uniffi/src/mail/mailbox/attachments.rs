@@ -4,7 +4,7 @@ use crate::mail::{DecryptedAttachment, Mailbox};
 use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl Mailbox {
     /// Loads the metadata and file path for the given local [`attachment_id`]
     /// into a [`DecryptedAttachment`].
@@ -29,10 +29,9 @@ impl Mailbox {
         &self,
         local_attachment_id: Id,
     ) -> Result<DecryptedAttachment, ActionError> {
-        let mbox = self.mbox.clone();
+        let ctx = self.ctx()?;
         uniffi_async(async move {
-            mbox.user_context()
-                .get_attachment(local_attachment_id.into())
+            ctx.get_attachment(local_attachment_id.into())
                 .await
                 .map_err(RealProtonMailError::from)
                 .map(Into::into)

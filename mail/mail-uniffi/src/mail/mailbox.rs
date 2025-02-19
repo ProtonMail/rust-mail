@@ -1,15 +1,19 @@
 pub mod attachments;
 
 use crate::core::datatypes::Id;
-use crate::errors::UserSessionError;
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{ProtonError, UserSessionError};
 use crate::mail::datatypes::ViewMode;
+use crate::mail::state::MailUserContextPtr;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_api_core::services::proton::Proton;
+use proton_api_core::session::Session;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
+use proton_mail_common::Mailbox as RealMailbox;
 use stash::stash::Stash;
 use std::sync::Arc;
 use tracing::error;
@@ -17,8 +21,23 @@ use tracing::error;
 /// A [`Mailbox`] provides a gateway to manipulating messages and conversations for a given label.
 #[derive(uniffi::Object)]
 pub struct Mailbox {
-    /// The inner mailbox, which is the real internal type.
-    mbox: proton_mail_common::Mailbox,
+    /// The mail user context relevant for the mailbox.
+    ctx: MailUserContextPtr,
+
+    /// The real mailbox instance.
+    mbox: RealMailbox,
+}
+
+impl Mailbox {
+    /// Get a strong reference to the inner user context.
+    pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, ProtonError> {
+        Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
+    }
+
+    /// Get the connection to the user database
+    pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
+        Ok(self.ctx()?.user_stash().to_owned())
+    }
 }
 
 /// Callback for operations that get scheduled in the background and return no result.
@@ -29,18 +48,27 @@ pub trait MailboxBackgroundResult: Send + Sync {
 
 const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
-export_typed_result!(NewMailboxResult, Arc<Mailbox>, UserSessionError);
-
 /// Create a new mailbox for a given label id.
-#[uniffi::export]
-pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResult {
-    let ctx = ctx.ctx().clone();
+#[uniffi_export]
+pub async fn new_mailbox(
+    ctx: &MailUserSession,
+    label_id: Id,
+) -> Result<Arc<Mailbox>, UserSessionError> {
+    let ptr = ctx.ptr();
+    let ctx = ctx.ctx()?;
+
     uniffi_async(async move {
-        let mbox = proton_mail_common::Mailbox::new(ctx, label_id.into()).await?;
-        if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
+        let stash = ctx.user_stash();
+        let mut tether = stash.connection();
+        let mbox = RealMailbox::new(&tether, label_id.into()).await?;
+
+        if let Err(e) = mbox
+            .sync(&mut tether, ctx.api(), DEFAULT_CONVERSATION_COUNT)
+            .await
+        {
             error!("Could not sync mailbox: {e:?}");
         }
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
     .map_err(UserSessionError::from)
@@ -61,13 +89,17 @@ pub async fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> NewMailboxResul
 ///
 /// Returns an error if the mailbox could not be created or synced.
 ///
-#[uniffi::export]
-pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
-    let ctx = ctx.ctx().clone();
-    uniffi_async(async move {
-        let mbox = proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::inbox()).await?;
+#[uniffi_export]
+pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
+    let ptr = ctx.ptr();
+    let ctx = ctx.ctx()?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
+    uniffi_async(async move {
+        let stash = ctx.user_stash();
+        let tether = stash.connection();
+        let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::inbox()).await?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
     .map_err(UserSessionError::from)
@@ -88,21 +120,24 @@ pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
 ///
 /// Returns an error if the mailbox could not be created or synced.
 ///
-#[uniffi::export]
-pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> NewMailboxResult {
-    let ctx = ctx.ctx().clone();
-    uniffi_async(async move {
-        let mbox =
-            proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::all_mail()).await?;
+#[uniffi_export]
+pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
+    let ptr = ctx.ptr();
+    let ctx = ctx.ctx()?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { mbox }))
+    uniffi_async(async move {
+        let stash = ctx.user_stash();
+        let tether = stash.connection();
+        let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::all_mail()).await?;
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
     .map_err(UserSessionError::from)
     .into()
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 impl Mailbox {
     /// Get the label id of the mailbox.
     #[must_use]
@@ -122,10 +157,15 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     pub async fn unread_count(&self) -> Result<u64, UserSessionError> {
+        let stash = self.user_stash()?;
         let mbox = self.mbox.clone();
-        uniffi_async(
-            async move { Result::<_, RealProtonMailError>::Ok(mbox.unread_count().await?) },
-        )
+
+        uniffi_async(async move {
+            let tether = stash.connection();
+            let count = mbox.unread_count(&tether).await?;
+
+            Result::<_, RealProtonMailError>::Ok(count)
+        })
         .await
         .map_err(UserSessionError::from)
     }
@@ -140,10 +180,12 @@ impl Mailbox {
         &self,
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, UserSessionError> {
+        let ctx = self.ctx()?;
         let mbox = self.mbox.clone();
+
         uniffi_async(async move {
-            let receiver = mbox.watch_unread_count().await?;
-            let watcher = watch_channel(mbox.user_context().as_ref(), receiver, callback);
+            let receiver = mbox.watch_unread_count(ctx.user_stash()).await?;
+            let watcher = watch_channel(ctx, receiver, callback);
 
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
@@ -152,36 +194,25 @@ impl Mailbox {
     }
 }
 
-/// Create a new mailbox for a given label id.
-#[uniffi::export]
-pub async fn with_label_id(ctx: &MailUserSession, label_id: Id) -> NewMailboxResult {
-    // Note: This is a workaround for the default constructor not being able to be
-    // generated on Kotlin.
-    new_mailbox(ctx, label_id).await
-}
-
 impl Mailbox {
     /// Get the inner mailbox.
     #[must_use]
-    pub fn mbox(&self) -> &proton_mail_common::Mailbox {
+    pub fn mbox(&self) -> &RealMailbox {
         &self.mbox
     }
 
     /// Get the API service.
-    #[must_use]
-    pub fn api(&self) -> &Proton {
-        self.mbox.api()
+    pub fn api(&self) -> Result<Proton, ProtonError> {
+        Ok(self.ctx()?.api().to_owned())
+    }
+
+    /// Get the API session.
+    pub fn session(&self) -> Result<Session, ProtonError> {
+        Ok(self.ctx()?.session().to_owned())
     }
 
     /// Get the database connection.
-    #[must_use]
-    pub fn stash(&self) -> &Stash {
-        self.mbox.stash()
-    }
-
-    /// Get the [`MailUserContext`].
-    #[must_use]
-    pub fn context(&self) -> Arc<MailUserContext> {
-        self.mbox.user_context()
+    pub fn stash(&self) -> Result<Stash, ProtonError> {
+        Ok(self.ctx()?.user_stash().to_owned())
     }
 }

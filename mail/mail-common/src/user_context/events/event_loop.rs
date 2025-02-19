@@ -72,7 +72,7 @@ impl Store for MailUserContext {
 #[async_trait]
 impl Provider<MailEvent> for MailUserContext {
     async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
-        Ok(self.session().api().get_events_latest().await?.event_id)
+        Ok(self.api().get_events_latest().await?.event_id)
     }
 
     async fn get_event(&self, event_id: &EventId) -> Result<MailEvent, ApiServiceError> {

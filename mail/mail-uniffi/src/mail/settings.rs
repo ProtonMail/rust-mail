@@ -10,15 +10,15 @@ use tokio::task::JoinError;
 use super::{datatypes::MailSettings, MailUserSession};
 
 /// Gets the latest settings or a default if it can't find it.
-#[uniffi::export]
-pub async fn mail_settings(ctx: &MailUserSession) -> MailSettings {
-    let stash = ctx.ctx().user_stash().clone();
-    uniffi_async::<_, JoinError, _>(async move {
+#[uniffi_export]
+pub async fn mail_settings(ctx: &MailUserSession) -> Result<MailSettings, UserSessionError> {
+    let stash = ctx.user_stash()?;
+    Ok(uniffi_async::<_, JoinError, _>(async move {
         let tether = stash.connection();
         Ok(RealSettings::get_or_default(&tether).await.into())
     })
     .await
-    .unwrap_or(MailSettings::default())
+    .unwrap_or(MailSettings::default()))
 }
 
 #[derive(Clone, uniffi::Record)]
@@ -28,12 +28,12 @@ pub struct SettingsWatcher {
 }
 
 /// Calls on_update with the new mail settings every time the mail settings change.
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, UserSessionError> {
-    let ctx = ctx.ctx();
+    let ctx = ctx.ctx()?;
     uniffi_async(async move {
         let stash = ctx.user_stash();
         let handle = RealSettings::watch(stash)?;
@@ -44,7 +44,7 @@ pub async fn watch_mail_settings(
             .unwrap_or_default()
             .into();
 
-        let watcher = watch_channel(ctx.as_ref(), handle, callback);
+        let watcher = watch_channel(ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
             watch_handle: watcher,

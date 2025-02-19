@@ -175,7 +175,7 @@ impl From<RealContactSuggestions> for ContactSuggestions {
     }
 }
 
-#[uniffi::export]
+#[uniffi_export]
 impl ContactSuggestions {
     /// Returns all contact suggestions
     ///

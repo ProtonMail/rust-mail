@@ -4,7 +4,6 @@ use crate::models::{Conversation, Message};
 use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -100,7 +99,7 @@ impl ActionHandler for Handler {
         let failed_ids = if action.0.remote_target_ids.is_empty() {
             vec![]
         } else {
-            let api = ctx.session().api();
+            let api = ctx.api();
             let message_ids = action
                 .0
                 .remote_target_ids

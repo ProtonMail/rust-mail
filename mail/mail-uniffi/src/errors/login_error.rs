@@ -1,12 +1,10 @@
 use super::{LoginErrorReason, ProtonError};
-use crate::export_void_result;
 use crate::UniffiEnum;
+use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-export_void_result!(VoidLoginResult, LoginError);
-
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum LoginError {
     Reason(LoginErrorReason),
     Other(ProtonError),

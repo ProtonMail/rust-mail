@@ -141,10 +141,13 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     if !messages.is_empty() {
         let mut conversation =
@@ -222,10 +225,13 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
 
     ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
 
     // Action
     let message_ids = Message::remote_ids_counterpart(to_mark, &tether)

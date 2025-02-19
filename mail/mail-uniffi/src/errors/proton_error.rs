@@ -1,13 +1,13 @@
-use crate::core::datatypes::Id;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::OtherErrorReason;
-use crate::{export_typed_result, export_void_result, UniffiEnum};
+use crate::UniffiEnum;
+use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
-#[derive(Debug, UniffiEnum)]
+#[derive(Debug, From, UniffiEnum)]
 pub enum ProtonError {
     OtherReason(OtherErrorReason),
     SessionExpired,
@@ -44,6 +44,3 @@ impl From<RealMailErrorReason> for ProtonError {
         }
     }
 }
-
-export_void_result!(VoidProtonResult, ProtonError);
-export_typed_result!(OptIdProtonResult, Option<Id>, ProtonError);

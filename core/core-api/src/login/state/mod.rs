@@ -10,7 +10,6 @@ use crate::services::proton::ProtonCore;
 use crate::session::{Config, Session, SessionParts};
 use crate::store::DynStore;
 use crate::store::UserData;
-use derive_more::Into;
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo};

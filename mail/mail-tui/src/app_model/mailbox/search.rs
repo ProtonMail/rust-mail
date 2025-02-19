@@ -5,7 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::KeyCode;
 use proton_mail_common::models::MailSettings;
-use proton_mail_common::{MailContext, Mailbox};
+use proton_mail_common::{MailContext, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
@@ -42,7 +42,12 @@ impl StateHandler for Search {
         frame.render_stateful_widget(TextInput::new("Search:"), areas[0], &mut self.search);
     }
 
-    fn handle_event(&mut self, _: &Mailbox, event: Event) -> Command<Messages> {
+    fn handle_event(
+        &mut self,
+        _: &Arc<MailUserContext>,
+        _: &Mailbox,
+        event: Event,
+    ) -> Command<Messages> {
         if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Esc => return Command::message(Message::CloseSearchPopup.into()),
@@ -60,7 +65,8 @@ impl StateHandler for Search {
 
     fn update(
         &mut self,
-        _ctx: &MailContext,
+        _: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
         _mail_settings: &Arc<MailSettings>,
@@ -68,7 +74,7 @@ impl StateHandler for Search {
         match message {
             Message::SearchSubmit(search_phrase) => Command::batch(vec![
                 Command::message(Message::CloseSearchPopup.into()),
-                MessagesState::from_search(mbox.clone(), search_phrase),
+                MessagesState::from_search(user_ctx.to_owned(), mbox.to_owned(), search_phrase),
             ]),
             _ => Command::none(),
         }

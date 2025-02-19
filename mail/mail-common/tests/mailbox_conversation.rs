@@ -10,7 +10,6 @@ use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_new_mailbox_sync_conversations() {
@@ -102,12 +101,15 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(Arc::clone(&user_ctx), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
         .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    mailbox.sync(10).await.unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
     let tether = user_ctx.user_stash().connection();
     // Get conversations for mailbox.
     let conversation = Conversation::find_first("", vec![], &tether)
