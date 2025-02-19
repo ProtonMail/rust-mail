@@ -410,16 +410,28 @@ pub struct ScrollCursor<T: ScrollData> {
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
+    /// Create a new ScrollCursor set to the very begining of the data.
+    ///
+    /// It relies on the `i64::MAX` as the time and display order has to be
+    /// lower in order to read data from cursor. i64::MAX is used as the
+    /// sqlite3 does use 64 bit signed ints.
+    ///
     pub fn absolute_begining(local_label_id: LocalLabelId, unread: ReadFilter) -> Self {
         ScrollCursor {
             local_label_id,
             unread,
-            time: u32::MAX as u64,
-            display_order: u32::MAX as u64,
+            time: i64::MAX as u64,
+            display_order: i64::MAX as u64,
             _phantom: std::marker::PhantomData,
         }
     }
 
+    /// Create a new ScrollCursor set to the very end of the data.
+    ///
+    /// It relies on the `0` as the time and display order has to be
+    /// greater in order to read data from cursor. And 0 is the lowest possible value
+    /// for the unsigned int.
+    ///
     pub fn absolute_end(local_label_id: LocalLabelId, unread: ReadFilter) -> Self {
         ScrollCursor {
             local_label_id,
@@ -429,6 +441,7 @@ impl<T: ScrollData> ScrollCursor<T> {
             _phantom: std::marker::PhantomData,
         }
     }
+
     /// Same as [`visible_elements`] but returns only the number of items that match.
     ///
     /// # Errors
