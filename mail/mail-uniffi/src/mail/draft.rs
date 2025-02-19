@@ -4,6 +4,7 @@ mod recipients;
 use crate::core::datatypes::Id;
 use crate::errors::{
     DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError, ProtonError,
+    VoidDraftDiscardResult, VoidDraftSaveSendResult, VoidDraftUndoSendResult,
 };
 use crate::mail::datatypes::{AttachmentMetadata, MimeType};
 use crate::mail::draft::observer::DraftSendResult;
@@ -314,6 +315,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
+    #[returns(VoidDraftSaveSendResult)]
     pub async fn do_save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
@@ -335,6 +337,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
+    #[returns(VoidDraftSaveSendResult)]
     pub async fn do_send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
@@ -357,6 +360,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
+    #[returns(VoidDraftDiscardResult)]
     pub async fn do_discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
         uniffi_async(async move {
             let instance = self.instance.read().await;
@@ -377,6 +381,7 @@ impl Draft {
 ///
 /// Note that will only work if the message has been sent with a send delay.
 #[uniffi_export]
+#[returns(VoidDraftUndoSendResult)]
 pub async fn draft_undo_send(
     session: &MailUserSession,
     message_id: Id,

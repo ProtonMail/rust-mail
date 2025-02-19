@@ -1,5 +1,7 @@
 use super::MailUserSession;
-use crate::errors::{unexpected::UnexpectedError, ProtonError, UserSessionError};
+use crate::errors::{
+    unexpected::UnexpectedError, ProtonError, UserSessionError, VoidSessionResult,
+};
 use futures::TryFutureExt;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
@@ -7,6 +9,7 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 impl MailUserSession {
     /// Execute exactly one pending action.
     #[must_use]
+    #[returns(VoidSessionResult)]
     pub async fn execute_pending_action(&self) -> Result<(), UserSessionError> {
         self.ctx()?
             .execute_pending_action()

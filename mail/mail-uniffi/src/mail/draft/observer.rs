@@ -1,5 +1,5 @@
 use crate::core::datatypes::Id;
-use crate::errors::{DraftSaveSendError, ProtonError};
+use crate::errors::{DraftSaveSendError, ProtonError, VoidProtonResult};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_core_common::utils::MapVec;
@@ -162,6 +162,7 @@ pub async fn draft_send_result_unseen(
 ///
 /// Returns error if the query failed.
 #[uniffi_export]
+#[returns(VoidProtonResult)]
 pub async fn draft_send_result_mark_seen(
     session: &MailUserSession,
     message_ids: Vec<Id>,
@@ -186,6 +187,7 @@ pub async fn draft_send_result_mark_seen(
 ///
 /// Returns error if the query failed.
 #[uniffi_export]
+#[returns(VoidProtonResult)]
 pub async fn draft_send_result_delete(
     session: &MailUserSession,
     message_ids: Vec<Id>,

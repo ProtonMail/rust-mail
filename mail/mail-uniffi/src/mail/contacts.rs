@@ -1,6 +1,6 @@
 use super::MailUserSession;
 use crate::core::datatypes::ContactSuggestions;
-use crate::errors::ActionError;
+use crate::errors::{ActionError, VoidActionResult};
 use crate::{
     core::datatypes::{DeviceContact, GroupedContacts, Id},
     uniffi_async, WatchHandle,
@@ -69,6 +69,7 @@ pub async fn contact_suggestions(
 }
 
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn delete_contact(
     contact_id: Id,
     session: Arc<MailUserSession>,

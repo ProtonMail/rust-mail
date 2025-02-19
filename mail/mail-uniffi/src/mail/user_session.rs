@@ -6,7 +6,7 @@ mod labels;
 
 use crate::core::datatypes::ConnectionStatus;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{ActionError, ProtonError, UserSessionError};
+use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::MapIntoResult;
 use crate::{
@@ -80,6 +80,7 @@ impl MailUserSession {
     }
 
     /// Log out a session.
+    #[returns(VoidSessionResult)]
     pub async fn logout(&self) -> Result<(), UserSessionError> {
         let ctx = self.take_ctx()?;
 

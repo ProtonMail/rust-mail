@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+
+  - Put back `VoidFooResult` type instead of method-specific types
+
 ## [0.45.0] - 2025-02-19
 
 ### Changed

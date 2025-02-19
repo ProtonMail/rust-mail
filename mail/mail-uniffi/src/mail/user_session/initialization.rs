@@ -1,4 +1,4 @@
-use crate::errors::UserSessionError;
+use crate::errors::{UserSessionError, VoidSessionResult};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -10,6 +10,7 @@ impl MailUserSession {
     ///
     /// *NOTE*: You should not create any [`crate::mail::Mailbox`] types until this initialization has
     /// completed.
+    #[returns(VoidSessionResult)]
     pub async fn initialize(
         &self,
         cb: Box<dyn MailUserSessionInitializationCallback>,

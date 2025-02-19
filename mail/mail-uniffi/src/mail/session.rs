@@ -4,7 +4,7 @@ use crate::core::{
     StoredSessionState,
 };
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, UserSessionError};
+use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
@@ -560,6 +560,7 @@ impl MailSession {
     /// # Errors
     ///
     /// Returns an error if the account is not found.
+    #[returns(VoidSessionResult)]
     pub async fn set_primary_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.clone();
         let user_id = user_id.into();
@@ -577,6 +578,7 @@ impl MailSession {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
+    #[returns(VoidSessionResult)]
     pub async fn logout_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let user_ctx = self.user_ctx.clone();
         let user_id = user_id.into();
@@ -599,6 +601,7 @@ impl MailSession {
     /// # Errors
     ///
     /// Returns error if data can not be removed or the db operation failed.
+    #[returns(VoidSessionResult)]
     pub async fn delete_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let mail_ctx = self.mail_ctx.clone();
         let user_ctx = self.user_ctx.clone();

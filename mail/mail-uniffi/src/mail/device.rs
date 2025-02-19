@@ -1,3 +1,4 @@
+use crate::errors::VoidActionResult;
 use crate::mail::{MailSession, MailUserSession};
 use crate::{core::datatypes::DeviceEnvironment, errors::ActionError, uniffi_async};
 use proton_core_common::models::RegisteredDevice as RealRegisteredDevice;
@@ -47,6 +48,7 @@ pub async fn get_registered_device(
 /// the sake of registering it later, use [`save_registered_device`] instead.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn register_and_save_device(
     session: Arc<MailUserSession>,
     device: RegisteredDevice,
@@ -84,6 +86,7 @@ pub async fn register_and_save_device(
 /// you probably should use [`register_and_save_device`] instead.
 ///
 #[uniffi_export]
+#[returns(VoidActionResult)]
 pub async fn save_registered_device(
     session: Arc<MailSession>,
     device: RegisteredDevice,
