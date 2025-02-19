@@ -12,6 +12,7 @@ impl Default for CoreAccount {
             name_or_addr: String::default(),
             display_name: Option::default(),
             username: Option::default(),
+            password: Option::default(),
             primary_addr: Option::default(),
             second_factor_mode: None,
             password_mode: None,

@@ -49,6 +49,9 @@ async fn create_table_core_accounts(tx: &Bond<'_>) -> Result<(), StashError> {
                 -- The account's username (once known)
                 username TEXT,
 
+                -- The account's password (encrypted, temporary)
+                password BLOB,
+
                 -- The account's display name (once known)
                 display_name TEXT,
 

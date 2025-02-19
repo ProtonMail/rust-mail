@@ -1,3 +1,4 @@
+use anyhow::bail;
 use async_trait::async_trait;
 use muon::client::PasswordMode;
 use std::ops::Deref;
@@ -105,11 +106,17 @@ pub trait Store: Send + Sync + 'static {
     /// Set the auth info.
     async fn set_auth_info(&mut self, info: AuthInfo) -> Result<(), StoreError>;
 
+    /// Set the temporary encrypted username/password.
+    async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError>;
+
     /// Set the user data.
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError>;
 
     /// Get the user's key secret.
     async fn expose_key_secret(&self) -> Option<UserKeySecret>;
+
+    /// Clear the temporary password.
+    async fn clear_temp_pass(&mut self) -> Result<(), StoreError>;
 
     /// Clear all stored data.
     async fn clear(&mut self) -> Result<(), StoreError>;
@@ -134,12 +141,20 @@ impl<S: ?Sized + Store> Store for Box<S> {
         self.deref_mut().set_auth_info(info).await
     }
 
+    async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError> {
+        self.deref_mut().set_temp_pass(pass).await
+    }
+
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
         self.deref_mut().set_user_data(data).await
     }
 
     async fn expose_key_secret(&self) -> Option<UserKeySecret> {
         self.deref().expose_key_secret().await
+    }
+
+    async fn clear_temp_pass(&mut self) -> Result<(), StoreError> {
+        self.deref_mut().clear_temp_pass().await
     }
 
     async fn clear(&mut self) -> Result<(), StoreError> {
@@ -184,6 +199,10 @@ impl Store for TempStore {
         Ok(())
     }
 
+    async fn set_temp_pass(&mut self, _: &str) -> Result<(), StoreError> {
+        bail!("unsupported")
+    }
+
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
         self.data = Some(data);
 
@@ -192,6 +211,10 @@ impl Store for TempStore {
 
     async fn expose_key_secret(&self) -> Option<UserKeySecret> {
         self.data.as_ref().map(|data| data.key_secret.clone())
+    }
+
+    async fn clear_temp_pass(&mut self) -> Result<(), StoreError> {
+        bail!("unsupported")
     }
 
     async fn clear(&mut self) -> Result<(), StoreError> {
