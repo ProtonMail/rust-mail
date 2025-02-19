@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Put back `VoidFooResult` type instead of method-specific types
 
+### Fixed
+
+  - Replace should return all visible items not fetched ones
+
 ## [0.45.0] - 2025-02-19
 
 ### Changed
