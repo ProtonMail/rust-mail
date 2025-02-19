@@ -93,6 +93,12 @@ async fn test_labeling_conversation_with_custom_label() {
     .await
     .unwrap();
 
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
+
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
@@ -122,6 +128,12 @@ async fn test_labeling_conversation_with_custom_label() {
     )
     .await
     .unwrap();
+
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -212,6 +224,11 @@ async fn test_labeling_conversation_with_starred_label() {
     .await
     .unwrap();
 
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
@@ -241,6 +258,12 @@ async fn test_labeling_conversation_with_starred_label() {
     )
     .await
     .unwrap();
+
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Verify that conversation contains label.
     assert!(

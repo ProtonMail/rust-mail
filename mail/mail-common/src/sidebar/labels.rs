@@ -116,7 +116,7 @@ impl Sidebar {
         ctx: &MailUserContext,
         local_id: LocalLabelId,
     ) -> SidebarResult<()> {
-        ctx.execute_action(Expand::collapse(local_id)).await?;
+        ctx.queue_action(Expand::collapse(local_id)).await?;
 
         Ok(())
     }
@@ -131,7 +131,7 @@ impl Sidebar {
         ctx: &MailUserContext,
         local_id: LocalLabelId,
     ) -> SidebarResult<()> {
-        ctx.execute_action(Expand::expand(local_id)).await?;
+        ctx.queue_action(Expand::expand(local_id)).await?;
 
         Ok(())
     }

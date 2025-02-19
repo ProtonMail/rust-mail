@@ -6,7 +6,7 @@ use common::new_queue_typed;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::queue::ActionRemoteOutput;
+use proton_action_queue::queue::QueuedActionState;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -15,9 +15,10 @@ async fn auto_queued_on_network_failure() {
     // check if the remote action returns a network error it is queued for execution later.
     let queue = new_queue_typed::<ErrorAction>().await;
 
-    let output = queue.apply_action(ErrorAction {}).await.unwrap();
+    queue.queue_action(ErrorAction {}).await.unwrap();
+    let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
-    assert!(matches!(output.remote, ActionRemoteOutput::Queued(_)),);
+    assert!(matches!(output, QueuedActionState::Queued(_)),);
 }
 
 #[tokio::test]
@@ -25,12 +26,13 @@ async fn auto_queued_on_writer_guard_failure() {
     // check if the remote action returns a network error it is queued for execution later.
     let queue = new_queue_typed::<WriteGuardExpiredAction>().await;
 
-    let output = queue
-        .apply_action(WriteGuardExpiredAction {})
+    queue
+        .queue_action(WriteGuardExpiredAction {})
         .await
         .unwrap();
+    let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
-    assert!(matches!(output.remote, ActionRemoteOutput::Queued(_)),);
+    assert!(matches!(output, QueuedActionState::Queued(_)),);
 }
 
 #[tokio::test]
@@ -41,7 +43,7 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
 
     let _ = queue.queue_action(ErrorAction {}).await.unwrap();
 
-    queue.execute_all().await.unwrap();
+    queue.new_executor().execute_all().await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]

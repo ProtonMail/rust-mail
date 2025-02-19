@@ -1,22 +1,10 @@
 use crate::actions::{new_action_factory, ActionError};
 use crate::{MailContextResult, MailUserContext};
 use proton_action_queue::action::Action;
-use proton_action_queue::queue::{ActionOutput, Queue, QueuedActionOutput};
+use proton_action_queue::queue::{Queue, QueuedActionOutput};
 use stash::stash::Stash;
 
 impl MailUserContext {
-    /// Execute an action immediately.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the action could not be executed.
-    pub async fn execute_action<T: Action<Error = ActionError>>(
-        &self,
-        action: T,
-    ) -> MailContextResult<ActionOutput<T>> {
-        Ok(self.action_queue.apply_action(action).await?)
-    }
-
     /// Queue an action for later execution.
     ///
     /// # Errors
@@ -31,13 +19,13 @@ impl MailUserContext {
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        self.action_queue.execute_one().await?;
+        self.default_queue_executor.execute_one().await?;
         Ok(())
     }
 
     /// Execute all pending actions in the queue.
     pub async fn execute_pending_actions(&self) -> MailContextResult<usize> {
-        Ok(self.action_queue.execute_all().await?)
+        Ok(self.default_queue_executor.execute_all().await?)
     }
 }
 

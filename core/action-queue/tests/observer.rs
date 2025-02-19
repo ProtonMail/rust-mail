@@ -15,6 +15,7 @@ use std::time::Duration;
 async fn failure_action_observer_remote() {
     let queue = new_queue_typed::<ErrorAction>().await;
     queue.register::<SuccessAction>().unwrap();
+    let executor = queue.new_executor();
 
     let id_cancel = queue.queue_action(ErrorAction {}).await.unwrap().id;
     let id_delete = queue.queue_action(ErrorAction {}).await.unwrap().id;
@@ -49,9 +50,9 @@ async fn failure_action_observer_remote() {
     }
 
     // check execution failure
-    queue.execute_one().await.unwrap_err();
+    executor.execute_one().await.unwrap_err();
     // execute success action.
-    queue.execute_one().await.unwrap();
+    executor.execute_one().await.unwrap();
     let result = tokio::time::timeout(Duration::from_secs(5), error_observer.next())
         .await
         .expect("timed out")
@@ -98,8 +99,9 @@ async fn action_awaiter() {
         .unwrap();
     assert!(matches!(result, BroadcastMessage::Deleted(_, _)));
 
+    let executor = queue.new_executor();
     // check execution failure
-    queue.execute_one().await.unwrap_err();
+    executor.execute_one().await.unwrap_err();
 
     // check failure execution.
     queue.delete_action(id_delete).await.unwrap();
@@ -110,7 +112,7 @@ async fn action_awaiter() {
     assert!(matches!(result, BroadcastMessage::Error(_, _)));
 
     // execute success action.
-    queue.execute_one().await.unwrap();
+    executor.execute_one().await.unwrap();
     let result = tokio::time::timeout(Duration::from_secs(5), success_awaiter.wait())
         .await
         .expect("timed out")

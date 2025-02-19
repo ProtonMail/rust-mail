@@ -36,6 +36,11 @@ async fn folder_expansion() {
         .expand_folder(&user_ctx, folder.local_id.unwrap())
         .await
         .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Tests
     let folder = get_folder(name, &tether).await;
@@ -65,6 +70,11 @@ async fn folder_collapse() {
     // Action
     Sidebar
         .collapse_folder(&user_ctx, folder.local_id.unwrap())
+        .await
+        .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
         .await
         .unwrap();
 

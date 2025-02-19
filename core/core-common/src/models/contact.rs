@@ -13,7 +13,7 @@ use crate::{ContactError, CoreContextError, CoreContextResult};
 use futures::future::try_join;
 use futures::try_join;
 use itertools::Itertools;
-use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
+use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::prelude::ContactUID;
@@ -488,9 +488,9 @@ impl Contact {
     pub async fn action_delete(
         queue: &Queue,
         contact_ids: Vec<LocalContactId>,
-    ) -> Result<ActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
+    ) -> Result<QueuedActionOutput<ContactsDelete>, ActionError<ContactsDelete>> {
         let action = ContactsDelete::new(contact_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Marks a contact as deleted.

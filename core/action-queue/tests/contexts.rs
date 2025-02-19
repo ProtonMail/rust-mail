@@ -23,8 +23,10 @@ async fn actions_with_different_contexts() -> Result<(), anyhow::Error> {
     queue.register_execution_context(Arc::downgrade(&context1));
     queue.register_execution_context(Arc::downgrade(&context2));
 
-    queue.apply_action(Action1 {}).await?;
-    queue.apply_action(Action2 {}).await?;
+    queue.queue_action(Action1 {}).await?;
+    queue.queue_action(Action2 {}).await?;
+
+    queue.new_executor().execute_all().await?;
 
     Ok(())
 }

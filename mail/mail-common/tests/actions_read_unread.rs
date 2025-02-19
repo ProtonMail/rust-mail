@@ -163,6 +163,11 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)
@@ -239,6 +244,11 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Validation
     let conversations = Conversation::find("WHERE num_unread = ?", params![0], &tether)

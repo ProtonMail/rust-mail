@@ -149,6 +149,12 @@ async fn action_label_as_without_archive() {
     .await
     .unwrap();
 
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
+
     // Validation
     let conversation1 = Conversation::load(1.into(), &tether)
         .await
@@ -321,6 +327,11 @@ async fn action_label_as_with_archive() {
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Validation
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)

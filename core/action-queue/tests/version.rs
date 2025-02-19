@@ -33,7 +33,8 @@ async fn queued_version_migration() {
 
     let queue = new_queue_with_stash(pool.clone(), factory_v2).await;
     assert!(queue.contains(queued_id).await.unwrap());
-    queue.execute_all().await.unwrap();
+    let executor = queue.new_executor();
+    executor.execute_all().await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
