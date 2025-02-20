@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,
@@ -18,6 +19,7 @@ pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
     unread: ReadFilter,
     page_size: usize,
+    invalidate: Option<flume::Sender<()>>,
     state: MailScrollerState<T>,
 }
 
@@ -27,8 +29,24 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             local_label_id,
             unread,
             page_size,
+            invalidate: None,
             state: MailScrollerState::None,
         }
+    }
+
+    /// Send a message to notify user that the scrolling data order have chagned.
+    async fn notify_scroller_order_invalid(
+        invalidate: &Option<flume::Sender<()>>,
+    ) -> Result<(), MailContextError> {
+        if let Some(sender) = invalidate.as_ref() {
+            sender.send_async(()).await.map_err(|e| {
+                MailContextError::Other(anyhow!(
+                    "Could not notify about invalid scroller state: {e}"
+                ))
+            })?;
+        }
+
+        Ok(())
     }
 
     /// Update ordered scroller end cursor to the newest value.
@@ -61,7 +79,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
         is_offline: bool,
-        _tether: &Tether,
+        tether: &Tether,
     ) -> Result<(Vec<T::Item>, MailPaginatorJoinHandle), MailContextError> {
         let (_, task) = self.initialize(ctx).await?;
 
@@ -71,8 +89,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     .await?;
 
             debug!("We are offline, load whatever is in the cache");
-            // let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
-            let items = vec![];
+            let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
 
             Ok((items, task))
         } else {
@@ -235,10 +252,13 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 // Note: Task is always spawned, if there is no more data to download.
                 // As this information is provided in a trait. It is up to the implementation
                 // To check if there is more data to download before asking for more.
+                let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
+                    Self::notify_scroller_order_invalid(&self.invalidate).await?;
+
                     vec![]
                 } else {
-                    scroller.fetch_more(&tether).await?
+                    items
                 };
 
                 let should_not_load_more_from_remote =
@@ -258,11 +278,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             }
             MailScrollerState::Offline {
                 ordered: _,
-                unordered: _,
-            } => (vec![], None), //(unordered.fetch_more(&tether).await?, None),
-            MailScrollerState::NotSynced(_unordered) => {
-                // let items = unordered.fetch_more(&tether).await?;
-                let items = vec![];
+                unordered,
+            } => (unordered.fetch_more(&tether).await?, None),
+            MailScrollerState::NotSynced(unordered) => {
+                let items = unordered.fetch_more(&tether).await?;
                 let task = if is_offline {
                     None
                 } else {
@@ -290,5 +309,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
     fn watched_tables(&self) -> Vec<String> {
         T::watched_tables()
+    }
+
+    fn set_notify(&mut self, sender: flume::Sender<()>) {
+        let _ = self.invalidate.insert(sender);
     }
 }

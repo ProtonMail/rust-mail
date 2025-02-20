@@ -85,4 +85,6 @@ pub trait MailScrollerSource: Send + Sync {
     > + Send;
 
     fn watched_tables(&self) -> Vec<String>;
+
+    fn set_notify(&mut self, _: flume::Sender<()>) {}
 }

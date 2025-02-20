@@ -90,13 +90,31 @@ impl<T: MailScrollerSource> MailScroller<T> {
         })
     }
 
-    pub fn watch(&self) -> Result<WatcherHandle, StashError> {
-        self.ctx.user_stash().subscribe_to(|sender| {
+    pub fn watch(&mut self) -> Result<WatcherHandle, StashError> {
+        let (sender, new_receiver) = flume::unbounded();
+        let sender_clone = sender.clone();
+        self.source.set_notify(sender);
+
+        let WatcherHandle {
+            receiver, handle, ..
+        } = self.ctx.user_stash().subscribe_to(|sender| {
             Box::new(MailScrollerWatcher {
                 sender,
                 tables: self.source.watched_tables(),
             })
-        })
+        })?;
+
+        tokio::spawn(async move {
+            while receiver.recv_async().await.is_ok() {
+                if sender_clone.send_async(()).await.is_err() {
+                    tracing::error!("MailScroller could not notify callback on database changes");
+                    break;
+                }
+            }
+            tracing::warn!("MailScroller receiver closed, despawn watcher");
+        });
+
+        Ok(WatcherHandle::new(new_receiver, handle))
     }
 
     /// Check whether there is more data available.

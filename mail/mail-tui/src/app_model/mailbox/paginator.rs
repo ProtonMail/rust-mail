@@ -30,7 +30,7 @@ impl<T: MailScrollerSource> Paginator<T> {
     ) -> Result<(Self, Command<Messages>), MailContextError> {
         let to_message = Arc::new(to_message);
         let paginator = Arc::new(Mutex::new(create_paginator().await?));
-        let guard = paginator.lock().await;
+        let mut guard = paginator.lock().await;
         let WatcherHandle {
             handle, receiver, ..
         } = guard.watch()?;
