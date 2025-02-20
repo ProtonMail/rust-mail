@@ -70,6 +70,38 @@ impl Display for Type {
     }
 }
 
+/// Unique identifier for each action execution group.
+///
+/// It is recommended this value be a human-readable string to aid in debugging.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct ActionGroup(pub &'static str);
+
+impl ActionGroup {
+    /// Create new action group identifier.
+    #[must_use]
+    pub const fn new(id: &'static str) -> Self {
+        Self(id)
+    }
+
+    /// Get the default action group.
+    #[must_use]
+    pub const fn default() -> Self {
+        Self("DEFAULT_GROUP")
+    }
+}
+
+impl AsRef<str> for ActionGroup {
+    fn as_ref(&self) -> &str {
+        self.0
+    }
+}
+
+impl Display for ActionGroup {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
 /// Defines the priority of a queued action.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, TryFrom)]
 #[try_from(repr)]
@@ -147,6 +179,9 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
 pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Unique type identifier.
     const TYPE: Type;
+
+    /// The Group in which this action should execute.
+    const GROUP: ActionGroup = ActionGroup::default();
 
     /// Version of the current implementation.
     const VERSION: u32;
@@ -417,6 +452,8 @@ pub struct Metadata {
     pub(crate) priority_override: Option<Priority>,
     /// If set, delays the execution of this action by the specified duration.
     pub(crate) delay: Option<std::time::Duration>,
+    /// If set, overrides the group assigned to the action.
+    pub(crate) group_override: Option<ActionGroup>,
 }
 
 impl Default for Metadata {
@@ -428,6 +465,7 @@ impl Default for Metadata {
             created: chrono::Utc::now(),
             priority_override: None,
             delay: None,
+            group_override: None,
         }
     }
 }
@@ -535,6 +573,13 @@ impl MetadataBuilder {
     #[must_use]
     pub fn with_delay(mut self, duration: std::time::Duration) -> Self {
         self.metadata.delay = Some(duration);
+        self
+    }
+
+    /// Override the default group assigned to this action with `group`.
+    #[must_use]
+    pub fn with_group_override(mut self, group: ActionGroup) -> Self {
+        self.metadata.group_override = Some(group);
         self
     }
 

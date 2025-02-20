@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
 
 use super::*;
-use crate::action::{DefaultVersionConverter, MetadataBuilder, Type, WriterGuardError};
+use crate::action::{
+    ActionGroup, DefaultVersionConverter, MetadataBuilder, Type, WriterGuardError,
+};
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
@@ -141,7 +143,10 @@ async fn action_execution_lock() {
 
     let tx = conn.transaction().await.unwrap();
 
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), first_action_id);
 
     // Acquire lock
@@ -151,7 +156,10 @@ async fn action_execution_lock() {
             .unwrap();
 
     // Next action should be the third, since action 2 depends on action one.
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), third_action_id);
 
     // Simulate timedout lock by setting timeout in the past.
@@ -165,14 +173,20 @@ async fn action_execution_lock() {
     .unwrap();
 
     // Next action should be the first, since the execution lock timed out.
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), first_action_id);
 
     // Delete first action
     StoredAction::delete(&tx, first_action_id).await.unwrap();
 
     // Next action should be the second, since there is no execution lock
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), second_action_id);
 
     // Acquire lock
@@ -186,7 +200,10 @@ async fn action_execution_lock() {
     .unwrap();
 
     // We should now receive the last action.
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), third_action_id);
 
     // Acquire lock for the 3rd action
@@ -203,8 +220,57 @@ async fn action_execution_lock() {
     lock.release(&tx).await.unwrap();
 
     // We should receive the second action again.
-    let next_action = StoredAction::next(&tx).await.unwrap().unwrap();
+    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(next_action.id.unwrap(), second_action_id);
+}
+
+#[tokio::test]
+async fn action_execution_group_selection() {
+    let state = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection();
+    let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+
+    let tx = conn.transaction().await.unwrap();
+    stored.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx = conn.transaction().await.unwrap();
+    // Action has default group, so it should show up.
+    let action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(action.id.unwrap(), stored.id.unwrap());
+
+    // This group does not exist and no action are assigned to it.
+    let unknown_group = ActionGroup::new("UNKNOWN");
+    let action = StoredAction::next(unknown_group.as_ref(), &tx)
+        .await
+        .unwrap();
+    assert!(action.is_none());
+
+    // Save an action with this new group.
+    let metadata = MetadataBuilder::new()
+        .with_group_override(unknown_group.clone())
+        .build();
+
+    let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+    stored.save(&tx).await.unwrap();
+
+    // We should now have an action.
+    let action = StoredAction::next(unknown_group.as_ref(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(action.id.unwrap(), stored.id.unwrap());
 }
 
 #[tokio::test]
