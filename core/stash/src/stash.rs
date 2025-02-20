@@ -43,9 +43,9 @@ use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::path::Path;
 use std::sync::Arc;
+use std::thread;
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
-use tokio::task::spawn_blocking;
 use tracing::{debug, error, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
@@ -885,7 +885,9 @@ impl Tether {
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
         debug!("Spawning worker task...");
-        _ = spawn_blocking(move || {
+        // TODO: replace me with a thread pool.
+        let thread_builder = thread::Builder::new().name("Tether worker".to_string());
+        _ = thread_builder.spawn(move || {
             debug!("Creating worker thread");
             // The first time an operation is received, we attempt to acquire a database
             // connection from the pool. This is done lazily so that creating tethers is sync.
