@@ -13,7 +13,10 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use std::ops::Add;
+use std::time::Duration;
 use tracing::{debug, error};
+
+const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
@@ -59,10 +62,6 @@ pub struct StoredAction {
     #[DbField]
     pub version: u32,
 
-    #[DbField]
-    /// Whether this action has been picked up by the queue.
-    pub executing: bool,
-
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -103,7 +102,6 @@ impl StoredAction {
             state,
             version: T::VERSION,
             row_id: None,
-            executing: false,
         }
     }
 
@@ -296,17 +294,38 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn next(tether: &Tether) -> Result<Option<StoredAction>, StashError> {
+    pub(crate) async fn next(tether: &Tether) -> Result<Option<StoredAction>, StashError> {
+        Self::next_with_timeout(DEFAULT_LOCK_TIMEOUT, tether).await
+    }
+
+    /// Get the next action to be executed.
+    ///
+    /// This takes into account dependencies, priority and execution delays. If `None` is returned
+    /// from this function there are no actions that can be executed at this point.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    async fn next_with_timeout(
+        timeout: Duration,
+        tether: &Tether,
+    ) -> Result<Option<StoredAction>, StashError> {
+        let now = Utc::now();
         StoredAction::find_first(
             "
+                LEFT JOIN action_queue_lock ON action_queue.id = action_queue_lock.action_id
                 WHERE
-                    scheduled < ? AND (
+                    (
+                        action_queue_lock.action_id IS NULL OR
+                        unixepoch(datetime(?1)) - unixepoch(datetime(action_queue_lock.acquired_at)) >= ?2
+                    ) AND
+                    scheduled < ?1 AND (
                         SELECT COUNT(*) FROM action_queue_dependencies WHERE action_id = id
                     ) = 0
                 ORDER BY
                     priority ASC, created ASC
             ",
-            params![Utc::now()],
+            params![now, timeout.as_secs()],
             tether,
         )
         .await
@@ -332,7 +351,8 @@ impl StoredAction {
             // NOTE: the executing check works since we guarantee immediate locking in sqlite
             // transactions so that there is only ever one writer so this value will always be
             // up to date.
-            if existing.action_type == self.action_type && !existing.executing {
+            let is_executing = ExecutionGuard::has_executor(existing_id, bond).await?;
+            if existing.action_type == self.action_type && !is_executing {
                 self.id = existing.id;
                 self.row_id = existing.row_id;
                 // failsafe, filter out any dependencies on self.
@@ -344,14 +364,183 @@ impl StoredAction {
         self.save(bond).await
     }
 
-    /// Mark an action as executing by the queue.
-    pub async fn mark_as_executing(id: ActionId, bond: &Bond<'_>) -> Result<(), StashError> {
+    /// Pop an action from the queue.
+    ///
+    /// This takes into account dependencies, priority and execution delays. If `None` is returned
+    /// from this function there are no actions that can be executed at this point.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed or the executor could not be retrieved.
+    #[allow(clippy::missing_panics_doc)] // next_action.id.unwrap will never happen.
+    pub async fn pop(
+        executor_id: String,
+        tether: &mut Tether,
+    ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
+        let tx = tether.transaction().await?;
+        let next_action = Self::next(&tx).await?;
+
+        let Some(next_action) = next_action else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+
+        let guard = ExecutionGuard::acquire(next_action.id.unwrap(), executor_id, &tx).await?;
+
+        tx.commit().await?;
+
+        Ok(Some((guard, next_action)))
+    }
+}
+
+/// Potential errors that can pop when trying to acquire a transaction.
+#[derive(Debug, thiserror::Error)]
+pub enum ExecutionGuardError {
+    #[error("This executor lock has expired")]
+    Expired,
+    #[error("{0}")]
+    Stash(#[from] StashError),
+}
+
+/// An execution guard for Queue Executors to prevent an action to be executed more than
+/// once at the same time.
+///
+/// Each time an action is meant to be executed the guard will be acquired. The guard
+/// remains valid for certain amount of time before expiring. When a guard expires, the next
+/// attempt to acquire it will bump the permit id.
+///
+/// The permit id is checked when we try to create a transaction. If for some reason another executor
+/// has started working on the action, the permit id will no longer match and we abort.
+///
+/// This type is not a [`Model`] to avoid accidental changes to the data.
+pub struct ExecutionGuard {
+    action_id: ActionId,
+    permit_id: usize,
+}
+
+impl ExecutionGuard {
+    /// Check whether the action with `action_id` is being executed.
+    pub async fn has_executor(action_id: ActionId, bond: &Bond<'_>) -> Result<bool, StashError> {
+        // While this function could be written to accept a Tether instead, it would bypass
+        // the exclusive writer access, which is required for this to work.
+        let permit_id = match bond
+            .query_value::<_, usize>(
+                "SELECT permit_id AS value FROM action_queue_lock WHERE action_id = ?",
+                params![action_id],
+            )
+            .await
+        {
+            Ok(permit_id) => permit_id,
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => 0,
+            Err(e) => return Err(e),
+        };
+        Ok(permit_id != 0)
+    }
+
+    /// Acquire the execution rights for the action with `action_id`.
+    ///
+    /// `executor_id` is a debug string that is recorded and should be unique per executor.
+    ///
+    /// # Remarks
+    ///
+    /// This method does not check if we can legally acquire the execution lock.
+    /// [`StoredAction::next()`] performs all the checks and returns the next action that
+    /// can be acquired.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn acquire(
+        action_id: ActionId,
+        executor_id: impl Into<String>,
+        bond: &Bond<'_>,
+    ) -> Result<Self, StashError> {
+        Self::acquire_with_timestamp(action_id, executor_id, Utc::now(), bond).await
+    }
+
+    /// Same as [`acquire`] but allows one to specify the [`timestamp`] of acquisition.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn acquire_with_timestamp(
+        action_id: ActionId,
+        executor_id: impl Into<String>,
+        timestamp: DateTime<Utc>,
+        bond: &Bond<'_>,
+    ) -> Result<Self, StashError> {
+        let permit_id = bond
+            .query_value::<_, usize>(
+                indoc! {"
+            INSERT INTO action_queue_lock (action_id, executor_id, acquired_at, permit_id)
+            VALUES (?1,?2,?3, 1)
+            ON CONFLICT (action_id) DO UPDATE SET
+                executor_id = ?2,
+                permit_id=permit_id +1,
+                acquired_at = ?3
+            RETURNING permit_id AS value
+       "},
+                params![action_id, executor_id.into(), timestamp],
+            )
+            .await?;
+
+        Ok(Self {
+            action_id,
+            permit_id,
+        })
+    }
+
+    /// Release the current access privileges.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    pub async fn release(self, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
-            format!("UPDATE {} SET executing=? WHERE id =?", Self::table_name()),
-            params![true, id],
+            indoc! {"
+            UPDATE action_queue_lock SET
+                executor_id = NULL,
+                acquired_at = 0
+            WHERE action_id = ? AND permit_id = ?
+       "},
+            params![self.action_id, self.permit_id],
         )
         .await?;
         Ok(())
+    }
+
+    /// Create a new transaction.
+    ///
+    /// This internally checks whether the permit id still matches what we expect the value to be.
+    /// If this is not the case, this lock expired and we should not write to the database.
+    ///
+    /// Every time we are able to write with a valid permit, we also update
+    /// the timestamp. This allows for some longer running tasks to extend their lifetime a bit
+    /// and prevent unnecessary re-runs.
+    ///
+    /// To prevent
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StashError`] if the transaction failed to acquire and [`ExecutionGuardError::Expired`]
+    /// if this execution lock has expired.
+    pub async fn transaction<'t>(
+        &self,
+        tether: &'t mut Tether,
+    ) -> Result<Bond<'t>, ExecutionGuardError> {
+        let tx = tether.transaction().await?;
+
+        let changed = tx
+            .execute(
+                "UPDATE action_queue_lock SET acquired_at=? WHERE action_id=? AND permit_id =?",
+                params![Utc::now(), self.action_id, self.permit_id],
+            )
+            .await?;
+        if changed == 0 {
+            return Err(ExecutionGuardError::Expired);
+        }
+
+        Ok(tx)
     }
 }
 
@@ -392,8 +581,7 @@ impl Migration for MigrationV1 {
                 created INTEGER DEFAULT (datetime('now')),
                 scheduled INTEGER DEFAULT (datetime('now')),
                 state BLOB NOT NULL,
-                debug_string TEXT DEFAULT NULL,
-                executing INTEGER NOT NULL DEFAULT 0
+                debug_string TEXT DEFAULT NULL
             )
         "};
 
@@ -436,6 +624,23 @@ impl Migration for MigrationV1 {
                 resource BLOB NOT NULL,
 
                 CONSTRAINT action_queue_res_action_id
+                    FOREIGN KEY (action_id)
+                    REFERENCES action_queue(id)
+                    ON DELETE CASCADE
+            )
+        "};
+        tx.execute(query, vec![]).await?;
+
+        // Create execution Lock Table - This is kept separate from the action
+        // to prevent accidental overrides via the Model::save methods
+        let query = indoc! {"
+            CREATE TABLE action_queue_lock(
+                action_id INTEGER PRIMARY KEY,
+                executor_id TEXT UNIQUE DEFAULT NULL,
+                acquired_at INTEGER NOT NULL DEFAULT 0,
+                permit_id INTEGER NOT NULL DEFAULT 0,
+
+                CONSTRAINT action_queue_lock_action_id
                     FOREIGN KEY (action_id)
                     REFERENCES action_queue(id)
                     ON DELETE CASCADE

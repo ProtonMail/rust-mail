@@ -4,11 +4,11 @@ mod common;
 use crate::common::{DefaultError, TestWriteExtension};
 use common::{new_factory, new_queue};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type,
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
-use proton_action_queue::db::StoredAction;
+use proton_action_queue::db::ExecutionGuard;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 #[tokio::test]
 async fn replace_updates_local_state() {
@@ -93,7 +93,7 @@ async fn replace_updates_queues_if_action_is_executing() {
     // simulate action executing
     let mut tether = queue.stash().connection();
     let tx = tether.transaction().await.unwrap();
-    StoredAction::mark_as_executing(queued_output.id, &tx)
+    ExecutionGuard::acquire(queued_output.id, "TEST", &tx)
         .await
         .unwrap();
     tx.commit().await.unwrap();
@@ -215,11 +215,10 @@ impl Handler for TestActionHandler {
         _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_REPLACE);
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
+        let tx = guard.transaction().await?;
         tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_AFTER_REPLACE)
             .await?;
         tx.commit().await?;

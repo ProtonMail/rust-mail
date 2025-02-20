@@ -2,7 +2,9 @@ use crate::datatypes::SystemLabelId;
 use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+};
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -10,7 +12,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::{debug, error};
 
 /// Action which discards a Draft.
@@ -112,7 +114,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         _: ActionId,
         ctx: &MailUserContext,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let Some(local_message_id) = action.local_message_id else {
             // if there is no local message id, we never create a message and there is
@@ -120,10 +122,10 @@ impl proton_action_queue::action::Handler for DiscardHandler {
             return Ok(());
         };
 
-        let mut tether = stash.connection();
-        let Some(message_id) = Message::local_id_counterpart(local_message_id, &tether).await?
+        let Some(message_id) =
+            Message::local_id_counterpart(local_message_id, guard.tether()).await?
         else {
-            let tx = tether.transaction().await?;
+            let tx = guard.transaction().await?;
             // No remote id, we can't issue the request, we should only delete the local data.
             Message::delete_by_id(local_message_id, &tx)
                 .await

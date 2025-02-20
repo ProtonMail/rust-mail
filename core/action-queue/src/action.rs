@@ -1,4 +1,4 @@
-use crate::db::StoredAction;
+use crate::db::{ExecutionGuard, ExecutionGuardError, StoredAction};
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
@@ -7,7 +7,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
-use stash::stash::{Bond, Stash};
+use stash::stash::{Bond, StashError, Tether};
 use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -18,13 +18,19 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
 /// Actions can return any error type, but we need to be able to inspect the http request error
-/// to detect network failure.
+/// to detect network failure and [`WriterGuard`] expirations so we can gracefully retry the
+/// action.
 pub trait Error: std::error::Error + Send + Sync {
     /// Check if the error is the result of a network failure.
     ///
     /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
     /// or there was an issue with the underlying network transport layer.
     fn is_network_failure(&self) -> bool;
+
+    /// Check whether this error was the result of a [`WriterGuardError::Expired`].
+    ///
+    /// This should return true when the presence of this error is detected.
+    fn is_writer_guard_expired(&self) -> bool;
 }
 
 /// Errors that may occur during action version conversion.
@@ -173,7 +179,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     ///
     /// To ensure we can correctly implement network error detection errors need
     /// to implement the [`Error`] trait.
-    type Error: Error + Send;
+    type Error: Error + Send + From<WriterGuardError>;
 
     /// Type of the execution context associated with this action.
     ///
@@ -193,6 +199,61 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Action priority.
     fn priority(&self) -> Priority {
         Self::PRIORITY
+    }
+}
+
+/// This type exists to make sure that when we attempt to modify local state in the queue executor
+/// we only do so if we have the permission to do so.
+///
+/// Permission is granted if the [`ExecutorGuard`] is still valid. This implementation
+/// detail is abstracted away with this type to make future changes easier.
+///
+/// Database read queries can be made over this type as it implements `Deref<Target=Tether>`.
+/// For writes use the [`transaction()`] method.
+pub struct WriterGuard<'t> {
+    tether: &'t mut Tether,
+    execution_guard: &'t ExecutionGuard,
+}
+
+impl<'t> WriterGuard<'t> {
+    pub(crate) fn new(tether: &'t mut Tether, execution_guard: &'t ExecutionGuard) -> Self {
+        Self {
+            tether,
+            execution_guard,
+        }
+    }
+    /// Create a new transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StashError`] if the transaction failed to be created  and [`WriterGuardError::Expired`]
+    /// if this execution lock has expired.
+    pub async fn transaction(&mut self) -> Result<Bond<'_>, WriterGuardError> {
+        Ok(self.execution_guard.transaction(self.tether).await?)
+    }
+
+    /// Access the tether for read only db queries.
+    #[must_use]
+    pub fn tether(&self) -> &Tether {
+        self.tether
+    }
+}
+
+/// Possible [`WriterGuardErrors`]
+#[derive(Debug, thiserror::Error)]
+pub enum WriterGuardError {
+    #[error("This executor lock has expired")]
+    Expired,
+    #[error("{0}")]
+    Stash(#[from] StashError),
+}
+
+impl From<ExecutionGuardError> for WriterGuardError {
+    fn from(value: ExecutionGuardError) -> Self {
+        match value {
+            ExecutionGuardError::Expired => Self::Expired,
+            ExecutionGuardError::Stash(v) => Self::Stash(v),
+        }
     }
 }
 
@@ -262,7 +323,7 @@ pub trait Handler: Default + 'static + Send + Sync {
         this_id: ActionId,
         context: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        writer_guard: WriterGuard<'_>,
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
     > + Send;
@@ -613,6 +674,16 @@ impl Display for NoopError {
 impl Error for NoopError {
     fn is_network_failure(&self) -> bool {
         false
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        false
+    }
+}
+
+impl From<WriterGuardError> for NoopError {
+    fn from(_: WriterGuardError) -> Self {
+        Self {}
     }
 }
 

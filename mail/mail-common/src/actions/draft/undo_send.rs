@@ -3,7 +3,9 @@ use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
@@ -11,7 +13,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
 use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::{error, warn};
 
 /// Action to cancel sending of a sent message.
@@ -140,7 +142,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let remote_id = action
             .remote_id
@@ -160,8 +162,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             }
         };
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
+        let tx = guard.transaction().await?;
 
         let mut message = Message::from_api_metadata(response.message, &tx)
             .await

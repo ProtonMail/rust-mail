@@ -4,7 +4,7 @@ use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type,
+    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::CoreSession;
@@ -13,7 +13,7 @@ use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, Tether};
+use stash::stash::{Bond, Tether};
 use std::collections::HashSet;
 use tracing::{error, warn};
 
@@ -196,24 +196,23 @@ impl ActionHandler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let session = ctx.session();
         let api = session.api();
-        let mut tether = stash.connection();
 
         let failed_ids = Message::remote_relabel(
             session,
             &action.data.added_labels,
             &action.data.removed_labels,
-            &tether,
+            guard.tether(),
         )
         .await?;
 
         if !failed_ids.is_empty() {
             error!("LabelAs message operation failed for messages: {failed_ids:?}");
-            let failed_ids = Message::remote_ids_counterpart(failed_ids, &tether).await?;
-            let tx = tether.transaction().await?;
+            let failed_ids = Message::remote_ids_counterpart(failed_ids, guard.tether()).await?;
+            let tx = guard.transaction().await?;
             for message_id in failed_ids {
                 Self::revert_one_locally(
                     message_id,
@@ -252,7 +251,7 @@ impl ActionHandler for Handler {
             if !failed_ids.is_empty() {
                 error!("Archive messages operation failed for : {failed_ids:?}");
 
-                let tx = tether.transaction().await?;
+                let tx = guard.transaction().await?;
                 let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tx)
                     .await?
                     .expect("Archive label must have a RemoteId");
@@ -264,7 +263,7 @@ impl ActionHandler for Handler {
         }
 
         if let Some(source_label_counters) =
-            MessageCounters::find_by_id(action.data.source_label_id, &tether).await?
+            MessageCounters::find_by_id(action.data.source_label_id, guard.tether()).await?
         {
             Ok(source_label_counters.total == 0)
         } else {

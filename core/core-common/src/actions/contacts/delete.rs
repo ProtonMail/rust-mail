@@ -1,11 +1,11 @@
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
@@ -85,7 +85,7 @@ impl proton_action_queue::action::Handler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let failed = Contact::delete_from_remote(&action.remote_ids, ctx.session().api()).await?;
         let mut failed_local_ids = Vec::with_capacity(failed.len());
@@ -93,9 +93,9 @@ impl proton_action_queue::action::Handler for Handler {
         if failed.is_empty() {
             Ok(())
         } else {
-            let conn = stash.connection();
+            let conn = guard.tether();
             for remote_id in failed {
-                let Some(local_id) = Contact::remote_id_counterpart(remote_id, &conn).await? else {
+                let Some(local_id) = Contact::remote_id_counterpart(remote_id, conn).await? else {
                     continue;
                 };
 

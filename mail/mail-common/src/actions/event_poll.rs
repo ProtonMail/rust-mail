@@ -1,9 +1,11 @@
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Priority, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+};
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 /// Action which polls the event loop.
 ///
@@ -26,8 +28,12 @@ impl Action for EventPoll {
 
 /// Wrapper type for [`EventLoopError`].
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct ActionEventLoopError(pub EventLoopError);
+pub enum ActionEventLoopError {
+    #[error(transparent)]
+    EventLoop(#[from] EventLoopError),
+    #[error(transparent)]
+    WriterGuard(#[from] WriterGuardError),
+}
 
 impl proton_action_queue::action::Error for ActionEventLoopError {
     fn is_network_failure(&self) -> bool {
@@ -36,6 +42,10 @@ impl proton_action_queue::action::Error for ActionEventLoopError {
         // and there is no need to keep it in the queue until network
         // communication is restored.
         false
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, Self::WriterGuard(WriterGuardError::Expired))
     }
 }
 
@@ -73,7 +83,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
         _: ActionId,
         context: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         if let Err(e) = context.poll_event_loop_impl().await {
             if let EventLoopError::Provider(e)
@@ -86,7 +96,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
                 }
             }
 
-            return Err(ActionEventLoopError(e));
+            return Err(ActionEventLoopError::from(e));
         }
         Ok(())
     }

@@ -4,9 +4,9 @@ mod tests;
 
 use crate::action::{
     Action, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler,
-    Metadata, Priority, Resources, Type,
+    Metadata, Priority, Resources, Type, WriterGuard,
 };
-use crate::db::{self, StoredAction};
+use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction};
 use chrono::DateTime;
 use flume::{Receiver, RecvError, SendError, Sender};
 use futures::future::BoxFuture;
@@ -25,6 +25,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use topological_sort::TopologicalSort;
 use tracing::{debug, debug_span, error, Instrument, Level};
+use uuid::Uuid;
 
 /// Execution context errors
 #[derive(Debug, thiserror::Error)]
@@ -665,10 +666,23 @@ impl Queue {
                 .await?;
                 debug!("Action queued with id={id}");
 
+                let mut tether = shared.stash.connection();
+                let tx = tether.transaction().await?;
+                let executor_id = Uuid::new_v4().to_string();
+                let guard = ExecutionGuard::acquire(id, executor_id, &tx).await?;
+                tx.commit().await?;
+
                 // 2) Execute remote counter part
-                let remote_output =
-                    execute_action_remote(&shared, id, context.as_ref(), &handler, &mut action)
-                        .await?;
+                let remote_output = execute_action_remote(
+                    &shared,
+                    id,
+                    context.as_ref(),
+                    &handler,
+                    &mut action,
+                    &mut tether,
+                    guard,
+                )
+                .await?;
 
                 Ok(ActionOutput {
                     local: local_output,
@@ -820,6 +834,8 @@ pub(crate) trait QueuedAction: Send {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
+        tether: &'a mut Tether,
+        execution_guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>>;
 
@@ -845,6 +861,8 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     fn execute<'a, 's: 'a>(
         &'a mut self,
         shared: &'a Shared,
+        tether: &'a mut Tether,
+        exec_guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
@@ -857,6 +875,8 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 context.as_ref(),
                 &self.handler,
                 &mut self.action,
+                tether,
+                exec_guard,
             )
             .await
             .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
@@ -1034,7 +1054,7 @@ impl BackgroundWorker {
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
     async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
-        let Some(action) = self.next_action(tether).await.map_err(|e| {
+        let Some((exec_guard, action)) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e:?}");
             e
         })?
@@ -1054,22 +1074,8 @@ impl BackgroundWorker {
         async {
             let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
 
-            // mark the action as executing so it can't be replaced.
-            // NOTE: This only works because sqlite transactions are being serialized into
-            // a single writer. Because we are forcing immediate locking mode this will
-            // work correctly.
-            // NOTE2: If this action is marked as executing multiple times there is currently
-            // no harm as the only side effect is that some action which uses
-            // replace_or_queue will sometimes duplicate. This is a tradeoff to prevent
-            // a long running action from blocking the queuing o new actions.
-            let tx = tether.transaction().await?;
-            StoredAction::mark_as_executing(action_id, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to mark as executing: {e:?}"))?;
-            tx.commit().await?;
-
             let exec_output = decoded
-                .execute(&self.shared, metadata)
+                .execute(&self.shared, tether, exec_guard, metadata)
                 .await
                 .inspect_err(|e| {
                     if let QueuedError::Action(err, metadata) = e {
@@ -1105,9 +1111,9 @@ impl BackgroundWorker {
 
     async fn next_action(
         &self,
-        tether: &Tether,
-    ) -> std::result::Result<Option<StoredAction>, StashError> {
-        StoredAction::next(tether).await
+        tether: &mut Tether,
+    ) -> std::result::Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
+        StoredAction::pop("BackgroundExecutor".to_owned(), tether).await
     }
     /// See [`Queue::delete()`] for more details.
     async fn delete(&mut self, action_id: ActionId) -> QueuedResult<()> {
@@ -1209,44 +1215,59 @@ async fn execute_action_remote<T: Action>(
     context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
+    tether: &mut Tether,
+    guard: ExecutionGuard,
 ) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
     //1) Attempt to execute on remote
     debug!("Applying action on remote");
 
-    // let post_remote: Result< = post_remote(handler, action, session).await;
+    let writer_guard = WriterGuard::new(tether, &guard);
     let result = handler
-        .apply_remote(id, context, action, &shared.stash)
+        .apply_remote(id, context, action, writer_guard)
         .await;
     let mut cancelled_actions = vec![];
-    let mut tether = shared.stash.connection();
-    let bond = tether.transaction().await?;
-    let result = match result {
-        Ok(result) => {
-            StoredAction::delete(&bond, id).await?;
-
-            debug!("Action executed");
-            Ok(ActionRemoteOutput::Executed(result))
+    let bond = match guard.transaction(tether).await {
+        Ok(tx) => tx,
+        Err(ExecutionGuardError::Expired) => {
+            return Ok(ActionRemoteOutput::Queued(id));
         }
-        Err(e) => {
-            error!("Failed to apply on server: {e:?}");
-            if e.is_network_failure() {
-                debug!("Action remains in queue due to lack of network");
-                // if this failed due to network error we should leave it in the queue.
-                return Ok(ActionRemoteOutput::Queued(id));
-            }
-            debug!("Reverting self and dependees");
-            match cancel_action_with_dependees(shared, &bond, id).await {
-                Ok(ids) => {
-                    cancelled_actions = ids;
-                }
-                Err(e) => {
-                    error!("Failed to cancel action and depeendees: {e:?}");
-                }
-            }
-
-            Err(ActionError::Action(e))
-        }
+        Err(ExecutionGuardError::Stash(e)) => return Err(e.into()),
     };
+    let result = async {
+        match result {
+            Ok(result) => {
+                StoredAction::delete(&bond, id).await?;
+
+                debug!("Action executed");
+                Ok(ActionRemoteOutput::Executed(result))
+            }
+            Err(e) => {
+                error!("Failed to apply on server: {e:?}");
+                if e.is_network_failure() {
+                    debug!("Action remains in queue due to lack of network");
+                    // if this failed due to network error we should leave it in the queue.
+                    return Ok(ActionRemoteOutput::Queued(id));
+                } else if e.is_writer_guard_expired() {
+                    debug!("Action remains in queue due to expired writer guard");
+                    return Ok(ActionRemoteOutput::Queued(id));
+                }
+                debug!("Reverting self and dependees");
+                match cancel_action_with_dependees(shared, &bond, id).await {
+                    Ok(ids) => {
+                        cancelled_actions = ids;
+                    }
+                    Err(e) => {
+                        error!("Failed to cancel action and depeendees: {e:?}");
+                    }
+                }
+
+                Err(ActionError::Action(e))
+            }
+        }
+    }
+    .await;
+
+    guard.release(&bond).await?;
     bond.commit().await?;
     for cancelled_action in cancelled_actions.into_iter().filter(|meta| {
         // We don't want to report cancellation of our own action, only of the dependees.

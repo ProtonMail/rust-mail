@@ -1,11 +1,13 @@
 mod common;
 
 use crate::common::{new_queue_typed, DefaultError};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_action_queue::observers::{ActionAwaiter, ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::BroadcastMessage;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use std::future::Future;
 use std::time::Duration;
 
@@ -164,7 +166,7 @@ impl Handler for ErrorActionHandler {
         _: ActionId,
         (): &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard,
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
     > + Send {
@@ -220,7 +222,7 @@ impl Handler for SuccessActionHandler {
         _: ActionId,
         (): &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> impl Future<
         Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
     > + Send {

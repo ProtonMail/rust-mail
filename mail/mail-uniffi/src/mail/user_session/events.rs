@@ -5,7 +5,7 @@ use crate::{spawn_async, uniffi_async};
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_event_loop::EventLoopError;
-use proton_mail_common::actions::event_poll::EventPoll;
+use proton_mail_common::actions::event_poll::{ActionEventLoopError, EventPoll};
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
@@ -78,13 +78,14 @@ impl MailUserSession {
                 if let ActionFailureReason::Error(err, _) = v {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {
                         match details {
-                            ActionError::Action(e) => match e.0 {
-                                EventLoopError::Refresh => {
+                            ActionError::Action(e) => match e {
+                                ActionEventLoopError::EventLoop(EventLoopError::Refresh) => {
                                     EventError::Reason(EventErrorReason::Refresh)
                                 }
-                                EventLoopError::Subscriber(_, _) => {
-                                    EventError::Reason(EventErrorReason::Subscriber)
-                                }
+                                ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
+                                    _,
+                                    _,
+                                )) => EventError::Reason(EventErrorReason::Subscriber),
                                 _ => EventError::Other(ProtonError::Unexpected(
                                     UnexpectedError::Internal,
                                 )),

@@ -12,6 +12,7 @@ use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
 use itertools::Itertools;
+use proton_action_queue::action::WriterGuardError;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AuthId, UserId};
@@ -64,8 +65,19 @@ pub enum CoreContextError {
     ContactError(#[from] ContactError),
     #[error("Attempting to create more than one context for the user with id {0}")]
     DuplicateContext(UserId),
+    #[error("Queue Writer Guard Expired")]
+    QueueWriterGuardExpired,
     #[error("{0}")]
     Other(AnyhowError),
+}
+
+impl From<WriterGuardError> for CoreContextError {
+    fn from(value: WriterGuardError) -> Self {
+        match value {
+            WriterGuardError::Expired => CoreContextError::QueueWriterGuardExpired,
+            WriterGuardError::Stash(e) => CoreContextError::Stash(e),
+        }
+    }
 }
 
 impl From<VcardValidationError> for CoreContextError {
@@ -87,6 +99,10 @@ impl proton_action_queue::action::Error for CoreContextError {
         } else {
             false
         }
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, Self::QueueWriterGuardExpired)
     }
 }
 

@@ -3,10 +3,12 @@ mod common;
 
 use crate::common::{DefaultError, TestReadExtension, TestWriteExtension};
 use common::{new_factory, new_queue};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_action_queue::queue::ActionRemoteOutput;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 #[tokio::test]
 async fn state_preserved_after_local_change() {
@@ -105,11 +107,10 @@ impl Handler for TestActionHandler {
         _: ActionId,
         _: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
+        let tx = writer_guard.transaction().await?;
         tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?;
         tx.commit().await?;
 

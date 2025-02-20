@@ -2,13 +2,13 @@ use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use crate::MailUserContext;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_api_core::consts::General;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 use tracing::error;
 
 /// Action to mark conversations as unread.
@@ -85,7 +85,7 @@ impl proton_action_queue::action::Handler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        stash: &Stash,
+        mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_unread_remote(
             action.0.remote_target_ids.clone(),
@@ -102,8 +102,7 @@ impl proton_action_queue::action::Handler for Handler {
         if !failed_ids.is_empty() {
             error!("Mark unread operation failed for: {:?}", failed_ids);
 
-            let mut conn = stash.connection();
-            let tx = conn.transaction().await?;
+            let tx = guard.transaction().await?;
             let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
 
             Conversation::mark_read(local_ids, &tx).await.map_err(|e| {

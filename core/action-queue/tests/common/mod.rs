@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use proton_action_queue::action::{Action, Error, Factory};
+use proton_action_queue::action::{Action, Error, Factory, WriterGuardError};
 use proton_action_queue::queue::Queue;
 use stash::exports::SqliteError;
 use stash::params;
@@ -133,10 +133,25 @@ pub enum DefaultError {
     Other(anyhow::Error),
     #[error("{0}")]
     DB(#[from] StashError),
+    #[error("Writer Guard Expired")]
+    WriterGuardExpired,
+}
+
+impl From<WriterGuardError> for DefaultError {
+    fn from(value: WriterGuardError) -> Self {
+        match value {
+            WriterGuardError::Expired => Self::WriterGuardExpired,
+            WriterGuardError::Stash(e) => Self::DB(e),
+        }
+    }
 }
 
 impl Error for DefaultError {
     fn is_network_failure(&self) -> bool {
         matches!(self, DefaultError::NetworkFailure)
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, DefaultError::WriterGuardExpired)
     }
 }

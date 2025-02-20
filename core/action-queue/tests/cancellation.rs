@@ -4,11 +4,11 @@ mod common;
 use crate::common::DefaultError;
 use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type,
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
 use proton_action_queue::queue::QueuedError;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Bond, Stash};
+use stash::stash::Bond;
 
 #[tokio::test]
 async fn cancel_causes_revert() {
@@ -196,7 +196,7 @@ impl Handler for CancelActionHandler {
         _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -255,7 +255,7 @@ impl Handler for ChainCancelActionHandler {
         _: ActionId,
         _: &Self::Context,
         _: &mut Self::Action,
-        _: &Stash,
+        _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

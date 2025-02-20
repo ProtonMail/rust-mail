@@ -21,7 +21,7 @@
 //! use std::future::Future;
 //! use std::sync::Arc;
 //! use serde::{Deserialize, Serialize};
-//! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, ActionId, Metadata, Priority, Type};
+//! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, ActionId, Metadata, Priority, Type, WriterGuardError, WriterGuard};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
 //! use stash::stash::{Stash, Bond};
 //!
@@ -35,14 +35,30 @@
 //!     #[error("Foo")]
 //!     Foo,
 //!     #[error("Request")]
-//!     Request
+//!     Request,
+//!     #[error("WriterGuardExpired")]
+//!     WriterGuardExpired,
 //! }
 //!
 //! impl proton_action_queue::action::Error for MyActionError {
 //!     fn is_network_failure(&self) -> bool {
 //!         Self::Request == *self
 //!     }
+//!
+//!     fn is_writer_guard_expired(&self) -> bool {
+//!        Self::WriterGuardExpired == *self
+//!     }
 //!}
+//!
+//! impl From<WriterGuardError> for MyActionError {
+//!    fn from(value: WriterGuardError) -> Self {
+//!        if matches!(value, WriterGuardError::Expired) {
+//!            Self::WriterGuardExpired
+//!        } else {
+//!            Self::Foo
+//!        }
+//!    }
+//! }
 //!
 //! impl Action for MyAction {
 //!     const TYPE: Type = Type("my_action");
@@ -71,7 +87,7 @@
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action_id:ActionId, ctx: &Self::Context, action: &mut Self::Action, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, action_id:ActionId, ctx: &Self::Context, action: &mut Self::Action, guard: WriterGuard<'_>) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }
