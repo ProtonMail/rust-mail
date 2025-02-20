@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.47.2] - 2025-02-20
+
 ### Fixed
 
-  - App no longer crashes
+  - Use `std::thread::spawn` instead of `tokio::task::spawn_blocking` to spawn the stash tether worker,
+    fixing a crash that occurred when the worker was spawned before the tokio runtime itself.
 
 ## [0.47.1] - 2025-02-20
 
