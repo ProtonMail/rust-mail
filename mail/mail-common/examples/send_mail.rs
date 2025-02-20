@@ -9,6 +9,7 @@ use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
+use proton_mail_test_utils::test_context::MailUserContextTestExtension;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing_subscriber::filter::LevelFilter;
@@ -109,9 +110,5 @@ async fn main() {
     let send_action = draft.to_send_action(None).unwrap();
     send_action.queue(user_ctx.action_queue()).await.unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_all()
-        .await
-        .unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 }

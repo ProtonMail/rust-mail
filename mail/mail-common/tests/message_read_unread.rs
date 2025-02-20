@@ -9,7 +9,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use std::sync::LazyLock;
@@ -172,11 +172,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation
     let messages = Message::find("WHERE unread = ?", params![true], &tether)
@@ -250,11 +246,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation
     let messages = Message::find("WHERE unread = ?", params![true], &tether)

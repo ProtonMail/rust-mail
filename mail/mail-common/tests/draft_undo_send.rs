@@ -13,7 +13,7 @@ use proton_mail_test_utils::message_body::{
     message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
     TEST_USER_ID,
 };
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
 #[tokio::test]
 async fn draft_undo_send() {
@@ -78,7 +78,7 @@ async fn draft_undo_send() {
         .contains(MessageFlags::SENT.into()));
 
     // flush queue.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 }
 
 #[tokio::test]
@@ -130,11 +130,7 @@ async fn draft_undo_send_failure() {
     .await
     .unwrap();
 
-    let err = user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap_err();
+    let err = user_ctx.execute_single_action().await.unwrap_err();
 
     let updated_local_message = Message::find_by_id(local_sent_message.local_id.unwrap(), &tether)
         .await

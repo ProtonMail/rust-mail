@@ -1,4 +1,3 @@
-mod actions;
 mod events;
 mod images;
 mod initialization;

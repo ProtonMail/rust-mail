@@ -664,20 +664,6 @@ fn background_worker(
                     return;
                 }
                 _ = interval.tick() => {
-                    if let Err(e) = context.execute_pending_actions().await {
-                        let e = anyhow!("Failed to flush actions: {e}");
-                        error!("{e:?}");
-                        if sender
-                            .send(Command::message(Messages::DisplayError(
-                                Some("Action Queue".to_owned()),
-                                e,
-                            )))
-                            .is_err()
-                        {
-                            error!("Failed to send message from worker");
-                        }
-                    }
-
                         if let Err(e) = context.poll_event_loop().await {
                             let e = anyhow!("Failed to poll events: {e}");
                             error!("{e:?}");

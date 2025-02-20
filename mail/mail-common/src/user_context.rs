@@ -11,7 +11,7 @@ use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfi
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
-use proton_action_queue::queue::{Queue, QueueExecutor, QueuedResult};
+use proton_action_queue::queue::{Queue, QueueAutoExecutor};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -45,7 +45,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
-    default_queue_executor: QueueExecutor,
+    default_queue_executor: QueueAutoExecutor,
     prefetch: PrefetchNotify,
 }
 
@@ -69,7 +69,7 @@ impl MailUserContext {
             action_queue,
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
-            default_queue_executor: queue_executor,
+            default_queue_executor: queue_executor.into_auto_executor(),
         });
 
         this.action_queue
@@ -123,18 +123,14 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    pub async fn execute_all_actions(&self) -> QueuedResult<usize> {
-        self.default_queue_executor.execute_all().await
-    }
-
     /// Get the action queue instance.
     pub fn action_queue(&self) -> &Queue {
         &self.action_queue
     }
 
-    /// Get the default queue executor.
-    pub fn default_queue_executor(&self) -> &QueueExecutor {
-        &self.default_queue_executor
+    /// Terminate all action queue executors.
+    pub fn terminate_queue_executors(&self) {
+        self.default_queue_executor.terminate();
     }
 
     /// Get the API service.

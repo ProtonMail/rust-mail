@@ -16,7 +16,7 @@ use std::ops::Add;
 use std::time::Duration;
 use tracing::{debug, error};
 
-const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
+pub(crate) const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]

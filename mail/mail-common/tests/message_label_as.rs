@@ -19,7 +19,7 @@ use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabelId};
 use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Tether;
@@ -168,11 +168,7 @@ async fn label_as_without_archive() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     //   * All messages are in first label (=> 4)
@@ -329,11 +325,7 @@ async fn label_as_with_archive() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)

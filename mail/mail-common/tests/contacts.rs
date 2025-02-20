@@ -7,7 +7,7 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::models::{Contact, ModelIdExtension};
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
 #[tokio::test]
 async fn contact_list() {
@@ -122,11 +122,7 @@ async fn delete_contacts() {
     Contact::action_delete(user_ctx.action_queue(), vec![contact.local_id.unwrap()])
         .await
         .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await
