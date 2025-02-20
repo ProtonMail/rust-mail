@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.47.1] - 2025-02-20
+
+### Changed
+
+  - [ET-2095] Added support with never visited locations. On order break (going back Online) the scroller will trigger callback.
+
 ## [0.47.0] - 2025-02-20
 
 ### Changed
