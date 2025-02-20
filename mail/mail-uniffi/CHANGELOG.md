@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Changed
+
+  - [ET-2095] Reverted all Set changes and bring back old scroller behaviour on offline data
+
 ## [0.46.0] - 2025-02-19
 
 ### Added

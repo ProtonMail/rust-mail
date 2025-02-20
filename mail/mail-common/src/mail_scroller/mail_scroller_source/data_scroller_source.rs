@@ -6,10 +6,7 @@ use proton_core_common::{
 use stash::stash::Tether;
 use tracing::{debug, trace};
 
-use crate::{
-    datatypes::ReadFilter, mail_scroller::MailScrollerSet, AppError, MailContextError,
-    MailUserContext,
-};
+use crate::{datatypes::ReadFilter, AppError, MailContextError, MailUserContext};
 
 use super::{
     mail_scroller_state::MailScrollerState, remote_source::RemoteSource, MailPaginatorJoinHandle,
@@ -64,8 +61,8 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
         is_offline: bool,
-        tether: &Tether,
-    ) -> Result<(MailScrollerSet<T::Item>, MailPaginatorJoinHandle), MailContextError> {
+        _tether: &Tether,
+    ) -> Result<(Vec<T::Item>, MailPaginatorJoinHandle), MailContextError> {
         let (_, task) = self.initialize(ctx).await?;
 
         if is_offline {
@@ -74,12 +71,13 @@ impl<T: RemoteSource> DataScrollerSource<T> {
                     .await?;
 
             debug!("We are offline, load whatever is in the cache");
-            let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
+            // let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
+            let items = vec![];
 
-            Ok((MailScrollerSet::Replace(items), task))
+            Ok((items, task))
         } else {
             // Retry to sync the data
-            Ok((MailScrollerSet::Replace(vec![]), task))
+            Ok((vec![], task))
         }
     }
 
@@ -209,7 +207,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
-    ) -> Result<(MailScrollerSet<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
+    ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
@@ -237,13 +235,10 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 // Note: Task is always spawned, if there is no more data to download.
                 // As this information is provided in a trait. It is up to the implementation
                 // To check if there is more data to download before asking for more.
-                let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
-                    let items = scroller.visible_elements(&tether).await?;
-
-                    MailScrollerSet::Replace(items)
+                    vec![]
                 } else {
-                    MailScrollerSet::Append(items)
+                    scroller.fetch_more(&tether).await?
                 };
 
                 let should_not_load_more_from_remote =
@@ -263,13 +258,11 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             }
             MailScrollerState::Offline {
                 ordered: _,
-                unordered,
-            } => (
-                MailScrollerSet::Append(unordered.fetch_more(&tether).await?),
-                None,
-            ),
-            MailScrollerState::NotSynced(unordered) => {
-                let items = MailScrollerSet::Append(unordered.fetch_more(&tether).await?);
+                unordered: _,
+            } => (vec![], None), //(unordered.fetch_more(&tether).await?, None),
+            MailScrollerState::NotSynced(_unordered) => {
+                // let items = unordered.fetch_more(&tether).await?;
+                let items = vec![];
                 let task = if is_offline {
                     None
                 } else {
@@ -278,7 +271,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 };
                 (items, task)
             }
-            MailScrollerState::None => (MailScrollerSet::Replace(vec![]), None),
+            MailScrollerState::None => (vec![], None),
         };
 
         // When Scroller was never initialized try to figure out if we can serve something

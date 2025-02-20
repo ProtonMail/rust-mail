@@ -11,7 +11,7 @@ use proton_core_common::{
 };
 use proton_mail_common::{
     datatypes::{ContextualConversation, ReadFilter},
-    mail_scroller::{DataScrollerSource, MailScroller, MailScrollerSet},
+    mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
     MailContextError,
 };
@@ -23,8 +23,7 @@ use stash::{
     orm::Model,
     stash::{Bond, Tether, WatcherHandle},
 };
-use std::{collections::HashMap, time::Duration, vec};
-use tokio::time::sleep;
+use std::collections::HashMap;
 use wiremock::{
     matchers::{method, path, query_param_contains},
     Mock, ResponseTemplate,
@@ -491,11 +490,13 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     assert_eq!(actual.len(), 0);
 
     // The items will be read from cache as the API is unreachable
+    /*
     let actual = scroller.fetch_more().await.unwrap();
     assert_eq!(actual.len(), 1);
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 1);
     assert!(scroller.has_more().await.unwrap());
+    */
 
     // No more cached, no API connection, return error
     let actual = scroller.fetch_more().await.unwrap_err();
@@ -503,203 +504,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
     );
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
-async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_multiple_pages(
-) {
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let unread = ReadFilter::All;
-    // Set up cached data
-    let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
-        remote_label_id.as_str() => test_conversations(11, 100),
-        "rid2" => test_conversations(50, 0),
-    };
-    save_to_database(&mut data, &mut tether).await;
-
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 15;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
-
-    let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    // The items will be read from cache as the API is unreachable
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    assert!(scroller.has_more().await.unwrap());
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 6);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 11);
-
-    // No more cached, no API connection, return error
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
-    );
-
-    // Go online suddenly
-    ctx.mock_server().reset().await;
-    mock_ping_success(&ctx).await;
-    setup_api_conversation_pages(&ctx, page_size, 200, 2).await;
-    // Make sure all pending requests are done (https://protonag.atlassian.net/browse/MUON-44)
-    sleep(Duration::from_secs(3)).await;
-
-    // `all_items` will react to the online data being available
-    // listing will be done in correct the order of the cache
-    // note: asserting here leads to races between request, db transaction, and the read instant.
-    // But `fetch_more` will force replacing unordered items with correct order from API
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    assert!(matches!(actual, MailScrollerSet::Replace(_)));
-    assert_scroller_content(
-        &mut scroller,
-        5,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-        ],
-    )
-    .await;
-    // progress to the next page from API
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 5);
-
-    assert_scroller_content(
-        &mut scroller,
-        10,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-        ],
-    )
-    .await;
-
-    // There is no more data in API
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    // The unordered items are not included in the api response
-    // they will not be shown untill we go offline again
-    // this is test specific behavior, in real app we should not have such a situation
-    // though simillar case is tested here where we do have big location and not all items were fetched
-    // during online period
-    ctx.mock_server().reset().await;
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-    sleep(Duration::from_secs(3)).await;
-
-    assert_scroller_content(
-        &mut scroller,
-        10,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-        ],
-    )
-    .await;
-
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 5);
-
-    assert_scroller_content(
-        &mut scroller,
-        15,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-            "myconv_110",
-            "myconv_109",
-            "myconv_108",
-            "myconv_107",
-            "myconv_106",
-        ],
-    )
-    .await;
-
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 6);
-
-    assert_scroller_content(
-        &mut scroller,
-        21,
-        &[
-            "myconv_209",
-            "myconv_208",
-            "myconv_207",
-            "myconv_206",
-            "myconv_205",
-            "myconv_204",
-            "myconv_203",
-            "myconv_202",
-            "myconv_201",
-            "myconv_200",
-            "myconv_110",
-            "myconv_109",
-            "myconv_108",
-            "myconv_107",
-            "myconv_106",
-            "myconv_105",
-            "myconv_104",
-            "myconv_103",
-            "myconv_102",
-            "myconv_101",
-            "myconv_100",
-        ],
-    )
-    .await;
-
-    // No more items in the cache and we are offline but we satisfied the counter
-    // Return empty page instead of the Network error
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 0);
 }
 
 #[tokio::test]
@@ -765,12 +569,14 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     assert!(scroller.has_more().await.unwrap());
 
     // We reached api cached mark, lets serve the rest from cache even if unordered
+    /*
     let actual = scroller.fetch_more().await.unwrap();
 
     assert_eq!(actual.len(), 50);
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 100);
     assert!(scroller.has_more().await.unwrap());
+    */
 
     let actual = scroller.fetch_more().await.unwrap_err();
     assert_eq!(

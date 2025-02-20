@@ -17,7 +17,7 @@ use tracing::debug;
 
 use crate::{
     datatypes::SearchOptions,
-    mail_scroller::{MailScrollerSet, MailScrollerSource},
+    mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
     MailContextError, MailUserContext,
 };
@@ -334,7 +334,7 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
-    ) -> Result<(MailScrollerSet<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
+    ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
 
         if !self.initialized {
@@ -343,10 +343,10 @@ impl MailScrollerSource for SearchScrollerSource {
 
         if let Some(ref mut last) = self.last {
             let items = if self.initialized {
-                MailScrollerSet::Append(last.fetch_more(self.page_size, &tether).await?)
+                last.fetch_more(self.page_size, &tether).await?
             } else {
                 self.initialized = true;
-                MailScrollerSet::Replace(last.visible_elements(&tether).await?)
+                last.visible_elements(&tether).await?
             };
 
             let (task, total) = if items.is_empty() {
@@ -366,7 +366,7 @@ impl MailScrollerSource for SearchScrollerSource {
 
             Ok((items, total, task))
         } else {
-            Ok((MailScrollerSet::Replace(vec![]), 0, None))
+            Ok((vec![], 0, None))
         }
     }
 
