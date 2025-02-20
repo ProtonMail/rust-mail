@@ -187,6 +187,7 @@ impl Draft {
     }
 
     /// Set the draft's `subject`.
+    #[returns(VoidDraftSaveSendResult)]
     pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveSendError> {
         async_runtime()
             .block_on(async {
@@ -201,6 +202,7 @@ impl Draft {
     }
 
     /// Set the draft's `body`.
+    #[returns(VoidDraftSaveSendResult)]
     pub fn set_body(&self, body: String) -> Result<(), DraftSaveSendError> {
         async_runtime()
             .block_on(async {
@@ -402,6 +404,7 @@ pub async fn draft_undo_send(
 /// Note that this requires that the given message interacted with any of the [`Draft`] APIs
 /// in the past.
 #[uniffi_export]
+#[returns(VoidDraftDiscardResult)]
 pub async fn draft_discard(
     session: &MailUserSession,
     message_id: Id,

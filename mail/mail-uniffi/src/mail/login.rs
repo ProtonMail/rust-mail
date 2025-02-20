@@ -1,4 +1,4 @@
-use crate::errors::LoginError;
+use crate::errors::{LoginError, VoidLoginResult};
 use crate::mail::state::MailUserContextMap;
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
@@ -51,6 +51,7 @@ impl LoginFlow {
 impl LoginFlow {
     /// Login with user, password and optional fingerprints payload (for anti-abuse).
     /// * `fingerprint_payload` - a JSON array of objects serialized to a `String`.
+    #[returns(VoidLoginResult)]
     pub async fn login(
         &self,
         email: String,
@@ -79,6 +80,7 @@ impl LoginFlow {
     }
 
     /// Submit 2FA totp code.
+    #[returns(VoidLoginResult)]
     pub async fn submit_totp(&self, code: String) -> Result<(), LoginError> {
         let flow = self.flow.clone();
         uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -94,6 +96,7 @@ impl LoginFlow {
     }
 
     /// Submit mailbox password.
+    #[returns(VoidLoginResult)]
     pub async fn submit_mailbox_password(
         &self,
         mailbox_password: String,

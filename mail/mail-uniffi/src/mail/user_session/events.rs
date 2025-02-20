@@ -47,7 +47,6 @@ impl MailUserSession {
     ///
     /// Errors returned here are only related to queuing of the action. To get information
     /// about the event loop execution, please use [`MailUserSession::observe_event_loop_errors`].
-    #[allow(clippy::unused_async)]
     #[returns(VoidEventResult)]
     pub async fn poll_events(&self) -> Result<(), EventError> {
         let ctx = self.ctx()?;
