@@ -32,8 +32,8 @@ use serde::{Deserialize, Serialize};
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use stash::{params, sql_using_serde};
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -89,7 +89,7 @@ use uuid::Uuid;
 /// *ALWAYS* use [`Attachment::save()`].
 ///
 ///
-#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize, Default)]
 #[TableName("attachments")]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -100,9 +100,16 @@ pub struct Attachment {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAttachmentId>,
 
-    /// API Attachment id.
+    /// Internal only, even if it's `pub`
     #[DbField]
-    pub remote_id: Option<AttachmentId>,
+    pub(crate) remote_id: Option<AttachmentId>,
+
+    /// The attachment type of this attachment.
+    /// It can be a pgp attachment (local only, kept around for caching purposes)
+    /// Or a remote attachment, a real attachment, that has a RemoteId.
+    /// If you're looking for the AttachmentId, look here.
+    #[DbField]
+    pub attachment_type: AttachmentType,
 
     /// Address with which this attachment was encrypted.
     #[DbField]
@@ -190,15 +197,41 @@ pub struct Attachment {
     pub row_id: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum AttachmentType {
+    Remote(Option<AttachmentId>),
+    Pgp,
+}
+
+impl Default for AttachmentType {
+    fn default() -> Self {
+        Self::Remote(None)
+    }
+}
+
+sql_using_serde!(AttachmentType);
+
+#[cfg(any(test, debug_assertions))]
 impl ModelIdExtension for Attachment {
     type RemoteId = AttachmentId;
 
     fn remote_id(&self) -> Option<&Self::RemoteId> {
-        self.remote_id.as_ref()
+        match &self.attachment_type {
+            AttachmentType::Remote(id) => id.as_ref(),
+            _ => None,
+        }
     }
 }
 
 impl Attachment {
+    /// Gets the remote id of the attachment.
+    /// This is here to lower compile times.
+    pub fn remote_id(&self) -> Option<AttachmentId> {
+        match &self.attachment_type {
+            AttachmentType::Remote(id) => id.clone(),
+            _ => None,
+        }
+    }
     /// Load attachment metadata for a given `conversation_id`.
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
@@ -257,8 +290,9 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        self.remote_id = self.remote_id();
         if self.local_id.is_none() {
-            if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(remote_id) = self.remote_id() {
                 if let Some(existing) =
                     Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
                 {
@@ -399,16 +433,10 @@ impl Attachment {
         api: &PM,
         tether: &mut Tether,
     ) -> Result<Option<()>, AppError> {
-        let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
-            remote_id
-        } else {
+        let Some(remote_id) = self.remote_id() else {
             return Err(StashError::IdNotSet.into());
         };
-        let mut attachment = Self::from(
-            Self::fetch_metadata(remote_attachment_id, api)
-                .await?
-                .attachment,
-        );
+        let mut attachment = Self::from(Self::fetch_metadata(remote_id, api).await?.attachment);
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
         let tx = tether.transaction().await?;
@@ -818,7 +846,7 @@ impl From<ApiAttachment> for Attachment {
     fn from(value: ApiAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id),
+            attachment_type: AttachmentType::Remote(Some(value.id)),
             local_address_id: None,
             remote_address_id: Some(value.address_id),
             local_conversation_id: None,
@@ -839,6 +867,7 @@ impl From<ApiAttachment> for Attachment {
             image_width: None,
             image_height: None,
             row_id: None,
+            remote_id: None,
         }
     }
 }
@@ -847,7 +876,7 @@ impl From<ApiMessageAttachment> for Attachment {
     fn from(value: ApiMessageAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id),
+            attachment_type: AttachmentType::Remote(Some(value.id)),
             local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,
@@ -868,6 +897,7 @@ impl From<ApiMessageAttachment> for Attachment {
             image_width: value.headers.image_width,
             image_height: value.headers.image_height,
             row_id: None,
+            remote_id: None,
         }
     }
 }
@@ -876,7 +906,7 @@ impl From<AttachmentMetadata> for Attachment {
     fn from(value: AttachmentMetadata) -> Self {
         Self {
             local_id: value.local_id,
-            remote_id: value.remote_id,
+            attachment_type: value.attachment_type,
             local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,
@@ -897,6 +927,7 @@ impl From<AttachmentMetadata> for Attachment {
             image_width: None,
             image_height: None,
             row_id: None,
+            remote_id: None,
         }
     }
 }
@@ -904,7 +935,7 @@ impl From<Attachment> for AttachmentMetadata {
     fn from(value: Attachment) -> Self {
         Self {
             local_id: value.local_id,
-            remote_id: value.remote_id,
+            attachment_type: value.attachment_type,
             disposition: value.disposition,
             mime_type: value.mime_type,
             filename: value.filename,

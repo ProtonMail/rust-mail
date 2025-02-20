@@ -1,44 +1,16 @@
-use futures::future::join_all;
-use proton_core_common::models::sender_image_cache::{
-    ReceivedFormat, SenderImage, SenderImageMetadata,
-};
+use std::{fs, path::PathBuf};
+
+use futures::future::try_join_all;
+use pretty_assertions::assert_eq;
 use proton_core_test_utils::test_context::TestContext;
-use stash::orm::Model;
-use std::fs;
 use test_case::test_case;
+use wiremock::{
+    matchers::{method, path},
+    Mock, ResponseTemplate,
+};
 
-const TEST_ADDRESS: &str = "test@example.com";
-
-#[tokio::test]
-async fn get_sender_image() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
-
-    ctx.mock_get_images_logo(vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
-        .await;
-    ctx.catch_all().await;
-
-    // No user image in cache
-    assert!(user_ctx.images_logo_cache.is_empty());
-
-    let image_path = user_ctx
-        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
-        .await
-        .expect("failed to get image")
-        .unwrap();
-
-    assert_eq!(
-        fs::read(image_path).unwrap(),
-        vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
-    );
-    assert_eq!(user_ctx.images_logo_cache.len(), 1);
-
-    user_ctx
-        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
-        .await
-        .expect("failed to get image");
-
-    assert_eq!(user_ctx.images_logo_cache.len(), 1);
+fn test_address() -> String {
+    "test@example.com".to_owned()
 }
 
 #[tokio::test]
@@ -50,7 +22,14 @@ async fn get_empty_sender_image() {
     ctx.catch_all().await;
 
     let image_path = user_ctx
-        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
+        .image_for_sender(
+            test_address(),
+            None,
+            None,
+            None,
+            None,
+            &mut user_ctx.stash().connection(),
+        )
         .await
         .expect("failed to get image");
 
@@ -58,84 +37,54 @@ async fn get_empty_sender_image() {
 }
 
 #[tokio::test]
-async fn get_sender_image_from_cache() {
+async fn concurrency() {
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
 
-    ctx.catch_all().await;
-
-    // No user image in cache
-    assert!(user_ctx.images_logo_cache.is_empty());
-
-    // Add an item into cache
-    let mut key = create_test_key(TEST_ADDRESS, Some(ReceivedFormat::Png));
-    let mut tether = user_ctx.stash().connection();
-    let tx = tether.transaction().await.unwrap();
-    key.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
-    let extra_metadata = SenderImageMetadata {
-        received_format: ReceivedFormat::Png,
-        is_empty: false,
-    };
-    user_ctx
-        .images_logo_cache
-        .add_item_with_extra(key, b"abcdef", &extra_metadata)
-        .unwrap();
-
-    // Get image
-    let image_path = user_ctx
-        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
-        .await
-        .expect("failed to get image")
-        .unwrap();
-
-    // Image is the one from cache
-    assert_eq!(fs::read(image_path).unwrap(), b"abcdef");
-}
-
-#[tokio::test]
-async fn concurrent_request() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
-
-    ctx.mock_get_images_logo(vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/images/logo"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_bytes("This is a very nice image lol".as_bytes()),
+        )
+        .named("Get images/logo (but allow > 1)")
+        .mount(ctx.mock_server())
         .await;
 
     ctx.catch_all().await;
 
-    // No user image in cache
-    assert!(user_ctx.images_logo_cache.is_empty());
+    let requests = (0..30).map(|_| {
+        let ctx_clone = user_ctx.clone();
+        async move {
+            let mut tether = ctx_clone.stash().connection();
+            ctx_clone
+                .image_for_sender(test_address(), None, None, None, None, &mut tether)
+                .await
+        }
+    });
 
-    let mut requests = vec![];
-    for _ in 0..3 {
-        requests.push(user_ctx.image_for_sender(
-            TEST_ADDRESS,
-            None,
-            None,
-            None,
-            None,
-            user_ctx.stash(),
-        ));
-    }
-
-    let result = join_all(requests).await;
+    let result = try_join_all(requests).await.unwrap();
     for result in result {
-        let image_path = result.unwrap().unwrap();
-        assert_eq!(
-            fs::read(image_path).unwrap(),
-            vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
-        );
+        result.unwrap();
     }
 
-    let key = SenderImage {
-        address: Some(TEST_ADDRESS.to_string()),
-        ..Default::default()
-    };
+    let mut tether = user_ctx.stash().connection();
+    let path_given = user_ctx
+        .image_for_sender(test_address(), None, None, None, None, &mut tether)
+        .await
+        .unwrap()
+        .unwrap();
 
-    let (query, params) = key.build_query();
-    let tether = user_ctx.stash().connection();
-    let items = SenderImage::find(query, params, &tether).await.unwrap();
-    assert_eq!(items.len(), 1);
+    let path = ctx
+        .tmp_dir
+        .path()
+        .join("core-cache")
+        .join(ctx.user_context().await.user_id().to_string())
+        .join("sender_images")
+        .join(format!("{}-0xeb804ef98475036c.svg", test_address(),));
+    assert_eq!(path, PathBuf::from(path_given));
+
+    let image = fs::read_to_string(path).unwrap();
+    assert_eq!(image, "This is a very nice image lol");
 }
 
 #[test_case(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], "png"; "png")]
@@ -148,26 +97,34 @@ async fn image_extension(bytes: &[u8], expected: &str) {
     ctx.mock_get_images_logo(bytes.to_vec()).await;
     ctx.catch_all().await;
 
-    // No user image in cache
-    assert!(user_ctx.images_logo_cache.is_empty());
-
     let image_path = user_ctx
-        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
+        .image_for_sender(
+            test_address(),
+            None,
+            None,
+            None,
+            None,
+            &mut user_ctx.stash().connection(),
+        )
         .await
         .expect("failed to get image")
         .unwrap();
 
-    assert_eq!(image_path.extension().unwrap(), expected);
-    let tether = user_ctx.stash().connection();
-    let sender_image = SenderImage::load(1, &tether).await.unwrap().unwrap();
-    let received_format = sender_image.received_format.unwrap();
-    assert_eq!(format!("{received_format}"), expected);
-}
+    assert!(image_path.ends_with(expected));
+    assert_eq!(fs::read(&image_path).unwrap(), bytes);
 
-#[allow(clippy::field_reassign_with_default)]
-fn create_test_key(address: &str, received_format: Option<ReceivedFormat>) -> SenderImage {
-    let mut key = SenderImage::default();
-    key.address = Some(address.to_owned());
-    key.received_format = received_format;
-    key
+    // Called two times but only calls the api once.
+    let image_path_2 = user_ctx
+        .image_for_sender(
+            test_address(),
+            None,
+            None,
+            None,
+            None,
+            &mut user_ctx.stash().connection(),
+        )
+        .await
+        .expect("failed to get image")
+        .unwrap();
+    assert_eq!(image_path, image_path_2);
 }

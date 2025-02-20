@@ -14,7 +14,6 @@ use proton_core_common::action_queue::{
     CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
 };
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
-use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -78,8 +77,6 @@ pub enum MailContextError {
     Login(#[from] LoginError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
-    #[error("Cache Error: {0}")]
-    CacheError(#[from] CacheError),
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
     #[error("Draft: {0}")]
@@ -90,6 +87,17 @@ pub enum MailContextError {
     TaskCancelled,
     #[error("Queue Write Guard Expired")]
     QueueWriterGuardExpired,
+    #[error("Bug: Called fetch_attachment_data on a pgp attachment.")]
+    CalledFetchedAttachmentOnPgp,
+    #[error(
+        "Bug: Called fetch_attachment_data on an attachment without remoteid (local attachment)."
+    )]
+    CalledFetchedAttachmentLocalAttachment,
+    #[error("Bug: Invalid utf8 somewhere in path: {0:?}.")]
+    InvalidUtf8AttachmentPath(std::ffi::OsString),
+    #[error("Could not start transaction: {0}")]
+    IntoTransactionError(anyhow::Error),
+
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -138,7 +146,6 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Other(err) => MailContextError::Other(err),
             CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
             CoreContextError::Stash(err) => MailContextError::Stash(err),
-            CoreContextError::CacheError(err) => MailContextError::CacheError(err),
             CoreContextError::ContactError(err) => MailContextError::ContactError(err),
             CoreContextError::DuplicateContext(user_id) => Self::DuplicateContext(user_id),
             CoreContextError::QueueWriterGuardExpired => Self::QueueWriterGuardExpired,
@@ -166,9 +173,9 @@ impl From<JoinError> for MailContextError {
 }
 pub struct MailContext {
     core_context: Arc<Context>,
-    // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
-    pub(crate) mail_cache_size: u64,
+    /// This will get used in the near future.
+    pub(crate) _attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
 }
 
@@ -186,7 +193,7 @@ impl MailContext {
         user_db_path: impl Into<PathBuf>,
         core_cache_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
-        mail_cache_size: u64,
+        cache_size: u64,
         connection_pool_size: Option<u32>,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
@@ -201,7 +208,6 @@ impl MailContext {
             initializers,
             api_config,
             core_cache_path,
-            mail_cache_size,
             connection_pool_size,
         )
         .await?;
@@ -209,7 +215,7 @@ impl MailContext {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
-            mail_cache_size,
+            _attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
         }))
     }
@@ -223,7 +229,7 @@ impl MailContext {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path,
-            mail_cache_size,
+            _attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
         }))
     }
@@ -482,6 +488,11 @@ impl MailContext {
     /// Path where mail content should be cached for user with `user_id`.
     pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
         self.mail_cache_path.join(user_id.to_string())
+    }
+
+    #[must_use]
+    pub fn attachments_cache_path(&self) -> PathBuf {
+        self.mail_cache_path.join("attachments")
     }
 
     /// Get the core context.

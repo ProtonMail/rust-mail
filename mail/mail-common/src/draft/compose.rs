@@ -238,8 +238,7 @@ pub(super) fn prepare_plain_text_reply(
 /// is returned.
 ///
 /// This method also performs basic html sanitizing before converting to text.
-pub fn html_to_text(input: impl AsRef<str>) -> String {
-    let input = input.as_ref();
+pub fn html_to_text(input: &str) -> String {
     let mut transformer = Transformer::new(input);
     transformer.add_noreferrer();
     transformer.strip_utm();

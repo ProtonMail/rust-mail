@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::actions::draft::{
     local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
 };
@@ -126,15 +128,15 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn apply_local(
         &self,
         action_id: ActionId,
-        ctx: &MailUserContext,
+        _: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Bond<'_>,
+        bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        let local_draft_id = local_draft_label_id(tether).await?;
-        let local_all_draft_id = local_all_draft_label_id(tether).await?;
-        let local_all_mail_id = local_all_mail_label_id(tether).await?;
+        let local_draft_id = local_draft_label_id(bond).await?;
+        let local_all_draft_id = local_all_draft_label_id(bond).await?;
+        let local_all_mail_id = local_all_mail_label_id(bond).await?;
 
-        let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tether)
+        let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to load draft metadata: {e:?}");
@@ -145,7 +147,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let body_len = action.body.len() as u64;
-        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), tether)
+        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), bond)
             .await
             .inspect_err(|e| error!("Failed to load address: {e:?}"))?
         else {
@@ -154,7 +156,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let attachments = action
-            .attachments(tether)
+            .attachments(bond)
             .await
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
         debug!("Draft has {} attachments", attachments.len());
@@ -164,7 +166,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             id
         } else {
             debug!("Conversation does not exist, creating");
-            let display_order = Conversation::next_display_order(tether)
+            let display_order = Conversation::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
             let mut conversation = action.create_new_conversation(
@@ -176,7 +178,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 action.subject.clone(),
             );
             conversation
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e:?}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
@@ -186,7 +188,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let time = draft::compose::create_timestamp();
         let (message, body_metadata) = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
-            let Some(mut message) = Message::find_by_id(message_id, tether)
+            let Some(mut message) = Message::find_by_id(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message: {e:?}"))?
             else {
@@ -210,11 +212,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 time,
             );
 
-            message.save(tether).await.inspect_err(|e| {
+            message.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e:?}");
             })?;
 
-            let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, tether)
+            let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message metadata: {e:?}"))?
             else {
@@ -224,14 +226,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
             body_metadata.attachments = attachments;
             body_metadata.mime_type = action.mime_type;
 
-            body_metadata.save(tether).await.inspect_err(|e| {
+            body_metadata.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e:?}");
             })?;
 
             (message, body_metadata)
         } else {
             debug!("Local message id is not set, creating new draft");
-            let display_order = Message::next_display_order(tether)
+            let display_order = Message::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
             let mut message = action.create_new_message(
@@ -244,7 +246,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             );
             message.local_conversation_id = Some(conversation_id);
             message
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to save message: {e:?}"))?;
 
@@ -259,14 +261,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
             };
 
             message_body_metadata
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e:?}"))?;
 
             Message::apply_label(
                 local_draft_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -276,7 +278,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             Message::apply_label(
                 local_all_draft_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -286,7 +288,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             Message::apply_label(
                 local_all_mail_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -296,21 +298,16 @@ impl proton_action_queue::action::Handler for SaveHandler {
             (message, message_body_metadata)
         };
 
-        // Store body in cache.
-        let raw_body = StorableMessageBodyRef {
-            body: &action.body,
-            ..Default::default()
-        };
-
-        Message::store_raw_message_in_cache(ctx, message.local_id.unwrap(), raw_body).inspect_err(
-            |e| {
+        let body = mem::take(&mut action.body);
+        Message::store_decrypted_message_body(message.local_id.unwrap(), body, bond)
+            .await
+            .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
-            },
-        )?;
+            })?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
         metadata.save_action_id = Some(action_id);
-        metadata.save(tether).await.inspect_err(|e| {
+        metadata.save(bond).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e:?}");
         })?;
 

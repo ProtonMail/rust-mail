@@ -12,7 +12,6 @@ use futures::TryFutureExt;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
-use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
@@ -52,8 +51,6 @@ pub enum MailboxError {
     Stash(#[from] StashError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
-    #[error("Cache error: {0}")]
-    Cache(#[from] CacheError),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
 }
@@ -113,7 +110,7 @@ impl Mailbox {
     ///
     /// # Errors
     /// Returns error if API request or database changes failed.
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, count))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn sync(&self, tether: &mut Tether, api: &Proton, count: usize) -> MailboxResult<()> {
         let Some(label) = Label::load(self.label_id, tether).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));

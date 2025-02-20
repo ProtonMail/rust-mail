@@ -1,7 +1,12 @@
 use proton_api_core::services::proton::{LabelId, UserId};
 use proton_mail_common::cache::CacheMessageKey;
+use std::str::FromStr;
+
+use indoc::formatdoc;
+use itertools::Itertools;
+use proton_api_core::services::proton::common::{LabelId, UserId};
+use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::decrypted_message::StorableMessageBody;
 use proton_mail_common::models::Message;
 use proton_mail_common::{AppError, MailContextError, Mailbox};
 use proton_mail_test_utils::message_body::{
@@ -14,6 +19,8 @@ use stash::orm::Model;
 
 #[tokio::test]
 async fn mailbox_message_body_simple() {
+    // This test fetches a message body twice and expects it to be called only once
+
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
@@ -28,7 +35,10 @@ async fn mailbox_message_body_simple() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+
+    // Will be called only once
+    ctx.mock_get_messages_total_expect(vec![message.metadata.clone()], 1, 1)
+        .await;
     ctx.catch_all().await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -48,35 +58,34 @@ async fn mailbox_message_body_simple() {
         .expect("failed to load message");
     assert_eq!(saved_message.remote_id, Some(message.metadata.id));
 
-    // No message cached
-    let cache = user_ctx.messages_cache();
-    assert!(cache.is_empty());
-
-    // Decrypt the message body.
-    let _local_id = saved_message.local_id.unwrap();
-
+    // We fetch it twice and expect it to be the same, with only 1 req being actually made.
     let decrypted_body = saved_message
         .fetch_message_body(user_ctx.clone(), &mut tether)
         .await
         .unwrap();
 
-    assert_eq!(decrypted_body.body, TEST_MESSAGE_BODY_DECRYPTED);
-
-    // Now a message is cached and it's the right one
-    assert_eq!(cache.len(), 1);
-    let key = CacheMessageKey::from(&saved_message);
-    let item = cache
-        .get_item(&key)
-        .unwrap()
-        .map(|f| StorableMessageBody::from_reader(f).unwrap().body);
-    assert_eq!(item, Some(TEST_MESSAGE_BODY_DECRYPTED.to_owned()));
-
-    // Only one call to API is done
-    saved_message
+    let decrypted_body2 = saved_message
         .fetch_message_body(user_ctx.clone(), &mut tether)
         .await
         .unwrap();
-    assert_eq!(cache.len(), 1);
+
+    let body = tether
+        .query_value::<_, String>(
+            formatdoc!(
+                "
+            SELECT body as value FROM message_body WHERE
+                message_id = {}
+    ",
+                saved_message.local_id.unwrap()
+            ),
+            vec![],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(decrypted_body.body, body);
+    assert_eq!(decrypted_body.body, TEST_MESSAGE_BODY_DECRYPTED);
+    assert_eq!(decrypted_body2.body, decrypted_body.body);
 }
 
 #[tokio::test]
@@ -117,11 +126,6 @@ async fn mailbox_message_body_mime() {
         .expect("failed to load message");
     assert_eq!(saved_message.remote_id, Some(message.metadata.id));
 
-    let cache = user_ctx.messages_cache();
-    assert!(cache.is_empty());
-
-    let _local_id = saved_message.local_id.unwrap();
-
     // Action:
     //   * Get message body and PGP attachments
     let decrypted_message = saved_message
@@ -143,19 +147,130 @@ async fn mailbox_message_body_mime() {
             .unwrap();
     }
     // Validation:
+
     assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
-    let pgp_attachments = decrypted_message.pgp_attachments.unwrap();
+    let pgp_attachments = decrypted_message
+        .metadata
+        .attachments
+        .into_iter()
+        .collect_vec();
+
     assert_eq!(pgp_attachments.len(), 3);
-    assert_eq!(pgp_attachments[0].name, "attachment1.txt");
-    assert_eq!(pgp_attachments[0].mime_type, "text/plain");
-    assert_eq!(pgp_attachments[0].data, b"attachment1");
-    assert_eq!(pgp_attachments[1].name, "attachment2.txt");
-    assert_eq!(pgp_attachments[1].mime_type, "text/plain");
-    assert_eq!(pgp_attachments[1].data, b"attachment2");
-    assert_eq!(pgp_attachments[2].name, "OpenPGP_0x46F0FA708D336220.asc");
-    assert_eq!(pgp_attachments[2].mime_type, "application/pgp-keys");
+
+    assert_eq!(pgp_attachments[0].filename, "attachment1.txt");
+    assert_eq!(pgp_attachments[0].mime_type, MimeType::text_plain());
+
+    let data = user_ctx
+        .get_attachment_content_data(&pgp_attachments[0])
+        .await
+        .unwrap();
+    assert_eq!(data, b"attachment1");
+
+    assert_eq!(pgp_attachments[1].filename, "attachment2.txt");
+    assert_eq!(pgp_attachments[1].mime_type, MimeType::text_plain());
+    let data = user_ctx
+        .get_attachment_content_data(&pgp_attachments[1])
+        .await
+        .unwrap();
+    assert_eq!(data, b"attachment2");
+
     assert_eq!(
-        pgp_attachments[2].data,
-        TEST_MESSAGE_BODY_MIME_SIGNATURE.as_bytes()
+        pgp_attachments[2].filename,
+        "OpenPGP_0x46F0FA708D336220.asc"
     );
+    assert_eq!(
+        pgp_attachments[2].mime_type,
+        MimeType::from_str("application/pgp-keys").unwrap()
+    );
+    let data = user_ctx
+        .get_attachment_content_data(&pgp_attachments[2])
+        .await
+        .unwrap();
+    assert_eq!(data, TEST_MESSAGE_BODY_MIME_SIGNATURE.as_bytes());
+}
+
+#[tokio::test]
+async fn mailbox_message_retains_pgp_attachments() {
+    // Setup:
+    //   * Create a message encrypted with MIME format
+    //     + Contains 2 attachments
+    //     + OpenPGP public key
+
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let message = message_body_test_message_mime();
+
+    let params = message_body_test_params();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.catch_all().await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
+    let mut tether = user_ctx.user_stash().connection();
+    let saved_message = Message::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(saved_message.remote_id, Some(message.metadata.id));
+
+    // Before decrypting the message there are no attachments yet because all are pgp
+    assert!(saved_message.attachments_metadata.is_empty());
+
+    // Action:
+    //   * Get message body and PGP attachments
+    let decrypted_message = saved_message
+        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .await
+        .unwrap();
+
+    // Now they exist :)
+    assert_eq!(decrypted_message.metadata.attachments.len(), 3);
+
+    let Err(MailContextError::App(AppError::UnknownCid(_, cids))) = decrypted_message
+        .get_embedded_attachment(&user_ctx, "fail")
+        .await
+    else {
+        panic!("Expected error when passing bad cid");
+    };
+
+    for cid in cids {
+        decrypted_message
+            .get_embedded_attachment(&user_ctx, &cid)
+            .await
+            .unwrap();
+    }
+    // Validation:
+
+    assert_eq!(decrypted_message.body, TEST_MESSAGE_BODY_MIME_DECRYPTED);
+    let pgp_attachments = decrypted_message.metadata.attachments.iter().collect_vec();
+
+    assert_eq!(pgp_attachments.len(), 3);
+
+    let saved_message_2 = Message::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert_eq!(saved_message_2.attachments_metadata.len(), 3);
+    let decrypted_message_2 = saved_message
+        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .await
+        .unwrap();
+
+    // It should retain the attachments.
+    assert_eq!(decrypted_message.metadata, decrypted_message_2.metadata);
 }

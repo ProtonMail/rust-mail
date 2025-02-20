@@ -428,13 +428,12 @@ impl Draft {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
-                let Some(d) = Message::load_decrypted_message_from_cache(
-                    Arc::clone(&context),
-                    message.local_id.unwrap(),
-                    tether,
-                )
-                .await
-                .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
+                let Some(d) =
+                    Message::load_decrypted_message_from_cache(message.local_id.unwrap(), tether)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to load decrypted data from cache: {e:?}")
+                        })?
                 else {
                     return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };

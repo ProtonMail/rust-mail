@@ -14,7 +14,7 @@ use proton_core_test_utils::account::TEST_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_common::datatypes::attachment;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, ResponseTemplate};
+use wiremock::{Mock, ResponseTemplate, Times};
 
 const TEST_ATTACHMENT_ID: &str =
     "5OkOlBi3Swa4cHRyChyUazwt8GYDBLIAX-ZYnGg8-nAHNKjj5EgR5uH-GePQFaWQPgS60aoJ1Dl2s6UI4BmwNw==";
@@ -86,7 +86,11 @@ impl MailTestContext {
     /// * `attachment` - The metadata to return as a response.
     ///
     #[function_name::named]
-    pub async fn mock_get_attachment_metadata(&self, attachment: ApiAttachment) {
+    pub async fn mock_get_attachment_metadata(
+        &self,
+        attachment: ApiAttachment,
+        times: impl Into<Times>,
+    ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{}/metadata", attachment.id);
         Mock::given(method("GET"))
             .and(path(path_for_attachment))
@@ -94,7 +98,7 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(GetAttachmentMetadataResponse { attachment }),
             )
-            .expect(1)
+            .expect(times)
             .named(function_name!())
             .mount(self.mock_server())
             .await;
@@ -114,12 +118,13 @@ impl MailTestContext {
         &self,
         attachment_id: AttachmentId,
         attachment_content: Vec<u8>,
+        times: impl Into<Times>,
     ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
         Mock::given(method("GET"))
             .and(path(path_for_attachment))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
-            .expect(1)
+            .expect(times)
             .named(function_name!())
             .mount(self.mock_server())
             .await;

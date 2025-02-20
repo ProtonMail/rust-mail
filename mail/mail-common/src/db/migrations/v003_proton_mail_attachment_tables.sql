@@ -1,6 +1,5 @@
 CREATE TABLE attachments (
   local_id INTEGER PRIMARY KEY AUTOINCREMENT,
-  remote_id TEXT UNIQUE DEFAULT NULL,
   local_conversation_id INTEGER DEFAULT NULL,
   remote_conversation_id TEXT DEFAULT NULL,
   local_message_id INTEGER DEFAULT NULL,
@@ -20,9 +19,26 @@ CREATE TABLE attachments (
   transfer_encoding TEXT DEFAULT NULL,
   image_width TEXT DEFAULT NULL,
   image_height TEXT DEFAULT NULL,
+  remote_id TEXT UNIQUE DEFAULT NULL, -- Internal use only
+  attachment_type TEXT NOT NULL, -- JSON
+
   CONSTRAINT attachments_address_id FOREIGN KEY (local_address_id) REFERENCES addresses (local_id),
   CONSTRAINT attachments_conversation_id FOREIGN KEY (local_conversation_id) REFERENCES conversations (local_id) ON DELETE CASCADE,
   CONSTRAINT attachments_message_id FOREIGN KEY (local_message_id) REFERENCES messages (local_id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX index_attachments_rid ON attachments (remote_id)
+
+CREATE TABLE attachment_cache (
+    attachment_id INTEGER PRIMARY KEY,
+    atime INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    ctime INTEGER NOT NULL DEFAULT (unixepoch('now')),
+    hit_count INTEGER NOT NULL DEFAULT 0,
+    path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+
+    CONSTRAINT attachment_cache_attachment_id
+        FOREIGN KEY (attachment_id)
+        REFERENCES attachments (local_id)
+        ON DELETE CASCADE
+);

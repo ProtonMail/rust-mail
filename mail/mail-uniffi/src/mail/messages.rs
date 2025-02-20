@@ -8,9 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{
-    AllBottomBarMessageActions, AttachmentMetadata, Message, ReadFilter, SearchScroller,
-};
+use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::{Id, RemoteId};
@@ -90,39 +88,9 @@ impl DecryptedMessage {
     }
 
     #[must_use]
-    /// This is `Some` if the message is multipart. It contains the subject (if it has it) and the
-    /// attachments.
-    pub fn get_multipart_data(&self) -> Option<MultipartData> {
-        let attachments = self
-            .body
-            .pgp_attachments
-            .clone()?
-            .into_iter()
-            .map(|x| PgpAttachment {
-                id: x.id,
-                content_id: x.content_id,
-                name: x.name,
-                size: x.size as u64,
-                mime_type: x.mime_type,
-                data: x.data,
-            })
-            .collect_vec();
-
-        let subject = self.body.pgp_subject.clone();
-        Some(MultipartData {
-            subject,
-            attachments,
-        })
-    }
-
-    /// This function merges the API attachments and PGP attachments into one for easier client
-    /// consumption.
-    fn get_all_attachments(&self) -> Vec<AttachmentMetadata> {
-        self.body
-            .get_attachments()
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    /// This is `Some` if the message is multipart and has a subject.
+    pub fn get_pgp_subject(&self) -> Option<String> {
+        self.body.pgp_subject.clone()
     }
 }
 
@@ -160,34 +128,6 @@ impl DecryptedMessage {
         .map_err(ProtonError::from)
         .into()
     }
-}
-
-/// This comes from a multipart message, not to be confused with the other attachments.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, uniffi::Record)]
-pub struct PgpAttachment {
-    /// Unique id across all attachments in an inbox.
-    pub id: String,
-    /// Content id extracted from mime.
-    pub content_id: String,
-    /// File name of the attachment.
-    pub name: String,
-    /// The size of the attachment in bytes.
-    pub size: u64,
-    /// The content type of the attachment.
-    ///
-    /// Is an empty string if no content type was found.
-    pub mime_type: String,
-    /// The attachment data.
-    pub data: Vec<u8>,
-}
-
-/// The extra data of a multipart message.
-#[derive(Debug, PartialEq, Eq, Clone, Hash, uniffi::Record)]
-pub struct MultipartData {
-    /// The subject that comes from a multipart message.
-    subject: Option<String>,
-    /// Attachments that come from a multipart message.
-    attachments: Vec<PgpAttachment>,
 }
 
 /// Get a specified message.

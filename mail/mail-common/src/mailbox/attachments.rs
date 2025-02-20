@@ -1,23 +1,28 @@
-use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{AttachmentMetadata, LocalAttachmentId};
 use crate::models::Attachment;
 use crate::{
     AppError, MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult,
 };
-use anyhow::anyhow;
-use proton_core_common::cache::{CacheData, CacheError, CacheResult};
+use anyhow::{anyhow, Context as _};
+use indoc::indoc;
+use proton_core_common::os::safe_write_async;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use stash::exports::SqliteError;
 use stash::orm::Model;
+use stash::params;
+use stash::stash::{Bond, StashError};
 use std::io::Read;
 use std::path::PathBuf;
+use tokio::fs;
 use tracing::error;
 
 /// A decrypted attachment returned by [`Mailbox::get_attachment`].
 #[derive(Debug)]
+#[cfg_attr(any(test, debug_assertions), derive(Eq, PartialEq))]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
     pub attachment_metadata: AttachmentMetadata,
@@ -34,6 +39,101 @@ pub struct DecryptedAttachment {
 }
 
 impl MailUserContext {
+    /// Tries to get where an attachment is stored.
+    ///
+    /// a. Try to read it from the cache
+    /// b.
+    ///     - Download it if it can't find it
+    ///     - Save it to disk
+    ///     - Return the path as a String
+    pub async fn get_attachment_content_path(
+        &self,
+        attachment: &Attachment,
+    ) -> MailContextResult<String> {
+        let mut tether = self.user_stash().connection();
+        let tx = tether.transaction().await?;
+        if let Some(path) =
+            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
+        {
+            tx.commit().await?;
+            return Ok(path);
+        };
+        tx.commit().await?;
+
+        let data = self.fetch_attachment_data(attachment).await?;
+
+        // While we were downlaoding, did someone win the race?
+        // If so return it. Else store it.
+        // TODO(orion): Replace this
+        let tx = tether.transaction().await?;
+        if let Some(path) =
+            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
+        {
+            tx.commit().await?;
+            return Ok(path);
+        };
+
+        let at = self
+            .store_attachment_in_cache(
+                &attachment.filename,
+                attachment.local_id.unwrap(),
+                data,
+                &tx,
+            )
+            .await?;
+        tx.commit().await?;
+        Ok(at)
+    }
+
+    /// Tries to get the actual bytes of an attachment.
+    ///
+    /// a. Try to read it from the cache
+    /// b.
+    ///     - Download it if it can't find it
+    ///     - Save it to disk
+    ///     - Return the data.
+    pub async fn get_attachment_content_data(
+        &self,
+        attachment: &Attachment,
+    ) -> MailContextResult<Vec<u8>> {
+        let mut tether = self.user_stash().connection();
+        let tx = tether.transaction().await?;
+        if let Some(path) =
+            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
+        {
+            tx.commit().await?;
+            return Ok(fs::read(path).await?);
+        };
+        tx.commit().await?;
+
+        let data = self.fetch_attachment_data(attachment).await?;
+
+        // While we were downlaoding, did someone win the race?
+        // If so return it. Else store it.
+        // TODO(orion): Replace this
+        let tx = tether.transaction().await?;
+        if let Some(path) =
+            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
+        {
+            return Ok(fs::read(path).await?);
+        };
+
+        if let Err(e) = self
+            .store_attachment_in_cache(
+                &attachment.filename,
+                attachment.local_id.unwrap(),
+                data.clone(),
+                &tx,
+            )
+            .await
+        {
+            error!("Could not save attachment to disk/database, but will continue: {e:?}");
+        }
+
+        tx.commit().await?;
+        Ok(data)
+    }
+
     /// Loads the metadata and file path for the given local [`attachment_id`]
     /// into a [`DecryptedAttachment`].
     ///
@@ -62,70 +162,121 @@ impl MailUserContext {
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
-                remote_id: attachment.remote_id,
+                attachment_type: attachment.attachment_type,
                 disposition: attachment.disposition,
                 mime_type: attachment.mime_type,
                 filename: attachment.filename,
                 size: attachment.size,
             },
-            data_path,
+            data_path: data_path.into(),
         })
     }
 
-    /// Get decrypted attachment content
-    ///
-    /// Fetches, decrypts and caches the attachment in the filesystem if it's not there.
-    pub async fn get_attachment_content_path(
-        &self,
-        attachment: &Attachment,
-    ) -> MailboxResult<PathBuf> {
-        let cache = self.attachements_cache();
-        let key = CacheAttachmentKey::from(attachment);
+    /// Returns a fs path to an attachment in the filesystem.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tx))]
+    pub async fn get_attachment_from_cache(
+        id: LocalAttachmentId,
+        tx: &Bond<'_>,
+    ) -> Result<Option<String>, StashError> {
+        let path = tx
+            .query_value::<_, String>(
+                indoc! {
+                    "
+                    SELECT path as value FROM attachment_cache
+                    WHERE attachment_id = ?1;
+                    "
+                },
+                params![id],
+            )
+            .await;
 
-        Ok(cache
-            .get_path_or_insert(&key, self.fetch_attachment(attachment))
-            .await?)
+        match path {
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Ok(path) => {
+                tx.execute(
+                    indoc! { "
+                       UPDATE attachment_cache
+                       SET 
+                           atime = unixepoch('now'),
+                           hit_count = hit_count + 1
+                       WHERE attachment_id = ?1;
+"},
+                    params![id],
+                )
+                .await?;
+                Ok(Some(path))
+            }
+            Err(e) => Err(e),
+        }
     }
 
-    /// Get decrypted attachment content
-    /// Use this instead of `get_attachment_content_path` if you need the actual bytes.
-    ///
-    /// Fetches, decrypts and caches the attachment in the filesystem if it's not there.
-    pub async fn get_attachment_content_data(
+    /// Creates the attachment in the attachment_cache table and stores it in the disk
+    /// Returns the path as a String.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, data, tether))]
+    pub async fn store_attachment_in_cache(
         &self,
-        attachment: &Attachment,
-    ) -> MailContextResult<CacheData> {
-        let cache = self.attachements_cache();
-        let key = CacheAttachmentKey::from(attachment);
+        name: &str,
+        id: LocalAttachmentId,
+        data: Vec<u8>,
+        tether: &Bond<'_>,
+    ) -> MailContextResult<String> {
+        // We will write the attachment to
+        // {CACHE_PATH}/attachments/{id}/{name}
+        // The reason for this scheme is twofold:
+        // - The clients require that the name of the attachment be the name
+        // - Two different attachments might share the same name.
+        let mut path = self.mail_context().attachment_cache_path();
+        path.push(format!("{id}"));
+        std::fs::create_dir_all(&path)?;
+        path.push(name);
+        let path = path
+            .into_os_string()
+            .into_string()
+            // This is infailable since all pieces exist as a string at some point.
+            .map_err(|e| anyhow!("Invalid utf8 somewhere in the path: {e:?}"))?;
 
-        Ok(cache
-            .get_path_or_insert_data(&key, || self.fetch_attachment(attachment))
-            .await?)
+        let data_len = data.len();
+        safe_write_async(&path, data).await?;
+        tether
+            .execute(
+                indoc! {
+                "INSERT INTO attachment_cache (attachment_id, path, size)
+                    VALUES (?, ?, ?)",
+                        },
+                params![id, path.clone(), data_len],
+            )
+            .await?;
+        Ok(path)
     }
 
-    /// Fetches attachment data
-    async fn fetch_attachment(&self, attachment: &Attachment) -> CacheResult<Vec<u8>> {
+    /// Fetches and decrypts an attachment from the API.
+    async fn fetch_attachment_data(&self, attachment: &Attachment) -> MailContextResult<Vec<u8>> {
         let attachment_id = attachment.local_id.expect("Should be set");
         let pgp_provider = new_pgp_provider();
-        let remote_attachment_id =
-            attachment
-                .remote_id
-                .clone()
-                .ok_or(CacheError::Callback(anyhow!(
-                    "Attachment without RemoteId {attachment_id}"
-                )))?;
+        let remote_attachment_id = match &attachment.attachment_type {
+            crate::models::AttachmentType::Remote(Some(id)) => id,
+            crate::models::AttachmentType::Remote(None) => {
+                return Err(MailContextError::CalledFetchedAttachmentLocalAttachment)
+            }
+            crate::models::AttachmentType::Pgp => {
+                return Err(MailContextError::CalledFetchedAttachmentOnPgp)
+            }
+        };
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), self.api())
             .await
             .map_err(|e| {
-                error!("Failed to fetch attachment({attachment_id:?}) from API: {e:?})");
-                CacheError::Callback(anyhow!(e))
+                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}",);
+                e
             })?;
         let (decrypted_content, _verification_result) = self
-            .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
+            .decrypt_attachment_content(&pgp_provider, attachment, encrypted_content.as_ref())
             .await
+            // There is not much we can do at this point, and we need to convert from a
+            // MailboxError
+            .context("Failed to decrypt attachment")
             .map_err(|e| {
-                error!("Failed to decrypt attachment({attachment_id:?}): {e:?})");
-                CacheError::Callback(anyhow!(e))
+                error!("{e:?}");
+                MailContextError::Crypto
             })?;
         Ok(decrypted_content)
     }
@@ -157,7 +308,7 @@ impl MailUserContext {
     }
 
     /// Decrypt attachment content
-    async fn decrypt_attachment<Provider: PGPProviderSync>(
+    async fn decrypt_attachment_content<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         attachment_info: &Attachment,

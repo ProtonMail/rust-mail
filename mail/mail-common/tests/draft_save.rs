@@ -507,9 +507,9 @@ async fn create_draft_forward_inherits_all_attachments() {
     let normal_attachment = gen_normal_attachment();
 
     compare_inline_attachment(attachment_1, inline_attachment);
-    assert_ne!(
-        attachment_2.remote_id.clone().unwrap(),
-        normal_attachment.id
+    assert_eq!(
+        attachment_2.remote_id().unwrap().as_str(),
+        normal_attachment.id.as_str()
     );
     assert_eq!(
         attachment_2.disposition,
@@ -520,7 +520,10 @@ async fn create_draft_forward_inherits_all_attachments() {
 }
 
 fn compare_inline_attachment(attachment: &Attachment, inline_attachment: MessageAttachment) {
-    assert_ne!(attachment.remote_id.clone().unwrap(), inline_attachment.id);
+    assert_eq!(
+        attachment.remote_id().unwrap().as_str(),
+        inline_attachment.id.as_str()
+    );
     assert_eq!(attachment.disposition, inline_attachment.disposition.into());
     assert_eq!(attachment.filename, inline_attachment.name);
     assert_eq!(attachment.size, inline_attachment.size);

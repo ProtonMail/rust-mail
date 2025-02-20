@@ -105,3 +105,13 @@ CREATE TABLE draft_attachment_metadata (
   ownership INTEGER NOT NULL,
   CONSTRAINT draft_attachment_metadata_attachment_id FOREIGN KEY (local_attachment_id) REFERENCES attachments (local_id) ON DELETE CASCADE CONSTRAINT draft_attachment_metadata_metadata_id FOREIGN KEY (metadata_id) REFERENCES draft_metadata (id) ON DELETE CASCADE CONSTRAINT draft_attachment_metadata_action_id FOREIGN KEY (action_id) REFERENCES action_queue (id) ON DELETE SET NULL
 );
+
+CREATE TABLE message_body (
+    message_id INTEGER PRIMARY KEY,
+    body TEXT NOT NULL,
+
+CONSTRAINT message_body_id
+    FOREIGN KEY (message_id)
+    REFERENCES messages (local_id)
+    ON DELETE CASCADE
+);

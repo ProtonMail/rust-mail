@@ -31,7 +31,6 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::LabelId;
 pub use proton_api_mail;
 pub use proton_core_common;
-use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use stash::stash::StashError;
 
@@ -120,8 +119,6 @@ pub enum AppError {
     LocalLabelHasNoCounters(LocalLabelId),
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
-    #[error("Cache error: {0}")]
-    Cache(#[from] CacheError),
     #[error("Can't deserialize from MessagePack: {0}")]
     RmpDeserialization(#[from] rmp_serde::decode::Error),
     #[error("Can't serialize into MessagePack: {0}")]

@@ -1,7 +1,6 @@
 use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use proton_core_common::datatypes::LightOrDarkMode;
-use std::path::PathBuf;
 
 impl MailUserContext {
     /// Get sender image for an address.
@@ -29,34 +28,27 @@ impl MailUserContext {
     pub async fn image_for_sender(
         &self,
         address: String,
-        bimi_selector: Option<&str>,
+        bimi_selector: Option<String>,
         display_sender_image: bool,
         size: Option<u32>,
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
-    ) -> MailContextResult<Option<PathBuf>> {
-        let tether = self.user_stash().connection();
-        let mail_settings = MailSettings::get_or_default(&tether).await;
+    ) -> MailContextResult<Option<String>> {
+        if !display_sender_image {
+            return Ok(None);
+        }
+
+        let tether = &mut self.user_stash().connection();
+        let mail_settings = MailSettings::get_or_default(tether).await;
 
         if mail_settings.hide_sender_images {
             // sender images are to be hidden, return nothing
             return Ok(None);
         }
 
-        if !display_sender_image {
-            return Ok(None);
-        }
-
         Ok(self
             .user_context
-            .image_for_sender(
-                &address,
-                bimi_selector,
-                format,
-                mode,
-                size,
-                self.user_stash(),
-            )
+            .image_for_sender(address, bimi_selector, format, mode, size, tether)
             .await?)
     }
 }

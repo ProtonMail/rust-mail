@@ -10,8 +10,12 @@ use crate::core::datatypes::{
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
+use crate::LiveQueryCallback;
 use crate::{async_runtime, spawn_async, MapIntoResult};
-use crate::{uniffi_async, LiveQueryCallback};
+use crate::{
+    core::datatypes::{AccountDetails, Id, User},
+    uniffi_async,
+};
 use futures::TryFutureExt;
 use proton_api_core::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -195,10 +199,11 @@ impl MailUserSession {
         uniffi_async(async move {
             ctx.get_attachment(local_attachment_id.into())
                 .await
+                .map(DecryptedAttachment::try_from)?
                 .map_err(RealProtonMailError::from)
         })
         .await
-        .map_into()
+        .map_err(Into::into)
     }
 
     /// Get the connection status of the current user session.
@@ -324,12 +329,20 @@ impl MailUserSession {
     }
 }
 
-impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
-    fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
-        Self {
+impl TryFrom<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proton_mail_common::DecryptedAttachment) -> Result<Self, Self::Error> {
+        let data_path = value
+            .data_path
+            .into_os_string()
+            .into_string()
+            .map_err(|str| anyhow::anyhow!("Path contained invalid utf8: {str:?}"))?;
+
+        Ok(DecryptedAttachment {
             attachment_metadata: value.attachment_metadata.into(),
-            data_path: value.data_path.to_str().expect("valid path").to_owned(),
-        }
+            data_path,
+        })
     }
 }
 

@@ -19,6 +19,7 @@ use futures::future::try_join_all;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
+use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter, SearchOptions,
 };
@@ -308,7 +309,7 @@ impl MessagesState {
                     fs::write(&before, &decrypted.body).unwrap();
 
                     let after = temp_dir.join("after.html");
-                    fs::write(&after, &html.body).unwrap();
+                    safe_write(&after, &html.body).unwrap();
 
                     _ = std::process::Command::new(cmd_name)
                         .args([&after])
@@ -453,9 +454,8 @@ impl StateHandler for MessagesState {
                                 .await
                                 .map(|att| {
                                     format!(
-                                        "{} -> {}",
-                                        att.attachment_metadata.filename,
-                                        att.data_path.to_string_lossy(),
+                                        "{} -> {:?}",
+                                        att.attachment_metadata.filename, att.data_path,
                                     )
                                 })
                         }

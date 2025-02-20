@@ -236,7 +236,6 @@ async fn create_reply_with_mime_and_body(
     let source_body = DecryptedMessageBody {
         body: source_body,
         metadata: source_body_metadata,
-        pgp_attachments: None,
         pgp_subject: None,
         in_flight: Default::default(),
     };
@@ -385,52 +384,18 @@ fn normal_attachment_id() -> LocalAttachmentId {
 fn inline_attachment() -> Attachment {
     Attachment {
         local_id: Some(inline_attachment_id()),
-        remote_id: None,
-        local_address_id: None,
-        remote_address_id: None,
-        local_conversation_id: None,
-        remote_conversation_id: None,
-        local_message_id: None,
-        disposition: Disposition::Inline,
-        enc_signature: None,
         mime_type: attachment::MimeType::from_str("image/jpeg").unwrap(),
         filename: "image.jpeg".to_owned(),
-        signature: None,
-        size: 123,
-        content_id: None,
-        transfer_encoding: None,
-        image_width: None,
-        image_height: None,
-        row_id: None,
-        remote_message_id: None,
-        is_auto_forwardee: false,
-        sender: None,
-        key_packets: None,
+        disposition: Disposition::Inline,
+        ..Default::default()
     }
 }
 fn normal_attachment() -> Attachment {
     Attachment {
         local_id: Some(normal_attachment_id()),
-        remote_id: None,
-        local_address_id: None,
-        remote_address_id: None,
-        local_conversation_id: None,
-        remote_conversation_id: None,
-        local_message_id: None,
         disposition: Disposition::Attachment,
-        enc_signature: None,
         mime_type: attachment::MimeType::from_str("application/pdf").unwrap(),
         filename: "doc.pdf".to_owned(),
-        signature: None,
-        size: 1024,
-        content_id: None,
-        transfer_encoding: None,
-        image_width: None,
-        image_height: None,
-        row_id: None,
-        remote_message_id: None,
-        is_auto_forwardee: false,
-        sender: None,
-        key_packets: None,
+        ..Default::default()
     }
 }
