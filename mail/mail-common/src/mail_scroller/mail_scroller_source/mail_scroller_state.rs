@@ -82,14 +82,14 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
-    ///// If state is offline, return the mutable reference to the unordered data.
-    // pub fn offline_mut(&mut self) -> Option<&mut CachedScrollData<T>> {
-    //     match self {
-    //         MailScrollerState::Offline { unordered, .. } => Some(unordered),
-    //         MailScrollerState::NotSynced(unordered) => Some(unordered),
-    //         _ => None,
-    //     }
-    // }
+    /// If state is offline, return the mutable reference to the unordered data.
+    pub fn offline_mut(&mut self) -> Option<&mut CachedScrollData<T>> {
+        match self {
+            MailScrollerState::Offline { unordered, .. } => Some(unordered),
+            MailScrollerState::NotSynced(unordered) => Some(unordered),
+            _ => None,
+        }
+    }
 
     /// Try to switch from online to offline state.
     pub fn to_offline(&mut self) {

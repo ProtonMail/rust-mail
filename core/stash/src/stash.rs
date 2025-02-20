@@ -446,6 +446,12 @@ pub struct WatcherHandle {
     pub handle: DropRemoveTableObserverHandle,
 }
 
+impl WatcherHandle {
+    pub fn new(receiver: QueueReceiver<()>, handle: DropRemoveTableObserverHandle) -> Self {
+        Self { receiver, handle }
+    }
+}
+
 /// A connection to the database. It is used to execute queries against the database, and obtained
 /// from [`Stash::connection`].
 ///

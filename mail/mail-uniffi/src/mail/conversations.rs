@@ -606,7 +606,7 @@ pub async fn scroll_conversations_for_label(
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let scroller =
+        let mut scroller =
             MailScroller::conversations(Arc::clone(&context), label_id.into(), filter.into(), 50)
                 .await?;
         let handle = scroller.watch()?;

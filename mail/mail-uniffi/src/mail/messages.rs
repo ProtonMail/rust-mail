@@ -412,7 +412,7 @@ pub async fn scroll_messages_for_label(
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let scroller =
+        let mut scroller =
             MailScroller::messages(Arc::clone(&context), label_id.into(), filter.into(), 50)
                 .await?;
         let handle = scroller.watch()?;
@@ -484,7 +484,7 @@ pub async fn scroller_search(
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let scroller = MailScroller::search(Arc::clone(&context), options.into(), 50).await?;
+        let mut scroller = MailScroller::search(Arc::clone(&context), options.into(), 50).await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(SearchScroller {
