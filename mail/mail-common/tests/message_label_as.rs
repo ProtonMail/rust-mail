@@ -168,6 +168,11 @@ async fn label_as_without_archive() {
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Validation:
     //   * All messages are in first label (=> 4)
@@ -324,6 +329,11 @@ async fn label_as_with_archive() {
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Validation:
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)

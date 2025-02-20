@@ -99,19 +99,12 @@
 //!     let queue = Queue::new(stash).await.unwrap();
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
+//!     // create executor
+//!     let executor = queue.new_executor();
 //!     // Execute action immediately
-//!     let queued_id = match queue.apply_action(MyAction{value:10}).await.unwrap().remote {
-//!         ActionRemoteOutput::Executed(value) => {
-//!             println!("Action was executed and returned: {:?}", value);
-//!             return;
-//!         }
-//!         ActionRemoteOutput::Queued(id) => {
-//!             println!("Action was queued with id: {id}");
-//!             id
-//!         }
-//!     };
+//!     let queued_id = queue.queue_action(MyAction{value:10}).await.unwrap().id;
 //!
-//!     // Queue an action which depends on anotehr action.
+//!     // Queue an action which depends on another action.
 //!     let queued_id2= queue.queue_action_with_metadata(MyAction{value:30},
 //!         Metadata::builder()
 //!             .with_dependency(queued_id)
@@ -120,7 +113,7 @@
 //!     ).await.unwrap();
 //!
 //!     // Flush all available actions.
-//!     queue.execute_all().await.unwrap();
+//!     executor.execute_all().await.unwrap();
 //! }
 //!
 //! ```

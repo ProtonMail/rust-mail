@@ -95,9 +95,9 @@ impl Action for LabelAs {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type RemoteOutput = bool;
+    type RemoteOutput = ();
 
-    type LocalOutput = ();
+    type LocalOutput = bool;
     type Error = ActionError;
     type Context = MailUserContext;
 }
@@ -147,7 +147,7 @@ impl ActionHandler for Handler {
         _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<bool, <Self::Action as Action>::Error> {
         action.memorize_original_data(tx).await?;
         action.data.resolve_remote_ids(tx).await?;
 
@@ -162,7 +162,17 @@ impl ActionHandler for Handler {
         )
         .await?;
 
-        Ok(())
+        if let Some(source_label_counters) =
+            MessageCounters::find_by_id(action.data.source_label_id, tx).await?
+        {
+            Ok(source_label_counters.total == 0)
+        } else {
+            warn!(
+                "Could not find label with id: {}",
+                action.data.source_label_id
+            );
+            Ok(true)
+        }
     }
 
     async fn revert_local(
@@ -262,16 +272,6 @@ impl ActionHandler for Handler {
             }
         }
 
-        if let Some(source_label_counters) =
-            MessageCounters::find_by_id(action.data.source_label_id, guard.tether()).await?
-        {
-            Ok(source_label_counters.total == 0)
-        } else {
-            warn!(
-                "Could not find label with id: {}",
-                action.data.source_label_id
-            );
-            Ok(true)
-        }
+        Ok(())
     }
 }

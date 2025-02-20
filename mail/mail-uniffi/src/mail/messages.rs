@@ -931,7 +931,6 @@ pub async fn mark_messages_read(
             message_ids.map_vec(),
         )
         .await
-        .map(|_| ())
         .map_err(RealProtonMailError::from)
     })
     .await
@@ -965,7 +964,6 @@ pub async fn mark_messages_unread(
             message_ids.map_vec(),
         )
         .await
-        .map(|_| ())
         .map_err(RealProtonMailError::from)
     })
     .await

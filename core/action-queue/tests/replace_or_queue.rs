@@ -15,6 +15,7 @@ async fn replace_updates_local_state() {
     // When replacing, check that local state is updated when the action is stored.
 
     let queue = new_queue(new_factory::<TestAction>()).await;
+    let executor = queue.new_executor();
 
     // Check direct execution.
     let queued_output = queue
@@ -38,7 +39,7 @@ async fn replace_updates_local_state() {
     assert_eq!(replaced_output.id, queued_output.id);
 
     // Execute the action.
-    let executed = queue.execute_all().await.unwrap();
+    let executed = executor.execute_all().await.unwrap();
     assert_eq!(executed, 1);
 }
 
@@ -47,6 +48,7 @@ async fn replace_updates_queues_if_action_no_longer_present() {
     // When attempting to replace an action that does not exist, it will be
     // queued instead.
     let queue = new_queue(new_factory::<TestAction>()).await;
+    let executor = queue.new_executor();
 
     // Check direct execution.
     let queued_output = queue
@@ -72,7 +74,7 @@ async fn replace_updates_queues_if_action_no_longer_present() {
     assert_ne!(replaced_output.id, queued_output.id);
 
     // Execute the action.
-    let executed = queue.execute_all().await.unwrap();
+    let executed = executor.execute_all().await.unwrap();
     assert_eq!(executed, 1);
 }
 
@@ -156,7 +158,8 @@ async fn replace_updates_local_state_with_resources() {
     }
 
     // Execute the action.
-    let executed = queue.execute_all().await.unwrap();
+    let executor = queue.new_executor();
+    let executed = executor.execute_all().await.unwrap();
     assert_eq!(executed, 1);
 }
 

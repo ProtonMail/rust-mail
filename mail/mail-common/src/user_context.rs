@@ -11,7 +11,7 @@ use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfi
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
-use proton_action_queue::queue::{Queue, QueuedResult};
+use proton_action_queue::queue::{Queue, QueueExecutor, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -45,6 +45,7 @@ pub struct MailUserContext {
     cache: Cache,
     event_loop: EventLoop,
     action_queue: Queue,
+    default_queue_executor: QueueExecutor,
     prefetch: PrefetchNotify,
 }
 
@@ -58,6 +59,7 @@ impl MailUserContext {
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
+        let queue_executor = action_queue.new_executor();
         let user_context_weak = Arc::downgrade(&user_context);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
@@ -67,6 +69,7 @@ impl MailUserContext {
             action_queue,
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
+            default_queue_executor: queue_executor,
         });
 
         this.action_queue
@@ -121,11 +124,17 @@ impl MailUserContext {
     }
 
     pub async fn execute_all_actions(&self) -> QueuedResult<usize> {
-        self.action_queue.execute_all().await
+        self.default_queue_executor.execute_all().await
     }
 
+    /// Get the action queue instance.
     pub fn action_queue(&self) -> &Queue {
         &self.action_queue
+    }
+
+    /// Get the default queue executor.
+    pub fn default_queue_executor(&self) -> &QueueExecutor {
+        &self.default_queue_executor
     }
 
     /// Get the API service.

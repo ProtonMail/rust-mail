@@ -17,18 +17,24 @@ async fn network_failure_causes_revert_on_apply() {
 
     let key = "foo";
     let value = 30_u32;
-    let result = queue
-        .apply_action(RevertAction {
+    queue
+        .queue_action(RevertAction {
             key: key.to_string(),
             value,
         })
-        .await;
-    assert!(matches!(
-        result,
-        Err(ActionError::<RevertAction>::Action(
-            DefaultError::APIFailure
-        ))
-    ));
+        .await
+        .unwrap();
+    let result = queue.new_executor().execute_one().await.unwrap_err();
+    match result {
+        QueuedError::Action(e, _) => {
+            let err = e.as_action_error::<RevertAction>().unwrap();
+            assert!(matches!(
+                err,
+                ActionError::<RevertAction>::Action(DefaultError::APIFailure)
+            ));
+        }
+        _ => panic!("unexpected result"),
+    }
     assert!(queue
         .stash()
         .connection()
@@ -41,6 +47,7 @@ async fn network_failure_causes_revert_on_apply() {
 async fn network_failure_causes_revert_on_queue() {
     // Check that if remote fails to execute when action is queued, local state is reverted.
     let queue = new_queue_typed::<RevertAction>().await;
+    let executor = queue.new_executor();
 
     let key = "foo";
     let value = 30_u32;
@@ -65,7 +72,7 @@ async fn network_failure_causes_revert_on_queue() {
         value
     );
 
-    let QueuedError::Action(error, metadata) = queue.execute_all().await.unwrap_err() else {
+    let QueuedError::Action(error, metadata) = executor.execute_all().await.unwrap_err() else {
         panic!("unexpected queued action error");
     };
 
@@ -90,6 +97,7 @@ async fn revert_cancels_all_dependent_actions() {
     // Check that if an action fails to execute and all the subsequent actions
     // that depend on the failed action also revert.
     let queue = new_queue_typed::<ChainCancelAction>().await;
+    let executor = queue.new_executor();
 
     let key = "foo";
     let value = 30_u32;
@@ -155,7 +163,7 @@ async fn revert_cancels_all_dependent_actions() {
     );
 
     // Cancel
-    queue.execute_all().await.expect_err("Should fail");
+    executor.execute_all().await.expect_err("Should fail");
     // Check state is reverted.
     assert_eq!(
         queue

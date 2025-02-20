@@ -23,9 +23,7 @@ use anyhow::{anyhow, Context};
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use proton_action_queue::queue::{
-    ActionError as QueueActionError, ActionOutput, Queue, QueuedActionOutput,
-};
+use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_core::services::proton::Proton;
@@ -196,9 +194,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Star multiple conversations.
@@ -215,14 +213,14 @@ impl Conversation {
     pub async fn action_star(
         queue: &proton_action_queue::queue::Queue,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Unstar multiple conversations.
@@ -239,13 +237,13 @@ impl Conversation {
     pub async fn action_unstar(
         queue: &Queue,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Unlabel multiple conversations.
@@ -264,9 +262,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let action = Unlabel::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Mark multiple conversations as read.
@@ -286,14 +284,11 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<MarkRead>, QueueActionError<MarkRead>> {
+    ) -> Result<(), QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
-        match queue.apply_action(action).await {
-            Err(QueueActionError::Action(ActionError::NoInput)) => {
-                warn!("Action mark read with no actionable input");
-                Ok(ActionOutput::default())
-            }
-            other => other,
+        match queue.queue_action(action).await {
+            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Err(other) => Err(other),
         }
     }
 
@@ -313,14 +308,11 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<MarkUnread>, QueueActionError<MarkUnread>> {
+    ) -> Result<(), QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
-        match queue.apply_action(action).await {
-            Err(QueueActionError::Action(ActionError::NoInput)) => {
-                warn!("Action mark read with no actionable input");
-                Ok(ActionOutput::default())
-            }
-            other => other,
+        match queue.queue_action(action).await {
+            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Err(other) => Err(other),
         }
     }
 
@@ -363,9 +355,9 @@ impl Conversation {
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalConversationId>,
-    ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
+    ) -> Result<QueuedActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Soft delete multiple conversations.
@@ -384,9 +376,9 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
-    ) -> Result<ActionOutput<Delete>, QueueActionError<Delete>> {
+    ) -> Result<QueuedActionOutput<Delete>, QueueActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Action to change labels on a batch of conversations.
@@ -423,11 +415,11 @@ impl Conversation {
             partially_selected_label_ids,
             must_archive,
         );
-        let ActionOutput { local, .. } = queue
-            .apply_action(action)
+        let output = queue
+            .queue_action(action)
             .await
             .map_err(|e| AppError::Other(anyhow!(e)))?;
-        Ok(local)
+        Ok(output.local)
     }
 
     /// Locally apply LabelAs action for conversations

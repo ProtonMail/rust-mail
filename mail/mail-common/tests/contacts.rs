@@ -122,6 +122,11 @@ async fn delete_contacts() {
     Contact::action_delete(user_ctx.action_queue(), vec![contact.local_id.unwrap()])
         .await
         .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await

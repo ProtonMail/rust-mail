@@ -81,6 +81,11 @@ async fn label_message() {
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message have the label
@@ -138,6 +143,12 @@ async fn unlabel_message() {
     .await
     .unwrap();
 
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
+
     let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&label_id));
     assert_eq!(message.custom_labels.len(), 1);
@@ -152,6 +163,11 @@ async fn unlabel_message() {
     )
     .await
     .unwrap();
+    user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message have the label

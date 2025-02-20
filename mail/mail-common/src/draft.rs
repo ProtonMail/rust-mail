@@ -17,7 +17,7 @@ use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use derive_more::derive::TryFrom;
 use futures::future::join3;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
-use proton_action_queue::queue::{ActionError, ActionOutput, Queue, QueuedActionOutput};
+use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AddressId, AuthId};
@@ -933,8 +933,8 @@ impl Draft {
     pub async fn action_undo_send(
         queue: &Queue,
         message_id: LocalMessageId,
-    ) -> Result<ActionOutput<UndoSend>, ActionError<UndoSend>> {
-        queue.apply_action(UndoSend::new(message_id)).await
+    ) -> Result<QueuedActionOutput<UndoSend>, ActionError<UndoSend>> {
+        queue.queue_action(UndoSend::new(message_id)).await
     }
 
     /// Load an embedded attachment in this draft message.

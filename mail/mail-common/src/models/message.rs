@@ -17,9 +17,7 @@ use crate::models::*;
 use crate::{find_in_query, MailContextError};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
-use proton_action_queue::queue::{
-    ActionError as QueueActionError, ActionOutput, ActionRemoteOutput, Queue, QueuedActionOutput,
-};
+use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -235,9 +233,9 @@ impl Message {
         queue: &Queue,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, message_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Star multiple messages.
@@ -255,14 +253,14 @@ impl Message {
     pub async fn action_star(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
+    ) -> Result<QueuedActionOutput<ActionLabel>, QueueActionError<ActionLabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await
             .map_err(|e| QueueActionError::Queue(e.into()))?
             .expect("Star system label not found");
         let action = ActionLabel::new(label_id, message_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Unstar multiple messages.
@@ -279,13 +277,13 @@ impl Message {
     pub async fn action_unstar(
         queue: &Queue,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let tether = queue.stash().connection();
         let label_id = Label::remote_id_counterpart(LabelId::starred(), &tether)
             .await?
             .expect("Star system label not found");
         let action = Unlabel::new(label_id, message_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Unlabel multiple messages.
@@ -304,9 +302,9 @@ impl Message {
         queue: &Queue,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Unlabel>, QueueActionError<Unlabel>> {
+    ) -> Result<QueuedActionOutput<Unlabel>, QueueActionError<Unlabel>> {
         let action = Unlabel::new(label_id, message_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Mark multiple messages as read.
@@ -325,11 +323,10 @@ impl Message {
         queue: &Queue,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Read>, QueueActionError<Read>> {
+    ) -> Result<(), QueueActionError<Read>> {
         let action = Read::new(label_id, message_ids);
-        match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+        match queue.queue_action(action).await {
+            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }
@@ -351,11 +348,10 @@ impl Message {
         queue: &Queue,
         label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Unread>, QueueActionError<Unread>> {
+    ) -> Result<(), QueueActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
-        match queue.apply_action(action).await {
-            Ok(result) => Ok(result),
-            Err(QueueActionError::Action(ActionError::NoInput)) => Ok(ActionOutput::default()),
+        match queue.queue_action(action).await {
+            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }
@@ -399,9 +395,9 @@ impl Message {
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalMessageId>,
-    ) -> Result<ActionOutput<Move>, QueueActionError<Move>> {
+    ) -> Result<QueuedActionOutput<Move>, QueueActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
-        queue.apply_action(action).await
+        queue.queue_action(action).await
     }
 
     /// Mark multiple messages as read.
@@ -586,15 +582,11 @@ impl Message {
             partially_selected_label_ids,
             must_archive,
         );
-        match queue
-            .apply_action(action)
+        let output = queue
+            .queue_action(action)
             .await
-            .map_err(|e| AppError::Other(anyhow!(e)))?
-            .remote
-        {
-            ActionRemoteOutput::Executed(result) => Ok(result),
-            ActionRemoteOutput::Queued(id) => Err(AppError::ActionStillQueued(id)),
-        }
+            .map_err(|e| AppError::Other(anyhow!(e)))?;
+        Ok(output.local)
     }
 
     /// Remotely apply LabelAs action for conversations

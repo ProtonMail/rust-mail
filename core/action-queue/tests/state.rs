@@ -6,7 +6,6 @@ use common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::queue::ActionRemoteOutput;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -16,16 +15,15 @@ async fn state_preserved_after_local_change() {
     // to subsequent follow ups.
 
     let queue = new_queue(new_factory::<TestAction>()).await;
+    let executor = queue.new_executor();
 
     // Check direct execution.
-    let output = queue
-        .apply_action(TestAction { v: ACTION_VALUE })
+    queue
+        .queue_action(TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
-    assert!(matches!(
-        output.remote,
-        ActionRemoteOutput::Executed(ACTION_VALUE_FINAL)
-    ));
+
+    executor.execute_one().await.unwrap();
 
     // Check local state is as expected.
     assert_eq!(
@@ -44,7 +42,7 @@ async fn state_preserved_after_local_change() {
         .queue_action(TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
-    queue.execute_all().await.unwrap();
+    executor.execute_all().await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]

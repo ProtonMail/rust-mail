@@ -325,7 +325,7 @@ fn mark_conversation_read(
     let local_label_id = mailbox.label_id();
     Command::task(async move {
         match Conversation::action_mark_read(ctx.action_queue(), local_label_id, vec![id]).await {
-            Ok(_) => Command::None,
+            Ok(()) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");
@@ -344,7 +344,7 @@ fn mark_conversation_unread(
     Command::task(async move {
         match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
         {
-            Ok(_) => Command::None,
+            Ok(()) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
                 tracing::error!("{e:?}");

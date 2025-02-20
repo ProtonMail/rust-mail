@@ -1,4 +1,4 @@
-use proton_action_queue::queue::ActionError;
+use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::{LabelId, UserId};
 use proton_api_core::services::proton::prelude::ApiErrorInfo;
@@ -123,14 +123,18 @@ async fn draft_undo_send_failure() {
     tx.commit().await.unwrap();
 
     // Que undo send action
-    let Err(err) = Draft::action_undo_send(
+    Draft::action_undo_send(
         user_ctx.action_queue(),
         local_sent_message.local_id.unwrap(),
     )
     .await
-    else {
-        panic!("Should have failed.")
-    };
+    .unwrap();
+
+    let err = user_ctx
+        .default_queue_executor()
+        .execute_one()
+        .await
+        .unwrap_err();
 
     let updated_local_message = Message::find_by_id(local_sent_message.local_id.unwrap(), &tether)
         .await
@@ -142,10 +146,17 @@ async fn draft_undo_send_failure() {
     assert!(updated_local_message
         .flags
         .contains(MessageFlags::SENT.into()));
-    assert!(matches!(
-        err,
-        ActionError::Action(MailContextError::Draft(Error::Undo(
-            UndoError::SendCanNoLongerBeUndone
-        )))
-    ));
+
+    match err {
+        QueuedError::Action(err, _) => {
+            let action_err = err.as_action_error::<UndoSend>().unwrap();
+            assert!(matches!(
+                action_err,
+                ActionError::Action(MailContextError::Draft(Error::Undo(
+                    UndoError::SendCanNoLongerBeUndone
+                )))
+            ));
+        }
+        _ => panic!("Unexpected error"),
+    }
 }

@@ -8,9 +8,6 @@ use crate::action::{
 };
 use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction};
 use chrono::DateTime;
-use flume::{Receiver, RecvError, SendError, Sender};
-use futures::future::BoxFuture;
-use futures::FutureExt;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
@@ -21,8 +18,6 @@ use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
-use tokio::sync::oneshot;
-use tokio::task::JoinSet;
 use topological_sort::TopologicalSort;
 use tracing::{debug, debug_span, error, Instrument, Level};
 use uuid::Uuid;
@@ -49,30 +44,10 @@ pub enum Error {
     Deserialization(#[from] rmp_serde::decode::Error),
     #[error("{0}")]
     Context(#[from] ContextError),
-    #[error("Failed to communicate with worker")]
-    WorkerChannel,
     #[error("Unknown action: {0}")]
     UnknownAction(String),
     #[error("Replacing an action with dependencies to self")]
     SelfReferenceDependency,
-}
-
-impl<T> From<SendError<T>> for Error {
-    fn from(_: SendError<T>) -> Self {
-        Self::WorkerChannel
-    }
-}
-
-impl From<RecvError> for Error {
-    fn from(_: RecvError) -> Self {
-        Self::WorkerChannel
-    }
-}
-
-impl From<oneshot::error::RecvError> for Error {
-    fn from(_: oneshot::error::RecvError) -> Self {
-        Self::WorkerChannel
-    }
 }
 
 /// Errors that result from queuing or apply actions via the queue.
@@ -119,28 +94,10 @@ pub enum QueuedError {
     DB(#[from] StashError),
     #[error("Action {0} does not exist")]
     ActionNotFound(ActionId),
+    #[error("Action {0} is being executed")]
+    ActionInExecution(ActionId),
     #[error("{0}")]
     Context(#[from] ContextError),
-    #[error("Failed to communicate with worker")]
-    WorkerChannel,
-}
-
-impl<T> From<SendError<T>> for QueuedError {
-    fn from(_: SendError<T>) -> Self {
-        Self::WorkerChannel
-    }
-}
-
-impl From<RecvError> for QueuedError {
-    fn from(_: RecvError) -> Self {
-        Self::WorkerChannel
-    }
-}
-
-impl From<oneshot::error::RecvError> for QueuedError {
-    fn from(_: oneshot::error::RecvError) -> Self {
-        Self::WorkerChannel
-    }
 }
 
 /// Helper trait to extract errors from queued actions.
@@ -245,29 +202,9 @@ pub enum BroadcastMessage {
 /// * [`Handler::apply_local_post_remote`]
 ///
 ///
-/// There are two modes of execution immediate and queued.
-///
-/// # Immediate Mode
-///
-/// As the name indicated, immediate mode attempts to execute the actions immediately. However,
-/// if we detect that we can't apply the action on the remote due to lack of network, the action
-/// is automatically queued.
-///
-/// If the action can complete all steps successfully [`Action::RemoteOutput`] is returned as part of
-/// the result.
-///
-/// If the action fails, [`Action::Error`] is returned with [`ActionError`].
-///
-/// See:
-/// * [`Queue::apply_action()`]
-/// * [`Queue::apply_action_with_metadata()`]
-///
-///
-/// # Queued Mode
-///
-/// In this mode the local changes are applied first and the action is queued for execution as
-/// soon as all the conditions are met (Priority, delay and/or dependencies). Queued actions are
-/// persisted into the database until they are executed, cancelled or deleted.
+/// When queueing an action the local changes are applied first and the action is queued for
+/// execution as soon as all the conditions are met (Priority, delay and/or dependencies). Queued
+/// actions are persisted into the database until they are executed, cancelled or deleted.
 ///
 ///
 /// See:
@@ -279,16 +216,14 @@ pub enum BroadcastMessage {
 ///
 /// ## Executing Queued actions
 ///
-/// The queue does not automatically execute actions that are queued. The integrator needs to decide
-/// when the right moment is for the queue operate.
-///
-/// Note that if an action can't be executed due to network issues, no error is returned and
-/// it will be retried on the next invocation.
+/// Execution of the action requires a [`QueueExecutor`] which will pop actions from the
+/// queue and execute them. There is no upper limit on the amount of executors that can
+/// be created.
 ///
 /// See:
-/// * [`Queue::execute_one()`]
-/// * [`Queue::execute_all()`]
-/// * [`Queue::execute_with_limit()`]
+/// * [`QueueExecutor::execute_one()`]
+/// * [`QueueExecutor::execute_all()`]
+/// * [`Queue::new_executor`]
 ///
 /// ## Error Handling
 ///
@@ -311,21 +246,15 @@ pub enum BroadcastMessage {
 /// # Remarks
 ///
 /// There can only be on queue per database connection. Multiple queues in the same database
-/// are currently not supported.
-///
-/// ## Concurrency
-///
-/// The queue supports queuing actions from multiple threads, but modifying the queue (e.g.:
-/// deleting or executing actions) is guarded so that only the operation can be executed in
-/// isolation. If more than one location attempts to call these functions currently
-/// we will return [`QueuedError::Busy`].
+/// are currently not supported. You can achieve the illusion of multiple queues by assigning your
+/// actions to a specific [`ActionGroup`] and creating a [`QueueExecutor`] to operate on this
+/// group.
 ///
 pub struct Queue {
     shared: Arc<Shared>,
     // Keep the default context alive so that it is available for any action
     // which does not need a custom context.
     _default_context: Arc<()>,
-    sender: Sender<Command>,
 }
 
 /// Internal shared data used by the [`Queue`] and [`BackgroundWorker`].
@@ -365,32 +294,6 @@ pub enum ActionRemoteOutput<Remote> {
     Queued(ActionId),
 }
 
-/// Output of applying the [`Action`] with [`Queue::apply_action`] or
-/// [`Queue::apply_action_with_metadata`].
-///
-/// If remote result depends on whether the action was queued or
-/// executed immediately.
-pub struct ActionOutput<T: Action> {
-    /// Result of executing the action locally.
-    pub local: T::LocalOutput,
-    /// Result of executing the action on the remote server.
-    pub remote: ActionRemoteOutput<T::RemoteOutput>,
-}
-
-impl<T> Default for ActionOutput<T>
-where
-    T: Action,
-    T::LocalOutput: Default,
-    T::RemoteOutput: Default,
-{
-    fn default() -> Self {
-        Self {
-            local: T::LocalOutput::default(),
-            remote: ActionRemoteOutput::Executed(T::RemoteOutput::default()),
-        }
-    }
-}
-
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
 /// [`Queue::queue_action_with_metadata`].
 ///
@@ -428,15 +331,9 @@ impl Queue {
             execution_contexts: RwLock::new(HashMap::new()),
             broadcast_sender: sender,
         });
-        let (sender, receiver) = flume::bounded::<Command>(16);
-        let mut worker = BackgroundWorker::new(receiver, Arc::clone(&shared.clone()));
-        tokio::spawn(async move {
-            worker.run().await;
-        });
         let queue = Self {
             shared,
             _default_context: default_context,
-            sender,
         };
 
         queue.register_execution_context(default_context_downgraded);
@@ -597,166 +494,31 @@ impl Queue {
         })
     }
 
-    /// Execute an `action` immediately.
-    ///
-    /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// The action will only be queued if the remote fails with a network error.
-    ///
-    /// # Remarks
-    ///
-    /// Note that the `metadata` type is only used if the action is queued.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally or remotely.
-    pub async fn apply_action<T: Action>(
-        &self,
-        action: T,
-    ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
-        self.apply_action_with_metadata::<T>(action, Metadata::default())
-            .await
-    }
-
-    /// Execute an `action` immediately with a custom `metadata`.
-    ///
-    /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// The action will only be queued if the remote fails with a network error.
-    ///
-    /// # Remarks
-    ///
-    /// Note that the `metadata` type is only used if the action is queued.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally or remotely.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
-    "ApplyAction")]
-    pub async fn apply_action_with_metadata<T: Action>(
-        &self,
-        mut action: T,
-        metadata: Metadata,
-    ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
-        debug!("Applying action: {} {metadata:?}", T::TYPE);
-        if !self.shared.has_action::<T>() {
-            error!("Unknown action applied: {}", T::TYPE);
-            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
-        }
-
-        let (sender, receiver) = oneshot::channel();
-
-        let handler = T::Handler::default();
-
-        let context = self
-            .shared
-            .resolve_execution_context::<T>()
-            .map_err(|e| ActionError::Queue(e.into()))?;
-
-        let shared = Arc::clone(&self.shared);
-
-        let future = async move {
-            let output = async {
-                // 1) Apply local action and store in the queue
-                let (local_output, id) = execute_action_local(
-                    &shared,
-                    context.as_ref(),
-                    &handler,
-                    &mut action,
-                    metadata,
-                    None,
-                )
-                .await?;
-                debug!("Action queued with id={id}");
-
-                let mut tether = shared.stash.connection();
-                let tx = tether.transaction().await?;
-                let executor_id = Uuid::new_v4().to_string();
-                let guard = ExecutionGuard::acquire(id, executor_id, &tx).await?;
-                tx.commit().await?;
-
-                // 2) Execute remote counter part
-                let remote_output = execute_action_remote(
-                    &shared,
-                    id,
-                    context.as_ref(),
-                    &handler,
-                    &mut action,
-                    &mut tether,
-                    guard,
-                )
-                .await?;
-
-                Ok(ActionOutput {
-                    local: local_output,
-                    remote: remote_output,
-                })
-            }
-            .await;
-            let _ = sender.send(output).inspect_err(|_| {
-                error!("Failed to send result from apply action back to callee");
-            });
-        }
-        .boxed();
-
-        // Unlike Queued actions which are only execute by the background worker,
-        // immediate actions can cause conflict with the background worker as
-        // they can be picked up as the next action in the list.
-        // To prevent concurrent conflicts, we execute this action on the worker
-        // and wait for the result.
-        self.sender
-            .send_async(Command::Apply(future))
-            .await
-            .map_err(|_| Error::WorkerChannel)?;
-
-        receiver
-            .await
-            .map_err(|_| ActionError::Queue(Error::WorkerChannel))?
-    }
-
-    /// Execute one action from the queue.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queued action could not be executed locally or remotely, or if
-    /// another thread is currently invoking this function.
-    pub async fn execute_one(&self) -> QueuedResult<Option<ActionId>> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender.send_async(Command::ExecuteOne(sender)).await?;
-
-        receiver.await?
-    }
-
-    /// Execute all available actions from the queue.
-    ///
-    /// Returns the number of executed actions.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queued action could not be executed locally or remotely, or if
-    /// another thread is currently invoking this function.
-    pub async fn execute_all(&self) -> QueuedResult<usize> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender.send_async(Command::ExecuteAll(sender)).await?;
-
-        receiver.await?
-    }
-
     /// Delete an action with `action_id` from the queue *without reverting local state*.
     ///
     /// To revert local state use [`Queue::cancel()`] or [`Queue::cancel_with_dependees()`].
     ///
     /// # Errors
     ///
-    /// Returns error if the db operation failed or if another thread is currently invoking
-    /// this function.
+    /// Returns error if the db operation failed or if the action is currently being executed.
     pub async fn delete_action(&self, action_id: ActionId) -> QueuedResult<()> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send_async(Command::Delete(action_id, sender))
-            .await?;
-
-        receiver.await?
+        let mut tether = self.shared.stash.connection();
+        let tx = tether.transaction().await?;
+        // Safety: It's safe to perform this check without an executor guard as sqlite's
+        // single write transactions give us the freedom to safely validate this.
+        if ExecutionGuard::has_executor(action_id, &tx).await? {
+            return Err(QueuedError::ActionInExecution(action_id));
+        }
+        let existing_action_type = StoredAction::delete(&tx, action_id).await?;
+        tx.commit().await?;
+        if let Some(existing_action_type) = existing_action_type {
+            // Send only fails if there are no receivers, which is a valid state.
+            let _ = self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
+                action_id,
+                Arc::new(existing_action_type),
+            ));
+        }
+        Ok(())
     }
 
     /// Returns the number of actions queued.
@@ -797,15 +559,27 @@ impl Queue {
     ///
     /// # Errors
     ///
-    /// Returns error if the db query failed or the action could not be found or another thread
-    /// is currently invoking this function.
+    /// Returns error if the db query failed or the action could not be found or the action
+    /// is currently being executed.
     pub async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<ActionId>> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send_async(Command::Cancel(action_id, sender))
-            .await?;
-
-        receiver.await?
+        let mut tether = self.shared.stash.connection();
+        let tx = tether.transaction().await?;
+        // Safety: It's safe to perform this check without an executor guard as sqlite's
+        // single write transactions give us the freedom to safely validate this.
+        if ExecutionGuard::has_executor(action_id, &tx).await? {
+            return Err(QueuedError::ActionInExecution(action_id));
+        }
+        let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
+        tx.commit().await?;
+        let cancelled_ids = cancelled_actions.iter().map(|v| v.id).collect();
+        for cancelled_action in cancelled_actions {
+            // Send only fails if there are no receivers, which is a valid state.
+            let _ = self
+                .shared
+                .broadcast_sender
+                .send(BroadcastMessage::Cancelled(cancelled_action));
+        }
+        Ok(cancelled_ids)
     }
 
     /// Retrieve the next action to execute.
@@ -822,9 +596,22 @@ impl Queue {
     pub fn new_broadcast_receiver(&self) -> tokio::sync::broadcast::Receiver<BroadcastMessage> {
         self.shared.broadcast_sender.subscribe()
     }
+
+    /// Create a new executor for this queue for a given `action_group`.
+    #[must_use]
+    pub fn new_executor_with_group(&self, action_group: ActionGroup) -> QueueExecutor {
+        QueueExecutor::new(action_group, Arc::clone(&self.shared))
+    }
+
+    /// Create a new executor for this queue for the default action group.
+    #[must_use]
+    pub fn new_executor(&self) -> QueueExecutor {
+        self.new_executor_with_group(ActionGroup::default())
+    }
 }
 
 /// Indicates the state of the action.
+#[derive(Debug, Clone, Copy)]
 pub enum QueuedActionState {
     /// The action was executed, which led to either a success or failure result.
     Executed(ActionId),
@@ -926,136 +713,58 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
     }
 }
 
-/// Worker commands
-enum Command {
-    /// Run immediate action
-    Apply(BoxFuture<'static, ()>),
-    /// Execute one queued action
-    ExecuteOne(oneshot::Sender<QueuedResult<Option<ActionId>>>),
-    /// Execute all queued actions
-    ExecuteAll(oneshot::Sender<QueuedResult<usize>>),
-    /// Cancel an action and all the actions which depend on this action
-    Cancel(ActionId, oneshot::Sender<QueuedResult<Vec<ActionId>>>),
-    /// Delete an action without cancelling
-    Delete(ActionId, oneshot::Sender<QueuedResult<()>>),
-}
-
-impl Debug for Command {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Command::Apply(_) => {
-                write!(f, "Command::Apply")
-            }
-            Command::ExecuteOne(_) => {
-                write!(f, "Command::ExecuteOne")
-            }
-            Command::ExecuteAll(_) => {
-                write!(f, "Command::ExecuteAll")
-            }
-            Command::Cancel(id, _) => {
-                write!(f, "Command::Cancel({id}")
-            }
-            Command::Delete(id, _) => {
-                write!(f, "Command::Delete({id})")
-            }
-        }
-    }
-}
-
-/// The background worker enforces a single execution scope.
+/// A Queue Executor which can pop actions from the [`Queue`] and execute them.
 ///
-/// While it is safe to queue action in parallel with queued action execution,
-/// the same does not apply for immediate actions. It was possible
-/// in the previous iteration for the background executor to attempt to
-/// execute an immediate action at the same time leading to odd action
-/// cancelled errors.
-///
-/// The background worker now ensures that only one location is actively
-/// executing queued actions at any given time and immediate actions are
-/// also send to the worker. Immediate actions can still run in parallel,
-/// but we don't allow other queued commands to proceed until the current
-/// set of running immediate actions has finished executing.
-///
-struct BackgroundWorker {
-    receiver: Receiver<Command>,
+/// Many executors can be assigned to a queue based on given [`ActionGroup`]. You can
+/// create one with [`Queue::new_executor()`].
+pub struct QueueExecutor {
     shared: Arc<Shared>,
-    /// St of running immediate actions
-    apply_tasks: JoinSet<()>,
+    action_group: ActionGroup,
+    id: String,
 }
 
-impl BackgroundWorker {
-    fn new(receiver: Receiver<Command>, shared: Arc<Shared>) -> Self {
+impl QueueExecutor {
+    fn new(action_group: ActionGroup, shared: Arc<Shared>) -> Self {
         Self {
-            receiver,
+            action_group,
             shared,
-            apply_tasks: JoinSet::default(),
+            id: Uuid::new_v4().to_string(),
         }
     }
-    async fn run(&mut self) {
-        debug!("Starting action queue background worker");
-        // To allow multiple actions to be applied immediately to the queue in
-        // parallel, we spawn a dedicated task for each we receive.
-        // Other operations on the queue need to wait until the current task
-        // set complete to prevent picking up actions that are already
-        // running.
-        while let Ok(cmd) = self.receiver.recv_async().await {
-            debug!("Received command: {cmd:?}");
-            match cmd {
-                // return channel is embedded in the future due to type erasure.
-                Command::Apply(future) => {
-                    self.apply_tasks.spawn(future);
-                }
-                Command::ExecuteAll(tx) => {
-                    self.wait_on_tasks().await;
-                    let r = self.execute_all().await;
-                    if tx.send(r).is_err() {
-                        error!("Failed to send execute one result back to callee");
-                    }
-                }
-                Command::ExecuteOne(tx) => {
-                    self.wait_on_tasks().await;
-                    let mut tether = self.shared.stash.connection();
-                    let r = self.execute_impl(&mut tether).await;
 
-                    if tx
-                        .send(r.map(|v| {
-                            if let Some(QueuedActionState::Executed(value)) = v {
-                                Some(value)
-                            } else {
-                                None
-                            }
-                        }))
-                        .is_err()
-                    {
-                        error!("Failed to send execute one result back to callee");
-                    }
-                }
-                Command::Cancel(id, tx) => {
-                    self.wait_on_tasks().await;
-                    let r = self.cancel(id).await;
-                    if tx
-                        .send(r.map(|v| v.into_iter().map(|v| v.id).collect()))
-                        .is_err()
-                    {
-                        error!("Failed to send cancel result back to callee");
-                    }
-                }
-                Command::Delete(id, tx) => {
-                    self.wait_on_tasks().await;
-                    let r = self.delete(id).await;
-                    if tx.send(r).is_err() {
-                        error!("Failed to send delete result back to callee");
-                    }
-                }
-            }
+    /// Execute one action from the queue.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queued action could not be executed locally or remotely, or if
+    /// another thread is currently invoking this function.
+    pub async fn execute_one(&self) -> QueuedResult<Option<QueuedActionState>> {
+        let mut tether = self.shared.stash.connection();
+        self.execute_impl(&mut tether).await
+    }
+
+    /// Execute all available actions from the queue.
+    ///
+    /// Returns the number of executed actions.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queued action could not be executed locally or remotely, or if
+    /// another thread is currently invoking this function.
+    pub async fn execute_all(&self) -> QueuedResult<usize> {
+        let mut tether = self.shared.stash.connection();
+        let mut counter = 0;
+        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&mut tether).await? {
+            counter += 1;
         }
-        debug!("Terminating action queue background worker");
+        Ok(counter)
     }
 
     /// Load the next action and execute it.
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
+    #[tracing::instrument(level = Level::DEBUG, skip_all)]
     async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some((exec_guard, action)) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e:?}");
@@ -1102,63 +811,11 @@ impl BackgroundWorker {
         .await
     }
 
-    /// See [`Queue::execute_all()`] for more details.
-    async fn execute_all(&self) -> QueuedResult<usize> {
-        let mut tether = self.shared.stash.connection();
-        let mut counter = 0;
-        while let Some(QueuedActionState::Executed(_)) = self.execute_impl(&mut tether).await? {
-            counter += 1;
-        }
-        Ok(counter)
-    }
-
     async fn next_action(
         &self,
         tether: &mut Tether,
     ) -> std::result::Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
-        StoredAction::pop(
-            "BackgroundExecutor".to_owned(),
-            ActionGroup::default().as_ref(),
-            tether,
-        )
-        .await
-    }
-    /// See [`Queue::delete()`] for more details.
-    async fn delete(&mut self, action_id: ActionId) -> QueuedResult<()> {
-        let mut tether = self.shared.stash.connection();
-        let tx = tether.transaction().await?;
-        let existing_action_type = StoredAction::delete(&tx, action_id).await?;
-        tx.commit().await?;
-        if let Some(existing_action_type) = existing_action_type {
-            // Send only fails if there are no receivers, which is a valid state.
-            let _ = self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
-                action_id,
-                Arc::new(existing_action_type),
-            ));
-        }
-        Ok(())
-    }
-
-    /// See [`Queue::cancel()`] for more details.
-    #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<Arc<QueuedMetadata>>> {
-        let mut tether = self.shared.stash.connection();
-        let tx = tether.transaction().await?;
-        let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
-        tx.commit().await?;
-        for cancelled_action in &cancelled_actions {
-            // Send only fails if there are no receivers, which is a valid state.
-            let _ = self
-                .shared
-                .broadcast_sender
-                .send(BroadcastMessage::Cancelled(Arc::clone(cancelled_action)));
-        }
-        Ok(cancelled_actions)
-    }
-
-    /// Wait on all the executing immediate actions.
-    async fn wait_on_tasks(&mut self) {
-        while self.apply_tasks.join_next().await.is_some() {}
+        StoredAction::pop(self.id.clone(), self.action_group.as_ref(), tether).await
     }
 }
 
