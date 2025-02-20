@@ -7,14 +7,12 @@ use crate::errors::UserSessionError;
 use crate::mail::datatypes::Conversation;
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
-use proton_mail_common::datatypes::{ContextualConversation, ReadFilter as RealReadFilter};
+use proton_mail_common::datatypes::ReadFilter as RealReadFilter;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::mail_scroller::{
-    DataScrollerSource, MailScroller as RealMailScroller, MailScrollerSet, SearchScrollerSource,
+    DataScrollerSource, MailScroller as RealMailScroller, SearchScrollerSource,
 };
-use proton_mail_common::models::{
-    ConversationScrollData, Message as RealMessage, MessageScrollData,
-};
+use proton_mail_common::models::{ConversationScrollData, MessageScrollData};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -39,30 +37,6 @@ impl From<ReadFilter> for RealReadFilter {
             ReadFilter::All => RealReadFilter::All,
             ReadFilter::Unread => RealReadFilter::Unread,
             ReadFilter::Read => RealReadFilter::Read,
-        }
-    }
-}
-
-/// Represents a set of conversations to display in the UI.
-///
-/// This is used to update the UI with new conversations.
-/// It distinguishes between appending new conversations to the end of the list
-/// and replacing the current list of conversations with a new one.
-#[derive(Debug, uniffi::Enum)]
-pub enum ConversationScrollerSet {
-    Append(Vec<Conversation>),
-    Replace(Vec<Conversation>),
-}
-
-impl From<MailScrollerSet<ContextualConversation>> for ConversationScrollerSet {
-    fn from(value: MailScrollerSet<ContextualConversation>) -> Self {
-        match value {
-            MailScrollerSet::Append(conversations) => {
-                ConversationScrollerSet::Append(conversations.into_iter().map_into().collect())
-            }
-            MailScrollerSet::Replace(conversations) => {
-                ConversationScrollerSet::Replace(conversations.into_iter().map_into().collect())
-            }
         }
     }
 }
@@ -126,10 +100,17 @@ impl ConversationScroller {
     /// Returns an error if the page after the next page could not be fetched
     /// from the API or database depending if it was already fetched.
     ///
-    pub async fn fetch_more(self: Arc<Self>) -> Result<ConversationScrollerSet, UserSessionError> {
+    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
-            Result::<_, RealProtonMailError>::Ok(scroller.fetch_more().await?.into())
+            Result::<_, RealProtonMailError>::Ok(
+                scroller
+                    .fetch_more()
+                    .await?
+                    .into_iter()
+                    .map_into()
+                    .collect(),
+            )
         })
         .await
         .map_err(UserSessionError::from)
@@ -146,30 +127,6 @@ impl ConversationScroller {
     pub fn has_more(&self) -> bool {
         async_runtime()
             .block_on(async { self.scroller.lock().await.has_more().await.unwrap_or(false) })
-    }
-}
-
-/// Represents a set of messages to display in the UI.
-///
-/// This is used to update the UI with new messages.
-/// It distinguishes between appending new messages to the end of the list
-/// and replacing the current list of messages with a new one.
-#[derive(Debug, uniffi::Enum)]
-pub enum MessageScrollerSet {
-    Append(Vec<Message>),
-    Replace(Vec<Message>),
-}
-
-impl From<MailScrollerSet<RealMessage>> for MessageScrollerSet {
-    fn from(value: MailScrollerSet<RealMessage>) -> Self {
-        match value {
-            MailScrollerSet::Append(messages) => {
-                MessageScrollerSet::Append(messages.into_iter().map_into().collect())
-            }
-            MailScrollerSet::Replace(messages) => {
-                MessageScrollerSet::Replace(messages.into_iter().map_into().collect())
-            }
-        }
     }
 }
 
@@ -232,10 +189,17 @@ impl MessageScroller {
     /// Returns an error if the page after the next page could not be fetched
     /// from the API or database depending if it was already fetched.
     ///
-    pub async fn fetch_more(self: Arc<Self>) -> Result<MessageScrollerSet, UserSessionError> {
+    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
-            Result::<_, RealProtonMailError>::Ok(scroller.fetch_more().await?.into())
+            Result::<_, RealProtonMailError>::Ok(
+                scroller
+                    .fetch_more()
+                    .await?
+                    .into_iter()
+                    .map_into()
+                    .collect(),
+            )
         })
         .await
         .map_err(UserSessionError::from)

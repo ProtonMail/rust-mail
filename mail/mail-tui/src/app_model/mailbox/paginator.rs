@@ -56,12 +56,7 @@ impl<T: MailScrollerSource> Paginator<T> {
     }
 
     pub async fn fetch_more(&self) -> Result<Vec<T::Item>, MailContextError> {
-        self.paginator
-            .lock()
-            .await
-            .fetch_more()
-            .await
-            .map(Into::into)
+        self.paginator.lock().await.fetch_more().await
     }
 
     pub async fn total(&self) -> u64 {
@@ -84,7 +79,7 @@ impl<T: MailScrollerSource> Paginator<T> {
             Command::task(async move {
                 Command::batch([
                     match paginator.lock().await.fetch_more().await {
-                        Ok(v) => to_command(v.into()),
+                        Ok(v) => to_command(v),
                         Err(e) => Command::message(Messages::DisplayError(
                             Some("Paginator Next Page Failed".to_owned()),
                             anyhow::anyhow!("{e}"),

@@ -119,7 +119,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if the data could not be fetched or saved.
-    pub async fn fetch_more(&mut self) -> Result<MailScrollerSet<T::Item>, MailContextError> {
+    pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
         let is_online = self.ctx.session().status().await.is_online();
