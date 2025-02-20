@@ -1,15 +1,18 @@
 #![allow(clippy::print_stdout)]
+use clap::{Args, Parser};
 use futures::TryFutureExt;
+use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::CoreAccountState;
 use proton_mail_common::{MailContext, MailUserContext};
+use std::fs;
 use std::io::{stdin, stdout, Result as IoResult, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tempdir::TempDir;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
@@ -17,30 +20,73 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let dir = TempDir::new("login")?.into_path();
-    let key = SessionEncryptionKey::random();
-    let kch = InMemoryKeyChain::default();
+    let dir = Path::new("/tmp");
+    let kch = OnDiskKeyChain::new("/tmp/kch")?;
     let cfg = Config::default();
+    let ctx = new_mail_ctx(dir, kch, cfg).await?;
 
-    kch.store(key.to_base64())?;
-
-    let mail_ctx = new_mail_ctx(&dir, kch.into(), cfg).await?;
-    let user_ctx = new_user_ctx(Arc::clone(&mail_ctx)).await?;
-
-    let user_obj = user_ctx.user().await?;
-    let user_acc = mail_ctx.get_account(user_ctx.user_id().to_owned()).await?;
-
-    println!("{user_obj:#?}");
-    println!("{user_acc:#?}");
+    Cli::parse().run(ctx).await?;
 
     Ok(())
 }
 
-async fn new_mail_ctx(
+#[derive(Parser)]
+enum Cli {
+    Login(LoginCmd),
+}
+
+impl Cli {
+    async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
+        match self {
+            Self::Login(cmd) => cmd.run(ctx).await,
+        }
+    }
+}
+
+#[derive(Args)]
+struct LoginCmd {
+    username: String,
+}
+
+impl LoginCmd {
+    async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
+        let mut flow = new_login_flow(&ctx, &self.username).await?;
+
+        if flow.is_logged_out() {
+            let pass = read("password")?;
+            let info = LoginExtraInfo::default();
+
+            flow.login(self.username, pass, info).await?;
+        }
+
+        if flow.is_awaiting_2fa() {
+            flow.submit_totp(read("2nd factor")?).await?;
+        }
+
+        if flow.is_awaiting_mailbox_password() {
+            flow.submit_mailbox_password(read("2nd password")?).await?;
+        }
+
+        let user_ctx = ctx
+            .user_context_from_login_flow(&mut flow)
+            .inspect_err(|err| error!("failed to create user context: {err:?}"))
+            .await?;
+
+        MailUserContext::initialize_async(user_ctx, &InitCb)
+            .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
+            .map_err(|(_, err)| err)
+            .await?;
+
+        Ok(())
+    }
+}
+
+async fn new_mail_ctx<T: KeyChain + 'static>(
     dir: &Path,
-    kch: Arc<InMemoryKeyChain>,
+    kch: T,
     cfg: Config,
 ) -> Result<Arc<MailContext>> {
+    let kch = Arc::new(kch);
     let session = dir.join("session");
     let user = dir.join("user");
     let cache_path = dir.join("cache");
@@ -59,49 +105,23 @@ async fn new_mail_ctx(
     .await?)
 }
 
-async fn new_user_ctx(ctx: Arc<MailContext>) -> Result<Arc<MailUserContext>> {
-    let mut flow = ctx.new_login_flow()?;
-
-    while let Err(err) = flow
-        .login(
-            read("username")?,
-            read("password")?,
-            LoginExtraInfo::default(),
-        )
-        .await
-    {
-        warn!("failed to login: {err}");
-    }
-
-    if flow.is_awaiting_2fa() {
-        for _ in 0..3 {
-            match flow.submit_totp(read("2nd factor")?).await {
-                Ok(()) => break,
-                Err(err) => error!("failed to submit TOTP: {err:?}"),
-            }
+async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<Flow> {
+    for acc in ctx.get_accounts().await? {
+        if acc.name_or_addr != username {
+            continue;
         }
+
+        let session = match ctx.get_account_state(acc.remote_id.clone()).await? {
+            Some(CoreAccountState::LoggedIn(_)) => Err("account already logged in")?,
+            Some(CoreAccountState::NeedMbp(mut s)) => s.pop().unwrap(),
+            Some(CoreAccountState::NeedTfa(mut s)) => s.pop().unwrap(),
+            _ => continue,
+        };
+
+        return Ok(ctx.resume_login_flow(acc.remote_id, session).await?);
     }
 
-    if flow.is_awaiting_mailbox_password() {
-        for _ in 0..3 {
-            match flow.submit_mailbox_password(read("2nd password")?).await {
-                Ok(()) => break,
-                Err(err) => error!("failed to submit mailbox password: {err:?}"),
-            }
-        }
-    }
-
-    let user_ctx = ctx
-        .user_context_from_login_flow(&mut flow)
-        .inspect_err(|err| error!("failed to create user context: {err:?}"))
-        .await?;
-
-    MailUserContext::initialize_async(user_ctx.clone(), &InitCb)
-        .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
-        .map_err(|(_, err)| err)
-        .await?;
-
-    Ok(user_ctx)
+    Ok(ctx.new_login_flow()?)
 }
 
 fn read(prompt: &str) -> IoResult<String> {
@@ -112,6 +132,48 @@ fn read(prompt: &str) -> IoResult<String> {
     stdin().read_line(&mut input)?;
 
     Ok(input.trim().to_owned())
+}
+
+struct OnDiskKeyChain {
+    path: PathBuf,
+}
+
+impl OnDiskKeyChain {
+    fn new(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref().to_owned();
+
+        if fs::exists(&path)? {
+            info!("reusing existing keychain file: {}", path.display());
+        } else {
+            fs::write(&path, SessionEncryptionKey::random().to_base64())?;
+        };
+
+        Ok(Self { path })
+    }
+}
+
+impl KeyChain for OnDiskKeyChain {
+    fn store(&self, key: String) -> Result<(), KeyChainError> {
+        fs::write(&self.path, key).map_err(|e| KeyChainError::new(Box::new(e)))?;
+
+        Ok(())
+    }
+
+    fn delete(&self) -> Result<(), KeyChainError> {
+        fs::remove_file(&self.path).map_err(|e| KeyChainError::new(Box::new(e)))?;
+
+        Ok(())
+    }
+
+    fn get(&self) -> Result<Option<String>, KeyChainError> {
+        let Ok(true) = fs::exists(&self.path) else {
+            return Ok(None);
+        };
+
+        fs::read_to_string(&self.path)
+            .map(Some)
+            .map_err(|e| KeyChainError::new(Box::new(e)))
+    }
 }
 
 struct InitCb;
