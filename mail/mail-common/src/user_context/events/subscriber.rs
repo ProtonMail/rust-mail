@@ -7,7 +7,6 @@ use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
-use stash::orm::Model;
 use std::sync::Weak;
 use tracing::{debug, error};
 

@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use super::*;
+use pretty_assertions::assert_eq;
 use proton_mail_test_utils::db::new_test_connection;
-use stash::orm::Model;
 
 #[tokio::test]
 async fn test_mail_settings_store_read() {
@@ -55,6 +55,38 @@ async fn test_mail_settings_store_read() {
     let tx = tether.transaction().await.unwrap();
     settings.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
+    let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
+    assert_eq!(db_settings, settings);
+    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID));
+}
+
+#[tokio::test]
+async fn test_mail_settings_updated() {
+    let mut tether = new_test_connection().await.connection();
+    let mut settings = MailSettings {
+        local_id: None,
+        display_name: "foo".to_owned(),
+        signature: "bar".to_owned(),
+        theme: "goose".to_owned(),
+        ..Default::default()
+    };
+    // Save once
+    let tx = tether.transaction().await.unwrap();
+    settings.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let mut settings = MailSettings {
+        local_id: None,
+        display_name: "bar".into(), // We change foo into bar
+        signature: "bar".to_owned(),
+        theme: "goose".to_owned(),
+        ..Default::default()
+    };
+    // Save second time
+    let tx = tether.transaction().await.unwrap();
+    settings.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
     let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
     assert_eq!(db_settings, settings);
     assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID));

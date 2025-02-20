@@ -13,7 +13,7 @@ use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
 
 const MAIL_SETTINGS_ID: u64 = 1;
@@ -243,6 +243,28 @@ impl MailSettings {
     /// Get the mail settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(MAIL_SETTINGS_ID, tether).await
+    }
+
+    /// Save or update a mail setting.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that the information is updated correctly in the database.
+    ///
+    /// This method ensures that there is only one mail setting in the table.
+    /// Otherwise, it overwrites old record.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails
+    ///
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // // Make sure there will be only one row.
+        if let Some(existing) = Self::get(bond).await? {
+            self.row_id = existing.row_id;
+            self.local_id = Some(MAIL_SETTINGS_ID);
+        }
+
+        <Self as Model>::save(self, bond).await
     }
 
     /// Get the mail settings from database, fallback on default
