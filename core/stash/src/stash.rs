@@ -724,11 +724,9 @@ impl Tether {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        Ok(self
-            .query::<_, ValueRecord<T>>(query, params)
+        self.query::<_, ValueRecord<T>>(query, params)
             .await
             .map(|values| values.into_iter().map(|v| v.value).collect())
-            .unwrap())
     }
 
     /// Utility function to return a single row of a singular type.
