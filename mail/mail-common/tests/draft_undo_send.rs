@@ -78,7 +78,7 @@ async fn draft_undo_send() {
         .contains(MessageFlags::SENT.into()));
 
     // flush queue.
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_single_send_action().await.unwrap();
 }
 
 #[tokio::test]
@@ -130,7 +130,7 @@ async fn draft_undo_send_failure() {
     .await
     .unwrap();
 
-    let err = user_ctx.execute_single_action().await.unwrap_err();
+    let err = user_ctx.execute_single_send_action().await.unwrap_err();
 
     let updated_local_message = Message::find_by_id(local_sent_message.local_id.unwrap(), &tether)
         .await

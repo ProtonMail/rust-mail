@@ -1,9 +1,10 @@
+use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::SystemLabelId;
 use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::LabelId;
@@ -41,7 +42,8 @@ impl Action for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
 
-    const PRIORITY: Priority = Priority::Highest;
+    const PRIORITY: Priority = Priority::High;
+    const GROUP: ActionGroup = SEND_ACTION_GROUP;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = DiscardHandler;
     type RemoteOutput = ();

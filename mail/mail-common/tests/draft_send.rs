@@ -142,7 +142,7 @@ async fn basic_send_check() {
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Save at least once so we can retrieve the message id.
-    user_ctx.execute_all_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     // get draft message id.
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
@@ -160,7 +160,7 @@ async fn basic_send_check() {
     assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
 
     // Execute action.
-    user_ctx.execute_all_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
     let tether = user_ctx.user_stash().connection();
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -313,7 +313,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     draft.send(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_all_actions().await.unwrap_err();
+    user_ctx.execute_all_send_actions().await.unwrap_err();
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
@@ -438,7 +438,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     draft.send(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    let err = MailContextError::from(user_ctx.execute_all_actions().await.unwrap_err());
+    let err = MailContextError::from(user_ctx.execute_all_send_actions().await.unwrap_err());
     let MailContextError::QueuedAction(QueuedError::Action(err, _)) = err else {
         panic!("invalid error");
     };

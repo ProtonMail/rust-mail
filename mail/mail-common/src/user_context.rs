@@ -4,6 +4,7 @@ mod events;
 mod images;
 mod initialization;
 
+use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::user_context::action_queue::new_action_queue;
@@ -11,7 +12,7 @@ use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfi
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor};
+use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -31,6 +32,7 @@ use proton_event_loop::foreground_loop::EventLoop;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
@@ -46,6 +48,7 @@ pub struct MailUserContext {
     event_loop: EventLoop,
     action_queue: Queue,
     default_queue_executor: QueueAutoExecutor,
+    send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
 }
 
@@ -60,6 +63,11 @@ impl MailUserContext {
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
         let action_queue = new_action_queue(stash).await?;
         let queue_executor = action_queue.new_executor();
+        let send_queue_executors = QueueAutoExecutorPool::new(
+            &action_queue,
+            &SEND_ACTION_GROUP,
+            NonZeroUsize::new(4).unwrap(),
+        );
         let user_context_weak = Arc::downgrade(&user_context);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
@@ -70,6 +78,7 @@ impl MailUserContext {
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
             default_queue_executor: queue_executor.into_auto_executor(),
+            send_queue_executors,
         });
 
         this.action_queue
@@ -131,6 +140,7 @@ impl MailUserContext {
     /// Terminate all action queue executors.
     pub fn terminate_queue_executors(&self) {
         self.default_queue_executor.terminate();
+        self.send_queue_executors.terminate();
     }
 
     /// Get the API service.

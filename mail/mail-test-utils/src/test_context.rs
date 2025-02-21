@@ -6,6 +6,7 @@ use proton_api_core::status_observer::StatusObserver;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
+use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::context::MailUserDatabaseInitializer;
 use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
@@ -181,6 +182,17 @@ pub trait MailUserContextTestExtension {
         &self,
         action_group: ActionGroup,
     ) -> QueuedResult<usize>;
+
+    /// Execute a single action from the [`Queue`] with the send action group.
+    async fn execute_single_send_action(&self) -> QueuedResult<Option<QueuedActionState>> {
+        self.execute_single_action_with_group(SEND_ACTION_GROUP)
+            .await
+    }
+
+    /// Execute all available actions from the [`Queue`] with the Send action group.
+    async fn execute_all_send_actions(&self) -> QueuedResult<usize> {
+        self.execute_all_actions_with_group(SEND_ACTION_GROUP).await
+    }
 }
 
 impl MailUserContextTestExtension for MailUserContext {
