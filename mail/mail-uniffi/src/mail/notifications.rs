@@ -50,7 +50,7 @@ impl From<RealDecryptedPushNotification> for DecryptedPushNotification {
     }
 }
 
-#[proton_uniffi_macros::export_result]
+#[uniffi_export]
 pub async fn decrypt_push_notification(
     session: Arc<MailSession>,
     encrypted: EncryptedPushNotification,

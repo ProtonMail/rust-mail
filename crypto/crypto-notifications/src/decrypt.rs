@@ -1,4 +1,3 @@
-use crate::VerifiableNotification;
 use proton_crypto_account::proton_crypto::{
     crypto::{DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerifiedData},
     CryptoError,
@@ -40,14 +39,14 @@ pub trait GettablePGPNotification {
 pub trait DecryptableNotification: GettablePGPNotification {
     /// Decrypt the notification
     ///
-    /// Note, that function does not verify if the signature is correct. Instead, it returns
-    /// [`VerifiableNotification`] which can be used for it.
+    /// Note, that function does not verify notification, nor it provides verifier.
+    /// It is because we are receiving notification encrypted with **public** key.
     ///
     fn decrypt<T, O>(
         &self,
         pgp_provider: &T,
         decryption_keys: &[impl AsRef<T::PrivateKey>],
-    ) -> Result<(DecryptedNotification<O>, VerifiableNotification), NotificationError>
+    ) -> Result<DecryptedNotification<O>, NotificationError>
     where
         T: PGPProviderSync,
         for<'de> O: Deserialize<'de>,
@@ -59,13 +58,10 @@ pub trait DecryptableNotification: GettablePGPNotification {
             .decrypt(data, DataEncoding::Armor)
             .map_err(NotificationError::Decryption)?;
 
-        let signatures = decrypted_notification.signatures().unwrap_or_default();
         let raw_notification_data = decrypted_notification.into_vec();
         let notification = serde_json::from_slice(&raw_notification_data)
             .map_err(NotificationError::Deserialization)?;
 
-        let verifier = VerifiableNotification::new(raw_notification_data, signatures);
-
-        Ok((notification, verifier))
+        Ok(notification)
     }
 }

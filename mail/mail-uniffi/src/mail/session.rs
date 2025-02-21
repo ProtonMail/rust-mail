@@ -695,7 +695,7 @@ impl MailSession {
     /// Get the mail context wrapped in [`Arc`]
     #[must_use]
     pub fn ctx_arc(&self) -> Arc<MailContext> {
-        Arc::clone(&self.ctx)
+        Arc::clone(&self.mail_ctx)
     }
 
     /// Get the session database connection.

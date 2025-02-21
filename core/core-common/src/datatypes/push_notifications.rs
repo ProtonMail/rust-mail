@@ -60,7 +60,7 @@ impl EncryptedPushNotification {
         P: PGPProviderSync,
         for<'de> O: Deserialize<'de>,
     {
-        let (notification, _) = self
+        let notification = self
             .decrypt(pgp_provider, user_keys)
             .inspect_err(|e| error!("Failed to decrypt push notification: {e:?}"))?;
 
