@@ -4,19 +4,21 @@
 //! It's using shared base from [`proton_core_common`] but with the context of mail application
 //!
 
-use proton_core_common::datatypes::{EncryptedPushNotification, NotificationKind};
+use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_crypto_account::proton_crypto;
+use serde::Deserialize;
 use std::sync::Arc;
 use tracing::error;
 
 use crate::{MailContext, MailContextError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DecryptedMailPushNotification {
     // TODO (ET-2204): Obviously this is not the final datastructure shape,
     // just a proof of concept
-    Email,
-    OpenUrl,
+    Email {},
+    OpenUrl {},
 }
 
 pub trait DecryptableMailPushNotification {
@@ -47,9 +49,8 @@ impl DecryptableMailPushNotification for EncryptedPushNotification {
             .inspect_err(|e| error!("Failed to decrypt mail notification: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 
-        Ok(match decrypted_notification.notification.kind {
-            NotificationKind::Email => DecryptedMailPushNotification::Email,
-            NotificationKind::OpenUrl => DecryptedMailPushNotification::OpenUrl,
-        })
+        let decrypted_mail_notification = decrypted_notification.notification.inner;
+
+        Ok(decrypted_mail_notification)
     }
 }

@@ -44,8 +44,8 @@ pub enum DecryptedPushNotification {
 impl From<RealDecryptedPushNotification> for DecryptedPushNotification {
     fn from(value: RealDecryptedPushNotification) -> Self {
         match value {
-            RealDecryptedPushNotification::Email => Self::Email,
-            RealDecryptedPushNotification::OpenUrl => Self::OpenUrl,
+            RealDecryptedPushNotification::Email {} => Self::Email,
+            RealDecryptedPushNotification::OpenUrl {} => Self::OpenUrl,
         }
     }
 }

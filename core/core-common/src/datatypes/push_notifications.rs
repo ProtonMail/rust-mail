@@ -6,12 +6,12 @@ use proton_crypto_notifications::{
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-pub use proton_crypto_notifications::{DecryptedNotification, NotificationKind};
+pub use proton_crypto_notifications::DecryptedNotification;
 
 /// Decrypted push notification
 ///
 #[derive(Debug, Clone)]
-pub struct DecryptedPushNotification {
+pub struct DecryptedPushNotification<T> {
     /// Which account is recepient of the message
     ///
     pub auth_id: AuthId,
@@ -19,7 +19,7 @@ pub struct DecryptedPushNotification {
     ///
     /// This notification is BU agnostic. You may want to deserialize the internal data further.
     ///
-    pub notification: DecryptedNotification,
+    pub notification: DecryptedNotification<T>,
 }
 
 /// Encrypted push notification. This notification is completely encrypted
@@ -47,11 +47,15 @@ impl DecryptableNotification for EncryptedPushNotification {}
 impl EncryptedPushNotification {
     /// Decrypt notification
     ///
-    pub fn into_decrypted_push_notification<P: PGPProviderSync>(
+    pub fn into_decrypted_push_notification<P, O>(
         self,
         user_keys: &UnlockedUserKeys<P>,
         pgp_provider: &P,
-    ) -> Result<DecryptedPushNotification, NotificationError> {
+    ) -> Result<DecryptedPushNotification<O>, NotificationError>
+    where
+        P: PGPProviderSync,
+        for<'de> O: Deserialize<'de>,
+    {
         let (notification, _) = self
             .decrypt(pgp_provider, user_keys)
             .inspect_err(|e| error!("Failed to decrypt push notification: {e:?}"))?;

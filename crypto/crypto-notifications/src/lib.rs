@@ -72,24 +72,10 @@ pub enum NotificationError {
 /// decryption stage
 ///
 #[derive(Deserialize, Clone, Debug)]
-pub struct DecryptedNotification {
-    /// Decrypted notification payload
-    pub data: serde_json::Value,
-
-    /// Notification kind
-    #[serde(rename = "type")]
-    pub kind: NotificationKind,
-}
-
-/// Notification kind
-///
-#[derive(Deserialize, Clone, Copy, Debug)]
-#[serde(rename_all = "snake_case")]
-pub enum NotificationKind {
-    /// New email received
-    Email,
-    /// Used for anti abuse - new sign to your account has happened, opens a web url
-    OpenUrl,
+#[serde(transparent)]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
+pub struct DecryptedNotification<T> {
+    pub inner: T,
 }
 
 /// Notification encrypted by PGP key. Can be decrypted by [`DecryptableNotification::decrypt`].
@@ -106,11 +92,15 @@ pub trait DecryptableNotification: GettablePGPNotification {
     /// Note, that function does not verify if the signature is correct. Instead, it returns
     /// [`VerifiableNotification`] which can be used for it.
     ///
-    fn decrypt<T: PGPProviderSync>(
+    fn decrypt<T, O>(
         &self,
         pgp_provider: &T,
         decryption_keys: &[impl AsRef<T::PrivateKey>],
-    ) -> Result<(DecryptedNotification, VerifiableNotification), NotificationError> {
+    ) -> Result<(DecryptedNotification<O>, VerifiableNotification), NotificationError>
+    where
+        T: PGPProviderSync,
+        for<'de> O: Deserialize<'de>,
+    {
         let data = self.pgp_notification();
         let decrypted_notification = pgp_provider
             .new_decryptor()
