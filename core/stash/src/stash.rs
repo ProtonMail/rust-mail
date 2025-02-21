@@ -53,7 +53,7 @@ use crate as stash;
 type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
 /// defaults to 5,000 milliseconds in the underlying libraries.
-const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The maximum number of simultaneous connections allowed to the database. This
 /// defaults to 10.
