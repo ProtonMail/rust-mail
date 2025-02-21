@@ -16,7 +16,7 @@ use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
 
-const MAIL_SETTINGS_ID: u64 = 1;
+pub const MAIL_SETTINGS_ID: u64 = 1;
 
 /// Mail related use settings.
 ///
@@ -33,8 +33,8 @@ pub struct MailSettings {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    #[IdField]
+    pub local_id: u64,
 
     /// TODO: Document this field.
     #[DbField]
@@ -261,7 +261,7 @@ impl MailSettings {
         // // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
-            self.local_id = Some(MAIL_SETTINGS_ID);
+            self.local_id = MAIL_SETTINGS_ID;
         }
 
         <Self as Model>::save(self, bond).await
@@ -314,7 +314,7 @@ impl TableObserver for MailSettingsWatcher {
 impl From<ApiMailSettings> for MailSettings {
     fn from(value: ApiMailSettings) -> Self {
         Self {
-            local_id: None,
+            local_id: MAIL_SETTINGS_ID,
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,

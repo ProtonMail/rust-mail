@@ -92,6 +92,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
+    MAIL_SETTINGS_ID,
 };
 use proton_mail_common::AppError;
 use smart_default::SmartDefault;
@@ -1352,7 +1353,7 @@ pub struct MailSettings {
 impl From<MailSettings> for RealMailSettings {
     fn from(value: MailSettings) -> Self {
         RealMailSettings {
-            local_id: None,
+            local_id: MAIL_SETTINGS_ID,
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
