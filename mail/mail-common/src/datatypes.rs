@@ -1781,6 +1781,45 @@ pub struct ParsedHeaders {
 
 sql_using_serde!(ParsedHeaders);
 
+/// An error during SQL deserialization.
+/// It means we expected [`MAGIC_ID`] but got {0}
+#[derive(Debug, thiserror::Error)]
+#[error("Expected constant {expected} local id but got {got}")]
+struct NotAMagicLocalIdError {
+    expected: u32,
+    got: u32,
+}
+
+/// Mail settings local id. This is a special value that ALWAYS must be equal the constant
+/// [`MAGIC_ID`]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+pub struct MailSettingsId;
+
+impl MailSettingsId {
+    const MAGIC_ID: u32 = 1;
+}
+
+impl FromSql for MailSettingsId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let got = u32::from(u8::column_result(value)?);
+        if got != Self::MAGIC_ID {
+            return Err(FromSqlError::Other(Box::new(NotAMagicLocalIdError {
+                expected: Self::MAGIC_ID,
+                got,
+            })));
+        }
+        Ok(Self)
+    }
+}
+
+impl ToSql for MailSettingsId {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(i64::from(
+            Self::MAGIC_ID,
+        ))))
+    }
+}
+
 //  TRAITS
 //==============================================================================
 

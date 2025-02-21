@@ -8,7 +8,7 @@ use proton_mail_test_utils::db::new_test_connection;
 async fn test_mail_settings_store_read() {
     let mut tether = new_test_connection().await.connection();
     let mut settings = MailSettings {
-        local_id: MAIL_SETTINGS_ID,
+        local_id: MailSettingsId,
         display_name: "foo".to_owned(),
         signature: "bar".to_owned(),
         theme: "goose".to_owned(),
@@ -57,14 +57,14 @@ async fn test_mail_settings_store_read() {
     tx.commit().await.unwrap();
     let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
     assert_eq!(db_settings, settings);
-    assert_eq!(db_settings.local_id, MAIL_SETTINGS_ID);
+    assert_eq!(db_settings.local_id, MailSettingsId);
 }
 
 #[tokio::test]
 async fn test_mail_settings_updated() {
     let mut tether = new_test_connection().await.connection();
     let mut settings = MailSettings {
-        local_id: MAIL_SETTINGS_ID,
+        local_id: MailSettingsId,
         display_name: "foo".to_owned(),
         signature: "bar".to_owned(),
         theme: "goose".to_owned(),
@@ -76,7 +76,7 @@ async fn test_mail_settings_updated() {
     tx.commit().await.unwrap();
 
     let mut settings = MailSettings {
-        local_id: MAIL_SETTINGS_ID,
+        local_id: MailSettingsId,
         display_name: "bar".into(), // We change foo into bar
         signature: "bar".to_owned(),
         theme: "goose".to_owned(),
@@ -89,5 +89,5 @@ async fn test_mail_settings_updated() {
 
     let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
     assert_eq!(db_settings, settings);
-    assert_eq!(db_settings.local_id, MAIL_SETTINGS_ID);
+    assert_eq!(db_settings.local_id, MailSettingsId);
 }

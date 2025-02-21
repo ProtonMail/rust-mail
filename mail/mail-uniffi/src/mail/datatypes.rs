@@ -76,15 +76,15 @@ use proton_mail_common::datatypes::{
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationLabelsCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
-    LocalMessageId, MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
-    MessageLabelsCount as RealMessageCount, MessageRecipient as RealMessageRecipient,
-    MessageReplyTo as RealMessageReplyTo, MessageSender as RealMessageSender,
-    MimeType as RealMimeType, MobileSetting as RealMobileSetting,
-    MobileSettings as RealMobileSettings, NextMessageOnMove as RealNextMessageOnMove,
-    ParsedHeaderValue as RealParsedHeaderValue, PgpScheme as RealPgpScheme,
-    PmSignature as RealPmSignature, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
-    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
-    ViewMode as RealViewMode,
+    LocalMessageId, MailSettingsId, MessageButtons as RealMessageButtons,
+    MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
+    MessageRecipient as RealMessageRecipient, MessageReplyTo as RealMessageReplyTo,
+    MessageSender as RealMessageSender, MimeType as RealMimeType,
+    MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
+    NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
+    PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
+    ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
+    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -92,7 +92,6 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
-    MAIL_SETTINGS_ID,
 };
 use proton_mail_common::AppError;
 use smart_default::SmartDefault;
@@ -1353,7 +1352,7 @@ pub struct MailSettings {
 impl From<MailSettings> for RealMailSettings {
     fn from(value: MailSettings) -> Self {
         RealMailSettings {
-            local_id: MAIL_SETTINGS_ID,
+            local_id: MailSettingsId,
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
