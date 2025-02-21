@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::{
     ProtonMail,
 };
 use proton_core_common::datatypes::LocalLabelId;
-use stash::stash::{Bond, Tether};
+use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
 use crate::{
@@ -37,11 +37,11 @@ impl RemoteSource for ConversationScrollData {
         page_size: usize,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
-        let mut tether = ctx.user_stash().connection();
+        let stash = ctx.user_stash().clone();
         let handle = ctx.spawn(async move {
             RemoteConversationScrollerSource::sync_first_page(
                 &session,
-                &mut tether,
+                stash,
                 local_label_id,
                 remote_label_id,
                 unread,
@@ -88,11 +88,9 @@ impl RemoteSource for ConversationScrollData {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            let tether = stash.connection();
-
             RemoteConversationScrollerSource::sync_previous_page(
                 &session,
-                tether,
+                stash,
                 local_label_id,
                 remote_label_id,
                 remote_id,
@@ -124,11 +122,9 @@ impl RemoteConversationScrollerSource {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            let tether = stash.connection();
-
             Self::sync_next_page(
                 &session,
-                tether,
+                stash,
                 label_local_id,
                 remote_label_id,
                 remote_id,
@@ -144,10 +140,10 @@ impl RemoteConversationScrollerSource {
         Ok(task)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
     pub(super) async fn sync_first_page(
         session: &Session,
-        tether: &mut Tether,
+        stash: Stash,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
@@ -177,14 +173,14 @@ impl RemoteConversationScrollerSource {
             .into_iter()
             .map(|c| c.into())
             .collect();
-
+        let mut tether = stash.connection();
         Self::save_conversations(
             local_label_id,
             &mut conversations,
             unread,
             context_time,
             true,
-            tether,
+            &mut tether,
         )
         .await?;
 
@@ -194,11 +190,11 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_previous_page(
         session: &Session,
-        mut tether: Tether,
+        stash: Stash,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         first_element_id: ConversationId,
@@ -235,6 +231,7 @@ impl RemoteConversationScrollerSource {
             .map(|c| c.into())
             .collect();
 
+        let mut tether = stash.connection();
         Self::save_conversations(
             local_label_id,
             &mut conversations,
@@ -251,11 +248,11 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn sync_next_page(
         session: &Session,
-        mut tether: Tether,
+        stash: Stash,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: ConversationId,
@@ -303,6 +300,7 @@ impl RemoteConversationScrollerSource {
             .map(|c| c.into())
             .collect();
 
+        let mut tether = stash.connection();
         Self::save_conversations(
             local_label_id,
             &mut conversations,
