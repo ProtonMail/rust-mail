@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::datatypes::{
-    AlmostAllMail, ComposerDirection, ComposerMode, MessageButtons, MimeType, MobileSettings,
-    NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction,
-    ViewLayout, ViewMode,
+    AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
+    MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
+    SwipeAction, ViewLayout, ViewMode,
 };
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
@@ -15,8 +15,6 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
-
-const MAIL_SETTINGS_ID: u64 = 1;
 
 /// Mail related use settings.
 ///
@@ -33,8 +31,8 @@ pub struct MailSettings {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    #[IdField]
+    pub local_id: MailSettingsId,
 
     /// TODO: Document this field.
     #[DbField]
@@ -242,7 +240,7 @@ impl MailSettings {
 
     /// Get the mail settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
-        Self::load(MAIL_SETTINGS_ID, tether).await
+        Self::load(MailSettingsId, tether).await
     }
 
     /// Save or update a mail setting.
@@ -261,7 +259,7 @@ impl MailSettings {
         // // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
-            self.local_id = Some(MAIL_SETTINGS_ID);
+            self.local_id = MailSettingsId;
         }
 
         <Self as Model>::save(self, bond).await
@@ -314,7 +312,7 @@ impl TableObserver for MailSettingsWatcher {
 impl From<ApiMailSettings> for MailSettings {
     fn from(value: ApiMailSettings) -> Self {
         Self {
-            local_id: None,
+            local_id: MailSettingsId,
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
