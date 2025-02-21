@@ -6,7 +6,7 @@ use proton_api_mail::services::proton::{
     common::MessageId, prelude::GetMessagesOptions, ProtonMail,
 };
 use proton_core_common::datatypes::LocalLabelId;
-use stash::stash::{Bond, Tether};
+use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
 use crate::{
@@ -34,11 +34,11 @@ impl RemoteSource for MessageScrollData {
         page_size: usize,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
-        let mut tether = ctx.user_stash().connection();
+        let stash = ctx.user_stash().clone();
         let handle = ctx.spawn(async move {
             RemoteMessageScrollerSource::sync_first_page(
                 &session,
-                &mut tether,
+                stash,
                 local_label_id,
                 remote_label_id,
                 unread,
@@ -52,7 +52,7 @@ impl RemoteSource for MessageScrollData {
         Ok(Some(handle))
     }
 
-    async fn spawn_background_sync(
+    async fn sync_next_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         scroller: &Self,
@@ -69,6 +69,38 @@ impl RemoteSource for MessageScrollData {
             page_size,
         )
         .await
+    }
+
+    async fn sync_previous_page(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        scroller: &Self,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let remote_id = scroller.remote_message_id.clone();
+        let message_time = scroller.message_time;
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            RemoteMessageScrollerSource::sync_previous_page(
+                &session,
+                stash,
+                local_label_id,
+                remote_label_id,
+                remote_id,
+                message_time,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
     }
 }
 
@@ -87,11 +119,9 @@ impl RemoteMessageScrollerSource {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            let tether = stash.connection();
-
             Self::sync_next_page(
                 &session,
-                tether,
+                stash,
                 local_label_id,
                 remote_label_id,
                 remote_id,
@@ -107,10 +137,10 @@ impl RemoteMessageScrollerSource {
         Ok(task)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
     pub(super) async fn sync_first_page(
         session: &Session,
-        tether: &mut Tether,
+        stash: Stash,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         unread: ReadFilter,
@@ -135,21 +165,22 @@ impl RemoteMessageScrollerSource {
         }
 
         let mut messages: Vec<Message> = vec![];
+        let mut tether = stash.connection();
 
         for message in response.messages {
-            messages.push(Message::from_api_metadata(message, tether).await?);
+            messages.push(Message::from_api_metadata(message, &tether).await?);
         }
 
-        Self::save_messages(local_label_id, &mut messages, unread, tether).await?;
+        Self::save_messages(local_label_id, &mut messages, unread, true, &mut tether).await?;
 
         Ok(messages)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,
-        mut tether: Tether,
+        stash: Stash,
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: MessageId,
@@ -190,12 +221,58 @@ impl RemoteMessageScrollerSource {
         }
 
         let mut messages: Vec<Message> = vec![];
+        let mut tether = stash.connection();
 
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, &tether).await?);
         }
 
-        Self::save_messages(local_label_id, &mut messages, unread, &mut tether).await?;
+        Self::save_messages(local_label_id, &mut messages, unread, true, &mut tether).await?;
+
+        Ok(messages)
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
+    #[allow(clippy::too_many_arguments)]
+    async fn sync_previous_page(
+        session: &Session,
+        stash: Stash,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        first_element_id: MessageId,
+        first_element_time: u64,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<Message>, MailContextError> {
+        debug!("Syncing previous page");
+        let response = session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                // time == 0 breaks the api query.
+                begin: Some(first_element_time),
+                begin_id: Some(first_element_id.clone()),
+                label_id: Some(vec![remote_label_id]),
+                page_size: page_size as u64 + 1_u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        debug!("Fetched {} elements", response.messages.len());
+
+        if response.messages.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut messages: Vec<Message> = vec![];
+        let mut tether = stash.connection();
+
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, &tether).await?);
+        }
+
+        Self::save_messages(local_label_id, &mut messages, unread, false, &mut tether).await?;
 
         Ok(messages)
     }
@@ -204,6 +281,7 @@ impl RemoteMessageScrollerSource {
         local_label_id: LocalLabelId,
         messages: &mut [Message],
         unread: ReadFilter,
+        update_scroller: bool,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         // We do not want to notify the UI about the not visible items
@@ -226,15 +304,17 @@ impl RemoteMessageScrollerSource {
         let remote_id = last.remote_id.clone().unwrap();
         let display_order = last.display_order;
 
-        Self::update_scroller_data(
-            local_label_id,
-            remote_id.clone(),
-            unread,
-            time,
-            display_order,
-            &tx,
-        )
-        .await?;
+        if update_scroller {
+            Self::update_scroller_data(
+                local_label_id,
+                remote_id.clone(),
+                unread,
+                time,
+                display_order,
+                &tx,
+            )
+            .await?;
+        }
 
         debug!(
             "New last element id={:?}, time={}, order={}",

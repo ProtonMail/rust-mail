@@ -80,6 +80,13 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     /// Get the display order of the item.
     fn display_order(item: &Self::Item) -> u64;
 
+    /// Transform model into ScrollData
+    fn into_scroll_data(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        item: Self::Item,
+    ) -> Option<Self>;
+
     /// List of tables that are watched by the scroll data.
     fn watched_tables() -> Vec<String>;
 }
@@ -223,6 +230,28 @@ impl ScrollData for MessageScrollData {
 
     fn display_order(item: &Self::Item) -> u64 {
         item.display_order
+    }
+
+    fn into_scroll_data(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        item: Self::Item,
+    ) -> Option<Self> {
+        let time = Self::time(&item);
+        let display_order = Self::display_order(&item);
+        if let Some(remote_id) = item.remote_id.clone() {
+            return Some(
+                MessageScrollData::builder()
+                    .local_label_id(local_label_id)
+                    .unread(unread)
+                    .message_time(time)
+                    .display_order(display_order)
+                    .remote_message_id(remote_id)
+                    .build(),
+            );
+        }
+
+        None
     }
 
     fn watched_tables() -> Vec<String> {
@@ -382,6 +411,28 @@ impl ScrollData for ConversationScrollData {
         item.display_order
     }
 
+    fn into_scroll_data(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        item: Self::Item,
+    ) -> Option<Self> {
+        let time = Self::time(&item);
+        let display_order = Self::display_order(&item);
+        if let Some(remote_id) = item.remote_id.clone() {
+            return Some(
+                ConversationScrollData::builder()
+                    .local_label_id(local_label_id)
+                    .unread(unread)
+                    .conversation_time(time)
+                    .display_order(display_order)
+                    .remote_conversation_id(remote_id)
+                    .build(),
+            );
+        }
+
+        None
+    }
+
     fn watched_tables() -> Vec<String> {
         vec![
             Conversation::table_name().to_owned(),
@@ -473,7 +524,7 @@ impl<T: ScrollData> ScrollCursor<T> {
     /// Return error if the query failed.
     ///
     pub async fn visible_elements(&self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
-        self.visible_elements_limit(None, None, tether).await
+        self.visible_elements_limit(None, None, false, tether).await
     }
 
     /// Internal function to get the visible elements with limit and offset.
@@ -482,9 +533,10 @@ impl<T: ScrollData> ScrollCursor<T> {
         &self,
         limit: Option<usize>,
         offset: Option<u64>,
+        require_remote_id: bool,
         tether: &Tether,
     ) -> Result<Vec<T::Item>, StashError> {
-        let query = T::query(self.unread, limit, false, offset);
+        let query = T::query(self.unread, limit, require_remote_id, offset);
         Ok(T::convert(
             self.local_label_id,
             T::Model::find(
@@ -620,7 +672,7 @@ impl<T: ScrollData> CachedScrollData<T> {
             };
             let items = self
                 .end
-                .visible_elements_limit(limit, offset, tether)
+                .visible_elements_limit(limit, offset, false, tether)
                 .await?;
             let cursor = match items.last() {
                 Some(last) => ScrollCursor::builder()
@@ -669,14 +721,27 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// further to the end of the downloaded list of elements.
     ///
     pub async fn update(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.end = self.scroll_data(tether).await?.into();
+        self.end = self.scroll_data_end(tether).await?.into();
 
         Ok(())
     }
 
+    pub async fn scroll_data_begin(&self, tether: &Tether) -> Result<Option<T>, StashError> {
+        let first = self
+            .end
+            .visible_elements_limit(Some(1), None, true, tether)
+            .await?
+            .pop();
+
+        match first {
+            Some(first) => Ok(T::into_scroll_data(self.local_label_id, self.unread, first)),
+            None => Ok(None),
+        }
+    }
+
     /// Get the underlying "data" to which the end cursor points to.
     ///
-    pub async fn scroll_data(&self, tether: &Tether) -> Result<T, StashError> {
+    pub async fn scroll_data_end(&self, tether: &Tether) -> Result<T, StashError> {
         // Due to nature of primary key of the underlying table
         // It does not really matter if we take end or cursor as
         // they should be the same however `end` var is just shorter.
