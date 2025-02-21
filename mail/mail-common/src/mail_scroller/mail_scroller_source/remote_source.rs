@@ -22,7 +22,16 @@ pub trait RemoteSource: ScrollData + Send {
         page_size: usize,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
-    fn spawn_background_sync(
+    fn sync_next_page(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        scroller: &Self,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
+
+    fn sync_previous_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         scroller: &Self,

@@ -203,6 +203,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    setup_api_sync_previous_page(&ctx, "myconv_9", 1).await;
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 3).await;
     let user_ctx = ctx.mail_user_context().await;
 
@@ -246,7 +247,8 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     .await;
     assert!(!scroller.has_more().await.unwrap());
 
-    // Cached - it will trigger two more background requests for pages as we fetch more
+    // Cached - it will trigger two more next page requests for pages as we fetch more
+    // and one previous page request on init.
     // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
     let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
@@ -802,6 +804,24 @@ async fn assert_scroller_content(
     let expected_rids = expected.iter().map(|rid| conv_id!(*rid)).collect_vec();
 
     assert_eq!(actual_rids, expected_rids);
+}
+
+#[function_name::named]
+async fn setup_api_sync_previous_page(ctx: &MailTestContext, first_id: &str, expect: u64) {
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/conversations"))
+        .and(query_param_contains("BeginID", first_id))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                conversations: vec![],
+                stale: false,
+                total: 0,
+            }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .mount(ctx.mock_server())
+        .await;
 }
 
 async fn setup_api_conversation_pages(

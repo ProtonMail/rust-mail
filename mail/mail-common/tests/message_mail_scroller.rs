@@ -183,6 +183,8 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    // mocks
+    mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
     let params = setup_api_message_pages(&ctx, page_size, 3).await;
     let user_ctx = ctx.mail_user_context().await;
 
@@ -481,6 +483,28 @@ async fn setup_api_message_pages(
     ctx.mock_get_messages(first_page).await;
 
     params
+}
+
+#[function_name::named]
+pub async fn mock_api_sync_prevous_messages_page(
+    ctx: &MailTestContext,
+    first_id: &str,
+    expect: u64,
+) {
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/messages"))
+        .and(query_param_contains("BeginID", first_id))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                total: 0,
+                messages: vec![],
+                stale: false,
+            }),
+        )
+        .expect(expect)
+        .named(function_name!())
+        .mount(ctx.mock_server())
+        .await;
 }
 
 #[function_name::named]

@@ -109,7 +109,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         T::sync_first_page(ctx, local_label_id, remote_label_id, unread, page_size).await
     }
 
-    async fn spawn_background_sync(
+    async fn sync_next_page(
         &self,
         ctx: &MailUserContext,
         scroller: &T,
@@ -119,7 +119,28 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         let unread = self.unread;
         let page_size = self.page_size;
 
-        T::spawn_background_sync(
+        T::sync_next_page(
+            ctx,
+            local_label_id,
+            scroller,
+            remote_label_id,
+            unread,
+            page_size,
+        )
+        .await
+    }
+
+    async fn sync_previous_page(
+        &self,
+        ctx: &MailUserContext,
+        scroller: &T,
+        remote_label_id: LabelId,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let local_label_id = self.local_label_id;
+        let unread = self.unread;
+        let page_size = self.page_size;
+
+        T::sync_previous_page(
             ctx,
             local_label_id,
             scroller,
@@ -141,6 +162,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
+        let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let unread = self.unread;
 
@@ -149,20 +171,31 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = self.state.online() {
             debug!("We have paginated here before, create cached scroller");
-            let task =
-                if scroller.has_more_than_a_page(&tether).await? || total < self.page_size as u64 {
-                    None
-                } else {
-                    let cp = scroller.scroll_data(&tether).await?;
-                    self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
+            let task = match scroller.scroll_data_begin(&tether).await? {
+                Some(scroll_data) => {
+                    self.sync_previous_page(ctx, &scroll_data, remote_label_id)
                         .await?
-                };
+                }
+                // When someone decides to oblitarate its mails it may happen that we think we have data in order
+                // but in reality the cursor cant get anything and this can lead to undefined behaviors.
+                // So lets make sure we have first page at least.
+                None => {
+                    Self::sync_first_page(
+                        ctx,
+                        self.local_label_id,
+                        remote_label_id,
+                        unread,
+                        self.page_size,
+                    )
+                    .await?
+                }
+            };
 
             return Ok((total, task));
         }
 
         // No entry exist, which means we have not synced this label yet.
-        debug!("Paginating for the first time, getting first page & spawning sync task.");
+        debug!("Paginating for the first time, getting first page");
         let local_label_id = label.local_id.unwrap();
         let remote_label_id = label.remote_id.clone().unwrap();
         let page_size = self.page_size;
@@ -269,8 +302,8 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 let task = if should_not_load_more_from_remote {
                     None
                 } else {
-                    let cp = scroller.scroll_data(&tether).await?;
-                    self.spawn_background_sync(ctx, &cp, label.remote_id.clone().unwrap())
+                    let cp = scroller.scroll_data_end(&tether).await?;
+                    self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())
                         .await?
                 };
 

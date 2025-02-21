@@ -55,7 +55,7 @@ impl RemoteSource for ConversationScrollData {
         Ok(Some(handle))
     }
 
-    async fn spawn_background_sync(
+    async fn sync_next_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
         scroller: &Self,
@@ -72,6 +72,40 @@ impl RemoteSource for ConversationScrollData {
             page_size,
         )
         .await
+    }
+
+    async fn sync_previous_page(
+        ctx: &MailUserContext,
+        local_label_id: LocalLabelId,
+        scroller: &Self,
+        remote_label_id: LabelId,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        let stash = ctx.user_stash().clone();
+        let remote_id = scroller.remote_conversation_id.clone();
+        let conversation_time = scroller.conversation_time;
+        let session = ctx.session().clone();
+
+        let task = Some(ctx.spawn(async move {
+            let tether = stash.connection();
+
+            RemoteConversationScrollerSource::sync_previous_page(
+                &session,
+                tether,
+                local_label_id,
+                remote_label_id,
+                remote_id,
+                conversation_time,
+                unread,
+                page_size,
+            )
+            .await?;
+
+            Ok(())
+        }));
+
+        Ok(task)
     }
 }
 
@@ -149,7 +183,65 @@ impl RemoteConversationScrollerSource {
             &mut conversations,
             unread,
             context_time,
+            true,
             tether,
+        )
+        .await?;
+
+        Ok(Self::contextual_conversations(
+            local_label_id,
+            conversations,
+        ))
+    }
+
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,local_label_id, remote_label_id))]
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn sync_previous_page(
+        session: &Session,
+        mut tether: Tether,
+        local_label_id: LocalLabelId,
+        remote_label_id: LabelId,
+        first_element_id: ConversationId,
+        first_element_time: u64,
+        unread: ReadFilter,
+        page_size: usize,
+    ) -> Result<Vec<ContextualConversation>, MailContextError> {
+        debug!("Syncing previous page");
+        let response = session
+            .api()
+            .get_conversations(GetConversationsOptions {
+                desc: Some(true),
+                // time == 0 breaks the api query.
+                begin: Some(first_element_time),
+                begin_id: Some(first_element_id.clone()),
+                label_id: Some(remote_label_id),
+                page_size: page_size as u64 + 1_u64,
+                unread: unread.into(),
+                ..Default::default()
+            })
+            .await?;
+
+        debug!("Fetched {} elements", response.conversations.len());
+
+        if response.conversations.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let context_time = Self::context_time(&response, unread);
+
+        let mut conversations: Vec<Conversation> = response
+            .conversations
+            .into_iter()
+            .map(|c| c.into())
+            .collect();
+
+        Self::save_conversations(
+            local_label_id,
+            &mut conversations,
+            unread,
+            context_time,
+            false,
+            &mut tether,
         )
         .await?;
 
@@ -216,6 +308,7 @@ impl RemoteConversationScrollerSource {
             &mut conversations,
             unread,
             context_time,
+            true,
             &mut tether,
         )
         .await?;
@@ -255,6 +348,7 @@ impl RemoteConversationScrollerSource {
         conversations: &mut [Conversation],
         unread: ReadFilter,
         context_time: Option<u64>,
+        update_scroller: bool,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         // We do not want to notify the UI about the not visible items
@@ -286,15 +380,17 @@ impl RemoteConversationScrollerSource {
         let remote_id = last.remote_id.clone().unwrap();
         let display_order = last.display_order;
 
-        Self::update_scroller_data(
-            local_label_id,
-            remote_id.clone(),
-            unread,
-            context_time,
-            display_order,
-            &tx,
-        )
-        .await?;
+        if update_scroller {
+            Self::update_scroller_data(
+                local_label_id,
+                remote_id.clone(),
+                unread,
+                context_time,
+                display_order,
+                &tx,
+            )
+            .await?;
+        }
 
         debug!(
             "New last element id={:?}, time={}, order={}",
