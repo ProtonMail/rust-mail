@@ -726,6 +726,8 @@ pub enum DeviceEnvironment {
     Google = 4,
     AppleProd = 6,
     AppleBeta = 7,
+    AppleProdET = 14,
+    AppleDevET = 15,
     AppleDev = 16,
 }
 
@@ -748,6 +750,8 @@ impl From<DeviceEnvironment> for ApiDeviceEnvironment {
             DeviceEnvironment::Google => Self::Google,
             DeviceEnvironment::AppleProd => Self::AppleProd,
             DeviceEnvironment::AppleBeta => Self::AppleBeta,
+            DeviceEnvironment::AppleProdET => Self::AppleProdET,
+            DeviceEnvironment::AppleDevET => Self::AppleDevET,
             DeviceEnvironment::AppleDev => Self::AppleDev,
         }
     }

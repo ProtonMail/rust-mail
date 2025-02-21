@@ -82,6 +82,8 @@ pub enum DeviceEnvironment {
     Google = 4,
     AppleProd = 6,
     AppleBeta = 7,
+    AppleProdET = 14,
+    AppleDevET = 15,
     AppleDev = 16,
 }
 
