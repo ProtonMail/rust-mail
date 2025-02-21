@@ -10,6 +10,10 @@ pub use proton_crypto_notifications::DecryptedNotification;
 
 /// Decrypted push notification
 ///
+/// # Parameters
+///
+/// * `T` - your BU message format.
+///
 #[derive(Debug, Clone)]
 pub struct DecryptedPushNotification<T> {
     /// Which account is recepient of the message
