@@ -4,23 +4,89 @@
 //! It's using shared base from [`proton_core_common`] but with the context of mail application
 //!
 
+use proton_api_mail::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
 use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_crypto_account::proton_crypto;
-use serde::Deserialize;
+use proton_mail_ids::LocalMessageId;
 use std::sync::Arc;
 use tracing::error;
 
-use crate::{MailContext, MailContextError};
+use crate::{models::Message, MailContext, MailContextError, MailUserContext};
+
+use super::MessageSender;
 
 /// Decrypted notification usable only in the context of the Inbox application
 ///
-#[derive(Clone, Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Clone, Debug)]
 pub enum DecryptedInboxPushNotification {
-    // TODO (ET-2204): Obviously this is not the final datastructure shape,
-    // just a proof of concept
-    Email {},
-    OpenUrl {},
+    /// Decrypted notification that is pushed when user receives a new email.
+    ///
+    Email(DecryptedEmailPushNotification),
+    // TODO (ET-2204): Write this case
+    /// Decrypted notification that is pushed when user logged in in the separate device.
+    /// We use it to show webpage.
+    ///
+    OpenUrl,
+}
+
+impl DecryptedInboxPushNotification {
+    /// Sync the message.
+    ///
+    /// Notification does not contain all message metadata that is necessary for us
+    /// to save the message in our SQLite database.
+    ///
+    /// In order to make it happen (and we need to make it happen, because mobile applications are operating on local ids, not remote ids),
+    /// we need to fetch missing info from API and then store it in our local cache.
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx` - mail user context as we save in user specific DB
+    /// * `push_notification` - payload received from the push notification
+    ///
+    /// # Returns
+    ///
+    /// Decrypted notification that contains local IDs and refers to models stored in our database
+    ///
+    /// # Errors
+    ///
+    /// This function may return an error in case of API error or when Stash fails to write to the database
+    ///
+    pub async fn sync(
+        ctx: Arc<MailUserContext>,
+        push_notification: ApiDecryptedInboxPushNotification,
+    ) -> Result<Self, MailContextError> {
+        match push_notification {
+            ApiDecryptedInboxPushNotification::Email { data } => {
+                let remote_message_id = data.message_id.clone();
+                let (message, _) =
+                    Message::force_sync_message_and_body(ctx, remote_message_id, false).await?;
+
+                Ok(Self::Email(DecryptedEmailPushNotification {
+                    subject: data.body,
+                    sender: data.sender.into(),
+                    message_id: message.local_id.expect("Local ID"),
+                }))
+            }
+            ApiDecryptedInboxPushNotification::OpenUrl { data: _ } => todo!("ET-2204"),
+        }
+    }
+}
+
+/// Decrypted notification that is pushed when user receives a new email.
+///
+#[derive(Clone, Debug)]
+pub struct DecryptedEmailPushNotification {
+    /// The subject of the email message
+    ///
+    pub subject: String,
+
+    /// Information about who sent the message
+    ///
+    pub sender: MessageSender,
+
+    /// Local message ID
+    ///
+    pub message_id: LocalMessageId,
 }
 
 /// Notification specific for the Inbox, that can be decrypted and deserialized
@@ -55,7 +121,11 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
             .inspect_err(|e| error!("Failed to decrypt mail notification: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 
-        let decrypted_mail_notification = decrypted_notification.notification.inner;
+        let decrypted_mail_notification: ApiDecryptedInboxPushNotification =
+            decrypted_notification.notification.inner;
+
+        let decrypted_mail_notification =
+            DecryptedInboxPushNotification::sync(ctx.clone(), decrypted_mail_notification).await?;
 
         Ok(decrypted_mail_notification)
     }
