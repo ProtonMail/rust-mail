@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
@@ -324,7 +325,10 @@ pub struct MuonStoreImpl<S> {
 }
 
 impl<S> MuonStoreImpl<S> {
-    pub fn new(env_id: EnvId, store: Arc<RwLock<S>>) -> Self {
+    pub fn new(env_id: impl Borrow<EnvId>, store: impl Borrow<Arc<RwLock<S>>>) -> Self {
+        let env_id = env_id.borrow().to_owned();
+        let store = store.borrow().to_owned();
+
         Self { env_id, store }
     }
 }

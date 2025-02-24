@@ -4,6 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use derive_more::Deref;
 use muon::{
     common::{BoxFut, RetryPolicy, Sender, SenderLayer},
     error::ErrorKind,
@@ -124,50 +125,6 @@ pub struct StatusObserver {
 }
 
 impl StatusObserver {
-    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
-    where
-        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
-    {
-        let resp = inner.send(req).await;
-
-        match resp {
-            Err(error) => {
-                match error.kind() {
-                    ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
-                        self.update(ConnectionStatus::Offline).await;
-                    }
-                    ErrorKind::Connect | ErrorKind::Closed => {
-                        self.update(ConnectionStatus::ServerUnreachable).await;
-                    }
-                    _ => {}
-                }
-
-                Err(error)
-            }
-            Ok(resp) => {
-                if resp.is(429) || resp.status().is_server_error() {
-                    self.update(ConnectionStatus::ServerUnreachable).await;
-                } else {
-                    self.update(ConnectionStatus::Online).await;
-                }
-
-                Ok(resp)
-            }
-        }
-    }
-}
-
-impl SenderLayer<ProtonRequest, ProtonResponse> for StatusObserver {
-    fn on_send<'a: 'fut, 'fut>(
-        &'a self,
-        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
-        req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
-        Box::pin(self.on_send(inner, req))
-    }
-}
-
-impl StatusObserver {
     /// Create a new `StatusObserver`.
     ///
     /// The status is initialized to `Online`.
@@ -180,7 +137,7 @@ impl StatusObserver {
     ///
     pub fn new() -> Self {
         Self {
-            status: STATUS.clone(),
+            status: Arc::clone(&STATUS),
             request: Arc::new(Mutex::new(None)),
             config: StatusObserverConfig::default(),
         }
@@ -304,5 +261,58 @@ impl StatusObserver {
 impl Default for StatusObserver {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[derive(Debug, Deref)]
+pub struct StatusObserverLayer(StatusObserver);
+
+impl StatusObserverLayer {
+    pub fn new(observer: StatusObserver) -> Self {
+        Self(observer)
+    }
+}
+
+impl StatusObserverLayer {
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        let resp = inner.send(req).await;
+
+        match resp {
+            Err(error) => {
+                match error.kind() {
+                    ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
+                        self.update(ConnectionStatus::Offline).await;
+                    }
+                    ErrorKind::Connect | ErrorKind::Closed => {
+                        self.update(ConnectionStatus::ServerUnreachable).await;
+                    }
+                    _ => {}
+                }
+
+                Err(error)
+            }
+            Ok(resp) => {
+                if resp.is(429) || resp.status().is_server_error() {
+                    self.update(ConnectionStatus::ServerUnreachable).await;
+                } else {
+                    self.update(ConnectionStatus::Online).await;
+                }
+
+                Ok(resp)
+            }
+        }
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for StatusObserverLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
     }
 }

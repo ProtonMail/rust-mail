@@ -61,7 +61,7 @@ impl WantTfa {
         data: StateData,
         pass: Option<String>,
     ) -> Result<State, LoginError> {
-        data.store.write().await.clear_temp_pass().await?;
+        data.parts.store.write().await.clear_temp_pass().await?;
 
         let state = if let Some(pass) = pass {
             State::finalize(client, data, pass).await?

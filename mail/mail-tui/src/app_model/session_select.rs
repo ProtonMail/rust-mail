@@ -140,7 +140,7 @@ impl AppStateHandler for Model {
                             }
                             Some(sess) => {
                                 let context = ctx
-                                    .user_context_from_session(sess, None)
+                                    .user_context_from_session(sess, None, None)
                                     .await
                                     .context("Error creating MailUserContext")?;
                                 let message = mailbox::Model::new(context).await?;

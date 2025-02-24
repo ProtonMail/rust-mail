@@ -9,6 +9,9 @@ use tokio::sync::RwLock;
 use crate::auth::{Auth, UserKeySecret};
 use crate::services::proton::common::{AuthId, UserId};
 
+/// A shared store.
+pub type BoxStore = Box<dyn Store>;
+
 /// A thread-safe, shared store.
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
 
@@ -164,7 +167,7 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
 /// A dummy store implementation, used when no store is provided.
 #[derive(Debug, Default)]
-pub(crate) struct TempStore {
+pub struct TempStore {
     auth: Auth,
     info: Option<AuthInfo>,
     data: Option<UserData>,

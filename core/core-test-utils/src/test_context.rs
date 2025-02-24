@@ -2,6 +2,7 @@ use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
+use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
@@ -256,7 +257,11 @@ impl TestContext {
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
         self.context
-            .user_context_from_session(&self.core_session, Some(StatusObserver::test()))
+            .user_context_from_session(
+                &self.core_session,
+                Some(StatusObserver::test()),
+                Some(ChallengeObserver::new()),
+            )
             .await
             .expect("failed to create user context")
     }
