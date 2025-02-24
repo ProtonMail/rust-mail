@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/sh
 
 # Usage: $0 rust_target config_path [output_dir]
 

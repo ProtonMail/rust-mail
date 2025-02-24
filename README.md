@@ -76,3 +76,13 @@ changes made in this repository.
 
 * proton-event-loop
 * proton-core-common
+
+## Nix package manager and Devenv
+
+`devenv.nix`, `devenv.lock` and `devenv.yaml` are an experiment to see if Nix package manager
+can be useful for sharing common setup across developers.
+
+It is **opt-in** and developers not interested in the Nix ecosystem are **not required to maintain** files.
+If something breaks it is the responsibility of Nix enthusiasts to fix the config files.
+
+Moreover, this setup is not going to be used in the CI.

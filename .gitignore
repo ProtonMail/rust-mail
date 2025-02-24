@@ -5,3 +5,12 @@ perf.data
 .DS_Store
 .gradle
 mail/mail-uniffi/android/lib/src/main/java/
+# Devenv
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml

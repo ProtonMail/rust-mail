@@ -1,4 +1,5 @@
-#
+#!/bin/sh
+
 # Build io artifact locally and copy it to the right location in
 # the ios repo
 #
