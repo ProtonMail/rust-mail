@@ -10,7 +10,7 @@ use muon::{
     ProtonRequest, ProtonResponse, Result as MuonResult,
 };
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{watch, Mutex, RwLock},
     task::JoinHandle,
 };
 use tracing::trace;
@@ -121,6 +121,7 @@ pub struct StatusObserver {
     status: Arc<RwLock<Status>>,
     request: Arc<Mutex<Option<BackgroundPing>>>,
     config: StatusObserverConfig,
+    on_update: watch::Sender<ConnectionStatus>,
 }
 
 impl StatusObserver {
@@ -179,12 +180,16 @@ impl StatusObserver {
     /// If it does, it's a bug.
     ///
     pub fn new() -> Self {
+        let (on_update, _) = watch::channel(ConnectionStatus::Online);
+
         Self {
             status: STATUS.clone(),
             request: Arc::new(Mutex::new(None)),
             config: StatusObserverConfig::default(),
+            on_update,
         }
     }
+
     /// Create a new test `StatusObserver` without shared state.
     ///
     /// The status is initialized to `Online`.
@@ -198,6 +203,8 @@ impl StatusObserver {
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn test() -> Self {
+        let (on_update, _) = watch::channel(ConnectionStatus::Online);
+
         let config = StatusObserverConfig::test();
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(config.up_to_date.as_secs() + 1))
@@ -210,6 +217,7 @@ impl StatusObserver {
             })),
             request: Arc::new(Mutex::new(None)),
             config,
+            on_update,
         }
     }
 
@@ -263,10 +271,25 @@ impl StatusObserver {
         status
     }
 
+    /// Peek in `update` method
+    ///
+    /// Expose internal information about status updates
+    ///
+    #[must_use]
+    pub fn on_updates(&self) -> watch::Receiver<ConnectionStatus> {
+        self.on_update.subscribe()
+    }
+
     async fn update(&self, status: ConnectionStatus) {
         let mut self_status = self.status.write().await;
         self_status.last_check = Instant::now();
         self_status.status = status;
+
+        if self.on_update.receiver_count() > 0 {
+            if let Err(e) = self.on_update.send(status) {
+                tracing::error!("Could not send status update on the StatusObserver's queue {e}");
+            }
+        }
 
         trace!("Status has been updated to {:?}", status);
     }
