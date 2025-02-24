@@ -24,7 +24,6 @@ members = [
     "mail/mail-wasm",
     "mail/uniffi-bindgen",
     "mail/uniffi-macros",
-    "xtask",
 ]
 
 [workspace.package]
