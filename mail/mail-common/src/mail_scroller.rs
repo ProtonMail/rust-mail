@@ -7,11 +7,9 @@ use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, WatcherHandle};
 use std::sync::Arc;
 
-mod mail_scroller_set;
 mod mail_scroller_source;
 mod mail_scroller_watcher;
 
-pub use mail_scroller_set::*;
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
 
