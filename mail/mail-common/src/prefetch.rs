@@ -5,7 +5,7 @@ use proton_core_common::{
     datatypes::{LocalLabelId, SystemLabel},
     models::Label,
 };
-use stash::{orm::Model, stash::Tether};
+use stash::orm::Model;
 use tokio::task::yield_now;
 use tracing::instrument;
 
@@ -93,17 +93,12 @@ impl Prefetch {
     /// Prefetch all defined locations one by one.
     #[instrument(skip(self, ctx))]
     async fn prefetch(&self, ctx: Arc<MailUserContext>) -> Result<(), MailContextError> {
-        let mut tether = ctx.user_stash().connection();
-
         for location in &self.prefetch_locations {
             yield_now().await;
             match location {
                 Location::Conversations(label_id) => {
                     tracing::debug!("Prefetching conversations for label {label_id}");
-                    if let Err(error) = self
-                        .prefetch_conversations(*label_id, &mut tether, &ctx)
-                        .await
-                    {
+                    if let Err(error) = self.prefetch_conversations(*label_id, &ctx).await {
                         tracing::error!(
                             "Failed to prefetch conversations for label {label_id}, {error}",
                         );
@@ -126,11 +121,10 @@ impl Prefetch {
     ///
     /// It fetches conversations from the given label and prefetches all message metadata
     /// tied to it and finally downloads the message to open body for each conversation.
-    #[instrument(skip(self, tether, ctx))]
+    #[instrument(skip(self, ctx))]
     async fn prefetch_conversations(
         &self,
         local_label_id: LocalLabelId,
-        tether: &mut Tether,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
         let Ok(mut scroller) =
@@ -142,14 +136,21 @@ impl Prefetch {
 
         let items = scroller.fetch_more().await?;
 
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let mut tether = ctx.user_stash().connection();
+
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
             let session = ctx.session();
-            let _ = Conversation::sync_conversation_messages(item.local_id, tether, session).await;
+            let _ =
+                Conversation::sync_conversation_messages(item.local_id, &mut tether, session).await;
             yield_now().await;
-            let messages = Message::in_conversation(item.local_id, tether).await?;
+            let messages = Message::in_conversation(item.local_id, &tether).await?;
             yield_now().await;
-            let Some(label) = Label::load(local_label_id, tether).await? else {
+            let Some(label) = Label::load(local_label_id, &tether).await? else {
                 continue;
             };
             let Ok(message_id_to_open) =
