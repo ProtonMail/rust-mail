@@ -7,13 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.48.0] - 2025-02-24
+
 ### Added
 
   - [ET-405]  Two `DeviceEnvironment` cases for ET: sandbox and production
 
+### Changed
+
+  - [ET-2182] Conversation and message scrollers now fetch new message on first use.
+
 ### Fixed
+
   - [ET-2205] Mail settings are now stored as always one row. This prevents a bug where mail settings were properly updated and retrieved only once, requiring fresh reinstall
   whenever user changed setting.
+  - Random crashes.
 
 
 ## [0.47.2] - 2025-02-20
