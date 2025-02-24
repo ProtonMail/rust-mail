@@ -18,7 +18,7 @@ use proton_mail_common::models::{
 };
 use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::*;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 
 #[tokio::test]
@@ -65,7 +65,7 @@ async fn create_empty_draft() {
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     let draft_message = Message::load(draft_message_id, &tether)
         .await
@@ -234,7 +234,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     // Update the draft
     draft.subject = new_subject.to_owned();
@@ -243,7 +243,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
     draft.save(user_ctx.action_queue()).await.unwrap();
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
@@ -468,7 +468,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap_err();
+    user_ctx.execute_all_send_actions().await.unwrap_err();
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
@@ -613,7 +613,7 @@ async fn create_draft_reply_impl(
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
@@ -717,7 +717,7 @@ async fn open_draft_sync_status_success() {
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
@@ -775,7 +775,7 @@ async fn open_draft_sync_status_cached() {
     draft.save(user_ctx.action_queue()).await.unwrap();
 
     // Execute action.
-    user_ctx.execute_pending_actions().await.unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();

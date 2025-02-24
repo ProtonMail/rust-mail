@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Changed
+
+  - [ET-2142] Draft actions now run in their own separate queue.
+
 ## [0.48.0] - 2025-02-24
 
 ### Added
@@ -22,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-2205] Mail settings are now stored as always one row. This prevents a bug where mail settings were properly updated and retrieved only once, requiring fresh reinstall
   whenever user changed setting.
   - Random crashes.
+
+
+### Removed
+
+  - [ET-2142] `excute_pending_action` and `execute_pending_actions` have been removed.
 
 
 ## [0.47.2] - 2025-02-20

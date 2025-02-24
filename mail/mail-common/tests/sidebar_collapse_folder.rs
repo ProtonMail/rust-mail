@@ -5,7 +5,7 @@ use proton_core_common::models::Label;
 use proton_mail_common::Sidebar;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::init::Params;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Tether;
@@ -36,11 +36,7 @@ async fn folder_expansion() {
         .expand_folder(&user_ctx, folder.local_id.unwrap())
         .await
         .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Tests
     let folder = get_folder(name, &tether).await;
@@ -72,11 +68,7 @@ async fn folder_collapse() {
         .collapse_folder(&user_ctx, folder.local_id.unwrap())
         .await
         .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Tests
     let folder = get_folder(name, &tether).await;

@@ -6,6 +6,7 @@ mod undo_send;
 use crate::datatypes::SystemLabelId;
 use crate::{AppError, MailContextError};
 pub use discard::*;
+use proton_action_queue::action::ActionGroup;
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
@@ -13,6 +14,8 @@ pub use save::*;
 pub use send::*;
 use stash::stash::Tether;
 pub use undo_send::*;
+
+pub const SEND_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_SEND");
 
 /// Resolve the Drafts folder local label id.
 async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {

@@ -1,9 +1,12 @@
+use proton_action_queue::action::ActionGroup;
+use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::UserId;
 use proton_api_core::status_observer::StatusObserver;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
+use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::context::MailUserDatabaseInitializer;
 use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
@@ -105,10 +108,16 @@ impl MailTestContext {
     /// # Panics
     /// Get the test user mail context.
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
-        self.mail_context
+        let ctx = self
+            .mail_context
             .user_context_from_session(&self.core_session, Some(StatusObserver::test()))
             .await
-            .expect("failed to create user context")
+            .expect("failed to create user context");
+
+        // Disable auto queue executor as we don't want these to interfere with our test execution.
+        ctx.terminate_queue_executors();
+
+        ctx
     }
 
     /// Set up a catch-all mock for the mock server.
@@ -144,5 +153,62 @@ impl MailTestContext {
             .named(function_name!())
             .mount(self.mock_server())
             .await;
+    }
+}
+
+/// Extension trait to help with the action queue.
+#[allow(async_fn_in_trait)]
+pub trait MailUserContextTestExtension {
+    /// Execute a single action from the [`Queue`] with the default action group.
+    async fn execute_single_action(&self) -> QueuedResult<Option<QueuedActionState>> {
+        self.execute_single_action_with_group(ActionGroup::default())
+            .await
+    }
+
+    /// Execute a single action from the [`Queue`] with a given `action_group`.
+    async fn execute_single_action_with_group(
+        &self,
+        action_group: ActionGroup,
+    ) -> QueuedResult<Option<QueuedActionState>>;
+
+    /// Execute all available actions from the [`Queue`] with the default action group.
+    async fn execute_all_actions(&self) -> QueuedResult<usize> {
+        self.execute_all_actions_with_group(ActionGroup::default())
+            .await
+    }
+
+    /// Execute all available actions from the [`Queue`] with the given `action_group`.
+    async fn execute_all_actions_with_group(
+        &self,
+        action_group: ActionGroup,
+    ) -> QueuedResult<usize>;
+
+    /// Execute a single action from the [`Queue`] with the send action group.
+    async fn execute_single_send_action(&self) -> QueuedResult<Option<QueuedActionState>> {
+        self.execute_single_action_with_group(SEND_ACTION_GROUP)
+            .await
+    }
+
+    /// Execute all available actions from the [`Queue`] with the Send action group.
+    async fn execute_all_send_actions(&self) -> QueuedResult<usize> {
+        self.execute_all_actions_with_group(SEND_ACTION_GROUP).await
+    }
+}
+
+impl MailUserContextTestExtension for MailUserContext {
+    async fn execute_single_action_with_group(
+        &self,
+        action_group: ActionGroup,
+    ) -> QueuedResult<Option<QueuedActionState>> {
+        let executor = self.action_queue().new_executor_with_group(action_group);
+        executor.execute_one().await
+    }
+
+    async fn execute_all_actions_with_group(
+        &self,
+        action_group: ActionGroup,
+    ) -> QueuedResult<usize> {
+        let executor = self.action_queue().new_executor_with_group(action_group);
+        executor.execute_all().await
     }
 }

@@ -15,7 +15,7 @@ use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::labels::ApiLabelTestUtils;
 use proton_mail_test_utils::mailbox::MailboxTestUtils;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use std::collections::HashMap;
 use velcro::hash_map;
@@ -93,11 +93,7 @@ async fn test_labeling_conversation_with_custom_label() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -129,11 +125,7 @@ async fn test_labeling_conversation_with_custom_label() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Verify that inbox mailbox contains conversation.
     assert!(
@@ -224,11 +216,7 @@ async fn test_labeling_conversation_with_starred_label() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
@@ -259,11 +247,7 @@ async fn test_labeling_conversation_with_starred_label() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Verify that conversation contains label.
     assert!(

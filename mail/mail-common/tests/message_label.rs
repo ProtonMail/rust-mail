@@ -21,7 +21,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::{MailUserContext, Mailbox};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -81,11 +81,7 @@ async fn label_message() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Verification:
     //   * The message have the label
@@ -143,11 +139,7 @@ async fn unlabel_message() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&label_id));
@@ -163,11 +155,7 @@ async fn unlabel_message() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Verification:
     //   * The message have the label

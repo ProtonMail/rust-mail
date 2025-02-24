@@ -1,5 +1,6 @@
 use crate::actions::draft::{
     local_all_draft_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
+    SEND_ACTION_GROUP,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
@@ -12,7 +13,8 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    WriterGuardError,
 };
 use proton_api_core::consts::Mail;
 use proton_api_mail::services::proton::common::MessageId;
@@ -45,7 +47,8 @@ pub type UndoTimestamp = u64;
 impl Action for Send {
     const TYPE: Type = Type("send_draft");
     const VERSION: u32 = 1;
-    const PRIORITY: Priority = Priority::Highest;
+    const PRIORITY: Priority = Priority::High;
+    const GROUP: ActionGroup = SEND_ACTION_GROUP;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = SendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);

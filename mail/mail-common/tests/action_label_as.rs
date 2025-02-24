@@ -13,7 +13,7 @@ use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCo
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use std::collections::{HashMap, HashSet};
@@ -149,11 +149,7 @@ async fn action_label_as_without_archive() {
     .await
     .unwrap();
 
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation
     let conversation1 = Conversation::load(1.into(), &tether)
@@ -327,11 +323,7 @@ async fn action_label_as_with_archive() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)

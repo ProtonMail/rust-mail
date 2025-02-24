@@ -6,7 +6,7 @@ use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
     Handler, Metadata, Priority, Resources, Type, WriterGuard,
 };
-use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction};
+use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction, DEFAULT_LOCK_TIMEOUT};
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
@@ -16,8 +16,10 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
+use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
+use tokio::task::AbortHandle;
 use topological_sort::TopologicalSort;
 use tracing::{debug, debug_span, error, Instrument, Level};
 use uuid::Uuid;
@@ -263,6 +265,7 @@ pub(crate) struct Shared {
     factory: RwLock<Factory>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
+    queued_action_notifier: tokio::sync::Notify,
 }
 
 impl Shared {
@@ -330,6 +333,7 @@ impl Queue {
             factory: RwLock::new(factory),
             execution_contexts: RwLock::new(HashMap::new()),
             broadcast_sender: sender,
+            queued_action_notifier: tokio::sync::Notify::new(),
         });
         let queue = Self {
             shared,
@@ -415,6 +419,9 @@ impl Queue {
         .await?;
         debug!("Action queued with id={id}");
 
+        // Notify executors.
+        self.shared.queued_action_notifier.notify_waiters();
+
         Ok(QueuedActionOutput {
             local: local_output,
             id,
@@ -484,8 +491,11 @@ impl Queue {
         .await?;
         if existing_id == id {
             debug!("Action has been updated");
+            // We don't want to notify executors in this case.
         } else {
             debug!("Action queued with id={id}");
+            // Notify executors.
+            self.shared.queued_action_notifier.notify_waiters();
         }
 
         Ok(QueuedActionOutput {
@@ -732,6 +742,18 @@ impl QueueExecutor {
         }
     }
 
+    /// Return's the unique id of this executor.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Convert this executor into a [`QueueAutoExecutor`].
+    #[must_use]
+    pub fn into_auto_executor(self) -> QueueAutoExecutor {
+        QueueAutoExecutor::new(self)
+    }
+
     /// Execute one action from the queue.
     ///
     /// # Errors
@@ -816,6 +838,111 @@ impl QueueExecutor {
         tether: &mut Tether,
     ) -> std::result::Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
         StoredAction::pop(self.id.clone(), self.action_group.as_ref(), tether).await
+    }
+}
+
+/// This executor will automatically execute action from the [`Queue`] as soon as they are inserted.
+///
+/// When executing in the same process, the executor can react very quickly to actions that
+/// are added to the queue.
+///
+/// In a cross-process setting we currently rely on a timeout to ensure that actions queued
+/// by another process are executed.
+pub struct QueueAutoExecutor {
+    abort_handle: AbortHandle,
+    id: String,
+}
+
+impl Drop for QueueAutoExecutor {
+    fn drop(&mut self) {
+        self.abort_handle.abort();
+    }
+}
+
+impl QueueAutoExecutor {
+    fn new(executor: QueueExecutor) -> Self {
+        let id = executor.id.clone();
+        let handle = tokio::spawn(async move { Self::run(executor).await }).abort_handle();
+
+        QueueAutoExecutor {
+            abort_handle: handle,
+            id,
+        }
+    }
+
+    /// Return's the unique id of this executor.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+    async fn run(executor: QueueExecutor) {
+        debug!(
+            "Starting auto queue executor {} with group={}",
+            executor.id, executor.action_group
+        );
+        loop {
+            let should_wait = match executor
+                .execute_one()
+                .instrument(
+                    debug_span!("Auto Execute", id=?executor.id, group=?executor.action_group),
+                )
+                .await
+            {
+                Ok(state) => {
+                    // If none is returned it means there was nothing to execute.
+                    state.is_none()
+                }
+                Err(e) => {
+                    error!("Failed to execute action: {e}");
+                    false
+                }
+            };
+
+            if should_wait {
+                // We currently wait for a signal from an action queue to start executing.
+                // The timeout is here to catch potential changes made in another process.
+                // This can be revisited once we have a cross process database observer.
+                let _ = tokio::time::timeout(
+                    DEFAULT_LOCK_TIMEOUT,
+                    executor.shared.queued_action_notifier.notified(),
+                )
+                .await;
+            }
+        }
+    }
+
+    /// Terminate the execution of actions.
+    pub fn terminate(&self) {
+        self.abort_handle.abort();
+    }
+}
+
+/// Manages a pool of queue auto executors.
+pub struct QueueAutoExecutorPool {
+    executors: Vec<QueueAutoExecutor>,
+}
+
+impl QueueAutoExecutorPool {
+    /// Create a new auto executor pool with `count` executors for the `action_group`.
+    #[must_use]
+    pub fn new(queue: &Queue, action_group: &ActionGroup, count: NonZeroUsize) -> Self {
+        let executors = std::iter::repeat(())
+            .take(count.get())
+            .map(|()| {
+                queue
+                    .new_executor_with_group(action_group.clone())
+                    .into_auto_executor()
+            })
+            .collect::<Vec<_>>();
+
+        Self { executors }
+    }
+
+    /// Stop all queue executors.
+    pub fn terminate(&self) {
+        for executor in &self.executors {
+            executor.terminate();
+        }
     }
 }
 

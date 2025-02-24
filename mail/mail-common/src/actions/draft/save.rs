@@ -1,5 +1,5 @@
 use crate::actions::draft::{
-    local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
+    local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
 };
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
@@ -15,7 +15,8 @@ use crate::models::{
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    WriterGuardError,
 };
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
@@ -104,7 +105,8 @@ impl Save {
 impl Action for Save {
     const TYPE: Type = Type("save_draft");
     const VERSION: u32 = 1;
-    const PRIORITY: Priority = Priority::Highest;
+    const PRIORITY: Priority = Priority::High;
+    const GROUP: ActionGroup = SEND_ACTION_GROUP;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = SaveHandler;
     type RemoteOutput = ();

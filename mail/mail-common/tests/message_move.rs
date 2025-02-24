@@ -19,7 +19,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use std::collections::HashMap;
@@ -106,11 +106,7 @@ async fn move_between_folders() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     // * the message is in the second folder
@@ -189,11 +185,7 @@ async fn move_from_label_does_not_unlabel() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     // * the message is in the second label
@@ -274,11 +266,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     // * the message only have `all_mail` label
@@ -358,11 +346,7 @@ async fn move_into_spam_remove_labels() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     // * the message only have `all_mail` label
@@ -440,11 +424,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
     )
     .await
     .unwrap();
-    user_ctx
-        .default_queue_executor()
-        .execute_one()
-        .await
-        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
     // * the message have `almost_all_mail` label

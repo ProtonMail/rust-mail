@@ -1,10 +1,10 @@
-use crate::actions::draft::{local_draft_label_id, local_sent_label_id};
+use crate::actions::draft::{local_draft_label_id, local_sent_label_id, SEND_ACTION_GROUP};
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::LabelId;
@@ -43,6 +43,8 @@ impl Action for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
+
+    const GROUP: ActionGroup = SEND_ACTION_GROUP;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UndoSendHandler;
     type RemoteOutput = ();
