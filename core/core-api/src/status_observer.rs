@@ -57,10 +57,10 @@ struct BackgroundPing {
     finished: flume::Receiver<()>,
 }
 
-/// Configuration for the `StatusWatcher`.
+/// Configuration for the `StatusObserver`.
 ///
 #[derive(Clone, Debug)]
-struct SwConfig {
+struct StatusObserverConfig {
     /// Forground ping's retry policy.
     fg_retry: RetryPolicy,
     /// Forground ping's timeout.
@@ -73,14 +73,14 @@ struct SwConfig {
     up_to_date: Duration,
 }
 
-impl Default for SwConfig {
+impl Default for StatusObserverConfig {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SwConfig {
-    /// Create a new `SwConfig` with default production values.
+impl StatusObserverConfig {
+    /// Create a new `StatusObserverConfig` with default production values.
     fn new() -> Self {
         Self {
             up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
@@ -91,7 +91,7 @@ impl SwConfig {
         }
     }
 
-    /// Create a new `SwConfig` with default test values.
+    /// Create a new `StatusObserverConfig` with default test values.
     fn test() -> Self {
         // Make single requests
         let test_retry_policy = RetryPolicy::default().max_count(0);
@@ -109,7 +109,7 @@ impl SwConfig {
     }
 }
 
-/// A `StatusWatcher` that will keep track of the connection status.
+/// A `StatusObserver` that will keep track of the connection status.
 ///
 /// It will ping the server to get the current status if the status is stale.
 /// If the status is `Offline`, it will start a background check.
@@ -117,13 +117,13 @@ impl SwConfig {
 /// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
 ///
 #[derive(Clone, Debug)]
-pub struct StatusWatcher {
+pub struct StatusObserver {
     status: Arc<RwLock<Status>>,
     request: Arc<Mutex<Option<BackgroundPing>>>,
-    config: SwConfig,
+    config: StatusObserverConfig,
 }
 
-impl StatusWatcher {
+impl StatusObserver {
     async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
@@ -157,7 +157,7 @@ impl StatusWatcher {
     }
 }
 
-impl SenderLayer<ProtonRequest, ProtonResponse> for StatusWatcher {
+impl SenderLayer<ProtonRequest, ProtonResponse> for StatusObserver {
     fn on_send<'a: 'fut, 'fut>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
@@ -167,8 +167,8 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for StatusWatcher {
     }
 }
 
-impl StatusWatcher {
-    /// Create a new `StatusWatcher`.
+impl StatusObserver {
+    /// Create a new `StatusObserver`.
     ///
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
@@ -182,10 +182,10 @@ impl StatusWatcher {
         Self {
             status: STATUS.clone(),
             request: Arc::new(Mutex::new(None)),
-            config: SwConfig::default(),
+            config: StatusObserverConfig::default(),
         }
     }
-    /// Create a new test `StatusWatcher` without shared state.
+    /// Create a new test `StatusObserver` without shared state.
     ///
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
@@ -198,7 +198,7 @@ impl StatusWatcher {
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn test() -> Self {
-        let config = SwConfig::test();
+        let config = StatusObserverConfig::test();
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(config.up_to_date.as_secs() + 1))
             .unwrap();
@@ -301,7 +301,7 @@ impl StatusWatcher {
     }
 }
 
-impl Default for StatusWatcher {
+impl Default for StatusObserver {
     fn default() -> Self {
         Self::new()
     }

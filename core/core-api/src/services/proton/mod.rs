@@ -70,7 +70,7 @@ use crate::services::proton::proton_impl::{
     MuonStoreImpl, SetCryptoClockLayer, SetDefaultServiceTypeLayer, SetDefaultTimeoutLayer,
 };
 use crate::session::Config;
-use crate::status_watcher::StatusWatcher;
+use crate::status_observer::StatusObserver;
 use crate::store::Store;
 
 /// Re-export muon for downstream convenience.
@@ -114,7 +114,7 @@ pub enum BuildError {
 pub fn build<S: Store>(
     config: Config,
     store: Arc<RwLock<S>>,
-    status_watcher: StatusWatcher,
+    status_observer: StatusObserver,
 ) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
         App::new(config.app_version)?.with_user_agent(agent)
@@ -128,7 +128,7 @@ pub fn build<S: Store>(
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
-        .layer_back(status_watcher)
+        .layer_back(status_observer)
         .layer_back(DisplayLogger::debug())
         .build()?;
 

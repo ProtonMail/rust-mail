@@ -19,7 +19,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
-use proton_api_core::status_watcher::StatusWatcher;
+use proton_api_core::status_observer::StatusObserver;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
@@ -582,7 +582,7 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
-        status: Option<StatusWatcher>,
+        status: Option<StatusObserver>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -707,7 +707,7 @@ impl Context {
     fn new_api_session(
         &self,
         session: Option<&CoreSession>,
-        status: Option<StatusWatcher>,
+        status: Option<StatusObserver>,
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
