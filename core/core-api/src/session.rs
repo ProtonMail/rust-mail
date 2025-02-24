@@ -2,6 +2,7 @@
 
 use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
+use std::borrow::Borrow;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -87,8 +88,8 @@ impl Builder {
         Self::default()
     }
 
-    pub fn with_config(mut self, config: Config) -> Self {
-        self.config = config;
+    pub fn with_config(mut self, config: impl Borrow<Config>) -> Self {
+        self.config = config.borrow().to_owned();
         self
     }
 
@@ -102,8 +103,8 @@ impl Builder {
         self
     }
 
-    pub fn with_env_id(mut self, env_id: EnvId) -> Self {
-        self.config.env_id = env_id;
+    pub fn with_env_id(mut self, env_id: impl Borrow<EnvId>) -> Self {
+        self.config.env_id = env_id.borrow().to_owned();
         self
     }
 

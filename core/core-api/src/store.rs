@@ -167,7 +167,7 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
 /// A dummy store implementation, used when no store is provided.
 #[derive(Debug, Default)]
-pub struct TempStore {
+pub(crate) struct TempStore {
     auth: Auth,
     info: Option<AuthInfo>,
     data: Option<UserData>,

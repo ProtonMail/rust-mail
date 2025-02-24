@@ -34,7 +34,6 @@ sql = ["dep:stash"]
 
 [dev-dependencies]
 anyhow = { workspace = true }
-muon = { workspace = true, features = ["testing", "testing-runner", "unsealed"]}
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 

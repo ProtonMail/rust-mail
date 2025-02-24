@@ -1,8 +1,10 @@
 use crate::consts::CoreBundle;
 use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
-use derive_more::Deref;
+use async_trait::async_trait;
+use derive_more::{Debug, Deref};
 use muon::common::{BoxFut, Sender, SenderLayer};
 use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
+use std::sync::Arc;
 
 /// Extension for
 /// [`APIErrorInfo`](`crate::services::proton::response_data::ApiErrorInfo`)
@@ -49,12 +51,31 @@ impl ApiErrorInfoExt for ApiErrorInfo {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct ChallengeObserver {}
+#[async_trait]
+pub trait ChallengeNotifier: Send + Sync + 'static {
+    async fn notify(&self);
+}
+
+#[derive(Debug, Clone)]
+#[debug("ChallengeObserver")]
+pub struct ChallengeObserver {
+    #[allow(unused)]
+    notifier: Arc<dyn ChallengeNotifier>,
+}
 
 impl ChallengeObserver {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(notifier: impl ChallengeNotifier) -> Self {
+        Self {
+            notifier: Arc::new(notifier),
+        }
+    }
+}
+
+impl Default for ChallengeObserver {
+    fn default() -> Self {
+        Self {
+            notifier: Arc::new(NoopNotifier),
+        }
     }
 }
 
@@ -65,9 +86,7 @@ impl ChallengeObserverLayer {
     pub fn new(observer: ChallengeObserver) -> Self {
         Self(observer)
     }
-}
 
-impl ChallengeObserverLayer {
     async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
@@ -84,4 +103,11 @@ impl SenderLayer<ProtonRequest, ProtonResponse> for ChallengeObserverLayer {
     ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
+}
+
+struct NoopNotifier;
+
+#[async_trait]
+impl ChallengeNotifier for NoopNotifier {
+    async fn notify(&self) {}
 }

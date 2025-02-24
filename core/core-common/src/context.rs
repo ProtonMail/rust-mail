@@ -716,13 +716,21 @@ impl Context {
         let session_id = session.map(|s| &s.remote_id).cloned();
         let account_stash = self.account_stash();
         let keychain = Arc::clone(&self.key_chain);
+        let store = AuthStore::new(account_stash, keychain, user_id, session_id);
 
-        Ok(ApiSession::builder()
-            .with_config(self.api_config.clone())
-            .with_store(AuthStore::new(account_stash, keychain, user_id, session_id))
-            .with_status(status.unwrap_or_default())
-            .with_challenge(challenge.unwrap_or_default())
-            .build()?)
+        let mut builder = ApiSession::builder()
+            .with_config(&self.api_config)
+            .with_store(store);
+
+        if let Some(status) = status {
+            builder = builder.with_status(status);
+        }
+
+        if let Some(challenge) = challenge {
+            builder = builder.with_challenge(challenge);
+        }
+
+        Ok(builder.build()?)
     }
 
     /// Get the stash in use

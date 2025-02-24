@@ -8,7 +8,7 @@ use derive_more::Deref;
 use muon::{
     common::{BoxFut, RetryPolicy, Sender, SenderLayer},
     error::ErrorKind,
-    ProtonRequest, ProtonResponse, Result as MuonResult,
+    Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult,
 };
 use tokio::{
     sync::{Mutex, RwLock},
@@ -271,38 +271,45 @@ impl StatusObserverLayer {
     pub fn new(observer: StatusObserver) -> Self {
         Self(observer)
     }
-}
 
-impl StatusObserverLayer {
     async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
     where
         S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
     {
-        let resp = inner.send(req).await;
-
-        match resp {
-            Err(error) => {
-                match error.kind() {
-                    ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
-                        self.update(ConnectionStatus::Offline).await;
-                    }
-                    ErrorKind::Connect | ErrorKind::Closed => {
-                        self.update(ConnectionStatus::ServerUnreachable).await;
-                    }
-                    _ => {}
-                }
-
-                Err(error)
-            }
+        match inner.send(req).await {
             Ok(resp) => {
-                if resp.is(429) || resp.status().is_server_error() {
-                    self.update(ConnectionStatus::ServerUnreachable).await;
-                } else {
-                    self.update(ConnectionStatus::Online).await;
-                }
+                self.on_recv_ok(&resp).await;
 
                 Ok(resp)
             }
+
+            Err(error) => {
+                self.on_recv_err(&error).await;
+
+                Err(error)
+            }
+        }
+    }
+
+    async fn on_recv_err(&self, error: &MuonError) {
+        match error.kind() {
+            ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
+                self.update(ConnectionStatus::Offline).await;
+            }
+
+            ErrorKind::Connect | ErrorKind::Closed => {
+                self.update(ConnectionStatus::ServerUnreachable).await;
+            }
+
+            _ => {}
+        }
+    }
+
+    async fn on_recv_ok(&self, resp: &ProtonResponse) {
+        if resp.is(429) || resp.status().is_server_error() {
+            self.update(ConnectionStatus::ServerUnreachable).await;
+        } else {
+            self.update(ConnectionStatus::Online).await;
         }
     }
 }

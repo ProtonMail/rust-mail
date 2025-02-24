@@ -24,15 +24,10 @@ fn random_path() -> String {
 #[tokio::test]
 async fn shared_status() {
     let mock_server = MockServer::start().await;
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
-        ..Default::default()
-    };
-    let api_1 = Session::builder()
-        .with_config(api_config.clone())
-        .build()
-        .unwrap();
-    let api_2 = Session::builder().with_config(api_config).build().unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
+    let api_config = Config::custom(mock_env);
+    let api_1 = Session::builder().with_config(&api_config).build().unwrap();
+    let api_2 = Session::builder().with_config(&api_config).build().unwrap();
     let api_3 = api_1.clone();
 
     Mock::given(method("GET"))

@@ -245,6 +245,3 @@ similar.opt-level = 3
 
 [profile.release]
 panic = "abort"
-
-[patch.proton.muon]
-path = "../muon/muon"

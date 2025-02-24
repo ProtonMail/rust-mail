@@ -260,7 +260,7 @@ impl TestContext {
             .user_context_from_session(
                 &self.core_session,
                 Some(StatusObserver::test()),
-                Some(ChallengeObserver::new()),
+                Some(ChallengeObserver::default()),
             )
             .await
             .expect("failed to create user context")
