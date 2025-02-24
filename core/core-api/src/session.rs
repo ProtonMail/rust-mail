@@ -10,7 +10,7 @@ use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
-use crate::status_watcher::StatusWatcher;
+use crate::status_observer::StatusObserver;
 use crate::store::{DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
@@ -70,7 +70,7 @@ impl Default for Config {
 pub struct Session {
     client: Proton,
     config: Arc<Config>,
-    status: StatusWatcher,
+    status: StatusObserver,
     store: DynStore,
 }
 
@@ -87,7 +87,7 @@ impl Session {
     pub fn new(
         config: Config,
         store: Option<Box<dyn Store>>,
-        status: StatusWatcher,
+        status: StatusObserver,
     ) -> Result<Self, BuildError> {
         init_server_crypto_clock();
 
@@ -199,7 +199,7 @@ impl Session {
             client: parts.client,
             config: parts.config,
             store: parts.store,
-            status: StatusWatcher::new(),
+            status: StatusObserver::new(),
         }
     }
 }

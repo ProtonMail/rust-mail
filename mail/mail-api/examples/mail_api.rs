@@ -4,7 +4,7 @@ use proton_api_core::login::Flow;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::session::Config;
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_core::status_watcher::StatusWatcher;
+use proton_api_core::status_observer::StatusObserver;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::services::proton::ProtonMail;
 use std::io::{stdin, stdout, BufRead, Write};
@@ -34,7 +34,7 @@ async fn main() {
             ..Default::default()
         },
         None,
-        StatusWatcher::test(),
+        StatusObserver::test(),
     )
     .unwrap();
 

@@ -1,6 +1,6 @@
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::session::{Config, EnvId, Session};
-use proton_api_core::status_watcher::StatusWatcher;
+use proton_api_core::status_observer::StatusObserver;
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_core_test_utils::utils::catch_all;
 use std::time::Duration;
@@ -9,8 +9,8 @@ use tokio::time::sleep;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-async fn status_watcher() -> StatusWatcher {
-    StatusWatcher::test()
+async fn status_watcher() -> StatusObserver {
+    StatusObserver::test()
         .with_up_to_date(Duration::from_millis(0))
         .await
 }
@@ -28,8 +28,8 @@ async fn shared_status() {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api_1 = Session::new(api_config.clone(), None, StatusWatcher::new()).unwrap();
-    let api_2 = Session::new(api_config, None, StatusWatcher::new()).unwrap();
+    let api_1 = Session::new(api_config.clone(), None, StatusObserver::new()).unwrap();
+    let api_2 = Session::new(api_config, None, StatusObserver::new()).unwrap();
     let api_3 = api_1.clone();
 
     Mock::given(method("GET"))
@@ -78,7 +78,7 @@ async fn make_another_request_when_stale() {
     let api = Session::new(
         api_config.clone(),
         None,
-        StatusWatcher::test()
+        StatusObserver::test()
             .with_up_to_date(Duration::from_millis(500))
             .await,
     )
@@ -111,7 +111,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     let api = Session::new(
         api_config.clone(),
         None,
-        StatusWatcher::test()
+        StatusObserver::test()
             .with_up_to_date(Duration::from_millis(1000))
             .await,
     )
