@@ -2791,11 +2791,7 @@ impl Conversation {
 
             let tx = tether.transaction().await?;
 
-            let message_metadata: Vec<ApiMessageMetadata> = conversation_response
-                .messages
-                .into_iter()
-                .map(Into::into)
-                .collect();
+            let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
             let mut new_conversation: Conversation = conversation_response.conversation.into();
 
             Message::create_or_update_messages_from_metadata(message_metadata, &tx)

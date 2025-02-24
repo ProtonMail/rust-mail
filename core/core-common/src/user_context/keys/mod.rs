@@ -148,7 +148,6 @@ impl UserContext {
         self.key_manager
             .public_address_keys(pgp_provider, email, internal_only, self)
             .await
-            .map_err(Into::into)
     }
 
     /// Loads the public address keys pinned to a user's contact, if any.

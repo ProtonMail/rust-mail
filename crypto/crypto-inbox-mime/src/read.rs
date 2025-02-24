@@ -251,11 +251,9 @@ fn process_signatures(parsed_message: &Message<'_>) -> Vec<MimeSignatureVerifier
                 .last()
                 .and_then(|last| parsed_message.part(*last))?;
             // Check that the signature content type is application/pgp-signature.
-            if extract_matched_content_subtype(signature_part.headers(), "application")
-                .map_or(true, |signature_content_type| {
-                    signature_content_type.to_lowercase() != "pgp-signature"
-                })
-            {
+            if extract_matched_content_subtype(signature_part.headers(), "application").is_none_or(
+                |signature_content_type| signature_content_type.to_lowercase() != "pgp-signature",
+            ) {
                 return None;
             };
             // Extract the signature.

@@ -421,9 +421,6 @@ pub async fn draft_discard(
 }
 
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
-    draft
-        .save(ctx.action_queue())
-        .await
-        .map_err(MailContextError::from)?;
+    draft.save(ctx.action_queue()).await?;
     Ok(())
 }

@@ -50,7 +50,7 @@ impl UserContext {
             address: Some(address.to_owned()),
             bimi_selector: bimi_selector.map(ToOwned::to_owned),
             format,
-            mode: mode.map(Into::into),
+            mode,
             size,
             ..Default::default()
         };

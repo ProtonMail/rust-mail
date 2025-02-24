@@ -28,7 +28,7 @@ impl KeyPackets {
     }
 
     pub fn decode(&self) -> Result<Vec<u8>, base64::DecodeError> {
-        BASE_64.decode(&self.0).map_err(Into::into)
+        BASE_64.decode(&self.0)
     }
 }
 

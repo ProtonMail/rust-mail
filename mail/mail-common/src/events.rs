@@ -276,7 +276,7 @@ impl From<ApiMessageEvent> for MessageEvent {
         Self {
             remote_id: value.id,
             action: value.action.into(),
-            message: value.message.map(MessageMetadata::from),
+            message: value.message,
         }
     }
 }
