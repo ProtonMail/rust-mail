@@ -179,6 +179,7 @@ pub(crate) struct SessionParts {
     pub(crate) client: Proton,
     pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
+    pub(crate) status: StatusObserver,
 }
 
 impl Session {
@@ -191,6 +192,7 @@ impl Session {
             client: self.client,
             config: self.config,
             store: self.store,
+            status: self.status,
         }
     }
 
@@ -199,7 +201,7 @@ impl Session {
             client: parts.client,
             config: parts.config,
             store: parts.store,
-            status: StatusObserver::new(),
+            status: parts.status,
         }
     }
 }

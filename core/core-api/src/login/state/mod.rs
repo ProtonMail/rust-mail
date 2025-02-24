@@ -8,6 +8,7 @@ use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::session::{Config, Session, SessionParts};
+use crate::status_observer::StatusObserver;
 use crate::store::DynStore;
 use crate::store::UserData;
 use derive_more::{Debug, From};
@@ -71,10 +72,10 @@ impl State {
         self,
         user: String,
         pass: String,
-        extra_info: LoginExtraInfo,
+        info: LoginExtraInfo,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantLogin(state) = self {
-            Ok(state.login(user, pass, extra_info).await?)
+            Ok(state.login(user, pass, info).await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -148,7 +149,7 @@ impl State {
 impl State {
     /// Create a `WantLogin` state.
     pub fn new(parts: SessionParts) -> Self {
-        Self::want_login(parts.client.auth(), parts.config, parts.store)
+        Self::want_login(parts.client.auth(), parts.config, parts.store, parts.status)
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
@@ -161,6 +162,7 @@ impl State {
         let data = StateData {
             config: parts.config,
             store: parts.store,
+            status: parts.status,
             user_id,
             auth_id,
         };
@@ -173,6 +175,7 @@ impl State {
         let data = StateData {
             config: parts.config,
             store: parts.store,
+            status: parts.status,
             user_id,
             auth_id,
         };
@@ -184,8 +187,13 @@ impl State {
 /// Private entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    fn want_login(auth: AuthFlow, config: Arc<Config>, store: DynStore) -> Self {
-        WantLogin::new(auth, config, store).into()
+    fn want_login(
+        auth: AuthFlow,
+        config: Arc<Config>,
+        store: DynStore,
+        status: StatusObserver,
+    ) -> Self {
+        WantLogin::new(auth, config, store, status).into()
     }
 
     /// Create a `WantTfa` state.
@@ -256,6 +264,7 @@ impl State {
 pub(crate) struct StateData {
     config: Arc<Config>,
     store: DynStore,
+    status: StatusObserver,
     user_id: UserId,
     auth_id: AuthId,
 }

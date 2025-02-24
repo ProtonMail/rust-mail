@@ -19,6 +19,7 @@ impl Complete {
             client: self.client,
             config: self.data.config,
             store: self.data.store,
+            status: self.data.status,
         })
     }
 }
