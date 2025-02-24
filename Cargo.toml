@@ -12,7 +12,6 @@ members = [
     "core/stash",
     "core/stash-macros",
     "core/vcard",
-    "crypto/crypto-account",
     "crypto/crypto-inbox",
     "crypto/crypto-inbox-mime",
     "mail/mail-api",
@@ -185,8 +184,7 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.8.2"
-path = "crypto/crypto-account"
+version = "0.8.3"
 registry = "proton"
 features = ["sql"]
 
