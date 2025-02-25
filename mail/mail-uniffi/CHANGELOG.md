@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-2142] Draft actions now run in their own separate queue.
 
+### Fixed
+
+  - Ensure `watch_contact_list` callback is constructed inside `uniffi_async` wrapper
+
 ## [0.48.0] - 2025-02-24
 
 ### Added

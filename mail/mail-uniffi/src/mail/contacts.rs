@@ -11,7 +11,7 @@ use proton_core_common::datatypes::DeviceContact as RealDeviceContact;
 use proton_core_common::models::Contact as RealContact;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::MailContextError;
+use proton_mail_common::{MailContextError, MailUserContext};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -115,8 +115,9 @@ pub async fn watch_contact_list(
     callback: Box<dyn ContactsLiveQueryCallback>,
 ) -> Result<WatchedContactList, ActionError> {
     let user_context = session.ctx()?;
-    let callback = contacts_callback(session.clone(), callback)?;
     uniffi_async(async move {
+        let callback = contacts_callback(&user_context, session, callback);
+
         let (contact_list, handle) =
             RealContact::watch_contact_list(user_context.user_stash()).await?;
 
@@ -138,13 +139,14 @@ pub async fn watch_contact_list(
 /// send an update which gets checked every `duration`.
 ///
 pub fn contacts_callback(
+    user_ctx: &MailUserContext,
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> Result<impl Fn() + Clone, ActionError> {
+) -> impl Fn() + Clone {
     let must_update = Arc::new(AtomicBool::new(false));
     let must_update_weak = Arc::downgrade(&must_update);
 
-    session.ctx()?.spawn(async move {
+    user_ctx.spawn(async move {
         let mut interval = interval(Duration::from_millis(50));
         let callback = Arc::new(callback);
 
@@ -156,7 +158,7 @@ pub fn contacts_callback(
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
-                let contact_list = contact_list(session.clone()).await;
+                let contact_list = contact_list(Arc::clone(&session)).await;
 
                 match contact_list {
                     ContactListResult::Ok(contact_list) => {
@@ -178,5 +180,5 @@ pub fn contacts_callback(
         }
     });
 
-    Ok(move || must_update.store(true, Ordering::Relaxed))
+    move || must_update.store(true, Ordering::Relaxed)
 }
