@@ -236,8 +236,19 @@ pub struct PutMessagesUnlabelResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnreadResponse {
     /// TODO: Document this field.
-    #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult<MessageId>>,
+}
+
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessageHamResponse {
+    code: i64,
+    added_flag: bool,
+    edited_incoming_defaults: bool,
+    fed_logs: bool,
+    edited_labels: bool,
 }
 
 /// Response to a relabel message request.

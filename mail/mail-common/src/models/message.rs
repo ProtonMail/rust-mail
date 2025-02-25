@@ -3,6 +3,7 @@
 mod messages;
 
 use crate::actions::messages::delete::Delete;
+use crate::actions::messages::ham::Ham;
 use crate::actions::messages::label::Label as ActionLabel;
 use crate::actions::messages::label_as::LabelAs;
 use crate::actions::messages::r#move::Move;
@@ -426,6 +427,26 @@ impl Message {
             }
         }
         Ok(())
+    }
+
+    /// Mark multiple messages as ham (not spam).
+    ///
+    /// # Parameters
+    ///
+    /// * `queue`       - The action queue.
+    /// * `label_id`    - The ID of the label to apply to the messages.
+    /// * `message_ids` - The IDs of the target messages.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn action_ham(
+        queue: &Queue,
+        message_ids: Vec<LocalMessageId>,
+    ) -> Result<QueuedActionOutput<Ham>, QueueActionError<Ham>> {
+        let action = Ham::new(message_ids);
+        queue.queue_action(action).await
     }
 
     /// Remove all removable labels from given messages.

@@ -1,0 +1,111 @@
+use crate::actions::MailActionError;
+use crate::datatypes::{LocalMessageId, RollbackItemType, SystemLabelId};
+use crate::models::{Message, RollbackItem};
+use crate::MailUserContext;
+use futures::future::try_join_all;
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_api_core::services::proton::common::LabelId;
+use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use serde::{Deserialize, Serialize};
+use stash::stash::Bond;
+
+/// Action which marks messages as Ham.
+/// Ham means that a message is not spam (get it?)
+/// This also applies to messages thought to be phising or suspicious.
+///
+/// It will also whitelist the sender
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Ham(Vec<LocalMessageId>);
+
+impl Ham {
+    /// Create a new instance which marks the messages as deleted.
+    /// This should only be called for messages that are in spam.
+    pub fn new(message_ids: Vec<LocalMessageId>) -> Self {
+        Self(message_ids)
+    }
+}
+
+impl Action for Ham {
+    const TYPE: Type = Type("mark_ham");
+    const VERSION: u32 = 1;
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = Handler;
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
+    type Error = MailActionError;
+
+    type Context = MailUserContext;
+}
+
+#[derive(Default)]
+pub struct Handler;
+
+impl ActionHandler for Handler {
+    type Action = Ham;
+
+    type Context = MailUserContext;
+    async fn apply_local(
+        &self,
+        _: ActionId,
+        _: &Self::Context,
+        action: &mut Self::Action,
+        bond: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        if action.0.is_empty() {
+            return Err(MailActionError::NoInput);
+        }
+        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
+
+        Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
+        Ok(())
+    }
+
+    async fn revert_local(
+        &self,
+        _: ActionId,
+        _: &Self::Context,
+        action: &mut Self::Action,
+        bond: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
+
+        Message::move_messages(inbox, spam, action.0.clone(), bond).await?;
+
+        let ids = Message::local_ids_counterpart(action.0.clone(), bond).await?;
+        for id in ids {
+            RollbackItem::new(id.to_string(), RollbackItemType::Message)
+                .save(bond)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        _: ActionId,
+        ctx: &Self::Context,
+        action: &mut Self::Action,
+        guard: WriterGuard<'_>,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let tether = guard.tether();
+        let ids = Message::local_ids_counterpart(action.0.clone(), tether).await?;
+        let iter = ids.iter().map(|id| ctx.api().put_message_ham(id));
+
+        _ = try_join_all(iter).await?;
+        Ok(())
+    }
+}

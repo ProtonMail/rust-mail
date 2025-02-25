@@ -329,6 +329,14 @@ pub trait ProtonMail {
         message_ids: Vec<MessageId>,
     ) -> ApiServiceResult<PutMessagesUnreadResponse>;
 
+    /// Mark message as not spam (ham)
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_message_ham(&self, id: &MessageId) -> ApiServiceResult<PutMessageHamResponse>;
+
     /// Relabel a message.
     ///
     /// Set the message to have the labels passed in the request. The labels are added and removed as necessary.
