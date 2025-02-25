@@ -1,17 +1,23 @@
 use clap::Parser;
+use proton_action_queue::observers::ActionAwaiter;
+use proton_action_queue::queue::BroadcastMessage;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
+use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
+use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
+use proton_mail_common::models::{Attachment, Message};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
-use proton_mail_test_utils::test_context::MailUserContextTestExtension;
 use std::sync::Arc;
 use tempdir::TempDir;
+use tracing::{error, info};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -107,8 +113,51 @@ async fn main() {
         })
         .unwrap();
 
-    let send_action = draft.to_send_action(None).unwrap();
-    send_action.queue(user_ctx.action_queue()).await.unwrap();
+    let id = draft.save(user_ctx.action_queue()).await.unwrap().id;
+    ActionAwaiter::new(user_ctx.action_queue(), id)
+        .wait()
+        .await
+        .unwrap();
+    let tether = user_ctx.user_stash().connection();
 
-    user_ctx.execute_all_actions().await.unwrap();
+    let message_id =
+        Message::local_id_counterpart(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+    //Note: This part will
+    let encrypted_attachment = Attachment::encrypt(&user_ctx, &draft.address_id, "Hello World!")
+        .await
+        .unwrap();
+
+    let params = NewAttachmentParams {
+        filename: "hello_world.txt".to_string(),
+        message_id,
+        mime_type: "text/plain".to_string(),
+        disposition: NewAttachmentDisposition::Attachment,
+        key_packets: encrypted_attachment.metadata.key_packets,
+        signature: encrypted_attachment.metadata.signature,
+        enc_signature: encrypted_attachment.metadata.encrypted_signature,
+        data_packet: encrypted_attachment.data,
+    };
+
+    user_ctx.api().post_attachment(params).await.unwrap();
+
+    let id = draft.send(user_ctx.action_queue()).await.unwrap().id;
+    let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
+    match send_awaiter.wait().await.unwrap() {
+        BroadcastMessage::Success(_) => {
+            info!("Message successfully sent.");
+        }
+        BroadcastMessage::Error(err, _) => {
+            error!("Error sending message: {:?}", err);
+        }
+        BroadcastMessage::Cancelled(_) => {
+            info!("Sending Cancelled.");
+        }
+        BroadcastMessage::Deleted(_, _) => {
+            info!("Sending Action Deleted.");
+        }
+    }
 }

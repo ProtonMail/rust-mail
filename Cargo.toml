@@ -40,6 +40,7 @@ bytes = "1.9"
 clap = { version = "4.5.27", features = ["derive"] }
 chrono = { version = "0.4", features = ["default", "serde"] }
 color-backtrace = "0.6.1"
+common-multipart-rfc7578 = { version = "0.7.0", default-features = false }
 colored = "2.2.0"
 ctor = "0.2.9"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
@@ -48,6 +49,7 @@ email_address = { version = "0.2.9", features = ["serde"] }
 flume = "0.11"
 futures = "0.3.31"
 function_name = "0.3.0"
+futures-util = "0.3.31"
 hex = "0.4.3"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"

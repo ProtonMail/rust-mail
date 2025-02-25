@@ -824,6 +824,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "common-multipart-rfc7578"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f08d53b5e0c302c5830cfa7511ba0edc3f241c691a95c0d184dfb761e11a6cc2"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "mime",
+ "mime_guess",
+ "rand 0.8.5",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4185,6 +4201,8 @@ version = "0.5.0"
 dependencies = [
  "bitflags 2.8.0",
  "bytes",
+ "common-multipart-rfc7578",
+ "futures-util",
  "muon",
  "pretty_assertions",
  "proton-api-core",

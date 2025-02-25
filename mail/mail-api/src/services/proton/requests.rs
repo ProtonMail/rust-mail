@@ -20,17 +20,18 @@
 //! used by both requests and responses.
 //!
 
+use super::request_data::{NewAttachmentDisposition, Package};
 use crate::services::proton::common::{ConversationId, MessageId};
+use crate::services::proton::prelude::{Disposition, NewAttachmentParams};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
+use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, AttachmentSignature};
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
-
-use super::request_data::Package;
 
 /// Parameters to filter/search conversations with a given criteria.
 #[serde_as]
@@ -414,4 +415,53 @@ pub struct PostSendRequest {
 
     /// The packages that contain the encrypted emails.
     pub packages: Vec<Package>,
+}
+
+/// Create a new attachment request.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostUploadAttachmentRequest {
+    /// File name of the attachment.
+    pub filename: String,
+    /// Message to which this attachment belongs to.
+    #[serde(rename = "MessageID")]
+    pub message_id: MessageId,
+    /// Attachment's MIME type may differ from the MIME type of the message.
+    /// There is a lot of possible MIME types, so it is not possible to list
+    /// all here. The safest bet is to deserialize it to string at that point.
+    #[serde(rename = "MIMEType")]
+    pub mime_type: String,
+    /// Attachment disposition.
+    pub disposition: Disposition,
+    /// If disposition is inline, the content id must have value.
+    #[serde(rename = "ContentID")]
+    pub content_id: Option<String>,
+    /// Binary asymmetric key packet.
+    pub key_packets: Vec<u8>,
+    /// Optional armored detached signature
+    pub signature: Option<AttachmentSignature>,
+    /// Optional armored encrypted message containing binary detached signature.
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    /// Encrypted attachment payload.
+    pub data_packet: Vec<u8>,
+}
+
+impl From<NewAttachmentParams> for PostUploadAttachmentRequest {
+    fn from(params: NewAttachmentParams) -> Self {
+        let (disposition, content_id) = match params.disposition {
+            NewAttachmentDisposition::Attachment => (Disposition::Attachment, None),
+            NewAttachmentDisposition::Inline(content_id) => (Disposition::Inline, Some(content_id)),
+        };
+        Self {
+            filename: params.filename,
+            message_id: params.message_id,
+            mime_type: params.mime_type,
+            disposition,
+            content_id,
+            key_packets: params.key_packets,
+            signature: params.signature,
+            enc_signature: params.enc_signature,
+            data_packet: params.data_packet,
+        }
+    }
 }

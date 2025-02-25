@@ -72,6 +72,16 @@ pub trait ProtonMail {
         attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse>;
 
+    /// Upload attachment data with the given `params`.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    async fn post_attachment(
+        &self,
+        params: NewAttachmentParams,
+    ) -> ApiServiceResult<PostAttachmentResponse>;
+
     /// TODO: Document this method.
     ///
     /// # Parameters
