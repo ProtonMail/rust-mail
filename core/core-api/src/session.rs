@@ -84,55 +84,66 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// Create a new session builder.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the session configuration.
     pub fn with_config(mut self, config: impl Borrow<Config>) -> Self {
-        self.config = config.borrow().to_owned();
+        config.borrow().clone_into(&mut self.config);
         self
     }
 
+    /// Set the app version (`x-pm-appversion`).
     pub fn with_app_version(mut self, app_version: impl AsRef<str>) -> Self {
-        self.config.app_version = app_version.as_ref().to_owned();
+        self.config.app_version = String::from(app_version.as_ref());
         self
     }
 
+    /// Set the user agent.
     pub fn with_user_agent(mut self, user_agent: impl AsRef<str>) -> Self {
-        self.config.user_agent = Some(user_agent.as_ref().to_owned());
+        self.config.user_agent = Some(String::from(user_agent.as_ref()));
         self
     }
 
+    /// Set the environment to connect to.
     pub fn with_env_id(mut self, env_id: impl Borrow<EnvId>) -> Self {
-        self.config.env_id = env_id.borrow().to_owned();
+        env_id.borrow().clone_into(&mut self.config.env_id);
         self
     }
 
+    /// Use the Atlas environment.
     pub fn with_atlas_env(mut self) -> Self {
         self.config.env_id = EnvId::new_atlas();
         self
     }
 
+    /// Use a custom environment.
     pub fn with_custom_env(mut self, env: impl Env) -> Self {
         self.config.env_id = EnvId::new_custom(env);
         self
     }
 
+    /// Set the store to use.
     pub fn with_store(mut self, store: impl Store) -> Self {
         self.store = Some(Box::new(store));
         self
     }
 
+    /// Set the status observer.
     pub fn with_status(mut self, status: StatusObserver) -> Self {
         self.status = Some(status);
         self
     }
 
+    /// Set the challenge observer.
     pub fn with_challenge(mut self, challenge: ChallengeObserver) -> Self {
         self.challenge = Some(challenge);
         self
     }
 
+    /// Build the session from the builder.
     pub fn build(self) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 

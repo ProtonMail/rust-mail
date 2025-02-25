@@ -51,11 +51,18 @@ impl ApiErrorInfoExt for ApiErrorInfo {
     }
 }
 
+/// An interface by which human verification challenges can be handled.
+///
+/// This is a placeholder for now and will be expanded in the future.
 #[async_trait]
 pub trait ChallengeNotifier: Send + Sync + 'static {
     async fn notify(&self);
 }
 
+/// A type that holds registered [`ChallengeNotifier`]s.
+///
+/// This is a placeholder for now and will be expanded in the future.
+#[must_use]
 #[derive(Debug, Clone)]
 #[debug("ChallengeObserver")]
 pub struct ChallengeObserver {
@@ -79,10 +86,12 @@ impl Default for ChallengeObserver {
     }
 }
 
+/// A type that wraps a [`ChallengeObserver`] and to implement the [`SenderLayer`] trait.
 #[derive(Debug, Deref)]
 pub struct ChallengeObserverLayer(ChallengeObserver);
 
 impl ChallengeObserverLayer {
+    #[must_use]
     pub fn new(observer: ChallengeObserver) -> Self {
         Self(observer)
     }

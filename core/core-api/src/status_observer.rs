@@ -117,6 +117,7 @@ impl StatusObserverConfig {
 /// The status is initialized to `Online`.
 /// With the default configuration, the last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
 ///
+#[must_use]
 #[derive(Clone, Debug)]
 pub struct StatusObserver {
     status: Arc<RwLock<Status>>,
@@ -153,7 +154,6 @@ impl StatusObserver {
     /// If it does, it's a bug.
     ///
     #[cfg(any(test, debug_assertions))]
-    #[must_use]
     pub fn test() -> Self {
         let config = StatusObserverConfig::test();
         let stale_instant = Instant::now()
@@ -181,7 +181,6 @@ impl StatusObserver {
     /// If it does, it's a bug.
     ///
     #[cfg(any(test, debug_assertions))]
-    #[must_use]
     pub async fn with_up_to_date(mut self, up_to_date: Duration) -> Self {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
@@ -264,10 +263,12 @@ impl Default for StatusObserver {
     }
 }
 
+/// A type that wraps a [`StatusObserver`] and to implement the [`SenderLayer`] trait.
 #[derive(Debug, Deref)]
 pub struct StatusObserverLayer(StatusObserver);
 
 impl StatusObserverLayer {
+    #[must_use]
     pub fn new(observer: StatusObserver) -> Self {
         Self(observer)
     }

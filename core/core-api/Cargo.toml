@@ -33,7 +33,6 @@ default = []
 sql = ["dep:stash"]
 
 [dev-dependencies]
-anyhow = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 
