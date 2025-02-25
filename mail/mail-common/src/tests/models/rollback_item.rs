@@ -4,7 +4,7 @@ use proton_api_core::services::proton::{
     requests::GetLabelsByIdsOptions, responses::GetLabelsResponse,
 };
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
-use proton_api_core::status_observer::StatusObserver;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_core_common::models::ModelExtension;
@@ -228,7 +228,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api = Session::new(api_config, None, StatusObserver::test()).unwrap();
+    let api = Session::new(api_config, None, StatusWatcher::test()).unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,

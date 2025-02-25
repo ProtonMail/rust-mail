@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::{
     sync::{Arc, Weak},
     time::Duration,
@@ -29,39 +29,49 @@ impl Deref for StatusWatcher {
     }
 }
 
+impl DerefMut for StatusWatcher {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.observer
+    }
+}
+
+impl Default for StatusWatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StatusWatcher {
     #[must_use]
-    pub fn new(api: Proton) -> Self {
+    pub fn new() -> Self {
         let (sender, _) = watch::channel(ConnectionStatus::Online);
-        let this = Self {
+        Self {
             subsribers: Arc::new(RwLock::new(sender)),
             current: Arc::new(RwLock::new(ConnectionStatus::Online)),
             observer: StatusObserver::new(),
-        };
-
-        this.initialize(api);
-        this
+        }
     }
 
     #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub fn test(api: Proton) -> Self {
+    pub fn test() -> Self {
         let (sender, _) = watch::channel(ConnectionStatus::Online);
-        let this = Self {
+        Self {
             subsribers: Arc::new(RwLock::new(sender)),
             current: Arc::new(RwLock::new(ConnectionStatus::Online)),
             observer: StatusObserver::test(),
-        };
+        }
+    }
 
-        this.initialize(api);
-        this
+    pub fn observer(&self) -> StatusObserver {
+        self.observer.clone()
     }
 
     pub async fn subscribe(&self) -> Receiver<ConnectionStatus> {
         self.subsribers.read().await.subscribe()
     }
 
-    fn initialize(&self, api: Proton) {
+    pub fn initialize(&self, api: Proton) {
         let subscribers = Arc::downgrade(&self.subsribers);
         let observer = self.observer.clone();
         let current_handle = self.current.clone();

@@ -2,7 +2,7 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::UserId;
-use proton_api_core::status_observer::StatusObserver;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
@@ -110,7 +110,7 @@ impl MailTestContext {
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
-            .user_context_from_session(&self.core_session, Some(StatusObserver::test()))
+            .user_context_from_session(&self.core_session, Some(StatusWatcher::test()))
             .await
             .expect("failed to create user context");
 

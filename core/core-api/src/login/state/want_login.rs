@@ -4,7 +4,7 @@ use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
 use crate::services::proton::prelude::{AuthId, UserId};
 use crate::session::Config;
-use crate::status_observer::StatusObserver;
+use crate::status_watcher::StatusWatcher;
 use crate::store::{AuthInfo, DynStore, MbpMode, TfaMode};
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
@@ -17,7 +17,7 @@ pub struct WantLogin {
     flow: AuthFlow,
     config: Arc<Config>,
     store: DynStore,
-    status: StatusObserver,
+    status: StatusWatcher,
 }
 
 impl WantLogin {
@@ -25,7 +25,7 @@ impl WantLogin {
         flow: AuthFlow,
         config: Arc<Config>,
         store: DynStore,
-        status: StatusObserver,
+        status: StatusWatcher,
     ) -> Self {
         info!("Login flow wants login");
 
@@ -104,7 +104,7 @@ fn get_state_data(
     data: &LoginFlowData,
     config: Arc<Config>,
     store: DynStore,
-    status: StatusObserver,
+    status: StatusWatcher,
 ) -> StateData {
     StateData {
         config,

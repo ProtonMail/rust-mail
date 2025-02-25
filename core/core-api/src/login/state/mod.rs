@@ -8,7 +8,7 @@ use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::session::{Config, Session, SessionParts};
-use crate::status_observer::StatusObserver;
+use crate::status_watcher::StatusWatcher;
 use crate::store::DynStore;
 use crate::store::UserData;
 use derive_more::{Debug, From};
@@ -191,7 +191,7 @@ impl State {
         auth: AuthFlow,
         config: Arc<Config>,
         store: DynStore,
-        status: StatusObserver,
+        status: StatusWatcher,
     ) -> Self {
         WantLogin::new(auth, config, store, status).into()
     }
@@ -264,7 +264,7 @@ impl State {
 pub(crate) struct StateData {
     config: Arc<Config>,
     store: DynStore,
-    status: StatusObserver,
+    status: StatusWatcher,
     user_id: UserId,
     auth_id: AuthId,
 }

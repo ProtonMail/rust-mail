@@ -233,14 +233,12 @@ impl StatusObserver {
     ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub async fn with_up_to_date(mut self, up_to_date: Duration) -> Self {
+    pub async fn with_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
             .unwrap();
         self.status.write().await.last_check = stale_instant;
         self.config.up_to_date = up_to_date;
-
-        self
     }
 
     /// Get the current status of the connection.
