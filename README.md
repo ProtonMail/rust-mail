@@ -79,10 +79,29 @@ changes made in this repository.
 
 ## Nix package manager and Devenv
 
-`devenv.nix`, `devenv.lock` and `devenv.yaml` are an experiment to see if Nix package manager
-can be useful for sharing common setup across developers.
+Affected files: `devenv.nix`, `devenv.lock` and `devenv.yaml`
 
+### What is it?
+
+Devenv (https://devenv.sh) is a Nix language framework for having reusable, portable and stable developer environments across all machines.
+It is based on Nix, the language and package manager, but it does not require full NixOS or having nix-darwin distribution installed.
+
+Note, this is an experiment to see if Nix package manager can be useful for sharing common setup across developers.
+
+### Why is it included?
+
+Devenv allows us to setup all necessary dependencies including how to build the codebase for iOS, once, in a declarative manner.
+
+Currently it provides complete environment for building monorepo + building frameworks for iOS.
+
+### Do I have to install nix now?
+
+No!
 It is **opt-in** and developers not interested in the Nix ecosystem are **not required to maintain** files.
 If something breaks it is the responsibility of Nix enthusiasts to fix the config files.
 
 Moreover, this setup is not going to be used in the CI.
+
+### What if I want to try?
+
+Follow guide on https://devenv.sh/getting-started in order to setup the devenv itself. It works on most of linux distributions as well as in WSL or on macOS.
