@@ -1,3 +1,4 @@
+import groovy.json.JsonSlurper
 import java.util.Properties
 import java.io.FileInputStream
 import java.io.IOException
@@ -55,10 +56,12 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
+    
     kotlinOptions {
         jvmTarget = "1.8"
     }
@@ -80,15 +83,17 @@ signing {
     useInMemoryPgpKeys(mavenSigningKey, mavenSigningKeyPassword)
 }
 
-
 dependencies {
+    val ANNOTATION = "1.7.1"
     val COROUTINES = "1.6.4"
     val JNA = "5.13.0"
-    val ANNOTATION = "1.7.1"
 
     implementation("androidx.annotation:annotation:${ANNOTATION}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${COROUTINES}")
     implementation("net.java.dev.jna:jna:${JNA}@aar")
+
+    // Ship the rustls platform verifier helper
+    implementation(files(findRustlsPlatformVerifierClasses()))
 }
 
 fun String.fromVariable(): String {
@@ -97,4 +102,22 @@ fun String.fromVariable(): String {
         logger.warn("Variable $this is not set!")
     }
     return value
+}
+
+fun findRustlsPlatformVerifierClasses(): File {
+    val PACKAGE_NAME = "rustls-platform-verifier-android"
+    val PACKAGE_PATH = "maven/rustls/rustls-platform-verifier/*/rustls-platform-verifier-*.aar"
+
+    val depExec = providers.exec { commandLine("cargo", "metadata", "--format-version", "1") }
+    val depText = depExec.standardOutput.asText.get()
+    val depJson = JsonSlurper().parseText(depText) as Map<String, Any>
+
+    val packages = depJson.get("packages") as List<Map<String, Any>>
+    val verifier = packages.find { it.get("name") == PACKAGE_NAME }
+    val manifest = file(verifier?.get("manifest_path") as String)
+
+    val aar = fileTree(manifest.parentFile) { include(PACKAGE_PATH) }.singleFile
+    val jar = zipTree(aar).matching { include("classes.jar") }.singleFile
+
+    return jar
 }
