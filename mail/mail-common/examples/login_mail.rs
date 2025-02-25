@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
     let cfg = Config::default();
     let ctx = new_mail_ctx(dir, kch, cfg).await?;
 
-    Cli::parse().run(ctx).await?;
+    Cli::parse().run(ctx).inspect_err(|e| error!("{e}")).await?;
 
     Ok(())
 }

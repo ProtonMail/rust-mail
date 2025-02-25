@@ -90,46 +90,46 @@ pub enum ApiServiceError {
     //  PROTOCOL ERRORS
     //==========================================================================
     /// 400: The request has been made incorrectly.
-    #[error("Bad request: {0}. {1}")]
+    #[error("Bad request: {0}. {}", as_proton_error(_1))]
     BadRequest(String, String),
 
     /// 401: The request was rejected due to authentication failure.
-    #[error("Unauthorized: {0}. {1}")]
+    #[error("Unauthorized: {0}. {}", as_proton_error(_1))]
     Unauthorized(String, String),
 
     /// 404: The URL requested on the external API was not found.
-    #[error("Not found: {0}. {1}")]
+    #[error("Not found: {0}. {}", as_proton_error(_1))]
     NotFound(String, String),
 
     /// 422: The data/request provided was invalid in terms or structure or
     /// contents, and could not be processed by the external API service.
-    #[error("Unprocessable entity: {0}. {1}")]
+    #[error("Unprocessable entity: {0}. {}", as_proton_error(_1))]
     UnprocessableEntity(String, String),
 
     /// 429: The client made too many requests to the server.
-    #[error("Too many requests: {0}. {1}")]
-    TooManyRequest(String, String),
+    #[error("Too many requests: {0}. {}", as_proton_error(_1))]
+    TooManyRequests(String, String),
 
     /// 500: Something is wrong with the external API service.
-    #[error("Internal server error: {0}. {1}")]
+    #[error("Internal server error: {0}. {}", as_proton_error(_1))]
     InternalServerError(String, String),
 
     /// 501: The server either does not recognize the request method, or it lacks the ability to
     /// fulfil the request.
-    #[error("Not Implemented: {0}. {1}")]
+    #[error("Not Implemented: {0}. {}", as_proton_error(_1))]
     NotImplemented(String, String),
 
     /// 502: The server was acting as a gateway or proxy and received an invalid response from the
     /// upstream server.
-    #[error("Bad gateway: {0}. {1}")]
+    #[error("Bad gateway: {0}. {}", as_proton_error(_1))]
     BadGateway(String, String),
 
     /// 503: The server cannot handle the request (because it is overloaded or down for maintenance).
-    #[error("Service Unavailable: {0}. {1}")]
+    #[error("Service Unavailable: {0}. {}", as_proton_error(_1))]
     ServiceUnavailable(String, String),
 
     /// Any other HTTP error which is not currently handled.
-    #[error("HTTP error {0}: {1}. {2}")]
+    #[error("HTTP error {0}: {1}. {}", as_proton_error(_2))]
     OtherHttpError(Status, String, String),
 
     //  DATA ERRORS
@@ -188,7 +188,7 @@ impl ApiServiceError {
     #[must_use]
     pub fn is_server_unreachable(&self) -> bool {
         match self {
-            ApiServiceError::TooManyRequest(_, _)
+            ApiServiceError::TooManyRequests(_, _)
             | ApiServiceError::BadGateway(_, _)
             | ApiServiceError::NotImplemented(_, _)
             | ApiServiceError::ServiceUnavailable(_, _)
@@ -197,9 +197,7 @@ impl ApiServiceError {
             _ => false,
         }
     }
-}
 
-impl ApiServiceError {
     /// Attempts to extract the Proton error from the API error.
     ///
     /// Returns `None` if the error is not present or
@@ -210,7 +208,7 @@ impl ApiServiceError {
         | ApiServiceError::Unauthorized(_, body)
         | ApiServiceError::NotFound(_, body)
         | ApiServiceError::UnprocessableEntity(_, body)
-        | ApiServiceError::TooManyRequest(_, body)
+        | ApiServiceError::TooManyRequests(_, body)
         | ApiServiceError::ServiceUnavailable(_, body)
         | ApiServiceError::OtherHttpError(_, _, body)) = self
         else {
@@ -224,6 +222,18 @@ impl ApiServiceError {
                 None
             }
         }
+    }
+}
+
+fn as_proton_error(s: impl AsRef<str>) -> String {
+    if let Ok(t) = ApiErrorInfo::from_json(s.as_ref()) {
+        let c = t.code;
+        let e = t.error.unwrap_or_default();
+        let d = t.details.unwrap_or_default();
+
+        format!("{c}: {e} ({d})")
+    } else {
+        s.as_ref().to_string()
     }
 }
 

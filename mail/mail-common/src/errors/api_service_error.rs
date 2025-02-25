@@ -17,7 +17,7 @@ pub enum UserApiServiceError {
     UnprocessableEntity(String),
 
     /// 429: The client made too many requests to the server.
-    TooManyRequest(String),
+    TooManyRequests(String),
 
     /// 500: Something is wrong with the external API service.
     InternalServerError(String),
@@ -46,7 +46,7 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
             ApiServiceError::Unauthorized(_, text) => Ok(Self::Unauthorized(text)),
             ApiServiceError::NotFound(_, text) => Ok(Self::NotFound(text)),
             ApiServiceError::UnprocessableEntity(_, text) => Ok(Self::UnprocessableEntity(text)),
-            ApiServiceError::TooManyRequest(_, text) => Ok(Self::TooManyRequest(text)),
+            ApiServiceError::TooManyRequests(_, text) => Ok(Self::TooManyRequests(text)),
             ApiServiceError::InternalServerError(_, text) => Ok(Self::InternalServerError(text)),
             ApiServiceError::NotImplemented(_, text) => Ok(Self::NotImplemented(text)),
             ApiServiceError::BadGateway(_, text) => Ok(Self::BadGateway(text)),
