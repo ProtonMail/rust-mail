@@ -1,7 +1,7 @@
 use proton_api_core::services::proton::common::AuthId;
 use proton_crypto_account::{keys::UnlockedUserKeys, proton_crypto::crypto::PGPProviderSync};
 use proton_crypto_notifications::{
-    DecryptableNotification, GettablePGPNotification, NotificationError,
+    DecryptableNotification, NotificationError, PGPEncryptedNotification,
 };
 use serde::{Deserialize, Serialize};
 use tracing::error;
@@ -40,8 +40,8 @@ pub struct EncryptedPushNotification {
     pub encrypted_message: String,
 }
 
-impl GettablePGPNotification for EncryptedPushNotification {
-    fn pgp_notification(&self) -> &[u8] {
+impl PGPEncryptedNotification for EncryptedPushNotification {
+    fn pgp_encrypted_notification_data(&self) -> &[u8] {
         self.encrypted_message.as_bytes()
     }
 }
@@ -53,8 +53,8 @@ impl EncryptedPushNotification {
     ///
     pub fn into_decrypted_push_notification<P, O>(
         self,
-        user_keys: &UnlockedUserKeys<P>,
         pgp_provider: &P,
+        user_keys: &UnlockedUserKeys<P>,
     ) -> Result<DecryptedPushNotification<O>, NotificationError>
     where
         P: PGPProviderSync,

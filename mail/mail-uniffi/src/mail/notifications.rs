@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use proton_core_common::datatypes::EncryptedPushNotification as RealEncryptedPushNotification;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::{
-    DecryptableMailPushNotification, DecryptedMailPushNotification as RealDecryptedPushNotification,
+use proton_mail_common::datatypes::mail_notifications::{
+    DecryptableInboxPushNotification,
+    DecryptedInboxPushNotification as RealDecryptedPushNotification,
 };
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::{errors::ActionError, uniffi_async};
 
@@ -59,7 +60,7 @@ pub async fn decrypt_push_notification(
         let ctx = session.ctx_arc();
         let real_encrypted = RealEncryptedPushNotification::from(encrypted);
         let real_decrypted = real_encrypted
-            .into_decrypted_push_mail_notification(ctx)
+            .into_decrypted_inbox_mail_notification(ctx)
             .await?;
 
         let decrypted = DecryptedPushNotification::from(real_decrypted);

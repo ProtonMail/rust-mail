@@ -12,27 +12,33 @@ use tracing::error;
 
 use crate::{MailContext, MailContextError};
 
+/// Decrypted notification usable only in the context of the Inbox application
+///
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum DecryptedMailPushNotification {
+pub enum DecryptedInboxPushNotification {
     // TODO (ET-2204): Obviously this is not the final datastructure shape,
     // just a proof of concept
     Email {},
     OpenUrl {},
 }
 
-pub trait DecryptableMailPushNotification {
-    async fn into_decrypted_push_mail_notification(
+/// Notification specific for the Inbox, that can be decrypted and deserialized
+///
+pub trait DecryptableInboxPushNotification {
+    /// Decrypt and deserialize generic push notification into Inbox-specific notification
+    ///
+    async fn into_decrypted_inbox_mail_notification(
         self,
         ctx: Arc<MailContext>,
-    ) -> Result<DecryptedMailPushNotification, MailContextError>;
+    ) -> Result<DecryptedInboxPushNotification, MailContextError>;
 }
 
-impl DecryptableMailPushNotification for EncryptedPushNotification {
-    async fn into_decrypted_push_mail_notification(
+impl DecryptableInboxPushNotification for EncryptedPushNotification {
+    async fn into_decrypted_inbox_mail_notification(
         self,
         ctx: Arc<MailContext>,
-    ) -> Result<DecryptedMailPushNotification, MailContextError> {
+    ) -> Result<DecryptedInboxPushNotification, MailContextError> {
         let pgp_provider = proton_crypto::new_pgp_provider();
 
         let auth_id = &self.auth_id;
@@ -45,7 +51,7 @@ impl DecryptableMailPushNotification for EncryptedPushNotification {
         let user_keys = ctx.unlocked_user_keys(&pgp_provider, &tether).await?;
 
         let decrypted_notification = self
-            .into_decrypted_push_notification(&user_keys, &pgp_provider)
+            .into_decrypted_push_notification(&pgp_provider, &user_keys)
             .inspect_err(|e| error!("Failed to decrypt mail notification: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 

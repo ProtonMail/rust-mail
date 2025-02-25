@@ -1,7 +1,7 @@
 use proton_crypto_account::proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, PGPProviderSync, PrivateKey, PublicKey,
 };
-use proton_crypto_notifications::{DecryptableNotification, GettablePGPNotification};
+use proton_crypto_notifications::{DecryptableNotification, PGPEncryptedNotification};
 use serde::{Deserialize, Serialize};
 
 pub const TEST_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -32,8 +32,8 @@ const TEST_EXPECTED_NOTIFICATION: DecryptedTestNotification = DecryptedTestNotif
 
 pub struct EncryptedTestNotification(pub String);
 
-impl GettablePGPNotification for EncryptedTestNotification {
-    fn pgp_notification(&self) -> &[u8] {
+impl PGPEncryptedNotification for EncryptedTestNotification {
+    fn pgp_encrypted_notification_data(&self) -> &[u8] {
         self.0.as_bytes()
     }
 }

@@ -30,13 +30,13 @@ pub struct DecryptedNotification<T> {
 
 /// Notification encrypted by PGP key. Can be decrypted by [`DecryptableNotification::decrypt`].
 ///
-pub trait GettablePGPNotification {
+pub trait PGPEncryptedNotification {
     /// Encrypted slice of bytes
     ///
-    fn pgp_notification(&self) -> &[u8];
+    fn pgp_encrypted_notification_data(&self) -> &[u8];
 }
 
-pub trait DecryptableNotification: GettablePGPNotification {
+pub trait DecryptableNotification: PGPEncryptedNotification {
     /// Decrypt the notification
     ///
     /// Note, that function does not verify notification, nor it provides verifier.
@@ -51,7 +51,7 @@ pub trait DecryptableNotification: GettablePGPNotification {
         T: PGPProviderSync,
         for<'de> O: Deserialize<'de>,
     {
-        let data = self.pgp_notification();
+        let data = self.pgp_encrypted_notification_data();
         let decrypted_notification = pgp_provider
             .new_decryptor()
             .with_decryption_key_refs(decryption_keys)
