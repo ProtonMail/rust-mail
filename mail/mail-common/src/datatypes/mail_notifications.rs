@@ -46,7 +46,7 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
             error!("Could not find a session with id {auth_id}");
             return Err(MailContextError::SessionMissing(auth_id.clone()));
         };
-        let ctx = ctx.user_context_from_session(&session, None).await?;
+        let ctx = ctx.user_context_from_session(&session, None, None).await?;
         let tether = ctx.user_stash().connection();
         let user_keys = ctx.unlocked_user_keys(&pgp_provider, &tether).await?;
 
