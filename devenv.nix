@@ -8,10 +8,10 @@
 
 let
  # Sometimes we have to escape paths provided by nix in order to cross compile properly the rust code in iOS
- filter_pkg_in = pkg: variable: "${variable}=\"$(echo \"\$${variable}\" | tr \":\" \"\\n\" | grep -v \"${pkg}\" | paste -sd \":\")\"";
- filter_pkg = pkg: 
+ filterPkgIn = pkg: variable: "${variable}=\"$(echo \"\$${variable}\" | tr \":\" \"\\n\" | grep -v \"${pkg}\" | paste -sd \":\")\"";
+ filterPkg = pkg: 
   let vars = ["PATH" "NIX_CFLAGS_COMPILE" "NIX_LDFLAGS" "XDG_DATA_DIRS"];
-  in lib.strings.concatMapStringsSep " " (var: filter_pkg_in pkg var) vars;
+  in lib.strings.concatMapStringsSep " " (var: filterPkgIn pkg var) vars;
 in
 {
   packages = [
@@ -58,7 +58,7 @@ in
 
       # But the rest has to use libiconv that is provided by XCode.
 
-      ${filter_pkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
+      ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
 
       popd
     '';
@@ -71,8 +71,8 @@ in
     #
     # Here we're filtering the /bin path to the 'xcodebuild' dependency brought in,
     # so that 'xcodebuild' resolves to the version installed outside the devshell.
-    export ${filter_pkg_in "xcbuild" "PATH"};
-    export ${filter_pkg_in "clang" "PATH"};
+    export ${filterPkgIn "xcbuild" "PATH"};
+    export ${filterPkgIn "clang" "PATH"};
     unset DEVELOPER_DIR;
     unset SDKROOT;
 
