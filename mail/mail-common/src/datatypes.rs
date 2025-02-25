@@ -42,6 +42,7 @@ pub mod attachment;
 pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
 pub mod labels;
+pub mod mail_notifications;
 pub mod message_banner;
 mod read_filter;
 mod rollback_item_type;

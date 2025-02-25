@@ -14,6 +14,7 @@ members = [
     "core/vcard",
     "crypto/crypto-inbox",
     "crypto/crypto-inbox-mime",
+    "crypto/crypto-notifications",
     "mail/mail-api",
     "mail/mail-common",
     "mail/mail-html-transformer",
@@ -189,6 +190,11 @@ features = ["sql"]
 
 [workspace.dependencies.proton-crypto]
 version = "0.4.12"
+registry = "proton"
+
+[workspace.dependencies.proton-crypto-notifications]
+version = "0.1"
+path = "crypto/crypto-notifications"
 registry = "proton"
 
 [workspace.dependencies.muon]

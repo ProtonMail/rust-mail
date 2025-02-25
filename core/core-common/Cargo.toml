@@ -21,6 +21,7 @@ parking_lot = { workspace = true }
 proton-api-core = { workspace = true, features = ["sql"] }
 proton-action-queue = { workspace = true }
 proton-crypto-account = { workspace = true, features = ["sql"] }
+proton-crypto-notifications = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-vcard = { workspace = true }

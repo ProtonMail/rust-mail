@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - [ET-405]  Two `DeviceEnvironment` cases for ET: sandbox and production
+  - [ET-2204] Added `EncryptedPushNotification` and method for decrypting it. The body of the notification is yet to define, but it is a proof of correct message decryption.
 
 ### Changed
 

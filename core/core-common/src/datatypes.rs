@@ -40,11 +40,13 @@
 mod account_details;
 mod avatar;
 mod contact_list;
+mod push_notifications;
 mod system_label;
 
 pub use self::account_details::AccountDetails;
 pub use self::avatar::AvatarInformation;
 pub use self::contact_list::*;
+pub use self::push_notifications::*;
 pub use self::system_label::*;
 
 use derive_more::derive::TryFrom;

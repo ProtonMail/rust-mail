@@ -33,6 +33,8 @@ use tokio::task::{JoinError, JoinHandle};
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
+    #[error("Session with id {0} is missing in the DB")]
+    SessionMissing(AuthId),
     #[error("Account with user id {0} is missing in the DB")]
     AccountMissing(UserId),
     #[error("A Cryptography error occurred")]
