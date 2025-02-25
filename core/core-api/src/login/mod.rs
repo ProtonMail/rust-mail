@@ -97,10 +97,11 @@ pub struct Flow {
 }
 
 impl Flow {
+    /// Create a new login flow from the beginning.
     #[must_use]
     pub fn new(session: Session) -> Self {
-        let parts = session.to_parts();
-        let state = State::new(parts);
+        let (client, parts) = session.to_parts();
+        let state = State::new(client, parts);
 
         Self { session, state }
     }
@@ -113,8 +114,8 @@ impl Flow {
         session_id: AuthId,
         pass: Option<String>,
     ) -> Self {
-        let parts = session.to_parts();
-        let state = State::new_from_tfa(parts, user_id, session_id, pass);
+        let (client, parts) = session.to_parts();
+        let state = State::new_from_tfa(client, parts, user_id, session_id, pass);
 
         Self { session, state }
     }
@@ -122,23 +123,24 @@ impl Flow {
     /// Resume the login flow at the mailbox password step.
     #[must_use]
     pub fn new_from_mbp(session: Session, user_id: UserId, session_id: AuthId) -> Self {
-        let parts = session.to_parts();
-        let state = State::new_from_mbp(parts, user_id, session_id);
+        let (client, parts) = session.to_parts();
+        let state = State::new_from_mbp(client, parts, user_id, session_id);
 
         Self { session, state }
     }
 
-    /// Start login with credentials while passing additional `extra_info`.
+    /// Start login with credentials while passing additional `info`.
     ///
     /// # Errors
+    ///
     /// Returns error if the login request or SRP proof calculations failed.
     pub async fn login(
         &mut self,
         user: String,
         pass: String,
-        extra_info: LoginExtraInfo,
+        info: LoginExtraInfo,
     ) -> Result<(), LoginError> {
-        self.transition(|s| s.login(user, pass, extra_info))
+        self.transition(|s| s.login(user, pass, info))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -252,19 +254,19 @@ impl Flow {
 
     /// Try to recover from a failed transition.
     fn try_recover(&mut self) {
-        let parts = self.session.to_parts();
+        let (client, parts) = self.session.to_parts();
 
         match self.take_state() {
             State::LoginRetry => {
-                self.state = State::new(parts);
+                self.state = State::new(client, parts);
             }
 
             State::TfaRetry(user_id, auth_id, pass) => {
-                self.state = State::new_from_tfa(parts, user_id, auth_id, pass);
+                self.state = State::new_from_tfa(client, parts, user_id, auth_id, pass);
             }
 
             State::MbpRetry(user_id, auth_id) => {
-                self.state = State::new_from_mbp(parts, user_id, auth_id);
+                self.state = State::new_from_mbp(client, parts, user_id, auth_id);
             }
 
             state => self.state = state,

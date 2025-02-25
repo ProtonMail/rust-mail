@@ -36,7 +36,6 @@ mod basic {
 mod messages {
     use super::*;
 
-    use proton_api_core::status_observer::StatusObserver;
     use serde_json::json;
     use test_case::test_case;
     use wiremock::matchers::path_regex;
@@ -103,6 +102,6 @@ mod messages {
             ..Default::default()
         };
 
-        Ok(Session::new(config, None, StatusObserver::test())?)
+        Ok(Session::builder().with_config(config).build()?)
     }
 }
