@@ -204,7 +204,6 @@ impl StatusObserver {
     #[must_use]
     pub fn test() -> Self {
         let (on_update, _) = watch::channel(ConnectionStatus::Online);
-
         let config = StatusObserverConfig::test();
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(config.up_to_date.as_secs() + 1))
@@ -280,14 +279,15 @@ impl StatusObserver {
 
     async fn update(&self, status: ConnectionStatus) {
         let mut self_status = self.status.write().await;
-        self_status.last_check = Instant::now();
-        self_status.status = status;
 
-        if self.on_update.receiver_count() > 0 {
+        if self_status.status != status {
             if let Err(e) = self.on_update.send(status) {
                 tracing::error!("Could not send status update on the StatusObserver's queue {e}");
             }
         }
+
+        self_status.last_check = Instant::now();
+        self_status.status = status;
 
         trace!("Status has been updated to {:?}", status);
     }

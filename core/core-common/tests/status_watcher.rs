@@ -11,7 +11,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn status_watcher(millis: u64) -> StatusWatcher {
     let mut sw = StatusWatcher::test();
-    let _ = sw.with_up_to_date(Duration::from_millis(millis)).await;
+    let () = sw.with_up_to_date(Duration::from_millis(millis)).await;
     sw
 }
 
@@ -51,12 +51,12 @@ async fn shared_status() {
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
-        .expect(2)
+        .expect(1..=2)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;
-    // Give some time for a server to start
-    sleep(Duration::from_millis(200)).await;
+
+    api_1.wait_for_online().await;
 
     // Check if all this calls trigger a single request - expect 2 as there is offline background request running
     assert_eq!(api_1.status().await, ConnectionStatus::Online);
@@ -108,7 +108,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(500)))
-        .expect(2)
+        .expect(2..=3)
         .mount(&mock_server)
         .await;
 
@@ -123,110 +123,40 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
 
-// #[tokio::test]
-// async fn offline_background_requests() {
+// #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+// async fn wait_for_online() {
 //     let mock_server = MockServer::start().await;
 //     let api_path = random_path();
 //     let api_config = Config {
 //         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
 //         ..Default::default()
 //     };
-//     let api = Session::new(
-//         api_config.clone(),
-//         None,
-//         StatusWatcher::test()
-//             .with_up_to_date(Duration::from_millis(1000))
-//             .await,
-//     )
-//     .unwrap();
+//     let sw = status_watcher(500).await;
+//     let api = Session::new(api_config.clone(), None, sw).unwrap();
 
 //     Mock::given(method("GET"))
 //         .and(path(format!("{api_path}/core/v4/tests/ping")))
 //         .respond_with(ResponseTemplate::new(500))
-//         .expect(5)
 //         .mount(&mock_server)
 //         .await;
-
 //     catch_all(&mock_server).await;
 //     // Give some time for a server to start
 //     sleep(Duration::from_millis(200)).await;
 
 //     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
-// }
 
-// TODO: Very unreliable tests in CI, needs to be fixed
-// #[tokio::test]
-// async fn terribly_bad_connection_and_server_restart_simulation() {
-//     let mock_server = MockServer::start().await;
-//     let api_path = random_path();
-//     let api_config = Config {
-//         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-//         ..Default::default()
-//     };
-//     let api = Session::new(api_config.clone(), None, status_watcher().await).unwrap();
-
-//     Mock::given(method("GET"))
-//         .and(path(format!("{api_path}/core/v4/tests/ping")))
-//         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(20)))
-//         .expect(2)
-//         .mount(&mock_server)
-//         .await;
-
-//     catch_all(&mock_server).await;
-//     // Give some time for a server to start
-//     sleep(Duration::from_millis(200)).await;
-
-//     assert_eq!(api.status().await, ConnectionStatus::Offline);
-
+//     // Restart server
 //     mock_server.reset().await;
 
 //     Mock::given(method("GET"))
 //         .and(path(format!("{api_path}/core/v4/tests/ping")))
 //         .respond_with(ResponseTemplate::new(200))
-//         .expect(2)
 //         .mount(&mock_server)
 //         .await;
-
 //     catch_all(&mock_server).await;
 
-//     sleep(Duration::from_millis(200)).await;
+//     api.wait_for_online().await;
 //     assert_eq!(api.status().await, ConnectionStatus::Online);
-//     sleep(Duration::from_millis(100)).await;
-//     assert_eq!(api.status().await, ConnectionStatus::Online);
-// }
-
-// #[tokio::test]
-// async fn terribly_bad_connection_responding_in_twenty_seconds() {
-//     let mock_server = MockServer::start().await;
-//     let api_path = random_path();
-//     let api_config = Config {
-//         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-//         ..Default::default()
-//     };
-//     let api = Session::new(api_config.clone(), None, status_watcher().await).unwrap();
-
-//     Mock::given(method("GET"))
-//         .and(path(format!("{api_path}/core/v4/tests/ping")))
-//         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(20)))
-//         .expect(2)
-//         .mount(&mock_server)
-//         .await;
-
-//     catch_all(&mock_server).await;
-//     // Give some time for a server to start
-//     sleep(Duration::from_millis(200)).await;
-
-//     // Timeout
-//     assert_eq!(api.status().await, ConnectionStatus::Offline);
-//     sleep(Duration::from_millis(100)).await;
-//     assert_eq!(api.status().await, ConnectionStatus::Offline);
 // }
 
 #[test_case(200, ConnectionStatus::Online; "TEST 1 - 200 Ok")]
@@ -251,12 +181,12 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
         ..Default::default()
     };
-    let api = Session::new(api_config.clone(), None, status_watcher(0).await).unwrap();
+    let api = Session::new(api_config.clone(), None, status_watcher(500).await).unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(http_code))
-        .expect(1)
+        .expect(1..=2)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;

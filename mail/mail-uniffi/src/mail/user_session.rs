@@ -7,7 +7,7 @@ use crate::core::datatypes::ConnectionStatus;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
-use crate::MapIntoResult;
+use crate::{async_runtime, spawn_async, LiveQueryCallback, MapIntoResult};
 use crate::{
     core::datatypes::{AccountDetails, Id, User},
     uniffi_async,
@@ -202,6 +202,24 @@ impl MailUserSession {
         })
         .await
         .map_err(UserSessionError::from)
+    }
+
+    /// Execute callback when connection status is online
+    ///
+    /// The method will execute callback immediately when current status is online
+    /// otherwise it will wait till the status is online again and then execute callback
+    ///
+    pub fn execute_when_online(&self, callback: Box<dyn LiveQueryCallback>) {
+        let Ok(ctx) = self.ctx() else {
+            tracing::error!("Cannot obtain context, callback will not be executed");
+            return;
+        };
+
+        spawn_async(ctx.clone(), async move {
+            ctx.session().wait_for_online().await;
+            let callback = move || callback.on_update();
+            _ = async_runtime().spawn_blocking(callback).await;
+        });
     }
 }
 

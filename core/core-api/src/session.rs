@@ -3,7 +3,7 @@
 use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;
@@ -99,6 +99,8 @@ impl Session {
         )?;
         let config = Arc::new(config);
 
+        status.initialize(client.clone());
+
         Ok(Self {
             client,
             config,
@@ -175,6 +177,28 @@ impl Session {
     ///
     pub async fn status(&self) -> ConnectionStatus {
         self.status.status(self.client.clone()).await
+    }
+
+    /// Observe changes on status via `Receiver`
+    ///
+    pub async fn status_changes(&self) -> watch::Receiver<ConnectionStatus> {
+        let mut subscription = self.status.subscribe().await;
+        subscription.mark_unchanged();
+
+        subscription
+    }
+
+    /// Hold task till connection status is back online
+    ///
+    pub async fn wait_for_online(&self) {
+        if self.status().await.is_offline() {
+            let mut watcher = self.status_changes().await;
+            while watcher.changed().await.is_ok() {
+                if self.status().await.is_online() {
+                    break;
+                }
+            }
+        }
     }
 }
 

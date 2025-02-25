@@ -14,6 +14,10 @@ use tokio::{
     time,
 };
 
+/// A `StatusWatcher` keeps track of the connection status and provides an interface to observe the changes.
+///
+/// It will watch `StatusObserver` updates and periodically request current status.
+///
 #[derive(Debug, Clone)]
 pub struct StatusWatcher {
     subsribers: Arc<RwLock<Sender<ConnectionStatus>>>,
@@ -42,6 +46,9 @@ impl Default for StatusWatcher {
 }
 
 impl StatusWatcher {
+    /// Construct new `StatusWatcher` with shared state Observer, this constructor should be invoked
+    /// when running an application.
+    ///
     #[must_use]
     pub fn new() -> Self {
         let (sender, _) = watch::channel(ConnectionStatus::Online);
@@ -52,6 +59,9 @@ impl StatusWatcher {
         }
     }
 
+    /// Construct new `StatusWatcher` with individual state Observer, this constructor should be invoked
+    /// when running tests.
+    ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
     pub fn test() -> Self {
@@ -63,14 +73,18 @@ impl StatusWatcher {
         }
     }
 
+    /// Clone underlying observer
+    #[must_use]
     pub fn observer(&self) -> StatusObserver {
         self.observer.clone()
     }
 
+    /// Subscribe for notifications of updates to the status
     pub async fn subscribe(&self) -> Receiver<ConnectionStatus> {
         self.subsribers.read().await.subscribe()
     }
 
+    /// Initialize background task for notifying subscribers
     pub fn initialize(&self, api: Proton) {
         let subscribers = Arc::downgrade(&self.subsribers);
         let observer = self.observer.clone();
@@ -80,19 +94,25 @@ impl StatusWatcher {
             let mut interval = time::interval(Duration::from_secs(10));
             let mut on_update = observer.on_updates();
 
+            on_update.mark_unchanged();
+
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
                         Self::update_status(&subscribers, &observer, &api, &current_handle).await;
+                        on_update.mark_unchanged();
                     }
                     Ok(()) = on_update.changed() => {
                         Self::update_status(&subscribers, &observer, &api, &current_handle).await;
+                        on_update.mark_unchanged();
+                        interval.reset();
                     }
                 }
             }
         });
     }
 
+    /// Update subscribers on status change
     async fn update_status(
         subscribers: &Weak<RwLock<Sender<ConnectionStatus>>>,
         observer: &StatusObserver,
@@ -104,16 +124,14 @@ impl StatusWatcher {
         };
         let subscribers = subscribers.read().await;
 
-        if subscribers.receiver_count() > 0 {
-            let new_status = observer.status(api.clone()).await;
-            let mut current = current_handle.write().await;
+        let new_status = observer.status(api.clone()).await;
+        let mut current = current_handle.write().await;
 
-            if *current != new_status {
-                *current = new_status;
+        if *current != new_status {
+            *current = new_status;
 
-                if let Err(e) = subscribers.send(*current) {
-                    tracing::error!("Cant send notification on status change {e}");
-                }
+            if let Err(e) = subscribers.send(*current) {
+                tracing::error!("Cant send notification on status change {e}");
             }
         }
     }
