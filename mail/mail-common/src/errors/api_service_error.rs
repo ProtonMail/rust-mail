@@ -41,31 +41,29 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
     type Error = Unexpected;
 
     fn try_from(error: ApiServiceError) -> Result<Self, Self::Error> {
+        use ApiServiceError::*;
+
         match error {
-            ApiServiceError::BadRequest(_, text) => Ok(Self::BadRequest(text)),
-            ApiServiceError::Unauthorized(_, text) => Ok(Self::Unauthorized(text)),
-            ApiServiceError::NotFound(_, text) => Ok(Self::NotFound(text)),
-            ApiServiceError::UnprocessableEntity(_, text) => Ok(Self::UnprocessableEntity(text)),
-            ApiServiceError::TooManyRequests(_, text) => Ok(Self::TooManyRequests(text)),
-            ApiServiceError::InternalServerError(_, text) => Ok(Self::InternalServerError(text)),
-            ApiServiceError::NotImplemented(_, text) => Ok(Self::NotImplemented(text)),
-            ApiServiceError::BadGateway(_, text) => Ok(Self::BadGateway(text)),
-            ApiServiceError::ServiceUnavailable(_, text) => Ok(Self::ServiceUnavailable(text)),
-            ApiServiceError::OtherHttpError(code, _, text) => {
-                Ok(Self::OtherHttpError(code.as_u16(), text))
+            BadRequest(_, info) => Ok(Self::BadRequest(format!("{info:?}"))),
+            Unauthorized(_, info) => Ok(Self::Unauthorized(format!("{info:?}"))),
+            NotFound(_, info) => Ok(Self::NotFound(format!("{info:?}"))),
+            UnprocessableEntity(_, info) => Ok(Self::UnprocessableEntity(format!("{info:?}"))),
+            TooManyRequests(_, info) => Ok(Self::TooManyRequests(format!("{info:?}"))),
+            InternalServerError(_, info) => Ok(Self::InternalServerError(format!("{info:?}"))),
+            NotImplemented(_, info) => Ok(Self::NotImplemented(format!("{info:?}"))),
+            BadGateway(_, info) => Ok(Self::BadGateway(format!("{info:?}"))),
+            ServiceUnavailable(_, info) => Ok(Self::ServiceUnavailable(format!("{info:?}"))),
+
+            OtherHttpError(code, _, info) => {
+                Ok(Self::OtherHttpError(code.as_u16(), format!("{info:?}")))
             }
 
-            ApiServiceError::ConnectionError(_)
-            | ApiServiceError::NetworkError(_)
-            | ApiServiceError::Redirect(_, _)
-            | ApiServiceError::Timeout(_) => Err(Unexpected::Network),
+            ConnectionError(_) | NetworkError(_) | Redirect(_, _) | Timeout(_) => {
+                Err(Unexpected::Network)
+            }
 
-            ApiServiceError::QueryStringError(_)
-            | ApiServiceError::RequestError(_)
-            | ApiServiceError::ResponseError(_)
-            | ApiServiceError::Utf8DecodingError(_)
-            | ApiServiceError::AuthStore(_)
-            | ApiServiceError::UnknownError(_) => Err(Unexpected::Internal),
+            QueryStringError(_) | RequestError(_) | ResponseError(_) | Utf8DecodingError(_)
+            | AuthStore(_) | UnknownError(_) => Err(Unexpected::Internal),
         }
     }
 }

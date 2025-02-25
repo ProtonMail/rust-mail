@@ -271,7 +271,6 @@ impl ProtonCore for Proton {
 #[allow(clippy::redundant_closure_for_method_calls)]
 impl From<muon::Error> for ApiServiceError {
     fn from(e: muon::Error) -> Self {
-        #[allow(clippy::enum_glob_use)]
         use MuonErrorKind::*;
 
         // Check if the error is the result of a timeout.
@@ -286,12 +285,20 @@ impl From<muon::Error> for ApiServiceError {
 
         // Otherwise, match on the kind of error we received.
         match e.kind() {
+            // Connection errors.
             Tls | Resolve | Dial | Connect => Self::ConnectionError(e.to_string()),
+
+            // Network errors.
             Send | Closed => Self::NetworkError(e.to_string()),
-            Auth => Self::Unauthorized(String::default(), e.to_string()),
+
+            // Request errors.
             Req => Self::RequestError(e.to_string()),
+
+            // Response errors.
             Res => Self::ResponseError(e.to_string()),
-            Other => Self::UnknownError(e.to_string()),
+
+            // All other errors.
+            _ => Self::UnknownError(e.to_string()),
         }
     }
 }
@@ -304,6 +311,12 @@ impl From<StatusErr> for ApiServiceError {
 
 impl From<&StatusErr> for ApiServiceError {
     fn from(&StatusErr(code, ref res): &StatusErr) -> Self {
+        macro_rules! err {
+            ($body:expr) => {
+                ApiErrorInfo::from_json($body).ok()
+            };
+        }
+
         let body = match String::from_utf8(res.body().to_owned()) {
             Ok(b) => b,
             Err(e) => return Self::Utf8DecodingError(e),
@@ -312,17 +325,17 @@ impl From<&StatusErr> for ApiServiceError {
         match (code, code.to_string()) {
             (code, e) if code.is_redirection() => Self::Redirect(e, body),
 
-            (Status::BAD_REQUEST, e) => Self::BadRequest(e, body),
-            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, body),
-            (Status::NOT_FOUND, e) => Self::NotFound(e, body),
-            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, body),
-            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequests(e, body),
-            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, body),
-            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, body),
-            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, body),
-            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, body),
+            (Status::BAD_REQUEST, e) => Self::BadRequest(e, err!(body)),
+            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, err!(body)),
+            (Status::NOT_FOUND, e) => Self::NotFound(e, err!(body)),
+            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, err!(body)),
+            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequests(e, err!(body)),
+            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, err!(body)),
+            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, err!(body)),
+            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, err!(body)),
+            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, err!(body)),
 
-            (code, e) => Self::OtherHttpError(code, e, body),
+            (code, e) => Self::OtherHttpError(code, e, err!(body)),
         }
     }
 }
