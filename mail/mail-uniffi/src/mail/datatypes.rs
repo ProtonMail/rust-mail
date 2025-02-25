@@ -1105,9 +1105,9 @@ impl ConversationSearchOptions {
 
         Ok(GetConversationsOptions {
             address_id: match self.address_id {
-                Some(id) => RealAddress::local_id_counterpart(LocalAddressId::from(id), tether)
-                    .await?
-                    .map(Into::into),
+                Some(id) => {
+                    RealAddress::local_id_counterpart(LocalAddressId::from(id), tether).await?
+                }
                 None => None,
             },
             attachments: self.attachments,
@@ -1117,7 +1117,6 @@ impl ConversationSearchOptions {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
                         .await?
-                        .map(Into::into)
                 }
                 None => None,
             },
@@ -1127,7 +1126,6 @@ impl ConversationSearchOptions {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
                         .await?
-                        .map(Into::into)
                 }
                 None => None,
             },
@@ -1136,9 +1134,7 @@ impl ConversationSearchOptions {
             ids,
             keyword: self.keyword,
             label_id: match self.label_id {
-                Some(id) => RealLabel::local_id_counterpart(LocalLabelId::from(id), tether)
-                    .await?
-                    .map(Into::into),
+                Some(id) => RealLabel::local_id_counterpart(LocalLabelId::from(id), tether).await?,
                 None => None,
             },
             limit: self.limit,
@@ -1898,9 +1894,9 @@ impl MessageSearchOptions {
 
         Ok(GetMessagesOptions {
             address_id: match self.address_id {
-                Some(id) => RealAddress::local_id_counterpart(LocalAddressId::from(id), tether)
-                    .await?
-                    .map(Into::into),
+                Some(id) => {
+                    RealAddress::local_id_counterpart(LocalAddressId::from(id), tether).await?
+                }
                 None => None,
             },
             attachments: self.attachments,
@@ -1908,9 +1904,9 @@ impl MessageSearchOptions {
             bcc: self.bcc,
             begin: self.begin,
             begin_id: match self.begin_id {
-                Some(id) => RealMessage::local_id_counterpart(LocalMessageId::from(id), tether)
-                    .await?
-                    .map(Into::into),
+                Some(id) => {
+                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
+                }
                 None => None,
             },
             cc: self.cc,
@@ -1918,16 +1914,15 @@ impl MessageSearchOptions {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
                         .await?
-                        .map(Into::into)
                 }
                 None => None,
             },
             desc: self.desc,
             end: self.end,
             end_id: match self.end_id {
-                Some(id) => RealMessage::local_id_counterpart(LocalMessageId::from(id), tether)
-                    .await?
-                    .map(Into::into),
+                Some(id) => {
+                    RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
+                }
                 None => None,
             },
             external_id: self.external_id,

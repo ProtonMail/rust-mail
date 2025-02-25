@@ -98,13 +98,7 @@ impl ActionHandler for Handler {
             vec![]
         } else {
             let api = ctx.api();
-            let message_ids = action
-                .0
-                .remote_target_ids
-                .clone()
-                .into_iter()
-                .map(Into::into)
-                .collect();
+            let message_ids = action.0.remote_target_ids.clone();
             let label_id = action.0.remote_label_id.clone();
             let response = api
                 .put_messages_delete(message_ids, label_id)

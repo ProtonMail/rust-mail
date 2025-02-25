@@ -90,13 +90,7 @@ impl ActionHandler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = ctx.api();
-        let message_ids = action
-            .0
-            .remote_target_ids
-            .clone()
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        let message_ids = action.0.remote_target_ids.clone();
         let response = api.put_messages_read(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as read

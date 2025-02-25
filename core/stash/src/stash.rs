@@ -553,7 +553,6 @@ impl Tether {
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
-            .map_err(Into::into)
     }
 
     /// Loads a record from the database by ID.

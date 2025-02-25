@@ -24,7 +24,7 @@ impl KeyPacket {
 
     /// Decodes the key packet to raw bytes.
     pub fn decode(&self) -> Result<Vec<u8>, DecodeError> {
-        BASE_64.decode(&self.0).map_err(Into::into)
+        BASE_64.decode(&self.0)
     }
 }
 
@@ -44,7 +44,7 @@ crate::string_id! {
 impl SessionKeyExposed {
     /// Decodes the session key and exposes it.
     pub fn decode(&self) -> Result<Vec<u8>, DecodeError> {
-        BASE_64.decode(&self.0).map_err(Into::into)
+        BASE_64.decode(&self.0)
     }
 }
 
