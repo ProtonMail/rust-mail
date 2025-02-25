@@ -123,41 +123,91 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     assert_eq!(api.status().await, ConnectionStatus::Online);
 }
 
-// #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
-// async fn wait_for_online() {
-//     let mock_server = MockServer::start().await;
-//     let api_path = random_path();
-//     let api_config = Config {
-//         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-//         ..Default::default()
-//     };
-//     let sw = status_watcher(500).await;
-//     let api = Session::new(api_config.clone(), None, sw).unwrap();
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn wait_for_online() {
+    let mock_server = MockServer::start().await;
+    let api_path = random_path();
+    let api_config = Config {
+        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
+        ..Default::default()
+    };
+    let sw = status_watcher(500).await;
+    let api = Session::new(api_config.clone(), None, sw).unwrap();
 
-//     Mock::given(method("GET"))
-//         .and(path(format!("{api_path}/core/v4/tests/ping")))
-//         .respond_with(ResponseTemplate::new(500))
-//         .mount(&mock_server)
-//         .await;
-//     catch_all(&mock_server).await;
-//     // Give some time for a server to start
-//     sleep(Duration::from_millis(200)).await;
+    Mock::given(method("GET"))
+        .and(path(format!("{api_path}/core/v4/tests/ping")))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock_server)
+        .await;
+    catch_all(&mock_server).await;
+    // Give some time for a server to start
+    sleep(Duration::from_millis(200)).await;
 
-//     assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
 
-//     // Restart server
-//     mock_server.reset().await;
+    // Restart server
+    mock_server.reset().await;
 
-//     Mock::given(method("GET"))
-//         .and(path(format!("{api_path}/core/v4/tests/ping")))
-//         .respond_with(ResponseTemplate::new(200))
-//         .mount(&mock_server)
-//         .await;
-//     catch_all(&mock_server).await;
+    Mock::given(method("GET"))
+        .and(path(format!("{api_path}/core/v4/tests/ping")))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+    catch_all(&mock_server).await;
 
-//     api.wait_for_online().await;
-//     assert_eq!(api.status().await, ConnectionStatus::Online);
-// }
+    api.wait_for_online().await;
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 3)]
+async fn multiple_subscribers() {
+    let mock_server = MockServer::start().await;
+    let api_path = random_path();
+    let api_config = Config {
+        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
+        ..Default::default()
+    };
+    let sw = status_watcher(500).await;
+    let api = Session::new(api_config.clone(), None, sw).unwrap();
+
+    Mock::given(method("GET"))
+        .and(path(format!("{api_path}/core/v4/tests/ping")))
+        .respond_with(ResponseTemplate::new(500))
+        .mount(&mock_server)
+        .await;
+    catch_all(&mock_server).await;
+    // Give some time for a server to start
+    sleep(Duration::from_millis(200)).await;
+
+    assert_eq!(api.status().await, ConnectionStatus::ServerUnreachable);
+
+    // Restart server
+    mock_server.reset().await;
+
+    Mock::given(method("GET"))
+        .and(path(format!("{api_path}/core/v4/tests/ping")))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&mock_server)
+        .await;
+    catch_all(&mock_server).await;
+
+    let mut subscriber_1 = api.status_changes().await;
+    let subscriber_2 = api.status_changes().await;
+
+    while !subscriber_1.has_changed().unwrap() {
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    assert!(subscriber_1.has_changed().unwrap());
+    assert!(subscriber_2.has_changed().unwrap());
+
+    assert!(subscriber_1.changed().await.is_ok());
+
+    assert!(!subscriber_1.has_changed().unwrap());
+    assert!(subscriber_2.has_changed().unwrap());
+
+    assert_eq!(api.status().await, ConnectionStatus::Online);
+}
 
 #[test_case(200, ConnectionStatus::Online; "TEST 1 - 200 Ok")]
 #[test_case(201, ConnectionStatus::Online; "TEST 2 - 201 Created")]
