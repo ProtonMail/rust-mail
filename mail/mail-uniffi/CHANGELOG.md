@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.48.1] - 2025-02-25
+
 ### Changed
 
   - [ET-2142] Draft actions now run in their own separate queue.
