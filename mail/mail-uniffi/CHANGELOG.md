@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - [ET-2142] Draft actions now run in their own separate queue.
+  - [ET-2204] Decrypted push notifications contain now valid and usable payloads for emails and opening urls.
 
 ## [0.48.0] - 2025-02-24
 

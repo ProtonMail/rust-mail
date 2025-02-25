@@ -9,14 +9,12 @@ use super::proton::{common::MessageId, prelude::MessageSender};
 ///
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[allow(clippy::large_enum_variant)] // ET-2204: Will go away when OpenUrl is properly implemented
 pub enum DecryptedInboxPushNotification {
     Email {
         data: DecryptedEmailPushNotification,
     },
     OpenUrl {
-        // TODO (ET-2204): Replace with proper structure
-        data: serde_json::Value,
+        data: DecryptedOpenUrlPushNotification,
     },
 }
 
@@ -68,4 +66,55 @@ pub struct DecryptedEmailPushNotification {
     #[serde(default)]
     #[serde_as(as = "BoolFromInt")]
     pub vibrate: bool,
+}
+
+/// This is decrypted notification that after clicking opens a web page.
+///
+#[serde_as]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecryptedOpenUrlPushNotification {
+    /// TODO: Describe
+    pub title: String,
+
+    /// TODO: Describe
+    pub subtitle: String,
+
+    /// Content of the notification
+    ///
+    pub body: String,
+
+    /// Who sent the message
+    ///
+    pub sender: MessageSender,
+
+    /// Whether to play sound
+    ///
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
+    pub sound: bool,
+
+    /// Whether to vibrate
+    ///
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
+    pub vibrate: bool,
+
+    /// TODO: Describe
+    pub large_icon: String,
+
+    /// TODO: Describe
+    pub small_icon: String,
+
+    /// A number rendered in the badge next to the icon.
+    ///
+    pub badge: u64,
+
+    /// What website should be opened when user clicks the notification
+    ///
+    pub url: String,
+
+    // This field is based on https://protonag.atlassian.net/wiki/spaces/INBOX/pages/46369569/Push+Notifications+in+Proton+Mail+iOS
+    /// TODO: Describe
+    pub message_id: String,
 }

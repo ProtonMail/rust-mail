@@ -5,6 +5,7 @@ use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
     DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
+    DecryptedOpenUrlPushNotification as RealDecryptedOpenUrlPushNotification,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
@@ -45,18 +46,17 @@ pub enum DecryptedPushNotification {
     /// Decrypted notification that is pushed when user receives a new email.
     ///
     Email(DecryptedEmailPushNotification),
-    // TODO (ET-2204): Obviously this is not the final datastructure
     /// Decrypted notification that is pushed when user logged in in the separate device.
     /// We use it to show webpage.
     ///
-    OpenUrl,
+    OpenUrl(DecryptedOpenUrlPushNotification),
 }
 
 impl From<RealDecryptedInboxPushNotification> for DecryptedPushNotification {
     fn from(value: RealDecryptedInboxPushNotification) -> Self {
         match value {
             RealDecryptedInboxPushNotification::Email(email) => Self::Email(email.into()),
-            RealDecryptedInboxPushNotification::OpenUrl { .. } => Self::OpenUrl,
+            RealDecryptedInboxPushNotification::OpenUrl(open_url) => Self::OpenUrl(open_url.into()),
         }
     }
 }
@@ -84,6 +84,31 @@ impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification
             subject: value.subject,
             sender: value.sender.into(),
             message_id: value.message_id.into(),
+        }
+    }
+}
+
+/// Decrypted notification that is pushed when user's device has to open a web page with given URL.
+/// Used for example when user logs in in the new device
+///
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct DecryptedOpenUrlPushNotification {
+    /// Content of the notification
+    pub content: String,
+
+    /// Information about who sent the notification
+    pub sender: MessageSender,
+
+    /// URL
+    pub url: String,
+}
+
+impl From<RealDecryptedOpenUrlPushNotification> for DecryptedOpenUrlPushNotification {
+    fn from(value: RealDecryptedOpenUrlPushNotification) -> Self {
+        Self {
+            content: value.content,
+            sender: value.sender.into(),
+            url: value.url,
         }
     }
 }
