@@ -6,13 +6,13 @@ use proton_mail_common::datatypes::mail_notifications::{
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
     DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
     DecryptedOpenUrlPushNotification as RealDecryptedOpenUrlPushNotification,
+    NotificationSender as RealNotificationSender,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::core::datatypes::Id;
 use crate::{errors::ActionError, uniffi_async};
 
-use super::datatypes::MessageSender;
 use super::MailSession;
 
 /// Encrypted push notification
@@ -71,7 +71,7 @@ pub struct DecryptedEmailPushNotification {
 
     /// Information about who sent the message
     ///
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// Local message ID
     ///
@@ -97,7 +97,7 @@ pub struct DecryptedOpenUrlPushNotification {
     pub content: String,
 
     /// Information about who sent the notification
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// URL
     pub url: String,
@@ -109,6 +109,35 @@ impl From<RealDecryptedOpenUrlPushNotification> for DecryptedOpenUrlPushNotifica
             content: value.content,
             sender: value.sender.into(),
             url: value.url,
+        }
+    }
+}
+
+/// Who sent the notification
+///
+/// This data structure is very similar to [`super::datatypes::MessageSender`] but simplified
+///
+#[derive(Clone, Debug, Default, Eq, PartialEq, uniffi::Record)]
+pub struct NotificationSender {
+    /// Name of the sender
+    ///
+    pub name: String,
+
+    /// Email address of the sender
+    ///
+    pub address: String,
+
+    /// TODO: Describe
+    ///
+    pub group: String,
+}
+
+impl From<RealNotificationSender> for NotificationSender {
+    fn from(value: RealNotificationSender) -> Self {
+        Self {
+            name: value.name,
+            address: value.address,
+            group: value.group,
         }
     }
 }
@@ -136,7 +165,7 @@ pub async fn decrypt_push_notification(
         let ctx = session.ctx_arc();
         let real_encrypted = RealEncryptedPushNotification::from(encrypted);
         let real_decrypted = real_encrypted
-            .into_decrypted_inbox_mail_notification(ctx)
+            .try_into_decrypted_inbox_mail_notification(ctx)
             .await?;
 
         let decrypted = DecryptedPushNotification::from(real_decrypted);

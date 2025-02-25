@@ -1,7 +1,27 @@
 use serde::Deserialize;
 use serde_with::{serde_as, BoolFromInt};
 
-use super::proton::{common::MessageId, prelude::MessageSender};
+use super::proton::common::MessageId;
+
+/// Who sent the notification
+///
+/// This data structure is very similar to [`super::proton::prelude::MessageSender`] but simplified
+///
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct NotificationSender {
+    /// Name of the sender
+    ///
+    pub name: String,
+
+    /// Email address of the sender
+    ///
+    pub address: String,
+
+    /// TODO: Describe
+    ///
+    pub group: String,
+}
 
 /// Decrypted notification for Inbox application
 ///
@@ -43,7 +63,7 @@ pub struct DecryptedEmailPushNotification {
 
     /// Who sent the message
     ///
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// This is hardcoded on the backend, always with the value "small_icon"
     ///
@@ -86,7 +106,7 @@ pub struct DecryptedOpenUrlPushNotification {
 
     /// Who sent the message
     ///
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// Whether to play sound
     ///
