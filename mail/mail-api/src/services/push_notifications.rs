@@ -18,7 +18,7 @@ pub struct NotificationSender {
     ///
     pub address: String,
 
-    /// TODO: Describe
+    /// Contact group of the sender
     ///
     pub group: String,
 }
