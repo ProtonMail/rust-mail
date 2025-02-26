@@ -260,7 +260,7 @@ impl TestContext {
         self.context
             .user_context_from_session(
                 &self.core_session,
-                Some(StatusWatcher::new().with_observer(StatusObserver::test())),
+                Some(StatusWatcher::with_observer(StatusObserver::test())),
                 Some(ChallengeObserver::default()),
             )
             .await

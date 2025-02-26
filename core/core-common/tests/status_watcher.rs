@@ -11,7 +11,7 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn status_watcher(millis: u64) -> StatusWatcher {
-    let mut sw = StatusWatcher::new().with_observer(StatusObserver::test());
+    let mut sw = StatusWatcher::with_observer(StatusObserver::test());
     let () = sw.set_up_to_date(Duration::from_millis(millis)).await;
     sw
 }
@@ -50,7 +50,9 @@ async fn shared_status() {
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
-        .expect(1..=3)
+        // Due to fact that two sessions are build separatly it spawns 2 tasks
+        // which may call the server once or twice x2 (2-4 requests)
+        .expect(1..=4)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;

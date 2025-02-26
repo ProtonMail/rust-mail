@@ -106,7 +106,7 @@ mod messages {
 
         Ok(Session::builder()
             .with_config(config)
-            .with_status(StatusWatcher::new().with_observer(StatusObserver::test()))
+            .with_status(StatusWatcher::with_observer(StatusObserver::test()))
             .build()?)
     }
 }

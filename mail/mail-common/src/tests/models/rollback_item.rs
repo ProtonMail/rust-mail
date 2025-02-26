@@ -229,7 +229,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
     };
     let api = Session::builder()
         .with_config(api_config)
-        .with_status(StatusWatcher::new().with_observer(StatusObserver::test()))
+        .with_status(StatusWatcher::with_observer(StatusObserver::test()))
         .build()
         .unwrap();
     let kinds = vec![

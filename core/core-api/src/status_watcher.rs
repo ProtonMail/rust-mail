@@ -38,22 +38,20 @@ impl Default for StatusWatcher {
 impl StatusWatcher {
     /// Construct new `StatusWatcher` with default shared state Observer.
     ///
-    /// note: Remember to replace observer for tests, they will interfere with each other otherwise
-    ///
     #[must_use]
     pub fn new() -> Self {
-        let (sender, _) = watch::channel(ConnectionStatus::Online);
-        Self {
-            subscribers: Arc::new(sender),
-            observer: StatusObserver::new(),
-        }
+        Self::with_observer(StatusObserver::new())
     }
 
-    /// Replace the default observer, useful when running tests.
+    /// Construct new `StatusWatcher` with custom observer, useful when running tests.
     ///
     #[must_use]
-    pub fn with_observer(self, observer: StatusObserver) -> Self {
-        Self { observer, ..self }
+    pub fn with_observer(observer: StatusObserver) -> Self {
+        let (sender, _) = watch::channel(ConnectionStatus::Online);
+        Self {
+            observer,
+            subscribers: Arc::new(sender),
+        }
     }
 
     /// Clone underlying observer
@@ -75,6 +73,8 @@ impl StatusWatcher {
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(10));
             let mut on_update = observer.on_updates();
+            // Make first call lazy and wait for real data.
+            on_update.mark_unchanged();
 
             loop {
                 tokio::select! {
@@ -89,7 +89,6 @@ impl StatusWatcher {
                             return;
                         };
                         Self::update_status(&subscribers, &observer, &api).await;
-                        interval.reset();
                     }
                 }
             }
@@ -102,11 +101,11 @@ impl StatusWatcher {
         observer: &StatusObserver,
         api: &Proton,
     ) {
+        let current: ConnectionStatus = *subscribers.borrow();
         let new_status = observer.status(api.clone()).await;
-        let current = subscribers.borrow();
 
-        if *current != new_status {
-            subscribers.send_replace(*current);
+        if current != new_status {
+            subscribers.send_replace(new_status);
         }
     }
 }
