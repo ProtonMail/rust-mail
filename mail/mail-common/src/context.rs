@@ -182,7 +182,7 @@ pub struct MailContext {
     core_context: Arc<Context>,
     mail_cache_path: PathBuf,
     /// This will get used in the near future.
-    pub(crate) _attachment_cache_size: u64,
+    pub(crate) attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
 }
 
@@ -222,7 +222,7 @@ impl MailContext {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
-            _attachment_cache_size: cache_size,
+            attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
         }))
     }
@@ -236,7 +236,7 @@ impl MailContext {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path,
-            _attachment_cache_size: mail_cache_size,
+            attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
         }))
     }

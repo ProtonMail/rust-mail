@@ -41,7 +41,7 @@ use tokio::task::JoinHandle;
 use tracing::error;
 
 pub struct MailUserContext {
-    this: Weak<Self>,
+    pub this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
     event_loop: EventLoop,

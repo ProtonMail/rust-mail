@@ -1,0 +1,6 @@
+---
+source: mail/mail-common/src/mailbox/attachments.rs
+expression: test_order(vars)
+---
+name: regular, anti-utility 768000
+name: pgp, INFINITY

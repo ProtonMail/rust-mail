@@ -1,0 +1,7 @@
+---
+source: mail/mail-common/src/mailbox/attachments.rs
+expression: test_order(vars)
+---
+name: spam, anti-utility 768000
+name: trash, anti-utility 768000
+name: very big but not trash or spam, anti-utility 512000

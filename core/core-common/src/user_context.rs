@@ -13,13 +13,14 @@ use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
-use std::fs;
+use std::fs::{self};
 use std::future::Future;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::debug;
+use tracing::{debug, warn};
 
 pub mod action_queue;
 pub mod images_logo;
@@ -94,6 +95,7 @@ impl UserContext {
         this.queue().register_execution_context(this_weak);
 
         fs::create_dir_all(this.sender_images_cache_path())?;
+        fs::create_dir_all(this.trash_path())?;
 
         Ok(this)
     }
@@ -220,4 +222,67 @@ impl UserContext {
     pub fn sender_images_cache_path(&self) -> PathBuf {
         self.cache_path.join("sender_images")
     }
+
+    #[must_use]
+    pub fn trash_path(&self) -> PathBuf {
+        self.cache_path.join("trash")
+    }
+
+    /// Deletes all of the provided files by first moving them to a temp directory, to be deleted
+    /// again next time this is called.
+    pub fn delete_files_safe<P: AsRef<Path>>(
+        &self,
+        files: impl IntoIterator<Item = P>,
+    ) -> Result<(), DeleteFilesSafeError> {
+        let path = self.trash_path();
+        let mut failures = vec![];
+        for from in files {
+            let from = from.as_ref();
+            let Some(filename) = from.file_name() else {
+                warn!("No file name");
+                failures.push((io::ErrorKind::Other.into(), from.to_owned()));
+                continue;
+            };
+
+            if let Err(e) = fs::rename(from, path.join(filename)) {
+                if e.kind() == io::ErrorKind::NotFound {
+                    warn!("Attempting to delete a file that does not exist");
+                } else {
+                    failures.push((e, from.to_owned()));
+                }
+            }
+        }
+
+        // Best effort remove files even if some failed
+        let res = remove_files(&path);
+        if !failures.is_empty() {
+            Err(DeleteFilesSafeError::Failed(failures))
+        } else if let Err(e) = res {
+            Err(DeleteFilesSafeError::Moved(e))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn remove_files(path: &Path) -> io::Result<()> {
+    for child in fs::read_dir(path)? {
+        let child = child?;
+        if child.file_type()?.is_dir() {
+            fs::remove_dir_all(child.path())?;
+        } else {
+            fs::remove_file(child.path())?;
+        }
+    }
+    Ok(())
+}
+
+/// The errors tha can happen when deleting files
+#[derive(Debug)]
+pub enum DeleteFilesSafeError {
+    /// Could not delete some of the files, maybe try again?
+    Failed(Vec<(io::Error, PathBuf)>),
+
+    /// Not all files could be deleted. Next time they probably will.
+    Moved(io::Error),
 }

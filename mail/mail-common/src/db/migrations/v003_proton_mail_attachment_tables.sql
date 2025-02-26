@@ -37,5 +37,4 @@ CREATE TABLE attachment_cache (
     CONSTRAINT attachment_cache_attachment_id
         FOREIGN KEY (attachment_id)
         REFERENCES attachments (local_id)
-        ON DELETE CASCADE
 );

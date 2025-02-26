@@ -1,0 +1,6 @@
+---
+source: mail/mail-common/src/mailbox/attachments.rs
+expression: test_order(vars)
+---
+name: zero_size, utility 0
+name: tiny, anti-utility 5
