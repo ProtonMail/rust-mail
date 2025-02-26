@@ -1,4 +1,7 @@
+#![allow(clippy::unused_async)]
+
 use crate::consts::CoreBundle;
+use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
 use async_trait::async_trait;
 use derive_more::{Debug, Deref};
@@ -51,12 +54,51 @@ impl ApiErrorInfoExt for ApiErrorInfo {
     }
 }
 
+/// The payload of a human verification challenge.
+#[derive(Debug, Clone)]
+pub struct ChallengePayload {
+    /// The ID of the user who is being challenged.
+    pub user_id: UserId,
+
+    /// The ID of the session in which the challenge is being issued.
+    pub session_id: AuthId,
+
+    /// The URL to load the challenge from.
+    pub challenge_url: String,
+}
+
+/// The callback for a human verification challenge.
+#[derive(Debug)]
+pub struct ChallengeCallback {
+    // ...
+}
+
+impl ChallengeCallback {
+    /// Called when the challenge has been successfully completed.
+    ///
+    /// This submits the token to the server and returns any information that
+    /// the server may have provided (e.g. cookies).
+    pub async fn on_success(&self, _token_type: String, _token_code: String) {
+        todo!()
+    }
+
+    /// Called when the challenge has failed.
+    pub async fn on_failed(&self) {
+        todo!()
+    }
+
+    /// Called when the challenge has been cancelled.
+    pub async fn on_cancelled(&self) {
+        todo!()
+    }
+}
+
 /// An interface by which human verification challenges can be handled.
 ///
 /// This is a placeholder for now and will be expanded in the future.
 #[async_trait]
 pub trait ChallengeNotifier: Send + Sync + 'static {
-    async fn notify(&self);
+    async fn on_challenge(&self, payload: ChallengePayload, callback: ChallengeCallback);
 }
 
 /// A type that holds registered [`ChallengeNotifier`]s.
@@ -118,5 +160,5 @@ struct NoopNotifier;
 
 #[async_trait]
 impl ChallengeNotifier for NoopNotifier {
-    async fn notify(&self) {}
+    async fn on_challenge(&self, _: ChallengePayload, _: ChallengeCallback) {}
 }

@@ -1,5 +1,6 @@
 mod crypto;
 pub mod datatypes;
+pub mod human_verification;
 mod keychain;
 mod network;
 pub mod paginator;
