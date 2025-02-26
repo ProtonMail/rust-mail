@@ -1,9 +1,26 @@
 use std::sync::Arc;
 
+use futures::TryFutureExt;
 use proton_api_core::human_verification as hv;
 
+/// An HTTP client capable of loading a human verification challenge.
+#[derive(Debug, uniffi::Object)]
+pub struct ChallengeLoader {
+    inner: hv::ChallengeLoader,
+}
+
+#[uniffi_export]
+impl ChallengeLoader {
+    /// Handle a `GET` request, returning the response.
+    ///
+    /// This is a placeholder.
+    pub async fn get(&self, url: &str) -> Result<String, String> {
+        self.inner.get(url).map_err(|e| e.to_string()).await
+    }
+}
+
 /// The payload of a human verification challenge.
-#[derive(Debug, Clone, uniffi::Object)]
+#[derive(Debug, uniffi::Object)]
 pub struct ChallengePayload {
     inner: hv::ChallengePayload,
 }
@@ -60,5 +77,10 @@ impl ChallengeCallback {
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait ChallengeNotifier: Send + Sync {
-    async fn on_challenge(&self, payload: Arc<ChallengePayload>, callback: Arc<ChallengeCallback>);
+    async fn on_challenge(
+        &self,
+        loader: Arc<ChallengeLoader>,
+        payload: Arc<ChallengePayload>,
+        callback: Arc<ChallengeCallback>,
+    );
 }
