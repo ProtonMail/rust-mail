@@ -5,13 +5,14 @@ use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
     DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
+    DecryptedOpenUrlPushNotification as RealDecryptedOpenUrlPushNotification,
+    NotificationSender as RealNotificationSender,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::core::datatypes::Id;
 use crate::{errors::ActionError, uniffi_async};
 
-use super::datatypes::MessageSender;
 use super::MailSession;
 
 /// Encrypted push notification
@@ -45,18 +46,17 @@ pub enum DecryptedPushNotification {
     /// Decrypted notification that is pushed when user receives a new email.
     ///
     Email(DecryptedEmailPushNotification),
-    // TODO (ET-2204): Obviously this is not the final datastructure
     /// Decrypted notification that is pushed when user logged in in the separate device.
     /// We use it to show webpage.
     ///
-    OpenUrl,
+    OpenUrl(DecryptedOpenUrlPushNotification),
 }
 
 impl From<RealDecryptedInboxPushNotification> for DecryptedPushNotification {
     fn from(value: RealDecryptedInboxPushNotification) -> Self {
         match value {
             RealDecryptedInboxPushNotification::Email(email) => Self::Email(email.into()),
-            RealDecryptedInboxPushNotification::OpenUrl { .. } => Self::OpenUrl,
+            RealDecryptedInboxPushNotification::OpenUrl(open_url) => Self::OpenUrl(open_url.into()),
         }
     }
 }
@@ -71,7 +71,7 @@ pub struct DecryptedEmailPushNotification {
 
     /// Information about who sent the message
     ///
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// Local message ID
     ///
@@ -84,6 +84,60 @@ impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification
             subject: value.subject,
             sender: value.sender.into(),
             message_id: value.message_id.into(),
+        }
+    }
+}
+
+/// Decrypted notification that is pushed when user's device has to open a web page with given URL.
+/// Used for example when user logs in in the new device
+///
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct DecryptedOpenUrlPushNotification {
+    /// Content of the notification
+    pub content: String,
+
+    /// Information about who sent the notification
+    pub sender: NotificationSender,
+
+    /// URL
+    pub url: String,
+}
+
+impl From<RealDecryptedOpenUrlPushNotification> for DecryptedOpenUrlPushNotification {
+    fn from(value: RealDecryptedOpenUrlPushNotification) -> Self {
+        Self {
+            content: value.content,
+            sender: value.sender.into(),
+            url: value.url,
+        }
+    }
+}
+
+/// Who sent the notification
+///
+/// This data structure is very similar to [`super::datatypes::MessageSender`] but simplified
+///
+#[derive(Clone, Debug, Default, Eq, PartialEq, uniffi::Record)]
+pub struct NotificationSender {
+    /// Name of the sender
+    ///
+    pub name: String,
+
+    /// Email address of the sender
+    ///
+    pub address: String,
+
+    /// TODO: Describe
+    ///
+    pub group: String,
+}
+
+impl From<RealNotificationSender> for NotificationSender {
+    fn from(value: RealNotificationSender) -> Self {
+        Self {
+            name: value.name,
+            address: value.address,
+            group: value.group,
         }
     }
 }
@@ -111,7 +165,7 @@ pub async fn decrypt_push_notification(
         let ctx = session.ctx_arc();
         let real_encrypted = RealEncryptedPushNotification::from(encrypted);
         let real_decrypted = real_encrypted
-            .into_decrypted_inbox_mail_notification(ctx)
+            .try_into_decrypted_inbox_mail_notification(ctx)
             .await?;
 
         let decrypted = DecryptedPushNotification::from(real_decrypted);

@@ -5,6 +5,8 @@
 //!
 
 use proton_api_mail::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
+use proton_api_mail::services::push_notifications::NotificationSender as ApiNotificationSender;
+
 use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_crypto_account::proton_crypto;
 use proton_mail_ids::LocalMessageId;
@@ -13,8 +15,6 @@ use tracing::error;
 
 use crate::{models::Message, MailContext, MailContextError, MailUserContext};
 
-use super::MessageSender;
-
 /// Decrypted notification usable only in the context of the Inbox application
 ///
 #[derive(Clone, Debug)]
@@ -22,11 +22,10 @@ pub enum DecryptedInboxPushNotification {
     /// Decrypted notification that is pushed when user receives a new email.
     ///
     Email(DecryptedEmailPushNotification),
-    // TODO (ET-2204): Write this case
     /// Decrypted notification that is pushed when user logged in in the separate device.
     /// We use it to show webpage.
     ///
-    OpenUrl,
+    OpenUrl(DecryptedOpenUrlPushNotification),
 }
 
 impl DecryptedInboxPushNotification {
@@ -67,7 +66,13 @@ impl DecryptedInboxPushNotification {
                     message_id: message.local_id.expect("Local ID"),
                 }))
             }
-            ApiDecryptedInboxPushNotification::OpenUrl { data: _ } => todo!("ET-2204"),
+            ApiDecryptedInboxPushNotification::OpenUrl { data } => {
+                Ok(Self::OpenUrl(DecryptedOpenUrlPushNotification {
+                    content: data.body,
+                    sender: data.sender.into(),
+                    url: data.url,
+                }))
+            }
         }
     }
 }
@@ -82,11 +87,55 @@ pub struct DecryptedEmailPushNotification {
 
     /// Information about who sent the message
     ///
-    pub sender: MessageSender,
+    pub sender: NotificationSender,
 
     /// Local message ID
     ///
     pub message_id: LocalMessageId,
+}
+
+/// Decrypted notification that is pushed for example when user logs in on a separate device.
+/// Clicking on such a notification opens URL in a webview.
+///
+#[derive(Clone, Debug)]
+pub struct DecryptedOpenUrlPushNotification {
+    /// Content of the notification
+    pub content: String,
+
+    /// Information about who sent the notification
+    pub sender: NotificationSender,
+
+    /// URL
+    pub url: String,
+}
+
+/// Who sent the notification
+///
+/// This data structure is very similar to [`super::MessageSender`] but simplified
+///
+#[derive(Clone, Debug)]
+pub struct NotificationSender {
+    /// Name of the sender
+    ///
+    pub name: String,
+
+    /// Email address of the sender
+    ///
+    pub address: String,
+
+    /// TODO: Describe
+    ///
+    pub group: String,
+}
+
+impl From<ApiNotificationSender> for NotificationSender {
+    fn from(value: ApiNotificationSender) -> Self {
+        Self {
+            name: value.name,
+            address: value.address,
+            group: value.group,
+        }
+    }
 }
 
 /// Notification specific for the Inbox, that can be decrypted and deserialized
@@ -94,14 +143,14 @@ pub struct DecryptedEmailPushNotification {
 pub trait DecryptableInboxPushNotification {
     /// Decrypt and deserialize generic push notification into Inbox-specific notification
     ///
-    async fn into_decrypted_inbox_mail_notification(
+    async fn try_into_decrypted_inbox_mail_notification(
         self,
         ctx: Arc<MailContext>,
     ) -> Result<DecryptedInboxPushNotification, MailContextError>;
 }
 
 impl DecryptableInboxPushNotification for EncryptedPushNotification {
-    async fn into_decrypted_inbox_mail_notification(
+    async fn try_into_decrypted_inbox_mail_notification(
         self,
         ctx: Arc<MailContext>,
     ) -> Result<DecryptedInboxPushNotification, MailContextError> {
@@ -123,6 +172,8 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
 
         let decrypted_mail_notification: ApiDecryptedInboxPushNotification =
             decrypted_notification.notification.inner;
+
+        tracing::warn!("Decrypted: {decrypted_mail_notification:#?}");
 
         let decrypted_mail_notification =
             DecryptedInboxPushNotification::sync(ctx.clone(), decrypted_mail_notification).await?;
