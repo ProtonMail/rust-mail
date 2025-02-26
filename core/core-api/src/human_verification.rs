@@ -1,7 +1,6 @@
 #![allow(clippy::unused_async)]
 
 use crate::service::ApiServiceResult;
-use crate::services::proton::common::{AuthId, UserId};
 use async_trait::async_trait;
 use derive_more::{Debug, Deref};
 use muon::common::{BoxFut, Sender, SenderLayer};
@@ -26,12 +25,6 @@ impl ChallengeLoader {
 /// The payload of a human verification challenge.
 #[derive(Debug, Clone)]
 pub struct ChallengePayload {
-    /// The ID of the user who is being challenged.
-    pub user_id: UserId,
-
-    /// The ID of the session in which the challenge is being issued.
-    pub session_id: AuthId,
-
     /// The URL to load the challenge from.
     pub challenge_url: String,
 }

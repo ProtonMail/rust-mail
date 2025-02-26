@@ -27,18 +27,6 @@ pub struct ChallengePayload {
 
 #[uniffi_export]
 impl ChallengePayload {
-    /// The ID of the user who is being challenged.
-    #[must_use]
-    pub fn user_id(&self) -> String {
-        self.inner.user_id.clone().into_inner()
-    }
-
-    /// The ID of the session in which the challenge is being issued.
-    #[must_use]
-    pub fn session_id(&self) -> String {
-        self.inner.session_id.clone().into_inner()
-    }
-
     /// The URL to load the challenge from.
     #[must_use]
     pub fn challenge_url(&self) -> String {
