@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::{sync::Arc, time::Duration};
 
@@ -106,6 +107,21 @@ impl StatusWatcher {
 
         if current != new_status {
             subscribers.send_replace(new_status);
+        }
+    }
+}
+
+pub trait StatusWatcherSubscriber {
+    fn wait_for_online(&mut self) -> impl Future<Output = ()> + Send;
+}
+
+impl StatusWatcherSubscriber for watch::Receiver<ConnectionStatus> {
+    async fn wait_for_online(&mut self) {
+        while self.changed().await.is_ok() {
+            // first call to `.changed()` returns immediately
+            if self.borrow().is_online() {
+                break;
+            }
         }
     }
 }

@@ -12,7 +12,7 @@ use crate::crypto_clock::init_server_crypto_clock;
 use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
-use crate::status_watcher::StatusWatcher;
+use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
@@ -273,14 +273,7 @@ impl Session {
     /// Hold task till connection status is back online
     ///
     pub async fn wait_for_online(&self) {
-        let mut watcher = self.status_changes();
-
-        while watcher.changed().await.is_ok() {
-            // first call to `.changed()` returns immediately
-            if watcher.borrow().is_online() {
-                break;
-            }
-        }
+        self.status_changes().wait_for_online().await;
     }
 }
 
