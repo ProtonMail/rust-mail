@@ -404,6 +404,8 @@ fn app_tracing_env_filter() -> EnvFilter {
         .as_deref()
         .unwrap_or(
             "info,
+        muon=debug,
+        muon_impl=debug,
         proton_mail_tui=debug,
         proton_api_core=debug,
         proton_mail_db=trace,
