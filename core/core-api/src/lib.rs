@@ -1,3 +1,4 @@
+#![allow(clippy::enum_glob_use)]
 #![allow(unreachable_code)]
 
 //! Rust bindings for the REST API for Proton

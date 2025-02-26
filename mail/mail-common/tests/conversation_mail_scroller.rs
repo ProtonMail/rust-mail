@@ -401,7 +401,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     ));
     assert_eq!(
         actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
     );
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 0);
@@ -410,7 +410,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let actual = scroller.fetch_more().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. ".to_string()
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
     );
 }
 

@@ -14,7 +14,7 @@ use muon::error::ErrorKind as MuonErrorKind;
 use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
 use muon::util::ProtonRequestExt;
 use muon::Result as MuonResult;
-use muon::{serde_to_query, Status};
+use muon::{serde_to_query, Status, StatusErr};
 use muon::{ProtonRequest, ProtonResponse};
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
@@ -272,29 +272,52 @@ impl ProtonCore for Proton {
 #[allow(clippy::redundant_closure_for_method_calls)]
 impl From<muon::Error> for ApiServiceError {
     fn from(e: muon::Error) -> Self {
+        use MuonErrorKind::*;
+
         // Check if the error is the result of a timeout.
         if e.source().is_some_and(|s| s.is::<Timeout>()) {
             return Self::Timeout(e.to_string());
         }
 
+        // Check if the error is a HTTP status error.
+        if let Some(e) = e.source().and_then(|s| s.downcast_ref::<StatusErr>()) {
+            return Self::from(e.to_owned());
+        }
+
         // Otherwise, match on the kind of error we received.
         match e.kind() {
-            MuonErrorKind::Tls
-            | MuonErrorKind::Resolve
-            | MuonErrorKind::Dial
-            | MuonErrorKind::Connect => Self::ConnectionError(e.to_string()),
+            // Connection errors.
+            Tls | Resolve | Dial | Connect => Self::ConnectionError(e.to_string()),
 
-            MuonErrorKind::Send | MuonErrorKind::Closed => Self::NetworkError(e.to_string()),
-            MuonErrorKind::Auth => Self::Unauthorized(String::default(), e.to_string()),
-            MuonErrorKind::Req => Self::RequestError(e.to_string()),
-            MuonErrorKind::Res => Self::ResponseError(e.to_string()),
-            MuonErrorKind::Other => Self::UnknownError(e.to_string()),
+            // Network errors.
+            Send | Closed => Self::NetworkError(e.to_string()),
+
+            // Request errors.
+            Req => Self::RequestError(e.to_string()),
+
+            // Response errors.
+            Res => Self::ResponseError(e.to_string()),
+
+            // All other errors.
+            _ => Self::UnknownError(e.to_string()),
         }
     }
 }
 
-impl From<muon::StatusErr> for ApiServiceError {
-    fn from(muon::StatusErr(code, res): muon::StatusErr) -> Self {
+impl From<StatusErr> for ApiServiceError {
+    fn from(value: StatusErr) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<&StatusErr> for ApiServiceError {
+    fn from(&StatusErr(code, ref res): &StatusErr) -> Self {
+        macro_rules! err {
+            ($body:expr) => {
+                ApiErrorInfo::from_json($body).ok()
+            };
+        }
+
         let body = match String::from_utf8(res.body().to_owned()) {
             Ok(b) => b,
             Err(e) => return Self::Utf8DecodingError(e),
@@ -303,17 +326,17 @@ impl From<muon::StatusErr> for ApiServiceError {
         match (code, code.to_string()) {
             (code, e) if code.is_redirection() => Self::Redirect(e, body),
 
-            (Status::BAD_REQUEST, e) => Self::BadRequest(e, body),
-            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, body),
-            (Status::NOT_FOUND, e) => Self::NotFound(e, body),
-            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, body),
-            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequest(e, body),
-            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, body),
-            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, body),
-            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, body),
-            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, body),
+            (Status::BAD_REQUEST, e) => Self::BadRequest(e, err!(body)),
+            (Status::UNAUTHORIZED, e) => Self::Unauthorized(e, err!(body)),
+            (Status::NOT_FOUND, e) => Self::NotFound(e, err!(body)),
+            (Status::UNPROCESSABLE_ENTITY, e) => Self::UnprocessableEntity(e, err!(body)),
+            (Status::TOO_MANY_REQUESTS, e) => Self::TooManyRequests(e, err!(body)),
+            (Status::INTERNAL_SERVER_ERROR, e) => Self::InternalServerError(e, err!(body)),
+            (Status::NOT_IMPLEMENTED, e) => Self::NotImplemented(e, err!(body)),
+            (Status::BAD_GATEWAY, e) => Self::BadGateway(e, err!(body)),
+            (Status::SERVICE_UNAVAILABLE, e) => Self::ServiceUnavailable(e, err!(body)),
 
-            (code, e) => Self::OtherHttpError(code, e, body),
+            (code, e) => Self::OtherHttpError(code, e, err!(body)),
         }
     }
 }

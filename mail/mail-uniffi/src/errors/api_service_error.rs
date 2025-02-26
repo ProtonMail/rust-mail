@@ -45,7 +45,7 @@ impl From<RealUserApiServiceError> for UserApiServiceError {
             RealUserApiServiceError::Unauthorized(text) => Self::Unauthorized(text),
             RealUserApiServiceError::NotFound(text) => Self::NotFound(text),
             RealUserApiServiceError::UnprocessableEntity(text) => Self::UnprocessableEntity(text),
-            RealUserApiServiceError::TooManyRequest(text) => Self::TooManyRequest(text),
+            RealUserApiServiceError::TooManyRequests(text) => Self::TooManyRequest(text),
             RealUserApiServiceError::InternalServerError(text) => Self::InternalServerError(text),
             RealUserApiServiceError::NotImplemented(text) => Self::NotImplemented(text),
             RealUserApiServiceError::BadGateway(text) => Self::BadGateway(text),
