@@ -265,22 +265,20 @@ impl Session {
 
     /// Observe changes on status via `Receiver`
     ///
-    pub async fn status_changes(&self) -> watch::Receiver<ConnectionStatus> {
-        let mut subscription = self.status.subscribe().await;
-        subscription.mark_unchanged();
-
-        subscription
+    #[must_use]
+    pub fn status_changes(&self) -> watch::Receiver<ConnectionStatus> {
+        self.status.subscribe()
     }
 
     /// Hold task till connection status is back online
     ///
     pub async fn wait_for_online(&self) {
-        if self.status().await.is_offline() {
-            let mut watcher = self.status_changes().await;
-            while watcher.changed().await.is_ok() {
-                if self.status().await.is_online() {
-                    break;
-                }
+        let mut watcher = self.status_changes();
+
+        while watcher.changed().await.is_ok() {
+            // first call to `.changed()` returns immediately
+            if watcher.borrow().is_online() {
+                break;
             }
         }
     }

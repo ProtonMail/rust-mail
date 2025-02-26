@@ -36,6 +36,7 @@ mod basic {
 mod messages {
     use super::*;
 
+    use proton_api_core::status_observer::StatusObserver;
     use proton_api_core::status_watcher::StatusWatcher;
     use serde_json::json;
     use test_case::test_case;
@@ -105,7 +106,7 @@ mod messages {
 
         Ok(Session::builder()
             .with_config(config)
-            .with_status(StatusWatcher::test())
+            .with_status(StatusWatcher::new().with_observer(StatusObserver::test()))
             .build()?)
     }
 }

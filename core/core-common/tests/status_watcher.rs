@@ -1,5 +1,6 @@
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::session::{Config, Session};
+use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_core_test_utils::utils::catch_all;
@@ -10,8 +11,8 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn status_watcher(millis: u64) -> StatusWatcher {
-    let mut sw = StatusWatcher::test();
-    let () = sw.with_up_to_date(Duration::from_millis(millis)).await;
+    let mut sw = StatusWatcher::new().with_observer(StatusObserver::test());
+    let () = sw.set_up_to_date(Duration::from_millis(millis)).await;
     sw
 }
 
@@ -197,8 +198,8 @@ async fn multiple_subscribers() {
         .await;
     catch_all(&mock_server).await;
 
-    let mut subscriber_1 = api.status_changes().await;
-    let subscriber_2 = api.status_changes().await;
+    let mut subscriber_1 = api.status_changes();
+    let subscriber_2 = api.status_changes();
 
     while !subscriber_1.has_changed().unwrap() {
         sleep(Duration::from_millis(100)).await;

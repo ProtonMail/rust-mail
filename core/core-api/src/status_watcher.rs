@@ -1,18 +1,9 @@
 use std::ops::{Deref, DerefMut};
-use std::{
-    sync::{Arc, Weak},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use crate::status_observer::StatusObserver;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
-use tokio::{
-    sync::{
-        watch::{self, Receiver, Sender},
-        RwLock,
-    },
-    time,
-};
+use tokio::{sync::watch, time};
 
 /// A `StatusWatcher` keeps track of the connection status and provides an interface to observe the changes.
 ///
@@ -20,8 +11,7 @@ use tokio::{
 ///
 #[derive(Debug, Clone)]
 pub struct StatusWatcher {
-    subsribers: Arc<RwLock<Sender<ConnectionStatus>>>,
-    current: Arc<RwLock<ConnectionStatus>>,
+    subscribers: Arc<watch::Sender<ConnectionStatus>>,
     observer: StatusObserver,
 }
 
@@ -46,31 +36,24 @@ impl Default for StatusWatcher {
 }
 
 impl StatusWatcher {
-    /// Construct new `StatusWatcher` with shared state Observer, this constructor should be invoked
-    /// when running an application.
+    /// Construct new `StatusWatcher` with default shared state Observer.
+    ///
+    /// note: Remember to replace observer for tests, they will interfere with each other otherwise
     ///
     #[must_use]
     pub fn new() -> Self {
         let (sender, _) = watch::channel(ConnectionStatus::Online);
         Self {
-            subsribers: Arc::new(RwLock::new(sender)),
-            current: Arc::new(RwLock::new(ConnectionStatus::Online)),
+            subscribers: Arc::new(sender),
             observer: StatusObserver::new(),
         }
     }
 
-    /// Construct new `StatusWatcher` with individual state Observer, this constructor should be invoked
-    /// when running tests.
+    /// Replace the default observer, useful when running tests.
     ///
-    #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub fn test() -> Self {
-        let (sender, _) = watch::channel(ConnectionStatus::Online);
-        Self {
-            subsribers: Arc::new(RwLock::new(sender)),
-            current: Arc::new(RwLock::new(ConnectionStatus::Online)),
-            observer: StatusObserver::test(),
-        }
+    pub fn with_observer(self, observer: StatusObserver) -> Self {
+        Self { observer, ..self }
     }
 
     /// Clone underlying observer
@@ -79,31 +62,33 @@ impl StatusWatcher {
     }
 
     /// Subscribe for notifications of updates to the status
-    pub async fn subscribe(&self) -> Receiver<ConnectionStatus> {
-        self.subsribers.read().await.subscribe()
+    #[must_use]
+    pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
+        self.subscribers.subscribe()
     }
 
     /// Initialize background task for notifying subscribers
     pub fn initialize(&self, api: Proton) {
-        let subscribers = Arc::downgrade(&self.subsribers);
+        let subscribers = Arc::downgrade(&self.subscribers);
         let observer = self.observer.clone();
-        let current_handle = self.current.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(10));
             let mut on_update = observer.on_updates();
 
-            on_update.mark_unchanged();
-
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        Self::update_status(&subscribers, &observer, &api, &current_handle).await;
-                        on_update.mark_unchanged();
+                        let Some(subscribers) = subscribers.upgrade() else {
+                            return;
+                        };
+                        Self::update_status(&subscribers, &observer, &api).await;
                     }
                     Ok(()) = on_update.changed() => {
-                        Self::update_status(&subscribers, &observer, &api, &current_handle).await;
-                        on_update.mark_unchanged();
+                        let Some(subscribers) = subscribers.upgrade() else {
+                            return;
+                        };
+                        Self::update_status(&subscribers, &observer, &api).await;
                         interval.reset();
                     }
                 }
@@ -113,25 +98,15 @@ impl StatusWatcher {
 
     /// Update subscribers on status change
     async fn update_status(
-        subscribers: &Weak<RwLock<Sender<ConnectionStatus>>>,
+        subscribers: &watch::Sender<ConnectionStatus>,
         observer: &StatusObserver,
         api: &Proton,
-        current_handle: &Arc<RwLock<ConnectionStatus>>,
     ) {
-        let Some(subscribers) = subscribers.upgrade() else {
-            return;
-        };
-        let subscribers = subscribers.read().await;
-
         let new_status = observer.status(api.clone()).await;
-        let mut current = current_handle.write().await;
+        let current = subscribers.borrow();
 
         if *current != new_status {
-            *current = new_status;
-
-            if let Err(e) = subscribers.send(*current) {
-                tracing::error!("Cant send notification on status change {e}");
-            }
+            subscribers.send_replace(*current);
         }
     }
 }

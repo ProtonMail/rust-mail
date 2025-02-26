@@ -189,7 +189,7 @@ impl StatusObserver {
     ///
     #[cfg(any(test, debug_assertions))]
     #[must_use]
-    pub async fn with_up_to_date(&mut self, up_to_date: Duration) {
+    pub async fn set_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
             .unwrap();
@@ -238,9 +238,7 @@ impl StatusObserver {
         let mut self_status = self.status.write().await;
 
         if self_status.status != status {
-            if let Err(e) = self.on_update.send(status) {
-                tracing::error!("Could not send status update on the StatusObserver's queue {e}");
-            }
+            self.on_update.send_replace(status);
         }
 
         self_status.last_check = Instant::now();

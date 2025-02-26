@@ -11,6 +11,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
+use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -259,7 +260,7 @@ impl TestContext {
         self.context
             .user_context_from_session(
                 &self.core_session,
-                Some(StatusWatcher::test()),
+                Some(StatusWatcher::new().with_observer(StatusObserver::test())),
                 Some(ChallengeObserver::default()),
             )
             .await
