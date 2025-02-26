@@ -2,9 +2,12 @@
 
 # Before you start
 # Make sure, that you have created `devenv.local.nix` file with following content
+# ```
+# { pkgs, ... }:
 # {
 # env.IOS_REPO_ROOT="<path to your ET apple inbox repository>";
 # }
+# ```
 
 let
  # Sometimes we have to escape paths provided by nix in order to cross compile properly the rust code in iOS

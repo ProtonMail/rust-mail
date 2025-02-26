@@ -105,3 +105,14 @@ Moreover, this setup is not going to be used in the CI.
 ### What if I want to try?
 
 Follow guide on https://devenv.sh/getting-started in order to setup the devenv itself. It works on most of linux distributions as well as in WSL or on macOS.
+
+Then, in the root of this repository create file `devenv.local.nix` (its gitignored) and add following:
+
+```nix
+{ pkgs: ...}:
+{
+  env.IOS_REPO_ROOT="<path to your ET apple inbox repository>";
+}
+```
+
+Now you will be able to build iOS by using `proton-build-ios` command
