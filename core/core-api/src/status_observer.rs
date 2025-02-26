@@ -11,7 +11,7 @@ use muon::{
     Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult,
 };
 use tokio::{
-    sync::{Mutex, RwLock},
+    sync::{watch, RwLock},
     task::JoinHandle,
 };
 use tracing::trace;
@@ -54,8 +54,13 @@ impl Deref for Status {
 ///
 #[derive(Debug)]
 struct BackgroundPing {
-    _request: StatusJoinHandle,
-    finished: flume::Receiver<()>,
+    request: StatusJoinHandle,
+}
+
+impl BackgroundPing {
+    fn is_finished(&self) -> bool {
+        self.request.is_finished()
+    }
 }
 
 /// Configuration for the `StatusObserver`.
@@ -121,8 +126,9 @@ impl StatusObserverConfig {
 #[derive(Clone, Debug)]
 pub struct StatusObserver {
     status: Arc<RwLock<Status>>,
-    request: Arc<Mutex<Option<BackgroundPing>>>,
+    request: Arc<RwLock<Option<BackgroundPing>>>,
     config: StatusObserverConfig,
+    on_update: watch::Sender<ConnectionStatus>,
 }
 
 impl StatusObserver {
@@ -137,12 +143,16 @@ impl StatusObserver {
     /// If it does, it's a bug.
     ///
     pub fn new() -> Self {
+        let (on_update, _) = watch::channel(ConnectionStatus::Online);
+
         Self {
             status: Arc::clone(&STATUS),
-            request: Arc::new(Mutex::new(None)),
+            request: Arc::new(RwLock::new(None)),
             config: StatusObserverConfig::default(),
+            on_update,
         }
     }
+
     /// Create a new test `StatusObserver` without shared state.
     ///
     /// The status is initialized to `Online`.
@@ -155,6 +165,7 @@ impl StatusObserver {
     ///
     #[cfg(any(test, debug_assertions))]
     pub fn test() -> Self {
+        let (on_update, _) = watch::channel(ConnectionStatus::Online);
         let config = StatusObserverConfig::test();
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(config.up_to_date.as_secs() + 1))
@@ -165,8 +176,9 @@ impl StatusObserver {
                 status: ConnectionStatus::Online,
                 last_check: stale_instant,
             })),
-            request: Arc::new(Mutex::new(None)),
+            request: Arc::new(RwLock::new(None)),
             config,
+            on_update,
         }
     }
 
@@ -181,14 +193,13 @@ impl StatusObserver {
     /// If it does, it's a bug.
     ///
     #[cfg(any(test, debug_assertions))]
-    pub async fn with_up_to_date(mut self, up_to_date: Duration) -> Self {
+    #[must_use]
+    pub async fn set_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
             .unwrap();
         self.status.write().await.last_check = stale_instant;
         self.config.up_to_date = up_to_date;
-
-        self
     }
 
     /// Get the current status of the connection.
@@ -197,15 +208,17 @@ impl StatusObserver {
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_up_to_date().await {
-            let mut request = self.request.lock().await;
-            if let Some(request_data) = request.as_ref() {
-                if !request_data.finished.is_empty()
-                    && request_data.finished.recv_async().await.is_ok()
-                {
-                    drop(request.take());
-                }
+            let request_finished = self
+                .request
+                .read()
+                .await
+                .as_ref()
+                .filter(|ping| ping.is_finished())
+                .is_some();
+
+            if request_finished {
+                drop(self.request.write().await.take());
             }
-            drop(request);
 
             Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
         }
@@ -219,8 +232,22 @@ impl StatusObserver {
         status
     }
 
+    /// Peek in `update` method
+    ///
+    /// Expose internal information about status updates
+    ///
+    #[must_use]
+    pub fn on_updates(&self) -> watch::Receiver<ConnectionStatus> {
+        self.on_update.subscribe()
+    }
+
     async fn update(&self, status: ConnectionStatus) {
         let mut self_status = self.status.write().await;
+
+        if self_status.status != status {
+            self.on_update.send_replace(status);
+        }
+
         self_status.last_check = Instant::now();
         self_status.status = status;
 
@@ -233,18 +260,16 @@ impl StatusObserver {
 
     #[allow(clippy::let_underscore_future)]
     async fn background_check(&self, api: Proton) {
-        let mut request = self.request.lock().await;
-        let timeout = self.config.bg_timeout;
-        let retry = self.config.bg_retry;
-        if request.is_none() {
-            let (sender, receiver) = flume::unbounded();
-            let _ = request.insert(BackgroundPing {
-                _request: tokio::spawn(async move {
+        let request_is_not_running = self.request.read().await.is_none();
+        if request_is_not_running {
+            let timeout = self.config.bg_timeout;
+            let retry = self.config.bg_retry;
+            let ping = BackgroundPing {
+                request: tokio::spawn(async move {
                     Self::ping(api, timeout, retry).await;
-                    let _ = sender.send_async(()).await;
                 }),
-                finished: receiver,
-            });
+            };
+            let _ = self.request.write().await.insert(ping);
         }
     }
 

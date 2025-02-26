@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+
+  - [ET-1955] `MailUserSession` has new method `execute_when_online` which accepts standard callback.
+
+
 ## [0.48.1] - 2025-02-25
 
 ### Changed

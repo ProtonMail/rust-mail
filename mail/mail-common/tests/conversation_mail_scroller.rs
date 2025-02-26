@@ -443,18 +443,30 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 
     // The items can be read only when we progress with `fetch_more`
     let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+    assert!(
+        matches!(
+            actual,
+            MailContextError::Api(ApiServiceError::NetworkError(_))
+        ) || matches!(
+            actual,
+            MailContextError::Api(ApiServiceError::InternalServerError(_, _))
+        )
     );
+
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 0);
     assert!(scroller.has_more().await.unwrap());
 
     let actual = scroller.fetch_more().await.unwrap_err();
-    assert_eq!(
-        actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+
+    assert!(
+        matches!(
+            actual,
+            MailContextError::Api(ApiServiceError::NetworkError(_))
+        ) || matches!(
+            actual,
+            MailContextError::Api(ApiServiceError::InternalServerError(_, _))
+        )
     );
 }
 

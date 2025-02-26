@@ -2,6 +2,8 @@ use crate as proton_mail_common;
 use proton_api_core::services::proton::requests::GetLabelsByIdsOptions;
 use proton_api_core::services::proton::responses::GetLabelsResponse;
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
+use proton_api_core::status_observer::StatusObserver;
+use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
 use proton_core_common::models::ModelExtension;
@@ -225,7 +227,11 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api = Session::builder().with_config(api_config).build().unwrap();
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(StatusWatcher::with_observer(StatusObserver::test()))
+        .build()
+        .unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,

@@ -4,7 +4,7 @@ use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::borrow::Borrow;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{watch, RwLock};
 
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;
@@ -12,7 +12,7 @@ use crate::crypto_clock::init_server_crypto_clock;
 use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
-use crate::status_observer::StatusObserver;
+use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
@@ -79,7 +79,7 @@ impl Default for Config {
 pub struct Builder {
     config: Config,
     store: Option<BoxStore>,
-    status: Option<StatusObserver>,
+    status: Option<StatusWatcher>,
     challenge: Option<ChallengeObserver>,
 }
 
@@ -132,7 +132,7 @@ impl Builder {
     }
 
     /// Set the status observer.
-    pub fn with_status(mut self, status: StatusObserver) -> Self {
+    pub fn with_status(mut self, status: StatusWatcher) -> Self {
         self.status = Some(status);
         self
     }
@@ -153,7 +153,9 @@ impl Builder {
 
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
-        let client = proton::build(&config, &store, status.clone(), challenge.clone())?;
+        let client = proton::build(&config, &store, status.observer(), challenge.clone())?;
+
+        status.initialize(client.clone());
 
         Ok(Session {
             client,
@@ -172,7 +174,7 @@ pub struct Session {
     client: Proton,
     config: Arc<Config>,
     store: DynStore,
-    status: StatusObserver,
+    status: StatusWatcher,
     challenge: ChallengeObserver,
 }
 
@@ -260,13 +262,26 @@ impl Session {
     pub async fn status(&self) -> ConnectionStatus {
         self.status.status(self.client.clone()).await
     }
+
+    /// Observe changes on status via `Receiver`
+    ///
+    #[must_use]
+    pub fn status_changes(&self) -> watch::Receiver<ConnectionStatus> {
+        self.status.subscribe()
+    }
+
+    /// Hold task till connection status is back online
+    ///
+    pub async fn wait_for_online(&self) {
+        self.status_changes().wait_for_online().await;
+    }
 }
 
 /// The parts of a session.
 pub(crate) struct SessionParts {
     pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
-    pub(crate) status: StatusObserver,
+    pub(crate) status: StatusWatcher,
     pub(crate) challenge: ChallengeObserver,
 }
 
