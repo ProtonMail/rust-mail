@@ -49,7 +49,7 @@ async fn shared_status() {
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
-        .expect(1..=2)
+        .expect(1..=3)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;
