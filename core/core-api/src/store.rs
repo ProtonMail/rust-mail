@@ -9,6 +9,9 @@ use tokio::sync::RwLock;
 use crate::auth::{Auth, UserKeySecret};
 use crate::services::proton::common::{AuthId, UserId};
 
+/// A shared store.
+pub type BoxStore = Box<dyn Store>;
+
 /// A thread-safe, shared store.
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
 

@@ -1,7 +1,7 @@
 use crate::login::state::{HasAuthId, HasUserId, StateData};
 use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
-use crate::session::{Session, SessionParts};
+use crate::session::Session;
 
 /// Represents a completed login flow.
 pub struct Complete {
@@ -15,12 +15,7 @@ impl Complete {
     }
 
     pub fn into_session(self) -> Session {
-        Session::from_parts(SessionParts {
-            client: self.client,
-            config: self.data.config,
-            store: self.data.store,
-            status: self.data.status,
-        })
+        Session::from_parts(self.client, self.data.parts)
     }
 }
 

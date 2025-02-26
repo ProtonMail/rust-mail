@@ -1,8 +1,6 @@
 use crate as proton_mail_common;
-#[allow(unused_imports)]
-use proton_api_core::services::proton::{
-    requests::GetLabelsByIdsOptions, responses::GetLabelsResponse,
-};
+use proton_api_core::services::proton::requests::GetLabelsByIdsOptions;
+use proton_api_core::services::proton::responses::GetLabelsResponse;
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_mail::services::proton::common::ConversationId;
@@ -228,7 +226,11 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()
     };
-    let api = Session::new(api_config, None, StatusWatcher::test()).unwrap();
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(StatusWatcher::test())
+        .build()
+        .unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,
         RollbackItemType::Message,

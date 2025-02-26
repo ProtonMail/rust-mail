@@ -103,6 +103,9 @@ mod messages {
             ..Default::default()
         };
 
-        Ok(Session::new(config, None, StatusWatcher::test())?)
+        Ok(Session::builder()
+            .with_config(config)
+            .with_status(StatusWatcher::test())
+            .build()?)
     }
 }

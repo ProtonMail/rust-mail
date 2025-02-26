@@ -1,5 +1,10 @@
 use crate::consts::CoreBundle;
 use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
+use async_trait::async_trait;
+use derive_more::{Debug, Deref};
+use muon::common::{BoxFut, Sender, SenderLayer};
+use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
+use std::sync::Arc;
 
 /// Extension for
 /// [`APIErrorInfo`](`crate::services::proton::response_data::ApiErrorInfo`)
@@ -7,7 +12,7 @@ use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChal
 ///
 /// Human verification challenges can be returned at any time with 422 http status
 /// code.
-pub trait ApiErrorExtension {
+pub trait ApiErrorInfoExt {
     /// Check whether the error is a human verification challenge.
     fn is_human_verification_challenge(&self) -> bool;
 
@@ -26,7 +31,7 @@ pub enum Error {
     MissingHumanVerificationData,
 }
 
-impl ApiErrorExtension for ApiErrorInfo {
+impl ApiErrorInfoExt for ApiErrorInfo {
     fn is_human_verification_challenge(&self) -> bool {
         self.code == CoreBundle::HumanVerificationRequired as u32
     }
@@ -44,4 +49,74 @@ impl ApiErrorExtension for ApiErrorInfo {
             details,
         )?)
     }
+}
+
+/// An interface by which human verification challenges can be handled.
+///
+/// This is a placeholder for now and will be expanded in the future.
+#[async_trait]
+pub trait ChallengeNotifier: Send + Sync + 'static {
+    async fn notify(&self);
+}
+
+/// A type that holds registered [`ChallengeNotifier`]s.
+///
+/// This is a placeholder for now and will be expanded in the future.
+#[must_use]
+#[derive(Debug, Clone)]
+#[debug("ChallengeObserver")]
+pub struct ChallengeObserver {
+    #[allow(unused)]
+    notifier: Arc<dyn ChallengeNotifier>,
+}
+
+impl ChallengeObserver {
+    pub fn new(notifier: impl ChallengeNotifier) -> Self {
+        Self {
+            notifier: Arc::new(notifier),
+        }
+    }
+}
+
+impl Default for ChallengeObserver {
+    fn default() -> Self {
+        Self {
+            notifier: Arc::new(NoopNotifier),
+        }
+    }
+}
+
+/// A type that wraps a [`ChallengeObserver`] and to implement the [`SenderLayer`] trait.
+#[derive(Debug, Deref)]
+pub struct ChallengeObserverLayer(ChallengeObserver);
+
+impl ChallengeObserverLayer {
+    #[must_use]
+    pub fn new(observer: ChallengeObserver) -> Self {
+        Self(observer)
+    }
+
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        inner.send(req).await
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for ChallengeObserverLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
+    }
+}
+
+struct NoopNotifier;
+
+#[async_trait]
+impl ChallengeNotifier for NoopNotifier {
+    async fn notify(&self) {}
 }

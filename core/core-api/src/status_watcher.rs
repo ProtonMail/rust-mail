@@ -74,7 +74,6 @@ impl StatusWatcher {
     }
 
     /// Clone underlying observer
-    #[must_use]
     pub fn observer(&self) -> StatusObserver {
         self.observer.clone()
     }

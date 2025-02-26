@@ -64,13 +64,14 @@ use serde::Deserialize;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
+use crate::human_verification::{ChallengeObserver, ChallengeObserverLayer};
 use crate::service::ApiServiceResult;
 use crate::services::proton::prelude::*;
 use crate::services::proton::proton_impl::{
     MuonStoreImpl, SetCryptoClockLayer, SetDefaultServiceTypeLayer, SetDefaultTimeoutLayer,
 };
 use crate::session::Config;
-use crate::status_observer::StatusObserver;
+use crate::status_observer::{StatusObserver, StatusObserverLayer};
 use crate::store::Store;
 
 /// Re-export muon for downstream convenience.
@@ -112,23 +113,25 @@ pub enum BuildError {
 
 /// Builds a new Proton client.
 pub fn build<S: Store>(
-    config: Config,
-    store: Arc<RwLock<S>>,
-    status_observer: StatusObserver,
+    config: &Arc<Config>,
+    store: &Arc<RwLock<S>>,
+    status: StatusObserver,
+    challenge: ChallengeObserver,
 ) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
-        App::new(config.app_version)?.with_user_agent(agent)
+        App::new(&config.app_version)?.with_user_agent(agent)
     } else {
-        App::new(config.app_version)?
+        App::new(&config.app_version)?
     };
 
-    let client = Proton::builder(app, MuonStoreImpl::new(config.env_id, store))
+    let client = Proton::builder(app, MuonStoreImpl::new(&config.env_id, store))
         .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
         .layer_front(Tagger::default())
         .layer_back(SetCryptoClockLayer)
         .layer_back(SetDefaultServiceTypeLayer)
         .layer_back(SetDefaultTimeoutLayer)
-        .layer_back(status_observer)
+        .layer_back(ChallengeObserverLayer::new(challenge))
+        .layer_back(StatusObserverLayer::new(status))
         .layer_back(DisplayLogger::debug())
         .build()?;
 

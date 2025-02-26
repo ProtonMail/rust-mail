@@ -3,9 +3,7 @@
 use muon::client::flow::LoginExtraInfo;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::ProtonCore;
-use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_core::status_watcher::StatusWatcher;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -30,12 +28,10 @@ async fn main() {
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
-    let api_env_config = ApiConfig {
-        app_version,
-        ..Default::default()
-    };
-
-    let session = Session::new(api_env_config, None, StatusWatcher::test()).unwrap();
+    let session = Session::builder()
+        .with_app_version(app_version)
+        .build()
+        .unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow

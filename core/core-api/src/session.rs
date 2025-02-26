@@ -2,16 +2,18 @@
 
 use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
+use std::borrow::Borrow;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
+use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
 use crate::services::proton::{self, BuildError, Proton};
 use crate::status_watcher::StatusWatcher;
-use crate::store::{DynStore, Store, TempStore};
+use crate::store::{BoxStore, DynStore, Store, TempStore};
 
 pub use muon::app::AppVersion;
 pub use muon::common::{Endpoint, Server};
@@ -47,9 +49,16 @@ impl Config {
     #[must_use]
     pub fn atlas() -> Self {
         Self {
-            app_version: String::from("Other"),
-            user_agent: None,
             env_id: EnvId::new_atlas(),
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
+    pub fn custom(env: impl Env) -> Self {
+        Self {
+            env_id: EnvId::new_custom(env),
+            ..Self::default()
         }
     }
 }
@@ -64,49 +73,124 @@ impl Default for Config {
     }
 }
 
+/// An API session builder.
+#[must_use]
+#[derive(Default)]
+pub struct Builder {
+    config: Config,
+    store: Option<BoxStore>,
+    status: Option<StatusWatcher>,
+    challenge: Option<ChallengeObserver>,
+}
+
+impl Builder {
+    /// Create a new session builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the session configuration.
+    pub fn with_config(mut self, config: impl Borrow<Config>) -> Self {
+        config.borrow().clone_into(&mut self.config);
+        self
+    }
+
+    /// Set the app version (`x-pm-appversion`).
+    pub fn with_app_version(mut self, app_version: impl AsRef<str>) -> Self {
+        self.config.app_version = String::from(app_version.as_ref());
+        self
+    }
+
+    /// Set the user agent.
+    pub fn with_user_agent(mut self, user_agent: impl AsRef<str>) -> Self {
+        self.config.user_agent = Some(String::from(user_agent.as_ref()));
+        self
+    }
+
+    /// Set the environment to connect to.
+    pub fn with_env_id(mut self, env_id: impl Borrow<EnvId>) -> Self {
+        env_id.borrow().clone_into(&mut self.config.env_id);
+        self
+    }
+
+    /// Use the Atlas environment.
+    pub fn with_atlas_env(mut self) -> Self {
+        self.config.env_id = EnvId::new_atlas();
+        self
+    }
+
+    /// Use a custom environment.
+    pub fn with_custom_env(mut self, env: impl Env) -> Self {
+        self.config.env_id = EnvId::new_custom(env);
+        self
+    }
+
+    /// Set the store to use.
+    pub fn with_store(mut self, store: impl Store) -> Self {
+        self.store = Some(Box::new(store));
+        self
+    }
+
+    /// Set the status observer.
+    pub fn with_status(mut self, status: StatusWatcher) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// Set the challenge observer.
+    pub fn with_challenge(mut self, challenge: ChallengeObserver) -> Self {
+        self.challenge = Some(challenge);
+        self
+    }
+
+    /// Build the session from the builder.
+    pub fn build(self) -> Result<Session, BuildError> {
+        init_server_crypto_clock();
+
+        let store = self.store.unwrap_or_else(TempStore::boxed);
+        let status = self.status.unwrap_or_default();
+        let challenge = self.challenge.unwrap_or_default();
+
+        let config = Arc::new(self.config);
+        let store = Arc::new(RwLock::new(store));
+        let client = proton::build(&config, &store, status.observer(), challenge.clone())?;
+
+        status.initialize(client.clone());
+
+        Ok(Session {
+            client,
+            config,
+            store,
+            status,
+            challenge,
+        })
+    }
+}
+
 /// An API session, capable of making requests to the API on behalf of a user.
 #[derive(Debug, Clone)]
 #[debug("Session {{ client: {client:?}, config: {config:?} }}")]
 pub struct Session {
     client: Proton,
     config: Arc<Config>,
-    status: StatusWatcher,
     store: DynStore,
+    status: StatusWatcher,
+    challenge: ChallengeObserver,
 }
 
 impl Session {
-    /// Create a new Session
+    /// Create a new session.
     ///
     /// # Errors
     ///
     /// Returns error if the API service failed to initialize.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the Proton client fails to build.
-    pub fn new(
-        config: Config,
-        store: Option<Box<dyn Store>>,
-        status: StatusWatcher,
-    ) -> Result<Self, BuildError> {
-        init_server_crypto_clock();
+    pub fn new() -> Result<Self, BuildError> {
+        Self::builder().build()
+    }
 
-        let store = Arc::new(RwLock::new(store.unwrap_or_else(|| TempStore::boxed())));
-        let client = proton::build(
-            Config::clone(&config),
-            Arc::clone(&store),
-            status.observer(),
-        )?;
-        let config = Arc::new(config);
-
-        status.initialize(client.clone());
-
-        Ok(Self {
-            client,
-            config,
-            status,
-            store,
-        })
+    /// Create a new session builder.
+    pub fn builder() -> Builder {
+        Builder::new()
     }
 
     /// Fork the current session.
@@ -204,32 +288,35 @@ impl Session {
 
 /// The parts of a session.
 pub(crate) struct SessionParts {
-    pub(crate) client: Proton,
     pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
     pub(crate) status: StatusWatcher,
+    pub(crate) challenge: ChallengeObserver,
 }
 
 impl Session {
-    pub(crate) fn to_parts(&self) -> SessionParts {
+    pub(crate) fn to_parts(&self) -> (Proton, SessionParts) {
         self.clone().into_parts()
     }
 
-    pub(crate) fn into_parts(self) -> SessionParts {
-        SessionParts {
-            client: self.client,
+    pub(crate) fn into_parts(self) -> (Proton, SessionParts) {
+        let parts = SessionParts {
             config: self.config,
             store: self.store,
             status: self.status,
-        }
+            challenge: self.challenge,
+        };
+
+        (self.client, parts)
     }
 
-    pub(crate) fn from_parts(parts: SessionParts) -> Self {
+    pub(crate) fn from_parts(client: Proton, parts: SessionParts) -> Self {
         Self {
-            client: parts.client,
+            client,
             config: parts.config,
             store: parts.store,
             status: parts.status,
+            challenge: parts.challenge,
         }
     }
 }

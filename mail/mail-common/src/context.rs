@@ -3,6 +3,7 @@ use crate::{draft, AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
+use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AuthId, UserId};
@@ -33,6 +34,8 @@ use tokio::task::{JoinError, JoinHandle};
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
+    #[error("Session with id {0} is missing in the DB")]
+    SessionMissing(AuthId),
     #[error("Account with user id {0} is missing in the DB")]
     AccountMissing(UserId),
     #[error("A Cryptography error occurred")]
@@ -282,10 +285,11 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         status: Option<StatusWatcher>,
+        challenge: Option<ChallengeObserver>,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_session(session, status)
+            .user_context_from_session(session, status, challenge)
             .await?;
         Arc::clone(self).new_user_context(ctx).await
     }

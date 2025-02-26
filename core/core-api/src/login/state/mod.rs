@@ -7,9 +7,7 @@ use crate::login::LoginError;
 use crate::services::proton::common::{AuthId, UserId};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
-use crate::session::{Config, Session, SessionParts};
-use crate::status_watcher::StatusWatcher;
-use crate::store::DynStore;
+use crate::session::{Session, SessionParts};
 use crate::store::UserData;
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
@@ -17,7 +15,6 @@ use muon::client::flow::{AuthFlow, LoginExtraInfo};
 use proton_crypto_account::keys::{LockedKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::salts::{Salt, Salts};
-use std::sync::Arc;
 
 mod complete;
 mod want_login;
@@ -148,52 +145,49 @@ impl State {
 /// Public entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    pub fn new(parts: SessionParts) -> Self {
-        Self::want_login(parts.client.auth(), parts.config, parts.store, parts.status)
+    pub fn new(client: Proton, parts: SessionParts) -> Self {
+        Self::want_login(client.auth(), parts)
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
     pub fn new_from_tfa(
+        client: Proton,
         parts: SessionParts,
         user_id: UserId,
         auth_id: AuthId,
         pass: Option<String>,
     ) -> Self {
         let data = StateData {
-            config: parts.config,
-            store: parts.store,
-            status: parts.status,
+            parts,
             user_id,
             auth_id,
         };
 
-        Self::want_tfa(parts.client.auth().into(), data, pass)
+        Self::want_tfa(client.auth().into(), data, pass)
     }
 
     /// Create a `WantMbp` state from a resumed login flow.
-    pub fn new_from_mbp(parts: SessionParts, user_id: UserId, auth_id: AuthId) -> Self {
+    pub fn new_from_mbp(
+        client: Proton,
+        parts: SessionParts,
+        user_id: UserId,
+        auth_id: AuthId,
+    ) -> Self {
         let data = StateData {
-            config: parts.config,
-            store: parts.store,
-            status: parts.status,
+            parts,
             user_id,
             auth_id,
         };
 
-        Self::want_mbp(parts.client, data)
+        Self::want_mbp(client, data)
     }
 }
 
 /// Private entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    fn want_login(
-        auth: AuthFlow,
-        config: Arc<Config>,
-        store: DynStore,
-        status: StatusWatcher,
-    ) -> Self {
-        WantLogin::new(auth, config, store, status).into()
+    fn want_login(auth: AuthFlow, parts: SessionParts) -> Self {
+        WantLogin::new(auth, parts).into()
     }
 
     /// Create a `WantTfa` state.
@@ -248,7 +242,7 @@ impl State {
         };
 
         // Save the derived user data in the auth store.
-        (data.store.write().await)
+        (data.parts.store.write().await)
             .set_user_data(UserData {
                 username: user.name.unwrap_or_default(),
                 display_name: user.display_name.unwrap_or_default(),
@@ -262,9 +256,7 @@ impl State {
 }
 
 pub(crate) struct StateData {
-    config: Arc<Config>,
-    store: DynStore,
-    status: StatusWatcher,
+    parts: SessionParts,
     user_id: UserId,
     auth_id: AuthId,
 }

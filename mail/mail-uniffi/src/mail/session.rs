@@ -181,7 +181,7 @@ impl MailSession {
 
         async_runtime()
             .block_on(async move {
-                ctx.user_context_from_session(session.session(), None)
+                ctx.user_context_from_session(session.session(), None, None)
                     .map_ok(|ctx| self.user_ctx.insert(ctx))
                     .map_ok(MailUserSession::new)
                     .map_err(RealProtonMailError::from)
@@ -690,6 +690,12 @@ impl MailSession {
     #[must_use]
     pub fn ctx(&self) -> &MailContext {
         &self.mail_ctx
+    }
+
+    /// Get the mail context wrapped in [`Arc`]
+    #[must_use]
+    pub fn ctx_arc(&self) -> Arc<MailContext> {
+        Arc::clone(&self.mail_ctx)
     }
 
     /// Get the session database connection.

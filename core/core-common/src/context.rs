@@ -13,6 +13,7 @@ use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::WriterGuardError;
+use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AuthId, UserId};
@@ -492,7 +493,7 @@ impl Context {
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None, None)?;
+        let session = self.new_api_session(None, None, None)?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -533,14 +534,14 @@ impl Context {
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
-                self.new_api_session(Some(&session), None)?,
+                self.new_api_session(Some(&session), None, None)?,
                 user_id,
                 session_id,
                 password,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
-                self.new_api_session(Some(&session), None)?,
+                self.new_api_session(Some(&session), None, None)?,
                 user_id,
                 session_id,
             )),
@@ -583,6 +584,7 @@ impl Context {
         &self,
         session: &CoreSession,
         status: Option<StatusWatcher>,
+        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -601,7 +603,7 @@ impl Context {
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session), status)?;
+        let session = self.new_api_session(Some(session), status, challenge)?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -616,7 +618,7 @@ impl Context {
 
         for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
-                .new_api_session(Some(&session), None)
+                .new_api_session(Some(&session), None, None)
                 .inspect_err(|err| error!("failed to create API session: {err:?}"))
             else {
                 continue;
@@ -708,19 +710,27 @@ impl Context {
         &self,
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
+        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let account_stash = self.account_stash();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
-        let config = self.api_config.clone();
 
-        Ok(ApiSession::new(
-            config,
-            Some(Box::new(store)),
-            status.unwrap_or_default(),
-        )?)
+        let mut builder = ApiSession::builder()
+            .with_config(&self.api_config)
+            .with_store(store);
+
+        if let Some(status) = status {
+            builder = builder.with_status(status);
+        }
+
+        if let Some(challenge) = challenge {
+            builder = builder.with_challenge(challenge);
+        }
+
+        Ok(builder.build()?)
     }
 
     /// Get the stash in use

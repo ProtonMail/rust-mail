@@ -1,5 +1,5 @@
 use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::session::{Config, EnvId, Session};
+use proton_api_core::session::{Config, Session};
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_core_test_utils::utils::catch_all;
@@ -24,12 +24,10 @@ fn random_path() -> String {
 #[tokio::test]
 async fn shared_status() {
     let mock_server = MockServer::start().await;
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
-        ..Default::default()
-    };
-    let api_1 = Session::new(api_config.clone(), None, StatusWatcher::new()).unwrap();
-    let api_2 = Session::new(api_config, None, StatusWatcher::new()).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
+    let api_config = Config::custom(mock_env);
+    let api_1 = Session::builder().with_config(&api_config).build().unwrap();
+    let api_2 = Session::builder().with_config(&api_config).build().unwrap();
     let api_3 = api_1.clone();
 
     Mock::given(method("GET"))
@@ -71,12 +69,14 @@ async fn shared_status() {
 async fn make_another_request_when_stale() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let sw = status_watcher(500).await;
-    let api = Session::new(api_config.clone(), None, sw).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
+    let api_config = Config::custom(mock_env);
+    let status = status_watcher(500).await;
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(status)
+        .build()
+        .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -98,12 +98,14 @@ async fn make_another_request_when_stale() {
 async fn very_bad_connection_but_responding_in_under_a_second() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let sw = status_watcher(1000).await;
-    let api = Session::new(api_config.clone(), None, sw).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
+    let api_config = Config::custom(mock_env);
+    let status = status_watcher(1000).await;
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(status)
+        .build()
+        .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -127,12 +129,14 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
 async fn wait_for_online() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let sw = status_watcher(500).await;
-    let api = Session::new(api_config.clone(), None, sw).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
+    let api_config = Config::custom(mock_env);
+    let status = status_watcher(500).await;
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(status)
+        .build()
+        .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -163,12 +167,14 @@ async fn wait_for_online() {
 async fn multiple_subscribers() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let sw = status_watcher(500).await;
-    let api = Session::new(api_config.clone(), None, sw).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
+    let api_config = Config::custom(mock_env);
+    let status = status_watcher(500).await;
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(status)
+        .build()
+        .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
@@ -227,11 +233,14 @@ async fn multiple_subscribers() {
 async fn status_reflected_in_response_http_code(http_code: u16, expected_status: ConnectionStatus) {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
-    let api_config = Config {
-        env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path(&api_path)),
-        ..Default::default()
-    };
-    let api = Session::new(api_config.clone(), None, status_watcher(500).await).unwrap();
+    let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
+    let api_config = Config::custom(mock_env);
+
+    let api = Session::builder()
+        .with_config(api_config)
+        .with_status(status_watcher(500).await)
+        .build()
+        .unwrap();
 
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
