@@ -204,6 +204,7 @@ impl ApiServiceError {
     /// Attempts to extract the Proton error from the API error.
     ///
     /// Returns `None` if the error is not present or failed to deserialize.
+    #[must_use]
     pub fn to_proton_error(&self) -> Option<ApiErrorInfo> {
         use ApiServiceError::*;
 
