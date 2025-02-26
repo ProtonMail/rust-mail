@@ -62,7 +62,7 @@ impl DecryptedInboxPushNotification {
                     Message::force_sync_message_and_body(ctx, remote_message_id, false).await?;
 
                 Ok(Self::Email(DecryptedEmailPushNotification {
-                    subject: data.body,
+                    subject: data.subject,
                     sender: data.sender.into(),
                     message_id: message.local_id.expect("Local ID"),
                 }))

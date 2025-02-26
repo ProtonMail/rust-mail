@@ -32,9 +32,11 @@ pub struct DecryptedEmailPushNotification {
 
     /// A subject of the message
     ///
-    pub body: String,
+    #[serde(rename = "body")]
+    pub subject: String,
 
-    /// TODO: Describe
+    /// This is hardcoded on the backend, always with the value "large_icon"
+    ///
     pub large_icon: String,
 
     /// Remote Id of the incoming message
@@ -45,7 +47,8 @@ pub struct DecryptedEmailPushNotification {
     ///
     pub sender: MessageSender,
 
-    /// TODO: Describe
+    /// This is hardcoded on the backend, always with the value "small_icon"
+    ///
     pub small_icon: String,
 
     /// Whether to play sound
