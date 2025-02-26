@@ -3,12 +3,15 @@ use std::sync::Arc;
 use proton_core_common::datatypes::EncryptedPushNotification as RealEncryptedPushNotification;
 use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
-    DecryptedInboxPushNotification as RealDecryptedPushNotification,
+    DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
+    DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
+use crate::core::datatypes::Id;
 use crate::{errors::ActionError, uniffi_async};
 
+use super::datatypes::MessageSender;
 use super::MailSession;
 
 /// Encrypted push notification
@@ -35,22 +38,70 @@ impl From<EncryptedPushNotification> for RealEncryptedPushNotification {
     }
 }
 
+/// Decrypted notification usable only in the context of the Inbox application
+///
 #[derive(Clone, Debug, uniffi::Enum)]
 pub enum DecryptedPushNotification {
+    /// Decrypted notification that is pushed when user receives a new email.
+    ///
+    Email(DecryptedEmailPushNotification),
     // TODO (ET-2204): Obviously this is not the final datastructure
-    Email,
+    /// Decrypted notification that is pushed when user logged in in the separate device.
+    /// We use it to show webpage.
+    ///
     OpenUrl,
 }
 
-impl From<RealDecryptedPushNotification> for DecryptedPushNotification {
-    fn from(value: RealDecryptedPushNotification) -> Self {
+impl From<RealDecryptedInboxPushNotification> for DecryptedPushNotification {
+    fn from(value: RealDecryptedInboxPushNotification) -> Self {
         match value {
-            RealDecryptedPushNotification::Email {} => Self::Email,
-            RealDecryptedPushNotification::OpenUrl {} => Self::OpenUrl,
+            RealDecryptedInboxPushNotification::Email(email) => Self::Email(email.into()),
+            RealDecryptedInboxPushNotification::OpenUrl { .. } => Self::OpenUrl,
         }
     }
 }
 
+/// Decrypted notification that is pushed when user receives a new email.
+///
+#[derive(Clone, Debug, uniffi::Record)]
+pub struct DecryptedEmailPushNotification {
+    /// The subject of the email message
+    ///
+    pub subject: String,
+
+    /// Information about who sent the message
+    ///
+    pub sender: MessageSender,
+
+    /// Local message ID
+    ///
+    pub message_id: Id,
+}
+
+impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification {
+    fn from(value: RealDecryptedEmailPushNotification) -> Self {
+        Self {
+            subject: value.subject,
+            sender: value.sender.into(),
+            message_id: value.message_id.into(),
+        }
+    }
+}
+
+/// Decrypt and deserialize Push notification.
+/// This function is mail (inbox) specific
+///
+/// # Parameters
+///
+/// * `session` - a mail session, used before logging in. Based on the notification payload, the SDK will find
+///   user session accordingly.
+/// * `encrypted` - encrypted message received from the Push API
+///
+/// # Errors
+///
+/// This function may return an error if decryption fails, or it the decrypted message is not in the expected
+/// format. It may also fail when saving new message to the database
+///
 #[uniffi_export]
 pub async fn decrypt_push_notification(
     session: Arc<MailSession>,
