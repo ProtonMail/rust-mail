@@ -393,6 +393,16 @@ impl MailUserContext {
         }
     }
 
+    /// Get the path to the attachment staging folder.
+    ///
+    /// Attachment staging is used by mobile to place attachment files so they can
+    /// be consumed later by the SDK. We can't directly use file system paths
+    pub fn attachment_staging_path(&self) -> PathBuf {
+        self.mail_context
+            .mail_cache_path(self.user_id())
+            .join("attachment-staging")
+    }
+
     /// Spawn an async `task` associated to this context.
     ///
     /// See [`spawn_task()`] for more details.

@@ -1,3 +1,4 @@
+use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::ValidationState;
@@ -254,14 +255,18 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
     for attachment in attachments {
-        let Some(remote_attachment_id) = attachment.remote_id.clone() else {
+        if attachment.remote_id.is_none() {
             return Err(PackageError::AttachmentNoRemoteId);
         };
 
-        // TODO(ET-1407): Use local attachment cache as well.
-        let loaded_data = Attachment::fetch_content(remote_attachment_id, context.api())
-            .await?
-            .to_vec();
+        let key = CacheAttachmentKey::from(attachment);
+        let Some(attachment_path) = context.attachements_cache().get_item_path(&key) else {
+            return Err(PackageError::AttachmentDataMissing);
+        };
+        let loaded_data = tokio::fs::read(&attachment_path).await.map_err(|e| {
+            error!("Failed to read attachment file: {e:?}");
+            PackageError::AttachmentLoad(e)
+        })?;
         let mime_type = attachment.mime_type.to_string();
 
         match attachment.disposition {

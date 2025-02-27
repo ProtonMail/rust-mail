@@ -250,5 +250,36 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
     )
     .await?;
 
+    // Draft Attachment Upload metadata
+    tx.execute(
+        indoc! {"
+            CREATE TABLE draft_attachment_metadata (
+                local_attachment_id INTEGER PRIMARY KEY,
+                metadata_id INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL DEFAULT (now()),
+                state INTEGER NOT NULL,
+                error TEXT DEFAULT NULL,
+                action_id INTEGER DEFAULT NULL,
+
+            CONSTRAINT draft_attachment_metadata_attachment_id
+                FOREIGN KEY (local_attachment_id)
+                REFERENCES attachments (local_id)
+                ON DELETE CASCADE
+
+            CONSTRAINT draft_attachment_metadata_metadata_id
+                FOREIGN KEY (metadata_id)
+                REFERENCES draft_metadata (id)
+                ON DELETE CASCADE
+
+            CONSTRAINT draft_attachment_metadata_action_id
+                FOREIGN KEY (action_id)
+                REFERENCES action_queue (id)
+                ON DELETE SET NULL
+            )
+        "},
+        vec![],
+    )
+    .await?;
+
     Ok(())
 }

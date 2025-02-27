@@ -23,6 +23,8 @@ pub enum DraftSendResultOrigin {
     SaveBeforeSend,
     /// Sending of the saved draft.
     Send,
+    /// When uploading an attachment.
+    AttachmentUpload,
 }
 
 impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
@@ -31,6 +33,7 @@ impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
             RealDraftSendResultOrigin::Save => Self::Save,
             RealDraftSendResultOrigin::SaveBeforeSend => Self::SaveBeforeSend,
             RealDraftSendResultOrigin::Send => Self::Send,
+            RealDraftSendResultOrigin::AttachmentUpload => Self::AttachmentUpload,
         }
     }
 }

@@ -1305,6 +1305,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "derive_builder"
 version = "0.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1688,6 +1699,12 @@ name = "fiat-crypto"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
+
+[[package]]
+name = "file-format"
+version = "0.26.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7ef3d5e8ae27277c8285ac43ed153158178ef0f79567f32024ca8140a0c7cd8"
 
 [[package]]
 name = "filetime"
@@ -4434,6 +4451,7 @@ dependencies = [
  "ctor",
  "derive_more 2.0.1",
  "email_address",
+ "file-format",
  "flume",
  "function_name",
  "futures",
@@ -4478,6 +4496,7 @@ dependencies = [
  "typed-builder",
  "uniffi",
  "url",
+ "uuid",
  "velcro",
  "wiremock",
 ]
@@ -4578,6 +4597,7 @@ dependencies = [
  "proton-core-common",
  "proton-mail-common",
  "ratatui",
+ "ratatui-explorer",
  "scopeguard",
  "secrecy",
  "sqlite-watcher",
@@ -4942,6 +4962,17 @@ dependencies = [
  "unicode-segmentation",
  "unicode-truncate",
  "unicode-width 0.1.14",
+]
+
+[[package]]
+name = "ratatui-explorer"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bde42516edac6d3f0b92bacc47644adda0d1c6cd0aefc4ac1f4ffb80c094999e"
+dependencies = [
+ "crossterm",
+ "derivative",
+ "ratatui",
 ]
 
 [[package]]

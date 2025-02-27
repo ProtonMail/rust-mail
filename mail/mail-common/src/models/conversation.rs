@@ -1611,42 +1611,15 @@ impl Conversation {
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids = {
-                // Create attachment from partial metadata present in a conversation.
-                // If attachment record already exists, the conversation ids are updated.
-                // If no record exists we create a new one.
-                let mut result = Vec::with_capacity(self.attachments_metadata.len());
-                for metadata in &mut self.attachments_metadata {
-                    let mut attachment = Attachment::find_first(
-                        "WHERE remote_id = ?",
-                        params![metadata.remote_id.clone()],
-                        bond,
-                    )
-                    .await?
-                    .unwrap_or(Attachment::from(metadata.clone()));
-
-                    attachment.local_conversation_id = self.local_id;
-                    attachment.remote_conversation_id = self.remote_id.clone();
-                    attachment.save(bond).await.inspect_err(|e| {
-                        error!(
-                            "Failed to updated attachment from conversation: {}",
-                            e.to_string()
-                        )
-                    })?;
-                    let local_id = attachment.local_id.expect("Should be set");
-                    metadata.local_id = Some(local_id);
-
-                    bond.execute(
-                        "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                        params![self.local_id.unwrap(), local_id],
-                    )
-                    .await?;
-
-                    result.push(local_id);
-                }
-
-                result
-            };
+            let local_ids =
+                Attachment::create_or_update_from_conversation_metadata(self, bond).await?;
+            for id in &local_ids {
+                bond.execute(
+                    "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
+                    params![self.local_id.unwrap(), *id],
+                )
+                .await?;
+            }
 
             #[allow(trivial_casts)]
             bond.execute(

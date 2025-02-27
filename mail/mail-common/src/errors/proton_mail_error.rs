@@ -1,6 +1,6 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
-use crate::draft::PackageError;
+use crate::draft::{AttachmentError, PackageError, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{
@@ -192,6 +192,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Label(label_error) => Self::from(label_error),
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
             MailContextError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
+            MailContextError::AttachmentEncryption(_) => Self::Unexpected(Unexpected::Crypto),
         }
     }
 }
@@ -203,6 +204,7 @@ impl From<DraftError> for ProtonMailError {
             DraftError::SaveOrSend(v) => v.into(),
             DraftError::Discard(v) => v.into(),
             DraftError::Undo(v) => v.into(),
+            DraftError::Attachment(v) => v.into(),
         }
     }
 }
@@ -258,6 +260,11 @@ impl From<DraftSaveOrSendError> for ProtonMailError {
             DraftSaveOrSendError::DraftDoesNotExistOnServer => Self::Reason(
                 MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::MessageDoesNotExist),
             ),
+            SaveOrSendError::MissingAttachmentUploads => {
+                Self::Reason(MailErrorReason::DraftSaveSendReason(
+                    DraftSaveSendErrorReason::MissingAttachmentUploads,
+                ))
+            }
         }
     }
 }
@@ -296,6 +303,44 @@ impl From<DraftDiscardError> for ProtonMailError {
             DraftDiscardError::DraftDoesNotExistOnServer => Self::Reason(
                 MailErrorReason::DraftDiscardReason(DraftDiscardErrorReason::MessageDoesNotExist),
             ),
+        }
+    }
+}
+
+impl From<AttachmentError> for ProtonMailError {
+    fn from(value: AttachmentError) -> Self {
+        match value {
+            AttachmentError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentError::MessageDoesNotExist => {
+                Self::Reason(MailErrorReason::DraftAttachmentReason(
+                    DraftAttachmentErrorReason::MessageDoesNotExist,
+                ))
+            }
+            AttachmentError::MessageDoesNotExistOnServer(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentReason(
+                    DraftAttachmentErrorReason::MessageDoesNotExistOnServer,
+                ))
+            }
+            AttachmentError::AttachmentDataMissing(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentError::MissingContentId(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentError::Crypto(_) => Self::Reason(MailErrorReason::DraftAttachmentReason(
+                DraftAttachmentErrorReason::Crypto,
+            )),
+            AttachmentError::ExistingUploadActionExist(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentError::AttachmentAlreadyUploaded(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentError::TooManyAttachments => {
+                Self::Reason(MailErrorReason::DraftAttachmentReason(
+                    DraftAttachmentErrorReason::TooManyAttachments,
+                ))
+            }
+            AttachmentError::MessageAlreadySent => {
+                Self::Reason(MailErrorReason::DraftAttachmentReason(
+                    DraftAttachmentErrorReason::MessageAlreadySent,
+                ))
+            }
+            AttachmentError::AttachmentMetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
         }
     }
 }

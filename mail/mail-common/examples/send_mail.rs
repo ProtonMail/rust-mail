@@ -3,14 +3,12 @@ use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
-use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
-use proton_mail_common::models::{Attachment, Message};
+use proton_mail_common::models::Attachment;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
@@ -51,10 +49,10 @@ async fn main() {
         .with_default_directive(LevelFilter::TRACE.into())
         .parse_lossy(
             "info,proton_sqlite3=trace,\
-                    proton_core_common=trace,proton_mail_common=trace,\
-                    proton_event_loop=trace,proton_api_core=trace,\
-                    proton_action_queue=trace,proton_api_mail=trace,\
-                    stash=error",
+                proton_core_common=trace,proton_mail_common=trace,\
+                proton_event_loop=trace,proton_api_core=trace,\
+                proton_action_queue=trace,proton_api_mail=trace,\
+                stash=error",
         );
     tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(env_filter)
@@ -68,10 +66,13 @@ async fn main() {
         mut body,
     } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
+    let tmp_file = tmp_dir.path().join("attachment.txt");
 
     let keychain = InMemoryKeyChain::default();
     let key = SessionEncryptionKey::random().to_base64();
     keychain.store(key).unwrap();
+
+    info!("TMP DIR: {:?}", tmp_dir.path());
 
     let ctx = MailContext::new(
         tmp_dir.path().join("session"),
@@ -112,38 +113,40 @@ async fn main() {
         })
         .unwrap();
 
-    let id = draft.save(user_ctx.action_queue()).await.unwrap().id;
+    let mut tether = user_ctx.user_stash().connection();
+
+    tokio::fs::write(&tmp_file, b"Hello world attachment")
+        .await
+        .unwrap();
+
+    let id = draft
+        .save(user_ctx.action_queue(), &tether)
+        .await
+        .unwrap()
+        .id;
     ActionAwaiter::new(user_ctx.action_queue(), id)
         .wait()
         .await
         .unwrap();
-    let tether = user_ctx.user_stash().connection();
 
-    let message_id =
-        Message::local_id_counterpart(draft.message_id(&tether).await.unwrap().unwrap(), &tether)
-            .await
-            .unwrap()
-            .unwrap();
+    // Add attachment after save.
+    let attachment = Attachment::create_local(
+        &user_ctx,
+        draft.address_id.clone(),
+        Disposition::Attachment,
+        &tmp_file,
+        &mut tether,
+    )
+    .await
+    .unwrap();
 
-    //Note: This part will
-    let encrypted_attachment = Attachment::encrypt(&user_ctx, &draft.address_id, "Hello World!")
+    draft.add_attachment(&user_ctx, attachment).await.unwrap();
+
+    let id = draft
+        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
-        .unwrap();
-
-    let params = NewAttachmentParams {
-        filename: "hello_world.txt".to_string(),
-        message_id,
-        mime_type: "text/plain".to_string(),
-        disposition: NewAttachmentDisposition::Attachment,
-        key_packets: encrypted_attachment.metadata.key_packets,
-        signature: encrypted_attachment.metadata.signature,
-        enc_signature: encrypted_attachment.metadata.encrypted_signature,
-        data_packet: encrypted_attachment.data,
-    };
-
-    user_ctx.api().post_attachment(params).await.unwrap();
-
-    let id = draft.send(user_ctx.action_queue()).await.unwrap().id;
+        .unwrap()
+        .id;
     let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
     match send_awaiter.wait().await.unwrap() {
         BroadcastMessage::Success(_) => {

@@ -8,8 +8,8 @@ use crate::draft::send::{
 };
 use crate::draft::{ReplyMode, SaveOrSendError};
 use crate::models::{
-    Conversation, DraftMetadata, DraftSendFailure, DraftSendResult, DraftSendResultOrigin,
-    MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
+    DraftSendResultOrigin, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -186,6 +186,14 @@ impl Send {
         let local_message_id = action.local_message_id.expect("Should be set");
         let local_outbox_label_id = local_outbox_label_id(guard.tether()).await?;
         let local_sent_label_id = local_sent_label_id(guard.tether()).await?;
+
+        // Check if there are any new attachments that have not yet finished loading.
+        if DraftAttachmentMetadata::has_unsynced_attachments(action.metadata_id, guard.tether())
+            .await?
+        {
+            error!("Draft has attachments that have not been uploaded");
+            return Err(SaveOrSendError::MissingAttachmentUploads.into());
+        }
 
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, guard.tether())
             .await

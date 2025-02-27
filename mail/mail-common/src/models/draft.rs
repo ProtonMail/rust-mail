@@ -1,5 +1,5 @@
 use crate::datatypes::LocalMessageId;
-use crate::draft::{Error, PackageError, ReplyMode, SaveOrSendError};
+use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{DraftSaveSendErrorReason, MailErrorReason, ProtonMailError};
@@ -12,7 +12,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
-use proton_mail_ids::LocalConversationId;
+use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -228,8 +228,45 @@ impl DraftMetadata {
     /// Check whether this draft has pending changes that have not been communicated to the server.
     ///
     /// Pending change are action that have been queued but not yet executed.
-    pub fn has_pending_changes(&self) -> bool {
-        self.send_action_id.is_some() || self.send_action_id.is_some()
+    ///
+    /// # Errors
+    ///
+    /// Returns errors if the query failed.
+    pub async fn has_pending_changes(&self, tether: &Tether) -> Result<bool, StashError> {
+        //TODO: check attachment metadata.
+        Ok(self.save_action_id.is_some()
+            || self.send_action_id.is_some()
+            || !DraftAttachmentMetadata::find_attachment_upload_action_ids(
+                self.id.unwrap(),
+                tether,
+            )
+            .await?
+            .is_empty())
+    }
+
+    /// Retrieve the last recorded save action.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn last_save_action_id(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Option<ActionId>, StashError> {
+        match tether
+            .query_value::<_, Option<ActionId>>(
+                format!(
+                    "SELECT save_action_id AS value FROM {} WHERE id =?",
+                    Self::table_name()
+                ),
+                params![metadata_id],
+            )
+            .await
+        {
+            Ok(action_id) => Ok(action_id),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -448,6 +485,7 @@ pub enum DraftSendFailure {
     MessageDoesNotExist,
     NoConnection,
     AlreadySent,
+    AttachmentUpload(String),
     Server(String),
     Internal,
 }
@@ -465,6 +503,8 @@ pub enum DraftSendResultOrigin {
     SaveBeforeSend = 1,
     /// We failed while sending the message
     Send = 2,
+    /// We failed while uploading an attachment
+    AttachmentUpload = 3,
 }
 
 impl ToSql for DraftSendResultOrigin {
@@ -503,6 +543,7 @@ impl DraftSendFailure {
                 SaveOrSendError::AlreadySent => Self::AlreadySent,
                 _ => Self::Internal,
             },
+            Error::Attachment(e) => Self::AttachmentUpload(e.to_string()),
             _ => Self::Internal,
         }
     }
@@ -596,6 +637,9 @@ impl From<DraftSendFailure> for ProtonMailError {
             DraftSendFailure::AlreadySent => Self::Reason(MailErrorReason::DraftSaveSendReason(
                 DraftSaveSendErrorReason::AlreadySent,
             )),
+            DraftSendFailure::AttachmentUpload(_) => {
+                todo!()
+            }
         }
     }
 }
@@ -615,6 +659,242 @@ impl TableObserver for DraftSendResultTableObserver {
             .inspect_err(|e| {
                 tracing::error!(
                     "Failed to send notification for DraftSendResultTableObserver: {}",
+                    e
+                )
+            })
+            .ok();
+    }
+}
+
+/// This table tracks the metadata of new attachments added to the draft as well as their
+/// state.
+#[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
+#[TableName("draft_attachment_metadata")]
+pub struct DraftAttachmentMetadata {
+    /// Id of the attachment.
+    #[IdField]
+    pub local_attachment_id: LocalAttachmentId,
+    #[DbField]
+    /// Draft metadata id.
+    pub metadata_id: MetadataId,
+    /// Timestamp at which this entry was produced.
+    #[DbField]
+    timestamp: i64,
+    /// Whether an error occurred while uploading the attachment.
+    #[DbField]
+    state: DraftAttachmentUploadState,
+    /// Last upload error, if any.
+    ///
+    /// We record the error separate as we need to ascertain the upload state. It's easier
+    /// to match against an integer rather than a json object on the database.
+    #[DbField]
+    pub error: Option<DraftAttachmentUploadError>,
+    /// Upload action that is currently queued or running.
+    #[DbField]
+    pub action_id: Option<ActionId>,
+    #[RowIdField]
+    pub row_id: Option<u64>,
+}
+
+impl DraftAttachmentMetadata {
+    /// Create a new instance
+    pub fn new(local_attachment_id: LocalAttachmentId, metadata_id: MetadataId) -> Self {
+        Self {
+            local_attachment_id,
+            metadata_id,
+            timestamp: Utc::now().timestamp(),
+            state: DraftAttachmentUploadState::Uploading,
+            action_id: None,
+            error: None,
+            row_id: None,
+        }
+    }
+
+    /// Overwrite `Model::Save` for create or update.
+    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(existing) = Self::find_by_id(self.local_attachment_id, bond).await? {
+            self.row_id = existing.row_id;
+        }
+
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Update state.
+    fn set_state(&mut self, state: DraftAttachmentUploadState) {
+        self.timestamp = Utc::now().timestamp();
+        self.state = state;
+    }
+
+    /// Update state to error with the given `error`.
+    pub fn set_error_state(&mut self, error: DraftAttachmentUploadError) {
+        self.set_state(DraftAttachmentUploadState::Error);
+        self.error = Some(error);
+    }
+
+    /// Update state to uploaded.
+    pub fn set_uploaded_state(&mut self) {
+        self.set_state(DraftAttachmentUploadState::Uploaded);
+        self.error = None;
+    }
+
+    /// Update state to uploading.
+    pub fn set_uploading_state(&mut self) {
+        self.set_state(DraftAttachmentUploadState::Uploading);
+    }
+
+    /// Update to offline.
+    pub fn set_offline_state(&mut self) {
+        self.set_state(DraftAttachmentUploadState::Offline);
+    }
+
+    /// Get the current state.
+    pub fn state(&self) -> DraftAttachmentUploadState {
+        self.state
+    }
+
+    /// Return all [`ActionId`]s for attachments that are still uploading.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn find_attachment_upload_action_ids(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Vec<ActionId>, StashError> {
+        tether
+            .query_values(
+                format!(
+                    "SELECT action_id AS value FROM {} WHERE metadata_id = ? AND action_id IS NOT NULL",
+                    Self::table_name()
+                ),
+                params![metadata_id],
+            )
+            .await
+    }
+
+    /// Check whether this draft has attachments that have not been uploaded yet.
+    pub async fn has_unsynced_attachments(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<bool, StashError> {
+        let count = tether
+            .query_value::<_, usize>(
+                format!(
+                    "SELECT COUNT(*) AS value FROM {} WHERE metadata_id = ? AND state <> ?",
+                    Self::table_name()
+                ),
+                params![metadata_id, DraftAttachmentUploadState::Uploaded],
+            )
+            .await?;
+        Ok(count != 0)
+    }
+
+    /// Subscribe to changes made to this database table.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the subscription failed.
+    pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
+        stash.subscribe_to(|sender| Box::new(DraftAttachmentMetadataTableObserver { sender }))
+    }
+
+    /// Get all metadata for a given `metadata_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn find_by_metadata_id(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        Self::find("WHERE metadata_id = ?", params![metadata_id], tether).await
+    }
+}
+
+/// Contains the state of the attachment.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[repr(u8)]
+pub enum DraftAttachmentUploadState {
+    /// Attachment has not been uploaded.
+    Uploading = 0,
+    /// Attachment has been uploaded to the server
+    Uploaded = 1,
+    /// Attachment failed to upload or encrypt.
+    Error = 2,
+    /// Could not upload due to lack of network,
+    Offline = 3,
+}
+
+impl ToSql for DraftAttachmentUploadState {
+    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for DraftAttachmentUploadState {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_i64()? {
+            0 => Ok(DraftAttachmentUploadState::Uploading),
+            1 => Ok(DraftAttachmentUploadState::Uploaded),
+            2 => Ok(DraftAttachmentUploadState::Error),
+            3 => Ok(DraftAttachmentUploadState::Offline),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}
+
+/// Possible attachment upload errors that are recorded.
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub enum DraftAttachmentUploadError {
+    /// Cryptography failure
+    Crypto(String),
+    /// Message has too many attachments.
+    TooManyAttachments,
+    /// The message was already sent.
+    MessageAlreadySent,
+    /// Server replied with error that we are not aware of.
+    Server(String),
+    /// Unexpected internal error
+    Unexpected,
+}
+
+sql_using_serde!(DraftAttachmentUploadError);
+
+impl DraftAttachmentUploadError {
+    /// Create a new instance from a [`MailContextError`]
+    pub fn from_mail_context_error(error: &MailContextError) -> Self {
+        match error {
+            MailContextError::Api(e) => Self::Server(e.to_string()),
+            MailContextError::Draft(Error::Attachment(AttachmentError::MessageAlreadySent)) => {
+                Self::MessageAlreadySent
+            }
+            MailContextError::Draft(Error::Attachment(AttachmentError::TooManyAttachments)) => {
+                Self::TooManyAttachments
+            }
+            MailContextError::Draft(Error::Attachment(AttachmentError::Crypto(e))) => {
+                Self::Crypto(e.to_string())
+            }
+            MailContextError::AttachmentEncryption(e) => Self::Crypto(e.to_string()),
+            _ => Self::Unexpected,
+        }
+    }
+}
+
+struct DraftAttachmentMetadataTableObserver {
+    sender: flume::Sender<()>,
+}
+
+impl TableObserver for DraftAttachmentMetadataTableObserver {
+    fn tables(&self) -> Vec<String> {
+        vec![DraftAttachmentMetadata::table_name().to_owned()]
+    }
+
+    fn on_tables_changed(&self, _: &BTreeSet<String>) {
+        self.sender
+            .send(())
+            .inspect_err(|e| {
+                tracing::error!(
+                    "Failed to send notification for DraftAttachmentTableObserver: {}",
                     e
                 )
             })

@@ -15,9 +15,11 @@ pub use model::Model;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
 use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
-use proton_mail_common::models::Message as MailMessage;
+use proton_mail_common::draft::attachments::DraftAttachment;
+use proton_mail_common::models::{Attachment, Message as MailMessage};
 use proton_mail_common::Mailbox;
 use search::{Search, SearchStatusBar};
+use std::path::PathBuf;
 
 const ITEM_LIMIT: usize = 50;
 
@@ -105,7 +107,10 @@ pub enum ComposerMessage {
     Save,
     Send,
     Discard,
-    UpdateDraftSaveId(proton_action_queue::action::ActionId),
+    CreateAttachment(PathBuf),
+    AddAttachment(Box<Attachment>),
+    RefreshAttachmentList,
+    AttachmentListRefreshed(Vec<DraftAttachment>),
 }
 
 impl From<ComposerMessage> for Messages {

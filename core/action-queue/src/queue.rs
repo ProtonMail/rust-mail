@@ -48,8 +48,6 @@ pub enum Error {
     Context(#[from] ContextError),
     #[error("Unknown action: {0}")]
     UnknownAction(String),
-    #[error("Replacing an action with dependencies to self")]
-    SelfReferenceDependency,
 }
 
 /// Errors that result from queuing or apply actions via the queue.
@@ -463,9 +461,6 @@ impl Queue {
             "Replacing {existing_id:?} or Queueing action: {} {metadata:?}",
             T::TYPE,
         );
-        if metadata.dependencies.contains(&existing_id) {
-            return Err(Error::SelfReferenceDependency.into());
-        }
 
         if !self.shared.has_action::<T>() {
             error!("Unknown action queued: {}", T::TYPE);

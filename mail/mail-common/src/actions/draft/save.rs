@@ -14,6 +14,7 @@ use crate::models::{
     DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
+use indoc::formatdoc;
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
@@ -24,6 +25,7 @@ use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
+use stash::params;
 use stash::stash::{Bond, StashError};
 use tracing::{debug, error};
 
@@ -159,6 +161,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .attachments(tether)
             .await
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
+        debug!("Draft has {} attachments", attachments.len());
         let attachment_metadata = Save::attachment_metadata(&attachments);
 
         let conversation_id = if let Some(id) = metadata.local_conversation_id {
@@ -365,7 +368,7 @@ impl Save {
         // Load all dependencies to make sure they are up to date. For drafts
         // this is fine so we can always access the latest value of the data
         // without having to queue multiple actions.
-        let Some(mut message) = Message::find_by_id(message_id, guard.tether()).await? else {
+        let Some(message) = Message::find_by_id(message_id, guard.tether()).await? else {
             return Err(AppError::MessageMissing(message_id).into());
         };
 
@@ -376,7 +379,7 @@ impl Save {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let Some(mut message_body_metadata) =
+        let Some(message_body_metadata) =
             MessageBodyMetadata::for_message(message_id, guard.tether())
                 .await
                 .inspect_err(|e| {
@@ -451,11 +454,6 @@ impl Save {
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
         let bond = guard.transaction().await?;
-        let row_id = message.row_id;
-
-        // Update remote ids
-        message.remote_id = Some(new_message.metadata.id.clone());
-        message.remote_conversation_id = Some(new_message.metadata.conversation_id.clone());
 
         // Update the remote conversation id.
         Conversation::update_remote_id(
@@ -466,16 +464,8 @@ impl Save {
         .await
         .inspect_err(|e| error!("Failed to update the conversation remote id: {e:?}"))?;
 
-        // Because we can't have custom update function in stash we need to
-        // first set the remote id on the message body metadata and then
-        // we can save the metadata returned by the server.
-        message_body_metadata.remote_message_id = message.remote_id.clone();
-        message_body_metadata.save(&bond).await.inspect_err(|e| {
-            error!("Failed to save message body metadata with remote id: {e:?}")
-        })?;
-
         // Update message data
-        let (mut new_local_message, mut new_message_body_metadata, _) =
+        let (new_local_message, mut new_message_body_metadata, _) =
             Message::from_api_data(new_message, &bond)
                 .await
                 .inspect_err(|e| {
@@ -483,32 +473,30 @@ impl Save {
                 })?;
 
         // Do not override all the data as it may override local data that we modified
-        // but is out of date when we are making this request.
-        new_local_message.subject = message.subject;
-        new_local_message.to_list = message.to_list;
-        new_local_message.cc_list = message.cc_list;
-        new_local_message.bcc_list = message.bcc_list;
-        new_local_message.sender = message.sender;
-        new_local_message.num_attachments = message.num_attachments;
-        new_local_message.attachments_metadata = message.attachments_metadata;
-        // Not preserving the labels will cause the message to be returned back to
-        // drafts on save.
-        new_local_message.label_ids = message.label_ids;
+        // but is out of date when we are making this request. The only value we should
+        // care about is the display order. Everything else we control.
+        bond.execute(
+            formatdoc! {"
+            UPDATE {} SET
+                display_order = ?,
+                remote_id =?,
+                remote_conversation_id =?
+            WHERE local_id = ?
+        ", Message::table_name()},
+            params![
+                new_local_message.display_order,
+                new_local_message.remote_id,
+                new_local_message.remote_conversation_id,
+                message_id
+            ],
+        )
+        .await
+        .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
 
-        new_local_message.row_id = row_id;
-        new_local_message.local_id = Some(message_id);
-        new_local_message.save(&bond).await.inspect_err(|e| {
-            error!("Failed to update the message: {e:?}");
-        })?;
-
-        // Update body metadata
+        // Update only the headers that are produced by the api.
         new_message_body_metadata.local_message_id = Some(message_id);
-        new_message_body_metadata.row_id = message_body_metadata.row_id;
-        // Keep the existing attachment data as this may be overridden by the server
-        // response if we have multiple saves.
-        new_message_body_metadata.attachments = message_body_metadata.attachments;
         new_message_body_metadata
-            .save(&bond)
+            .update_fields_after_draft_create_or_update(&bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to update message body metadata: {e:?}");

@@ -215,7 +215,9 @@ impl ComposerRecipientList {
             ComposerListType::Cc => draft.cc_list = list,
             ComposerListType::Bcc => draft.bcc_list = list,
         }
-        draft.save(ctx.action_queue()).await?;
+        draft
+            .save(ctx.action_queue(), &ctx.user_stash().connection())
+            .await?;
         Ok(())
     }
 }

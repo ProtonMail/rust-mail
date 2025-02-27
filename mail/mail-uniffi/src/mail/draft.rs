@@ -1,3 +1,4 @@
+mod attachments;
 mod observer;
 mod recipients;
 
@@ -7,12 +8,12 @@ use crate::errors::{
     EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
     VoidDraftUndoSendResult,
 };
-use crate::mail::datatypes::{AttachmentMetadata, MimeType};
+use crate::mail::datatypes::MimeType;
+use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use proton_mail_common::datatypes::AttachmentMetadata as RealAttachmentMetadata;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
 };
@@ -45,12 +46,14 @@ pub struct Draft {
     to_recipient_list: Arc<ComposerRecipientList>,
     bcc_recipient_list: Arc<ComposerRecipientList>,
     cc_recipient_list: Arc<ComposerRecipientList>,
+    attachment_list: Arc<AttachmentList>,
 }
 impl Draft {
     fn new_impl(ctx: Arc<MailUserContext>, draft: proton_mail_common::draft::Draft) -> Arc<Self> {
         let to_list = draft.to_list.clone();
         let cc_list = draft.cc_list.clone();
         let bcc_list = draft.bcc_list.clone();
+        let staging_path = draft.attachment_staging_path(&ctx);
         Arc::new_cyclic(|weak| Self {
             instance: RwLock::new(draft),
             ctx: Arc::clone(&ctx),
@@ -65,6 +68,7 @@ impl Draft {
                 bcc_list,
             ),
             cc_recipient_list: ComposerRecipientList::new_cc_list(ctx, Weak::clone(weak), cc_list),
+            attachment_list: AttachmentList::new(&staging_path, Weak::clone(weak)),
         })
     }
 }
@@ -216,22 +220,6 @@ impl Draft {
             .into()
     }
 
-    /// Get the draft's attachments
-    pub fn attachments(&self) -> Vec<AttachmentMetadata> {
-        async_runtime().block_on(async {
-            self.instance
-                .read()
-                .await
-                .decrypted_body
-                .metadata
-                .attachments
-                .clone()
-                .into_iter()
-                .map(|v| RealAttachmentMetadata::from(v).into())
-                .collect()
-        })
-    }
-
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
         async_runtime().block_on(async {
@@ -307,6 +295,11 @@ impl Draft {
         .map_err(ProtonError::from)
         .into()
     }
+
+    /// Get the attachment list.
+    pub fn attachment_list(&self) -> Arc<AttachmentList> {
+        Arc::clone(&self.attachment_list)
+    }
 }
 
 #[uniffi_export]
@@ -323,7 +316,7 @@ impl Draft {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .save(self.ctx.action_queue())
+                .save(self.ctx.action_queue(), &self.ctx.user_stash().connection())
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -345,7 +338,7 @@ impl Draft {
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .send(self.ctx.action_queue())
+                .send(self.ctx.action_queue(), &self.ctx.user_stash().connection())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -421,6 +414,8 @@ pub async fn draft_discard(
 }
 
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
-    draft.save(ctx.action_queue()).await?;
+    draft
+        .save(ctx.action_queue(), &ctx.user_stash().connection())
+        .await?;
     Ok(())
 }

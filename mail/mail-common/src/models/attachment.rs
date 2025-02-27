@@ -1,11 +1,14 @@
+use crate::cache::CacheAttachmentKey;
+use crate::datatypes::attachment::MimeType;
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
     KeyPackets, LocalAttachmentId, LocalMessageId, MessageSender,
 };
 use crate::models::*;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use anyhow::anyhow;
 use bytes::Bytes;
-use indoc::indoc;
+use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
@@ -16,7 +19,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalAddressId;
-use proton_core_common::models::{Address, ModelIdExtension};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -31,7 +34,11 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
-use tracing::error;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use tracing::{debug, error, info};
+use uuid::Uuid;
 
 /// Represents a mail attachment.
 ///
@@ -205,10 +212,10 @@ impl Attachment {
         tether: &Tether,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?) AND disposition = ?",
-                params![conversation_id, Disposition::Attachment],
+                   params![conversation_id, Disposition::Attachment],
                    tether,
         )
-        .await.map(|v| v.map_vec())
+            .await.map(|v| v.map_vec())
     }
 
     /// Load attachment metadata for a given `message_id`.
@@ -227,7 +234,7 @@ impl Attachment {
                    params![message_id, Disposition::Attachment],
                    tether,
         )
-        .await.map(|v| v.map_vec())
+            .await.map(|v| v.map_vec())
     }
 
     /// Save or update the attachment in the database.
@@ -260,6 +267,21 @@ impl Attachment {
                 }
             }
         }
+
+        if self.local_id.is_some() && self.remote_id.is_none() {
+            // There is currently a race because we try to write too much data at the same time
+            // rather than what really changed. It's highly unlikely that we ever want to remove
+            // the remote id of an attachment that already has one. This happens in the
+            // context of drafts, where a local change to the message body metadata can
+            // accidentally reset the attachment remote id to nothing, causing the send
+            // to fail.
+            if let Some(remote_id) =
+                Self::local_id_counterpart(self.local_id.unwrap(), bond).await?
+            {
+                self.remote_id = Some(remote_id);
+            }
+        }
+
         if self.local_address_id.is_none() {
             if let Some(remote_address_id) = self.remote_address_id.clone() {
                 self.local_address_id =
@@ -404,6 +426,126 @@ impl Attachment {
         .await
     }
 
+    /// Create or update the attachment table with partial information contained in
+    /// [`AttachmentMetadata`] from a [`Message`].
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn create_or_update_from_message_metadata(
+        message: &mut Message,
+        bond: &Bond<'_>,
+    ) -> Result<Vec<LocalAttachmentId>, StashError> {
+        let mut result = Vec::with_capacity(message.attachments_metadata.len());
+        for metadata in &mut message.attachments_metadata {
+            //Handle case where we have local not uploaded attachments.
+            let attachment = if metadata.local_id.is_some() && metadata.remote_id.is_none() {
+                Attachment::find_by_id(metadata.local_id.unwrap(), bond).await?
+            } else {
+                Attachment::find_first(
+                    "WHERE remote_id = ?",
+                    params![metadata.remote_id.clone()],
+                    bond,
+                )
+                .await?
+            };
+
+            if let Some(attachment) = attachment {
+                // This attachment exists, we need to update only the parts we
+                // want to modify.
+                bond.execute(
+                    formatdoc! {"UPDATE {} SET
+                    local_address_id = ?,
+                    remote_address_id = ?,
+                    local_message_id = ?,
+                    remote_message_id = ?
+                    WHERE local_id = ?
+                ", Self::table_name()},
+                    params![
+                        message.local_address_id,
+                        message.remote_address_id.clone(),
+                        message.local_id.unwrap(),
+                        message.remote_id.clone(),
+                        attachment.local_id.unwrap()
+                    ],
+                )
+                .await
+                .inspect_err(|e| error!("Failed to update attachment from message: {}", e))?;
+                result.push(attachment.local_id.unwrap())
+            } else {
+                let mut attachment = Attachment::from(metadata.clone());
+                // This attachment does not exist, we need to create it.
+                attachment.local_address_id = Some(message.local_address_id);
+                attachment.remote_address_id = Some(message.remote_address_id.clone());
+                attachment.local_message_id = message.local_id;
+                attachment.remote_message_id = message.remote_id.clone();
+                attachment
+                    .save(bond)
+                    .await
+                    .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
+                result.push(attachment.local_id.unwrap())
+            }
+        }
+        Ok(result)
+    }
+
+    /// Create or update the attachment table with partial information contained in
+    /// [`AttachmentMetadata`] from a [`Conversation`].
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn create_or_update_from_conversation_metadata(
+        conversation: &mut Conversation,
+        bond: &Bond<'_>,
+    ) -> Result<Vec<LocalAttachmentId>, StashError> {
+        let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
+        for metadata in &mut conversation.attachments_metadata {
+            //Handle case where we have local not uploaded attachments.
+            let attachment = if metadata.local_id.is_some() && metadata.remote_id.is_none() {
+                Attachment::find_by_id(metadata.local_id.unwrap(), bond).await?
+            } else {
+                Attachment::find_first(
+                    "WHERE remote_id = ?",
+                    params![metadata.remote_id.clone()],
+                    bond,
+                )
+                .await?
+            };
+
+            if let Some(attachment) = attachment {
+                // This attachment exists, we need to update only the parts we
+                // want to modify.
+                bond.execute(
+                    formatdoc! {"UPDATE {} SET
+                    local_conversation_id = ?,
+                    remote_conversation_id = ?
+                    WHERE local_id = ?
+                ", Self::table_name()},
+                    params![
+                        conversation.local_id.unwrap(),
+                        conversation.remote_id.clone(),
+                        attachment.local_id.unwrap()
+                    ],
+                )
+                .await
+                .inspect_err(|e| error!("Failed to update attachment from conversation: {}", e))?;
+                result.push(attachment.local_id.unwrap());
+            } else {
+                let mut attachment = Attachment::from(metadata.clone());
+                // This attachment does not exist, we need to create it.
+                attachment.local_conversation_id = Some(conversation.local_id.unwrap());
+                attachment.remote_conversation_id = conversation.remote_id.clone();
+                attachment.save(bond).await.inspect_err(|e| {
+                    error!("Failed to save attachment from conversation: {e:?}")
+                })?;
+                result.push(attachment.local_id.unwrap());
+            }
+        }
+
+        Ok(result)
+    }
+
     /// Get all attachments with the given IDs.
     ///
     /// # Parameters
@@ -461,6 +603,8 @@ impl Attachment {
             .unlocked_address_keys(&pgp_provider, &tether, address_id)
             .await?;
 
+        drop(tether);
+
         let primary_address_key = unlocked_address_keys.primary_for_mail().map_err(|e| {
             error!("Could not retrieve primary address key: {e:?}");
             MailContextError::Crypto
@@ -472,6 +616,161 @@ impl Attachment {
                 error!("Failed to encrypt attachment: {e:?}");
                 MailContextError::Crypto
             })
+    }
+
+    /// Encrypt an attachment from a given `path` with an optional `size_hint`.
+    ///
+    /// Returns the
+    /// # Errors
+    ///
+    /// Returns error if the encryption failed or the address can't be located.
+    pub async fn encrypt_from_path(
+        context: &MailUserContext,
+        address_id: &AddressId,
+        path: PathBuf,
+        size_hint: Option<usize>,
+    ) -> MailContextResult<EncryptedAttachment> {
+        let pgp_provider = new_pgp_provider();
+
+        let tether = context.user_stash().connection();
+        let unlocked_address_keys = context
+            .unlocked_address_keys(&pgp_provider, &tether, address_id)
+            .await?;
+
+        let primary_address_key = unlocked_address_keys.primary_for_mail().map_err(|e| {
+            error!("Could not retrieve primary address key: {e:?}");
+            MailContextError::Crypto
+        })?;
+        drop(tether);
+
+        tokio::task::spawn_blocking(move || {
+            let mut data = Vec::with_capacity(size_hint.unwrap_or(1024));
+            let mut writer = proton_crypto_inbox::attachment::encrypt_and_sign_to_writer(
+                &pgp_provider,
+                &primary_address_key,
+                &mut data,
+            )
+            .map_err(|e| {
+                error!("Failed to create encrypted attachment stream write: {e:?}");
+                MailContextError::Crypto
+            })?;
+            let mut stream_in = std::fs::File::open(&path).inspect_err(|e| {
+                error!("Failed to open attachment: {e:?}");
+            })?;
+            std::io::copy(&mut stream_in, &mut writer).map_err(|e| {
+                error!("Failed encrypted attachment: {e:?}");
+                MailContextError::Crypto
+            })?;
+
+            let metadata = writer.finalize().inspect_err(|e| {
+                error!("Failed finalize encrypted attachment: {e:?}");
+            })?;
+
+            Ok(EncryptedAttachment { metadata, data })
+        })
+        .await
+        .map_err(|err| {
+            let e = anyhow!("Failed to join attachment encryption task: {err:?}");
+            error!("{e:?}");
+            MailContextError::Other(e)
+        })?
+    }
+
+    /// Create a new attachment from the given file `path`.
+    ///
+    /// It is expected that the attachment data temporarily exists in another location before it
+    /// will moved or copied  to the internal cache.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, tether, path))]
+    pub async fn create_local(
+        ctx: &MailUserContext,
+        address_id: AddressId,
+        disposition: Disposition,
+        path: &Path,
+        tether: &mut Tether,
+    ) -> MailContextResult<Self> {
+        debug!("Attachment path: {path:?}");
+        let file_metadata = tokio::fs::metadata(path).await?;
+        if !file_metadata.is_file() {
+            error!("{path:?} is not a file");
+            return Err(AppError::IO(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Path is not file",
+            ))
+            .into());
+        }
+        let Some(file_name) = path.file_name() else {
+            error!("{path:?} does not have a file name");
+            return Err(AppError::IO(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Path does not have a file name",
+            ))
+            .into());
+        };
+        // File name
+        let file_name = file_name.to_string_lossy();
+        // Determine mime type
+        let path_cloned = path.to_owned();
+        let mime_type =
+            tokio::task::spawn_blocking(move || file_format::FileFormat::from_file(path_cloned))
+                .await
+                .map_err(|e| MailContextError::Other(anyhow!("Failed to join task: {e:?}")))?
+                .map_err(|e| {
+                    let e = format!("Failed to determine mime file type: {e:?}");
+                    error!("{e}");
+                    AppError::InvalidMimeType(e)
+                })?;
+
+        let mime_type = MimeType::from_str(mime_type.media_type())?;
+
+        // file size
+        let local_address_id = Address::remote_id_counterpart(address_id.clone(), tether).await?;
+
+        let mut attachment = Attachment {
+            local_id: None,
+            remote_id: None,
+            local_address_id,
+            remote_address_id: Some(address_id.clone()),
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_message_id: None,
+            remote_message_id: None,
+            disposition,
+            content_id: if disposition == Disposition::Inline {
+                // Generate a new content id.
+                Some(Uuid::new_v4().to_string())
+            } else {
+                None
+            },
+            enc_signature: None,
+            is_auto_forwardee: false,
+            key_packets: None,
+            mime_type,
+            filename: file_name.to_string(),
+            sender: None,
+            signature: None,
+            size: file_metadata.size(),
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
+            row_id: None,
+        };
+
+        debug!("Saving new attachment record");
+        let tx = tether.transaction().await?;
+        attachment.save(&tx).await?;
+        tx.commit().await?;
+
+        debug!("Storing attachment in cache");
+        let cache_key = CacheAttachmentKey::from(&attachment);
+
+        let data = tokio::fs::read(path).await?;
+        ctx.attachements_cache().add_item(cache_key, &data)?;
+
+        info!(
+            "Attachment created with id {}",
+            attachment.local_id.unwrap()
+        );
+        Ok(attachment)
     }
 }
 

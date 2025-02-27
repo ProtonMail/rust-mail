@@ -5,20 +5,28 @@ use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
+use futures::FutureExt;
 use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
+use proton_mail_common::draft::attachments::DraftAttachment;
+use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
     recipients, Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode,
 };
-use proton_mail_common::models::MailSettings;
+use proton_mail_common::models::{
+    Attachment, DraftAttachmentUploadState, MailSettings, MetadataId,
+};
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
 use ratatui::Frame;
+use stash::stash::{Stash, StashError, Tether};
 use std::io::Cursor;
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::error;
 use tui_textarea::TextArea;
 
@@ -34,6 +42,8 @@ pub struct Composer {
     subject_input_state: TextInputState,
     attachment_infos: Vec<AttachmentInfo>,
     draft_sync_status: Option<DraftSyncStatus>,
+    // for table observer.
+    _observer_cancellation_token: CancellationToken,
 }
 
 impl Composer {
@@ -47,9 +57,7 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match Draft::empty(ctx.user_stash()).await {
-                        Ok(draft) => Command::message(
-                            Message::OpenComposer(Composer::new(draft, None)).into(),
-                        ),
+                        Ok(draft) => Composer::create(draft, None, ctx.user_stash().clone()).await,
                         Err(e) => {
                             error!("Failed to create new draft:{e:?}");
                             Command::Message(Messages::DisplayError(None, e.into()))
@@ -76,9 +84,9 @@ impl Composer {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
                     match Draft::reply(&context, message_id, reply_mode, false).await {
-                        Ok(draft) => Command::message(
-                            Message::OpenComposer(Composer::new(draft, None)).into(),
-                        ),
+                        Ok(draft) => {
+                            Composer::create(draft, None, context.user_stash().clone()).await
+                        }
                         Err(e) => {
                             error!("Failed to open message in composer: {e:?}");
                             Command::batch([
@@ -103,10 +111,11 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::open(context, message_id).await {
-                        Ok((draft, sync_status)) => Command::message(
-                            Message::OpenComposer(Composer::new(draft, Some(sync_status))).into(),
-                        ),
+                    match Draft::open(Arc::clone(&context), message_id).await {
+                        Ok((draft, sync_status)) => {
+                            Composer::create(draft, Some(sync_status), context.user_stash().clone())
+                                .await
+                        }
                         Err(e) => {
                             error!("Failed to open message in composer: {e:?}");
                             Command::batch([
@@ -138,10 +147,11 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match save_action.queue(context.action_queue()).await {
-                        Ok(output) => {
-                            Command::message(ComposerMessage::UpdateDraftSaveId(output.id).into())
-                        }
+                    match save_action
+                        .queue(context.action_queue(), &context.user_stash().connection())
+                        .await
+                    {
+                        Ok(_) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e:?}");
                             Command::message(MailContextError::from(e).into())
@@ -165,9 +175,7 @@ impl Composer {
 
     fn create_save_action(&mut self) -> Result<DraftSaveActionQueuer, recipients::RecipientError> {
         self.update_draft_from_state()?;
-        Ok(self
-            .draft
-            .to_save_action(self.draft.last_draft_save_action_id))
+        Ok(self.draft.to_save_action())
     }
 
     /// Send the draft.
@@ -178,10 +186,7 @@ impl Composer {
                 err.into(),
             ));
         };
-        match self
-            .draft
-            .to_send_action(self.draft.last_draft_save_action_id)
-        {
+        match self.draft.to_send_action() {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
                     "Sending draft...".to_owned(),
@@ -189,7 +194,10 @@ impl Composer {
                 Command::task(async move {
                     Command::batch([
                         Command::message(Messages::DismissBackgroundProgress),
-                        match send_action.queue(context.action_queue()).await {
+                        match send_action
+                            .queue(context.action_queue(), &context.user_stash().connection())
+                            .await
+                        {
                             Ok(_) => Command::message(Message::CloseComposer.into()),
                             Err(e) => {
                                 error!("Failed to save draft: {e:?}");
@@ -202,8 +210,28 @@ impl Composer {
             Err(e) => Command::message(MailContextError::from(e).into()),
         }
     }
+    async fn create(
+        draft: Draft,
+        sync_status: Option<DraftSyncStatus>,
+        stash: Stash,
+    ) -> Command<Messages> {
+        match Self::new_impl(draft, sync_status, stash).await {
+            Ok((composer, background_cmd)) => Command::batch([
+                Command::message(Message::OpenComposer(composer).into()),
+                background_cmd,
+            ]),
+            Err(e) => Command::message(Messages::DisplayError(
+                Some("Open Composer failed".to_owned()),
+                e.into(),
+            )),
+        }
+    }
 
-    fn new(draft: Draft, sync_status: Option<DraftSyncStatus>) -> Self {
+    async fn new_impl(
+        draft: Draft,
+        sync_status: Option<DraftSyncStatus>,
+        stash: Stash,
+    ) -> Result<(Self, Command<Messages>), StashError> {
         let sender = draft.sender.clone();
         let to_list = recipient_list_to_display_value(&draft.to_list);
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
@@ -227,29 +255,72 @@ impl Composer {
         } else {
             TextArea::new(vec!["Unknown mime type".to_owned()])
         };
+
         let subject = draft.subject.clone();
-        let attachment_infos = draft
-            .decrypted_body
-            .metadata
-            .attachments
-            .iter()
-            .map(|attachment| AttachmentInfo {
-                disposition: attachment.disposition,
-                filename: attachment.filename.clone(),
-            })
-            .collect();
-        Self {
-            draft,
-            text_area,
-            selected_input: SelectedInput::To,
-            sender_input_state: TextInputState::with_value(sender),
-            to_input_state: TextInputState::with_value(to_list).selected(true),
-            cc_input_state: TextInputState::with_value(cc_list),
-            bcc_input_state: TextInputState::with_value(bcc_list),
-            subject_input_state: TextInputState::with_value(subject),
-            attachment_infos,
-            draft_sync_status: sync_status,
-        }
+        let tether = stash.connection();
+        let attachment_infos = Self::build_attachment_infos(
+            draft.metadata_id,
+            draft.decrypted_body.metadata.attachments.clone(),
+            &tether,
+        )
+        .await?;
+        drop(tether);
+
+        let mut observer = DraftAttachmentObserver::new(draft.metadata_id, stash).await?;
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_cloned = cancellation_token.clone();
+        let background_cmd = Command::background_task(move |sender| {
+            async move {
+            loop {
+                tokio::select! {
+                () = cancellation_token_cloned.cancelled() => {
+                    return;
+                }
+                r = observer.next() =>
+                      match r {
+                          Ok(()) => {
+                              let _ = sender.send_async(Command::message(ComposerMessage::RefreshAttachmentList.into())).await;
+                           }
+                          Err(e) => {
+                             let _= sender.send_async(Command::message(Messages::DisplayError(Some("Draft Attachment Observer Error".to_owned()),anyhow::Error::new(e)))).await;
+                             return;
+                          }
+                      }
+                }
+            }
+        }.boxed()
+        });
+        Ok((
+            Self {
+                draft,
+                text_area,
+                selected_input: SelectedInput::To,
+                sender_input_state: TextInputState::with_value(sender),
+                to_input_state: TextInputState::with_value(to_list).selected(true),
+                cc_input_state: TextInputState::with_value(cc_list),
+                bcc_input_state: TextInputState::with_value(bcc_list),
+                subject_input_state: TextInputState::with_value(subject),
+                attachment_infos,
+                draft_sync_status: sync_status,
+                _observer_cancellation_token: cancellation_token,
+            },
+            background_cmd,
+        ))
+    }
+
+    /// Collect attachment info to be displayed.
+    async fn build_attachment_infos(
+        metadata_id: MetadataId,
+        attachments: Vec<Attachment>,
+        tether: &Tether,
+    ) -> Result<Vec<AttachmentInfo>, StashError> {
+        Ok(
+            DraftAttachment::build_list(metadata_id, attachments, tether)
+                .await?
+                .into_iter()
+                .map(AttachmentInfo::from)
+                .collect(),
+        )
     }
 
     /// Discard the draft.
@@ -275,11 +346,94 @@ impl Composer {
 
         Command::message(Messages::raise_popup(popup))
     }
+
+    /// Create a new attachment that can be added to the draft.
+    fn create_attachment(
+        &mut self,
+        context: Arc<MailUserContext>,
+        path: PathBuf,
+    ) -> Command<Messages> {
+        let address_id = self.draft.address_id.clone();
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Preparing Attachment".to_owned(),
+            )),
+            Command::task(async move {
+                let mut tether = context.user_stash().connection();
+                let cmd = match Attachment::create_local(
+                    &context,
+                    address_id,
+                    Disposition::Attachment,
+                    &path,
+                    &mut tether,
+                )
+                .await
+                {
+                    Ok(attachment) => Command::message(
+                        ComposerMessage::AddAttachment(Box::new(attachment)).into(),
+                    ),
+                    Err(e) => Command::message(anyhow::Error::new(e).into()),
+                };
+
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
+
+    /// Add attachment to the draft
+    fn add_attachment(
+        &mut self,
+        context: Arc<MailUserContext>,
+        attachment: Attachment,
+    ) -> Command<Messages> {
+        // Note that we want to make sure the action is queued first
+        // before we allow the user to send or we can run into missing depencency issues.
+        let action = self.draft.to_add_attachment_action(attachment);
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Adding Attachment to message".to_owned(),
+            )),
+            Command::task(async move {
+                let tether = context.user_stash().connection();
+                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+                    Command::message(anyhow::Error::new(e).into())
+                } else {
+                    Command::message(ComposerMessage::RefreshAttachmentList.into())
+                };
+
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
+
+    /// Add attachment to the draft
+    fn refresh_attachment_list(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
+        let attachments = self.draft.decrypted_body.metadata.attachments.clone();
+        let metadata_id = self.draft.metadata_id;
+        Command::task(async move {
+            let tether = context.user_stash().connection();
+            match DraftAttachment::build_list(metadata_id, attachments, &tether).await {
+                Ok(list) => Command::message(ComposerMessage::AttachmentListRefreshed(list).into()),
+                Err(e) => Command::message(anyhow::Error::new(e).into()),
+            }
+        })
+    }
 }
 
 struct AttachmentInfo {
     disposition: Disposition,
     filename: String,
+    state: DraftAttachmentUploadState,
+}
+
+impl From<DraftAttachment> for AttachmentInfo {
+    fn from(value: DraftAttachment) -> Self {
+        Self {
+            disposition: value.metadata.disposition,
+            filename: value.metadata.filename,
+            state: value.state,
+        }
+    }
 }
 impl StateHandler for Composer {
     #[allow(clippy::too_many_lines)]
@@ -385,6 +539,13 @@ impl StateHandler for Composer {
         frame.render_widget(
             List::new(self.attachment_infos.iter().map(|a| {
                 Line::from(vec![
+                    match a.state {
+                        DraftAttachmentUploadState::Uploading => Span::from("U:"),
+                        DraftAttachmentUploadState::Uploaded => Span::from("D:"),
+                        DraftAttachmentUploadState::Error => Span::from("E:").fg(Color::Red),
+                        DraftAttachmentUploadState::Offline => Span::from("O:"),
+                    }
+                    .bold(),
                     Span::from(if a.disposition == Disposition::Inline {
                         "I:"
                     } else {
@@ -417,6 +578,8 @@ impl StateHandler for Composer {
             Span::from("Discard"),
             Span::from(" Ctrl+t: ").bold(),
             Span::from("Send"),
+            Span::from(" Ctrl+a: ").bold(),
+            Span::from("Add Attachment"),
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
         frame.render_widget(Line::from(help_text), footer);
@@ -469,6 +632,15 @@ impl StateHandler for Composer {
                         return Command::message(ComposerMessage::Send.into());
                     }
                 }
+                KeyCode::Char('a') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return Command::message(Messages::select_file_path(|path| {
+                            Command::message(
+                                ComposerMessage::CreateAttachment(path.to_path_buf()).into(),
+                            )
+                        }));
+                    }
+                }
                 KeyCode::Char('d') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Discard.into());
@@ -514,8 +686,17 @@ impl StateHandler for Composer {
             ComposerMessage::Save => self.save(user_ctx.to_owned()),
             ComposerMessage::Send => self.send(user_ctx.to_owned()),
             ComposerMessage::Discard => self.discard(user_ctx.to_owned()),
-            ComposerMessage::UpdateDraftSaveId(id) => {
-                self.draft.last_draft_save_action_id = Some(id);
+            ComposerMessage::CreateAttachment(path) => {
+                self.create_attachment(user_ctx.to_owned(), path)
+            }
+            ComposerMessage::AddAttachment(attachment) => {
+                self.add_attachment(user_ctx.to_owned(), *attachment)
+            }
+            ComposerMessage::RefreshAttachmentList => {
+                self.refresh_attachment_list(user_ctx.to_owned())
+            }
+            ComposerMessage::AttachmentListRefreshed(list) => {
+                self.attachment_infos = list.into_iter().map(AttachmentInfo::from).collect();
                 Command::none()
             }
         }

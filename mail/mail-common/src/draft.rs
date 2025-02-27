@@ -1,17 +1,19 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::actions::draft;
-use crate::actions::draft::{Discard, Save, UndoSend};
+use crate::actions::draft::{AttachmentUpload, Discard, Save, UndoSend};
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::DecryptedMessageBody;
+use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
     prepare_html_reply, prepare_plain_text_reply, sanitize_draft_open, sanitize_draft_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
-    DraftMetadata, DraftSendResult, DraftSendResultOrigin, EmbeddedAttachmentInfo, MailSettings,
-    Message, MessageBodyMetadata, MetadataId,
+    Attachment, DraftAttachmentMetadata, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
+    EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use derive_more::derive::TryFrom;
@@ -39,6 +41,7 @@ use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether};
 use tracing::{debug, error};
 
+pub mod attachments;
 pub mod compose;
 pub mod observers;
 pub mod recipients;
@@ -55,6 +58,8 @@ pub enum Error {
     Discard(#[from] DiscardError),
     #[error(transparent)]
     Undo(#[from] UndoError),
+    #[error(transparent)]
+    Attachment(#[from] AttachmentError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -109,10 +114,45 @@ pub enum SaveOrSendError {
     NoRecipients,
     #[error("Draft does not exist on server")]
     DraftDoesNotExistOnServer,
+    #[error("Draft has attachments which have not uploaded")]
+    MissingAttachmentUploads,
 }
 
 impl From<SaveOrSendError> for MailContextError {
     fn from(err: SaveOrSendError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur while attempting to upload an attachment
+#[derive(Debug, thiserror::Error)]
+pub enum AttachmentError {
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Attachment Metadata for Attachment {0} does not exist")]
+    AttachmentMetadataNotFound(LocalAttachmentId),
+    #[error("Draft has no message")]
+    MessageDoesNotExist,
+    #[error("Attachment's can't be uploaded because message {0} does not exist on server")]
+    MessageDoesNotExistOnServer(LocalMessageId),
+    #[error("Attachment {0} is missing from the cache")]
+    AttachmentDataMissing(LocalAttachmentId),
+    #[error("Attachment {0} has inline disposition, but does not have a content id")]
+    MissingContentId(LocalAttachmentId),
+    #[error("Failed to encrypt attachment: {0}")]
+    Crypto(AttachmentEncryptionError),
+    #[error("An existing upload action exists for this attachment")]
+    ExistingUploadActionExist(ActionId),
+    #[error("Attachment has already been uploaded")]
+    AttachmentAlreadyUploaded(LocalAttachmentId),
+    #[error("The message has too many attachments")]
+    TooManyAttachments,
+    #[error("The message has already been sent")]
+    MessageAlreadySent,
+}
+
+impl From<AttachmentError> for MailContextError {
+    fn from(err: AttachmentError) -> Self {
         Self::Draft(err.into())
     }
 }
@@ -162,6 +202,10 @@ pub enum PackageError {
     PackageBodyEncrypt(#[from] MessageError),
     #[error("Failed to load attachment content for mime body: {0}")]
     MimeBodyAttachmentLoad(#[from] ApiServiceError),
+    #[error("Attachment Data Missing")]
+    AttachmentDataMissing,
+    #[error("Attachment failed to load: {0}")]
+    AttachmentLoad(std::io::Error),
     #[error("Failed to get attachment remote id")]
     AttachmentNoRemoteId,
     #[error("Failed to write mime body to buffer: {0}")]
@@ -254,8 +298,6 @@ pub struct Draft {
     pub subject: String,
     /// `None` if there is no associated send result.
     pub send_result: Option<DraftSendResult>,
-    /// Records the last queued draft save id.
-    pub last_draft_save_action_id: Option<ActionId>,
     #[debug(skip)]
     /// The decrypted message body.
     pub decrypted_body: DecryptedMessageBody,
@@ -326,13 +368,16 @@ impl Draft {
                 .save(&tx)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
+            tokio::fs::create_dir_all(attachment_staging_path(&context, metadata.id.unwrap()))
+                .await
+                .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
             tx.commit().await?;
             metadata
         };
 
         // First let's try to sync the body and metadata. If we can't we will fill it
         // ourselves.
-        let (decrypted, sync_status) = if metadata.has_pending_changes() {
+        let (decrypted, sync_status) = if metadata.has_pending_changes(tether).await? {
             // If we have pending changes we should not sync the data from the server
             // as that will override local state.
             (None, DraftSyncStatus::Synced)
@@ -398,7 +443,6 @@ impl Draft {
                 address_id: message.remote_address_id,
                 subject: message.subject,
                 send_result,
-                last_draft_save_action_id: None,
                 decrypted_body: decrypted,
             },
             sync_status,
@@ -462,7 +506,6 @@ impl Draft {
             subject: String::new(),
             decrypted_body: decrypted_message_body,
             send_result: None,
-            last_draft_save_action_id: None,
         }
     }
 
@@ -529,6 +572,11 @@ impl Draft {
         )
         .await
         .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
+
+        tokio::fs::create_dir_all(attachment_staging_path(context, metadata.id.unwrap()))
+            .await
+            .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
+
         tx.commit().await?;
 
         let contact_group_resolver = ProtonContactGroupResolver::new(&tether);
@@ -619,7 +667,6 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
-            last_draft_save_action_id: None,
             decrypted_body: reply_draft_body,
         };
 
@@ -667,11 +714,21 @@ impl Draft {
 
         let mut attachment_key_packets =
             DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        debug!(
+            "Draft create with {} attachments",
+            message_body_metadata.attachments.len()
+        );
         for attachment in &message_body_metadata.attachments {
             let Some(remote_id) = attachment.remote_id.clone() else {
-                return Err(
-                    AppError::AttachmentDoesNotHaveRemoteId(attachment.local_id.unwrap()).into(),
+                // When adding new attachment to a draft, we reflect the state correctly offline
+                // but we can not attach an attachment until it has a remote id. We skip attachments
+                // that still does not have a remote id. Since we always save before send and send
+                // also requires all attachments to be uploaded this will correct itself.
+                tracing::warn!(
+                    "Attachment {} does not have a remote id, skipping",
+                    attachment.local_id.unwrap()
                 );
+                continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
                 return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
@@ -722,11 +779,21 @@ impl Draft {
 
         let mut attachment_key_packets =
             DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        debug!(
+            "Draft update with {} attachments",
+            message_body_metadata.attachments.len()
+        );
         for attachment in &message_body_metadata.attachments {
             let Some(remote_id) = attachment.remote_id.clone() else {
-                return Err(
-                    AppError::AttachmentDoesNotHaveRemoteId(attachment.local_id.unwrap()).into(),
+                // When adding new attachment to a draft, we reflect the state correctly offline
+                // but we can not attach an attachment until it has a remote id. We skip attachments
+                // that still does not have a remote id. Since we always save before send and send
+                // also requires all attachments to be uploaded this will correct itself.
+                tracing::warn!(
+                    "Attachment {} does not have a remote id, skipping",
+                    attachment.local_id.unwrap()
                 );
+                continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
                 return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
@@ -773,12 +840,9 @@ impl Draft {
     pub async fn save(
         &mut self,
         queue: &Queue,
+        tether: &Tether,
     ) -> Result<QueuedActionOutput<Save>, MailContextError> {
-        let queued_output = self
-            .to_save_action(self.last_draft_save_action_id)
-            .queue(queue)
-            .await?;
-        self.last_draft_save_action_id = Some(queued_output.id);
+        let queued_output = self.to_save_action().queue(queue, tether).await?;
         Ok(queued_output)
     }
 
@@ -791,13 +855,9 @@ impl Draft {
     pub async fn send(
         &mut self,
         queue: &Queue,
+        tether: &Tether,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        let (save_output, send_output) = self
-            .to_send_action(self.last_draft_save_action_id)?
-            .queue(queue)
-            .await?;
-        self.last_draft_save_action_id = Some(save_output.id);
-        Ok(send_output)
+        self.to_send_action()?.queue(queue, tether).await
     }
 
     /// Discard the current draft.
@@ -850,11 +910,10 @@ impl Draft {
     /// While we have our own instance variable for the `last_save_action_id`, it may
     /// be beneficial for users of this method to pass in an alternate source.
     ///
-    pub fn to_save_action(&self, last_save_action_id: Option<ActionId>) -> DraftSaveActionQueuer {
+    pub fn to_save_action(&self) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
             Save::new(self, DraftSendResultOrigin::Save),
-            last_save_action_id,
         )
     }
 
@@ -868,10 +927,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    pub fn to_send_action(
-        &self,
-        last_draft_save_action_id: Option<ActionId>,
-    ) -> Result<DraftSendActionQueuer, Error> {
+    pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SaveOrSendError::NoRecipients.into());
         }
@@ -882,7 +938,6 @@ impl Draft {
             metadata_id,
             save_action,
             send_action,
-            last_draft_save_action_id,
         ))
     }
 
@@ -951,6 +1006,62 @@ impl Draft {
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
         self.decrypted_body.get_embedded_attachment(ctx, cid).await
     }
+
+    /// Add a new `attachment` to this draft.
+    ///
+    /// Use [`Attachment::create_local`] to create a new attachment first.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query or queuing the action failed.
+    pub async fn add_attachment(
+        &mut self,
+        ctx: &MailUserContext,
+        attachment: Attachment,
+    ) -> Result<ActionId, MailContextError> {
+        let upload_action = self.to_add_attachment_action(attachment);
+
+        let queue = ctx.action_queue();
+        let tether = ctx.user_stash().connection();
+        let result = upload_action.queue(queue, &tether).await?;
+
+        Ok(result.id)
+    }
+    /// Add a new `attachment` to this draft.
+    ///
+    /// Similar to [`add_attachment`] but return an action queuer instead.
+    ///
+    pub fn to_add_attachment_action(
+        &mut self,
+        attachment: Attachment,
+    ) -> DraftAttachmentUploadQueuer {
+        // create save action before the attachment is registered as we need a message to upload.
+        let save_action = self.to_save_action();
+        let attachment_id = attachment.local_id.unwrap();
+        self.decrypted_body.metadata.attachments.push(attachment);
+
+        DraftAttachmentUploadQueuer::new(
+            self.metadata_id,
+            self.address_id.clone(),
+            attachment_id,
+            save_action,
+        )
+    }
+
+    /// Get the path where attachments should be staged.
+    pub fn attachment_staging_path(&self, context: &MailUserContext) -> PathBuf {
+        attachment_staging_path(context, self.metadata_id)
+    }
+
+    /// Get the list of attachments and their upload status.
+    pub async fn attachments(&self, tether: &Tether) -> Result<Vec<DraftAttachment>, StashError> {
+        DraftAttachment::build_list(
+            self.metadata_id,
+            self.decrypted_body.metadata.attachments.clone(),
+            tether,
+        )
+        .await
+    }
 }
 
 /// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
@@ -958,26 +1069,31 @@ impl Draft {
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
     action: Save,
-    previous_action_id: Option<ActionId>,
 }
 
 impl DraftSaveActionQueuer {
-    fn new(id: MetadataId, action: Save, previous_action_id: Option<ActionId>) -> Self {
-        Self {
-            id,
-            action,
-            previous_action_id,
-        }
+    fn new(id: MetadataId, action: Save) -> Self {
+        Self { id, action }
     }
 
     /// Consume and queue this action.
     #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip(self,queue))]
-    pub async fn queue(self, queue: &Queue) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
-        let metadata = MetadataBuilder::new()
+    pub async fn queue(
+        self,
+        queue: &Queue,
+        tether: &Tether,
+    ) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
+        // We need to be aware of the last save action id to try and replace the existing one.
+        // On failure, we only execute after the previous one has finished,
+        let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
+        let mut metadata_builder = MetadataBuilder::new()
             .with_resource(&self.id)
-            .expect("This should never fail")
-            .build();
-        if let Some(previous_action_id) = self.previous_action_id {
+            .expect("This should never fail");
+        if let Some(action_id) = last_draft_save_action_id {
+            metadata_builder = metadata_builder.with_dependency(action_id);
+        }
+        let metadata = metadata_builder.build();
+        if let Some(previous_action_id) = last_draft_save_action_id {
             queue
                 .replace_or_queue_action_with_metadata(previous_action_id, self.action, metadata)
                 .await
@@ -995,35 +1111,33 @@ pub struct DraftSendActionQueuer {
     id: MetadataId,
     save_action: Save,
     send_action: draft::Send,
-    last_draft_save_action_id: Option<ActionId>,
 }
 
 impl DraftSendActionQueuer {
-    fn new(
-        id: MetadataId,
-        save_action: Save,
-        send_action: draft::Send,
-        last_draft_save_action_id: Option<ActionId>,
-    ) -> Self {
+    fn new(id: MetadataId, save_action: Save, send_action: draft::Send) -> Self {
         Self {
             id,
             save_action,
             send_action,
-            last_draft_save_action_id,
         }
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::send",skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::send",skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
-    ) -> Result<(QueuedActionOutput<Save>, QueuedActionOutput<draft::Send>), MailContextError> {
+        tether: &Tether,
+    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        let attachment_action_ids =
+            DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
+        let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
         let save_metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
+            .with_dependencies(attachment_action_ids)
             .build();
-        let save_output = if let Some(last_draft_save_action_id) = self.last_draft_save_action_id {
+        let save_output = if let Some(last_draft_save_action_id) = last_draft_save_action_id {
             queue
                 .replace_or_queue_action_with_metadata(
                     last_draft_save_action_id,
@@ -1041,12 +1155,9 @@ impl DraftSendActionQueuer {
             .expect("This should never fail")
             .with_dependency(save_output.id)
             .build();
-        Ok((
-            save_output,
-            queue
-                .queue_action_with_metadata(self.send_action, send_metadata)
-                .await?,
-        ))
+        Ok(queue
+            .queue_action_with_metadata(self.send_action, send_metadata)
+            .await?)
     }
 }
 
@@ -1063,7 +1174,7 @@ impl DraftDiscardActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::discard",skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::discard",skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
@@ -1078,4 +1189,81 @@ impl DraftDiscardActionQueuer {
             )
             .await
     }
+}
+
+/// Utility type to wrap the queueing of attachments upload.
+///
+/// We need to make sure that at least one save action is run before this action as we need
+/// a remote id to upload.
+pub struct DraftAttachmentUploadQueuer {
+    id: MetadataId,
+    attachment_id: LocalAttachmentId,
+    address_id: AddressId,
+    save_action: DraftSaveActionQueuer,
+}
+
+impl DraftAttachmentUploadQueuer {
+    fn new(
+        id: MetadataId,
+        address_id: AddressId,
+        attachment_id: LocalAttachmentId,
+        save_action: DraftSaveActionQueuer,
+    ) -> Self {
+        Self {
+            id,
+            address_id,
+            attachment_id,
+            save_action,
+        }
+    }
+
+    /// Consume and queue this action.
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::attachment_upload",skip_all)]
+    pub async fn queue(
+        self,
+        queue: &Queue,
+        tether: &Tether,
+    ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
+        let message_has_remote_id =
+            if let Some(local_message_id) = DraftMetadata::message_id(self.id, tether).await? {
+                Message::local_id_counterpart(local_message_id, tether)
+                    .await?
+                    .is_some()
+            } else {
+                false
+            };
+
+        let mut last_draft_save_action_id = None;
+        // We only want to issue a save action if the draft does not yet have a remote id, otherwise
+        // we can't upload the attachment.
+        if !message_has_remote_id {
+            // If an existing save is ongoing, we want to depend on that action first, otherwise
+            // we create a new one ourselves.
+            last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
+            if last_draft_save_action_id.is_none() {
+                last_draft_save_action_id = Some(self.save_action.queue(queue, tether).await?.id)
+            };
+        };
+
+        let mut metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail");
+        if let Some(last_draft_save_action_id) = last_draft_save_action_id {
+            metadata = metadata.with_dependency(last_draft_save_action_id)
+        }
+
+        let metadata = metadata.build();
+        Ok(queue
+            .queue_action_with_metadata(
+                AttachmentUpload::new(self.id, self.address_id, self.attachment_id),
+                metadata,
+            )
+            .await?)
+    }
+}
+
+fn attachment_staging_path(context: &MailUserContext, metadata_id: MetadataId) -> PathBuf {
+    context
+        .attachment_staging_path()
+        .join(metadata_id.to_string())
 }

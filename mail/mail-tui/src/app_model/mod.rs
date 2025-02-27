@@ -2,11 +2,13 @@ pub mod contacts;
 pub mod context_init;
 pub mod login;
 pub mod mailbox;
+pub mod path_select_popup;
 pub mod session_select;
 pub mod twofa;
 mod watcher;
 
 use crate::app::{Command, Model};
+use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use crate::CLI_ARGS;
@@ -79,7 +81,7 @@ pub trait AppStateHandler {
 /// Behavior for an application popup that will be displayed over the existing views.
 ///
 /// Unlike [`AppStateHandler`], popups can only react to input and can not change their state.
-pub trait Popup: Send {
+pub trait Popup {
     // Popups must be Send since they need to be sent as messages.
     /// Popup title to be drawn around the box.
     fn title(&self) -> Option<String>;
@@ -234,6 +236,17 @@ impl Model<Messages> for AppModel {
                 return Command::None;
             }
             Messages::RaisePopup(popup) => {
+                if self.popup.is_some() {
+                    self.pending_popups.push(popup);
+                } else {
+                    self.popup = Some(popup);
+                }
+                return Command::None;
+            }
+            Messages::SelectFilePathPopup(closure) => {
+                //TODO: Popups do not need sync requirement, but this library can't be made
+                // sync.
+                let popup = Box::new(PathSelectPopup::new(closure));
                 if self.popup.is_some() {
                     self.pending_popups.push(popup);
                 } else {

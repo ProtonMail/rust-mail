@@ -56,7 +56,10 @@ async fn create_empty_draft() {
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
@@ -231,7 +234,10 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -242,7 +248,10 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
     user_ctx.execute_all_send_actions().await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
@@ -465,7 +474,10 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
@@ -610,7 +622,10 @@ async fn create_draft_reply_impl(
     )
     .await
     .unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -714,7 +729,10 @@ async fn open_draft_sync_status_success() {
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -772,7 +790,10 @@ async fn open_draft_sync_status_cached() {
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -809,7 +830,10 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
-    draft.save(user_ctx.action_queue()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
 
     // Load the draft.
     let tether = user_ctx.user_stash().connection();

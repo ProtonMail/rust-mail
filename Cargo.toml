@@ -56,6 +56,7 @@ indoc = "2.0.5"
 insta = { version = "1.42.0", features = ["toml"] }
 itertools = "0.13.0"
 html2text = "0.13.6"
+file-format = { version = "0.26.0", features = ["reader"] }
 lazy_static = "1"
 mime = "0.3.17"
 mockall = "0.12"

@@ -1,4 +1,7 @@
-use crate::models::DraftSendResult;
+use crate::models::{
+    DraftAttachmentMetadata, DraftAttachmentUploadState, DraftSendResult, MetadataId,
+};
+use proton_mail_ids::LocalAttachmentId;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashSet;
 use tracing::error;
@@ -79,6 +82,87 @@ impl DraftSendResultWatcher {
 
             // return result.
             return Ok(all_unseen);
+        }
+    }
+}
+
+/// Observe attachment state for a given draft.
+pub struct DraftAttachmentObserver {
+    id: MetadataId,
+    stash: Stash,
+    current: HashSet<DraftAttachmentMetadataObserverState>,
+    watcher_handle: WatcherHandle,
+}
+
+impl DraftAttachmentObserver {
+    /// Create new instance for the given `metadata_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn new(metadata_id: MetadataId, stash: Stash) -> Result<Self, StashError> {
+        let conn = stash.connection();
+
+        let current = DraftAttachmentMetadata::find_by_metadata_id(metadata_id, &conn).await?;
+
+        let handle = DraftAttachmentMetadata::watch(&stash)?;
+
+        Ok(Self {
+            id: metadata_id,
+            stash,
+            current: HashSet::from_iter(
+                current
+                    .into_iter()
+                    .map(DraftAttachmentMetadataObserverState::from),
+            ),
+            watcher_handle: handle,
+        })
+    }
+
+    /// Wait on the next update for this watcher
+    ///
+    /// # Errors
+    ///
+    /// Returns error if
+    pub async fn next(&mut self) -> Result<(), StashError> {
+        loop {
+            self.watcher_handle
+                .receiver
+                .recv_async()
+                .await
+                .map_err(|_| StashError::WatcherError("Connection Lost".to_owned()))?;
+
+            let conn = self.stash.connection();
+            let current = DraftAttachmentMetadata::find_by_metadata_id(self.id, &conn).await?;
+            let new_state_set = HashSet::from_iter(
+                current
+                    .into_iter()
+                    .map(DraftAttachmentMetadataObserverState::from),
+            );
+
+            // No changes continue;
+            if new_state_set.difference(&self.current).next().is_none() {
+                continue;
+            }
+
+            self.current = new_state_set;
+            return Ok(());
+        }
+    }
+}
+
+/// Custom type to track changes, not all table changes need to be reported.
+#[derive(Debug, Eq, PartialEq, Hash)]
+struct DraftAttachmentMetadataObserverState {
+    attachment_id: LocalAttachmentId,
+    state: DraftAttachmentUploadState,
+}
+
+impl From<DraftAttachmentMetadata> for DraftAttachmentMetadataObserverState {
+    fn from(metadata: DraftAttachmentMetadata) -> Self {
+        Self {
+            attachment_id: metadata.local_attachment_id,
+            state: metadata.state(),
         }
     }
 }
