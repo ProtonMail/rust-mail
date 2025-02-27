@@ -1,4 +1,4 @@
-use crate::actions::ActionError;
+use crate::actions::MailActionError;
 use crate::{draft, AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -55,7 +55,7 @@ pub enum MailContextError {
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::queue::Error),
     #[error("Action: {0}")]
-    Action(#[from] ActionError),
+    Action(#[from] MailActionError),
     #[error("QueuedAction: {0}")]
     QueuedAction(#[from] QueuedError),
     #[error("Failed to access OpenPGP keys: {0}")]
@@ -136,6 +136,9 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::ContactError(err) => MailContextError::ContactError(err),
             CoreContextError::DuplicateContext(user_id) => Self::DuplicateContext(user_id),
             CoreContextError::QueueWriterGuardExpired => Self::QueueWriterGuardExpired,
+            CoreContextError::Action(core_action_error) => Self::Action(core_action_error.into()),
+            CoreContextError::QueuedAction(queued_error) => Self::QueuedAction(queued_error),
+            CoreContextError::ActionQueue(error) => Self::ActionQueue(error),
         }
     }
 }

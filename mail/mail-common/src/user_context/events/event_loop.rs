@@ -94,7 +94,7 @@ impl MailUserContext {
     pub async fn poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        self.action_queue
+        self.action_queue()
             .queue_action(crate::actions::event_poll::EventPoll {})
             .await?;
         Ok(())

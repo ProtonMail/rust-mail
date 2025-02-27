@@ -11,11 +11,13 @@ use crate::models::RollbackItem;
 use crate::AppError;
 use indoc::formatdoc;
 use itertools::Itertools;
-use proton_action_queue::action::{Factory, WriterGuardError};
+use proton_action_queue::action::WriterGuardError;
+use proton_action_queue::queue::Queue;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
 use proton_api_mail::services::proton::response_data::OperationResult;
+use proton_core_common::action_queue::CoreActionError;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_sqlite3::rusqlite::ToSql;
@@ -28,7 +30,7 @@ use std::marker::PhantomData;
 use tracing::error;
 
 #[derive(Debug, thiserror::Error)]
-pub enum ActionError {
+pub enum MailActionError {
     #[error("Http: {0}")]
     Http(#[from] ApiServiceError),
     #[error("Stash: {0}")]
@@ -45,7 +47,7 @@ pub enum ActionError {
     Other(anyhow::Error),
 }
 
-impl proton_action_queue::action::Error for ActionError {
+impl proton_action_queue::action::Error for MailActionError {
     fn is_network_failure(&self) -> bool {
         if let Self::Http(e) = self {
             e.is_network_failure()
@@ -59,56 +61,61 @@ impl proton_action_queue::action::Error for ActionError {
     }
 }
 
-impl From<WriterGuardError> for ActionError {
+impl From<WriterGuardError> for MailActionError {
     fn from(value: WriterGuardError) -> Self {
         match value {
-            WriterGuardError::Expired => ActionError::QueueWriterGuardExpired,
+            WriterGuardError::Expired => Self::QueueWriterGuardExpired,
             WriterGuardError::Stash(e) => Self::Stash(e),
         }
     }
 }
 
-pub(crate) fn new_action_factory() -> Factory {
-    let mut factory = Factory::new();
+impl From<CoreActionError> for MailActionError {
+    fn from(value: CoreActionError) -> Self {
+        match value {
+            CoreActionError::Http(api_service_error) => Self::Http(api_service_error),
+            CoreActionError::Stash(stash_error) => Self::Stash(stash_error),
+            CoreActionError::Label(label_error) => Self::Label(label_error),
+            CoreActionError::NoInput => Self::NoInput,
+            CoreActionError::QueueWriterGuardExpired => Self::QueueWriterGuardExpired,
+            CoreActionError::Other(error) => Self::Other(error),
+        }
+    }
+}
+
+pub(crate) fn register_mail_actions(queue: &Queue) {
     const ERR_MSG: &str = "Double Factory registration";
-    factory.register::<conversations::Delete>().expect(ERR_MSG);
-    factory.register::<conversations::Unlabel>().expect(ERR_MSG);
-    factory.register::<conversations::Label>().expect(ERR_MSG);
-    factory
-        .register::<conversations::MarkRead>()
-        .expect(ERR_MSG);
-    factory
+    queue.register::<conversations::Delete>().expect(ERR_MSG);
+    queue.register::<conversations::Unlabel>().expect(ERR_MSG);
+    queue.register::<conversations::Label>().expect(ERR_MSG);
+    queue.register::<conversations::MarkRead>().expect(ERR_MSG);
+    queue
         .register::<conversations::MarkUnread>()
         .expect(ERR_MSG);
-    factory.register::<conversations::Move>().expect(ERR_MSG);
-    factory.register::<messages::label::Label>().expect(ERR_MSG);
-    factory
+    queue.register::<conversations::Move>().expect(ERR_MSG);
+    queue.register::<messages::label::Label>().expect(ERR_MSG);
+    queue
         .register::<messages::unlabel::Unlabel>()
         .expect(ERR_MSG);
-    factory.register::<messages::r#move::Move>().expect(ERR_MSG);
-    factory
-        .register::<messages::delete::Delete>()
-        .expect(ERR_MSG);
-    factory.register::<messages::read::Read>().expect(ERR_MSG);
-    factory
-        .register::<messages::unread::Unread>()
-        .expect(ERR_MSG);
-    factory.register::<draft::Save>().expect(ERR_MSG);
-    factory.register::<draft::Send>().expect(ERR_MSG);
-    factory.register::<labels::Expand>().expect(ERR_MSG);
-    factory
+    queue.register::<messages::r#move::Move>().expect(ERR_MSG);
+    queue.register::<messages::delete::Delete>().expect(ERR_MSG);
+    queue.register::<messages::read::Read>().expect(ERR_MSG);
+    queue.register::<messages::unread::Unread>().expect(ERR_MSG);
+    queue.register::<draft::Save>().expect(ERR_MSG);
+    queue.register::<draft::Send>().expect(ERR_MSG);
+    queue.register::<labels::Expand>().expect(ERR_MSG);
+    queue
         .register::<messages::label_as::LabelAs>()
         .expect(ERR_MSG);
-    factory
+    queue
         .register::<conversations::label_as::LabelAs>()
         .expect(ERR_MSG);
-    factory
+    queue
         .register::<proton_core_common::actions::contacts::Delete>()
         .expect(ERR_MSG);
-    factory.register::<draft::Discard>().expect(ERR_MSG);
-    factory.register::<draft::UndoSend>().expect(ERR_MSG);
-    factory.register::<event_poll::EventPoll>().expect(ERR_MSG);
-    factory
+    queue.register::<draft::Discard>().expect(ERR_MSG);
+    queue.register::<draft::UndoSend>().expect(ERR_MSG);
+    queue.register::<event_poll::EventPoll>().expect(ERR_MSG);
 }
 
 /// Convenience type which contains data common to many actions.
@@ -152,9 +159,9 @@ where
     /// # Errors
     ///
     /// Returns error if ids could not be resolved.
-    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), MailActionError> {
         if self.target_ids.is_empty() {
-            return Err(ActionError::NoInput);
+            return Err(MailActionError::NoInput);
         }
 
         self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
@@ -176,7 +183,7 @@ where
     /// # Error
     ///
     /// Returns error if the query failed.
-    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, ActionError> {
+    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
         let placeholders = stash::utils::placeholders(self.target_ids.len());
         #[allow(trivial_casts)]
         let values = self
@@ -213,7 +220,7 @@ where
         &self,
         item_type: RollbackItemType,
         tx: &Bond<'_>,
-    ) -> Result<(), ActionError> {
+    ) -> Result<(), MailActionError> {
         for remote_id in self.remote_target_ids.iter() {
             RollbackItem::new(remote_id.to_string(), item_type)
                 .save(tx)
@@ -286,7 +293,7 @@ where
     /// # Errors
     ///
     /// * if some id can not be resolved
-    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
+    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
         self.remote_destination_label_id =
             Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
         self.remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
@@ -348,7 +355,7 @@ where
     }
 
     /// Resolve all local ids into the remote counterpart.
-    async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), ActionError> {
+    async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
         self.remote_ids = T::local_ids_counterpart(self.local_ids.clone(), tx).await?;
         self.remote_all_label_ids =
             Label::local_ids_counterpart(self.local_all_label_ids.clone(), tx).await?;
@@ -369,7 +376,7 @@ where
         &self,
         kind: RollbackItemType,
         bond: &Bond<'_>,
-    ) -> Result<(), ActionError> {
+    ) -> Result<(), MailActionError> {
         for remote_id in &self.remote_ids {
             RollbackItem::new(remote_id.to_string(), kind)
                 .save(bond)

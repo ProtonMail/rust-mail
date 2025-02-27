@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
+use crate::actions::{filter_responses_by_codes, GenericActionData, MailActionError};
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use crate::MailUserContext;
@@ -31,7 +31,7 @@ impl Action for MarkUnread {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
     type Context = MailUserContext;
 }
 

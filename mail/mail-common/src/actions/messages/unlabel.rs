@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::actions::{filter_responses, MailActionError, GenericActionData};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use crate::MailUserContext;
@@ -34,7 +34,7 @@ impl Action for Unlabel {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
     type Context = MailUserContext;
 }
 

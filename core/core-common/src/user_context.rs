@@ -6,6 +6,7 @@ use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
+use action_queue::ActionQueueContext;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
@@ -20,6 +21,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+pub mod action_queue;
 pub mod images_logo;
 mod keys;
 
@@ -46,6 +48,7 @@ pub struct UserContext {
     session: Session,
     context: Arc<Context>,
     user_stash: Stash,
+    queue_context: Arc<ActionQueueContext>,
     user_id: UserId,
     session_id: AuthId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
@@ -72,7 +75,6 @@ impl UserContext {
         sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
-
         let images_logo_cache = Self::init_sender_image_cache(
             cache_path.join("sender_images"),
             sender_image_cache_size,
@@ -80,17 +82,23 @@ impl UserContext {
         )
         .await?;
         let cancellation_token = context.new_child_cancellation_token();
-
-        Ok(Arc::new(Self {
+        let queue = Arc::new(ActionQueueContext::new(user_stash.clone()).await?);
+        let this = Arc::new(Self {
             session,
             context,
             user_stash,
+            queue_context: queue,
             user_id,
             session_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
             images_logo_cache,
             cancellation_token,
-        }))
+        });
+        let this_weak = Arc::downgrade(&this);
+
+        this.queue().register_execution_context(this_weak);
+
+        Ok(this)
     }
 
     async fn init_sender_image_cache(
@@ -124,6 +132,12 @@ impl UserContext {
     #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.user_stash
+    }
+
+    /// Get `ActionQueue` instance.
+    #[must_use]
+    pub fn queue(&self) -> &ActionQueueContext {
+        &self.queue_context
     }
 
     /// Get the user id of this context.

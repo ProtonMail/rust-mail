@@ -10,7 +10,7 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    filter_responses, ActionError, AllBottomBarMessageActions, BottomBarActions,
+    filter_responses, MailActionError, AllBottomBarMessageActions, BottomBarActions,
     MovableSystemFolderAction,
 };
 use crate::models::*;
@@ -326,7 +326,7 @@ impl Message {
     ) -> Result<(), QueueActionError<Read>> {
         let action = Read::new(label_id, message_ids);
         match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }
@@ -351,7 +351,7 @@ impl Message {
     ) -> Result<(), QueueActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
         match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }

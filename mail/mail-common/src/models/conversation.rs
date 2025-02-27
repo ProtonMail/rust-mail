@@ -7,7 +7,7 @@ use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    filter_responses, ActionError, ConversationAction, ConversationAvailableActions,
+    filter_responses, MailActionError, ConversationAction, ConversationAvailableActions,
     GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
@@ -287,7 +287,7 @@ impl Conversation {
     ) -> Result<(), QueueActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
         match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }
@@ -311,7 +311,7 @@ impl Conversation {
     ) -> Result<(), QueueActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         match queue.queue_action(action).await {
-            Ok(_) | Err(QueueActionError::Action(ActionError::NoInput)) => Ok(()),
+            Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
         }
     }
