@@ -3,7 +3,7 @@ use crate::datatypes::{
     KeyPackets, LocalAttachmentId, LocalMessageId, MessageSender,
 };
 use crate::models::*;
-use crate::AppError;
+use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use bytes::Bytes;
 use indoc::indoc;
 use itertools::Itertools;
@@ -20,9 +20,10 @@ use proton_core_common::models::{Address, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
-    AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
-    KeyPackets as RealKeyPackets,
+    AttachmentSignature as RealAttachmentSignature, DecryptableAttachment, EncryptableAttachment,
+    EncryptedAttachment, KeyPackets as RealKeyPackets,
 };
+use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::exports::ToSql;
@@ -30,6 +31,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use tracing::error;
 
 /// Represents a mail attachment.
 ///
@@ -430,6 +432,46 @@ impl Attachment {
             tether,
         )
         .await
+    }
+
+    /// Encrypt an attachment `data` with the given `address_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the encryption failed or the address can't be located.
+    pub async fn encrypt(
+        context: &MailUserContext,
+        address_id: &AddressId,
+        data: impl AsRef<[u8]>,
+    ) -> MailContextResult<EncryptedAttachment> {
+        struct AttachmentData<'a>(&'a [u8]);
+
+        impl EncryptableAttachment for AttachmentData<'_> {
+            fn attachment_data(&self) -> &[u8] {
+                self.0
+            }
+        }
+
+        let encryptable_attachment = AttachmentData(data.as_ref());
+
+        let pgp_provider = new_pgp_provider();
+
+        let tether = context.user_stash().connection();
+        let unlocked_address_keys = context
+            .unlocked_address_keys(&pgp_provider, &tether, address_id)
+            .await?;
+
+        let primary_address_key = unlocked_address_keys.primary_for_mail().map_err(|e| {
+            error!("Could not retrieve primary address key: {e:?}");
+            MailContextError::Crypto
+        })?;
+
+        encryptable_attachment
+            .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
+            .map_err(|e| {
+                error!("Failed to encrypt attachment: {e:?}");
+                MailContextError::Crypto
+            })
     }
 }
 

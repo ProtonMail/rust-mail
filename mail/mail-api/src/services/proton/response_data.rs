@@ -86,8 +86,7 @@ pub enum ComposerMode {
 }
 
 /// Whether this is an embedded attachment.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Disposition {
     /// TODO: Document this variant.
@@ -1294,4 +1293,29 @@ pub struct UndoToken {
     /// TODO: Document this field.
     #[serde(rename = "ValidUntil")]
     pub valid_until: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct NewAttachmentResponse {
+    /// Attachment id.
+    #[serde(rename = "ID")]
+    pub id: AttachmentId,
+    /// Attachment filename.
+    #[serde(rename = "Name")]
+    pub file_name: String,
+    /// Attachment file size.
+    #[serde(rename = "Size")]
+    pub file_size: u64,
+    /// Attachment disposition.
+    pub disposition: Disposition,
+    /// Binary asymmetric key packet.
+    pub key_packets: KeyPackets,
+    /// Optional armored detached signature.
+    pub signature: Option<AttachmentSignature>,
+    /// Optional armored encrypted message containing binary detached signature.
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    /// Attachment headers.
+    pub headers: MessageAttachmentHeaders,
 }

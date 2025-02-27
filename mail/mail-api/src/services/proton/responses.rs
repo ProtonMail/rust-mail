@@ -27,6 +27,7 @@
 //!
 
 use crate::services::proton::common::{ConversationId, MessageId};
+use crate::services::proton::prelude::NewAttachmentResponse;
 use crate::services::proton::response_data::{
     Attachment, Conversation, ConversationCount, MailSettings, Message, MessageCount,
     MessageMetadata, OperationResult, UndoToken,
@@ -280,4 +281,11 @@ pub struct PostSendMessageResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PostCancelSendResponse {
     pub message: MessageMetadata,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostAttachmentResponse {
+    pub attachment: NewAttachmentResponse,
 }

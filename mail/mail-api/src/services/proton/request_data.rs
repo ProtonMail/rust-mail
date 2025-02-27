@@ -19,7 +19,9 @@
 
 use crate::services::proton::common::{AttachmentId, MessageId};
 use crate::services::proton::response_data::MimeType;
-use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, KeyPackets};
+use proton_crypto_inbox::attachment::{
+    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
 use proton_crypto_inbox::message::packages::PackageMimeType;
 use proton_crypto_inbox::message::EncryptedDraft;
@@ -249,4 +251,34 @@ impl From<InboxSessionKey> for ExposedKey {
             algorithm: value.algorithm(),
         }
     }
+}
+
+/// Defines newly created attachment disposition.
+pub enum NewAttachmentDisposition {
+    /// Regular mail attachment.
+    Attachment,
+    /// Inline attachment, requires a content id.
+    Inline(String),
+}
+
+/// Parameters required to create a new attachment.
+pub struct NewAttachmentParams {
+    /// File name of the attachment.
+    pub filename: String,
+    /// Message to which this attachment belongs to.
+    pub message_id: MessageId,
+    /// Attachment's MIME type may differ from the MIME type of the message.
+    /// There is a lot of possible MIME types, so it is not possible to list
+    /// all here. The safest bet is to deserialize it to string at that point.
+    pub mime_type: String,
+    /// Attachment disposition.
+    pub disposition: NewAttachmentDisposition,
+    /// Binary asymmetric key packet.
+    pub key_packets: Vec<u8>,
+    /// Optional armored detached signature
+    pub signature: Option<AttachmentSignature>,
+    /// Optional armored encrypted message containing binary detached signature.
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    /// Encrypted attachment payload.
+    pub data_packet: Vec<u8>,
 }
