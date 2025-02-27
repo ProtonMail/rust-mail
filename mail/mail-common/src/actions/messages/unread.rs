@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses_by_codes, ActionError, GenericActionData};
+use crate::actions::{filter_responses_by_codes, GenericActionData, MailActionError};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use crate::MailUserContext;
@@ -36,7 +36,7 @@ impl Action for Unread {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
     type Context = MailUserContext;
 }
 

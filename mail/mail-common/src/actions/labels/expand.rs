@@ -1,6 +1,6 @@
 use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
-use crate::{actions::ActionError, AppError, MailUserContext};
+use crate::{actions::MailActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_api_core::services::proton::common::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
@@ -46,7 +46,7 @@ impl Action for Expand {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
 
     type Context = MailUserContext;
 }

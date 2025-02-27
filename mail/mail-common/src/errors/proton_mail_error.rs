@@ -1,5 +1,5 @@
 use super::mail_error_reason::*;
-use crate::actions::ActionError;
+use crate::actions::MailActionError;
 use crate::draft::PackageError;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -365,16 +365,16 @@ impl From<ContactError> for ProtonMailError {
     }
 }
 
-impl From<ActionError> for ProtonMailError {
-    fn from(error: ActionError) -> Self {
+impl From<MailActionError> for ProtonMailError {
+    fn from(error: MailActionError) -> Self {
         match error {
-            ActionError::Http(api_service_error) => Self::from(api_service_error),
-            ActionError::Stash(stash_error) => Self::from(stash_error),
-            ActionError::App(app_error) => Self::from(app_error),
-            ActionError::NoInput => Self::Unexpected(Unexpected::Internal),
-            ActionError::Label(label_error) => Self::from(label_error),
-            ActionError::Other(anyhow) => Self::from(anyhow),
-            ActionError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
+            MailActionError::Http(api_service_error) => Self::from(api_service_error),
+            MailActionError::Stash(stash_error) => Self::from(stash_error),
+            MailActionError::App(app_error) => Self::from(app_error),
+            MailActionError::NoInput => Self::Unexpected(Unexpected::Internal),
+            MailActionError::Label(label_error) => Self::from(label_error),
+            MailActionError::Other(anyhow) => Self::from(anyhow),
+            MailActionError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
         }
     }
 }

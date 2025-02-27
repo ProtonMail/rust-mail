@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, ActionError, ActionMoveData};
+use crate::actions::{filter_responses, ActionMoveData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use crate::MailUserContext;
@@ -41,7 +41,7 @@ impl Action for Move {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
 
     type Context = MailUserContext;
 }

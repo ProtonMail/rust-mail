@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::actions::{filter_responses, GenericActionData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
@@ -30,7 +30,7 @@ impl Action for Label {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
 
     type Context = MailUserContext;
 }

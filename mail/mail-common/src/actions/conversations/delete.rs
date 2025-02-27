@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::actions::{filter_responses, GenericActionData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::MailUserContext;
@@ -31,7 +31,7 @@ impl Action for Delete {
     type RemoteOutput = ();
 
     type LocalOutput = ();
-    type Error = ActionError;
+    type Error = MailActionError;
     type Context = MailUserContext;
 }
 
@@ -51,7 +51,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         if action.0.target_ids.is_empty() {
-            return Err(ActionError::NoInput);
+            return Err(MailActionError::NoInput);
         }
 
         Conversation::mark_deleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;

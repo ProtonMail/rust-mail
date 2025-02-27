@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, ActionError, LabelAsData};
+use crate::actions::{filter_responses, LabelAsData, MailActionError};
 use crate::datatypes::{ExclusiveLocation, LocalMessageId, RollbackItemType, SystemLabelId};
 use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};
@@ -43,7 +43,7 @@ impl LabelAs {
     }
 
     /// Memorize the data before applying LabelAs action so we can revert modifications later
-    async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), ActionError> {
+    async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), MailActionError> {
         let all_labels = Label::find_by_kind(LabelType::Label, tether).await?;
         self.data.local_all_label_ids = all_labels
             .iter()
@@ -66,7 +66,7 @@ impl LabelAs {
     }
 
     /// Keep track of labels added/removed
-    async fn save_modifications(&mut self, tether: &Tether) -> Result<(), ActionError> {
+    async fn save_modifications(&mut self, tether: &Tether) -> Result<(), MailActionError> {
         let selected = HashSet::from_iter(self.data.local_selected_label_ids.iter().cloned());
         let partial =
             HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
@@ -98,7 +98,7 @@ impl Action for LabelAs {
     type RemoteOutput = ();
 
     type LocalOutput = bool;
-    type Error = ActionError;
+    type Error = MailActionError;
     type Context = MailUserContext;
 }
 

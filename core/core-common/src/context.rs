@@ -1,5 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
+use crate::action_queue::CoreActionError;
 use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
@@ -12,7 +13,8 @@ use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_action_queue::action::WriterGuardError;
+use proton_action_queue::action::{Action, WriterGuardError};
+use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
@@ -50,6 +52,12 @@ pub enum CoreContextError {
     Crypto,
     #[error("Keychain Error: {0}")]
     KeyChain(#[from] KeyChainError),
+    #[error("Action: {0}")]
+    Action(#[from] CoreActionError),
+    #[error("QueuedAction: {0}")]
+    QueuedAction(#[from] QueuedError),
+    #[error("Action Queue: {0}")]
+    ActionQueue(#[from] proton_action_queue::queue::Error),
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
@@ -70,6 +78,15 @@ pub enum CoreContextError {
     QueueWriterGuardExpired,
     #[error("{0}")]
     Other(AnyhowError),
+}
+
+impl<T: Action<Error: Into<CoreContextError>>> From<QueueActionError<T>> for CoreContextError {
+    fn from(value: QueueActionError<T>) -> Self {
+        match value {
+            QueueActionError::Action(e) => e.into(),
+            QueueActionError::Queue(e) => Self::ActionQueue(e),
+        }
+    }
 }
 
 impl From<WriterGuardError> for CoreContextError {
