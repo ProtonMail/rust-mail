@@ -16,7 +16,7 @@ use proton_crypto_account::{
 
 use crate::keys::{InboxSessionKey, KeyPacket, SessionKeyError};
 
-use super::{AttachmentEncryptedSignature, AttachmentSignature, DecryptableAttachment, KeyPackets};
+use super::{AttachmentEncryptedSignature, AttachmentSignature};
 
 /// Type for encryption metadata belonging to a specific encrypted attachment.
 ///
@@ -29,7 +29,7 @@ pub struct EncryptedAttachmentMetadata {
     /// Optional encrypted attachment signature.
     pub encrypted_signature: Option<AttachmentEncryptedSignature>,
     /// The encrypted session key for each recipient key.
-    pub key_packets: KeyPackets,
+    pub key_packets: Vec<u8>,
 }
 
 /// Represent an attachment that is encrypted.
@@ -177,7 +177,7 @@ fn encrypt_helper<Provider: PGPProviderSync>(
     let metadata = EncryptedAttachmentMetadata {
         signature: Some(detached_signature),
         encrypted_signature: Some(encrypted_detached_signature),
-        key_packets: KeyPackets::new_from_bytes(&key_packets),
+        key_packets,
     };
     Ok(EncryptedAttachment { metadata, data })
 }
@@ -339,20 +339,6 @@ fn encrypt_detached_signature<T: PGPProviderSync>(
     Ok(attachment_encrypted_signature)
 }
 
-impl DecryptableAttachment for EncryptedAttachmentMetadata {
-    fn attachment_key_packets(&self) -> &KeyPackets {
-        &self.key_packets
-    }
-
-    fn attachment_signature(&self) -> Option<&AttachmentSignature> {
-        self.signature.as_ref()
-    }
-
-    fn attachment_encrypted_signature(&self) -> Option<&AttachmentEncryptedSignature> {
-        self.encrypted_signature.as_ref()
-    }
-}
-
 /// Attachment writer for encrypting and signing data.
 #[derive(Debug)]
 pub struct SigncryptedAttachmentWriter<'a, W, Provider, ProvEncryptor>
@@ -411,7 +397,7 @@ where
         let metadata = EncryptedAttachmentMetadata {
             signature: Some(detached_signature),
             encrypted_signature: Some(encrypted_detached_signature),
-            key_packets: KeyPackets::new_from_bytes(&self.key_packets),
+            key_packets: self.key_packets,
         };
         Ok(metadata)
     }

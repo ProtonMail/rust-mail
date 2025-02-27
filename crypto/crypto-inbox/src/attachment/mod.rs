@@ -23,7 +23,8 @@ impl KeyPackets {
         Self(value.into_iter().map(|a| a.0).collect::<String>())
     }
 
-    pub(crate) fn new_from_bytes(key_packets: &[u8]) -> Self {
+    #[must_use]
+    pub fn new_from_bytes(key_packets: &[u8]) -> Self {
         KeyPackets(BASE_64.encode(key_packets))
     }
 

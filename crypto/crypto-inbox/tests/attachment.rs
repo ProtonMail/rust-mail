@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use base64::Engine;
 use proton_crypto_inbox::attachment::{
     encrypt_and_sign_to_writer, AttachmentEncryptedSignature, AttachmentSignature,
-    DecryptableAttachment, EncryptableAttachment, KeyPackets,
+    DecryptableAttachment, EncryptableAttachment, EncryptedAttachmentMetadata, KeyPackets,
 };
 
 mod common;
@@ -59,6 +59,35 @@ impl DecryptableAttachment for TestAttachmentMetdata {
 
     fn attachment_encrypted_signature(&self) -> Option<&AttachmentEncryptedSignature> {
         self.enc_signature.as_ref()
+    }
+}
+
+// Wrapper type for the tests.
+struct DecryptableAttachmentMetadata<'a> {
+    key_packets: KeyPackets,
+    original: &'a EncryptedAttachmentMetadata,
+}
+
+impl<'a> DecryptableAttachmentMetadata<'a> {
+    pub fn new(original: &'a EncryptedAttachmentMetadata) -> Self {
+        Self {
+            key_packets: KeyPackets::new_from_bytes(&original.key_packets),
+            original,
+        }
+    }
+}
+
+impl DecryptableAttachment for DecryptableAttachmentMetadata<'_> {
+    fn attachment_key_packets(&self) -> &KeyPackets {
+        &self.key_packets
+    }
+
+    fn attachment_signature(&self) -> Option<&AttachmentSignature> {
+        self.original.signature.as_ref()
+    }
+
+    fn attachment_encrypted_signature(&self) -> Option<&AttachmentEncryptedSignature> {
+        self.original.encrypted_signature.as_ref()
     }
 }
 
@@ -155,8 +184,7 @@ fn test_attachment_re_encrypt() {
         .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
         .unwrap();
 
-    let attachment_info = encrypted_attachment
-        .metadata
+    let attachment_info = DecryptableAttachmentMetadata::new(&encrypted_attachment.metadata)
         .decrypt_attachment_info(&pgp_provider, &address_keys)
         .expect("must decrypt");
 
@@ -226,8 +254,7 @@ fn test_attachment_encrypt_decrypt_v6() {
         .unwrap();
 
     // Sig should be ok v4
-    let decrypted_attachment = result
-        .metadata
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&result.metadata)
         .decrypt(
             &pgp_provider,
             &address_keys,
@@ -245,8 +272,7 @@ fn test_attachment_encrypt_decrypt_v6() {
     assert!(verification_result.is_ok());
 
     // Sig should be ok v6
-    let decrypted_attachment = result
-        .metadata
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&result.metadata)
         .decrypt(
             &pgp_provider,
             &address_keys,
@@ -281,8 +307,7 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
     }
 
     // Sig should be ok
-    let decrypted_attachment = result
-        .metadata
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&result.metadata)
         .decrypt(&pgp_provider, &address_keys, &address_keys, &result.data)
         .unwrap();
 
@@ -296,8 +321,7 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
 
     // Sig should be not ok
     let wrong_keys = get_test_public_address_keys(&pgp_provider);
-    let decrypted_attachment_wrong = result
-        .metadata
+    let decrypted_attachment_wrong = DecryptableAttachmentMetadata::new(&result.metadata)
         .decrypt(&pgp_provider, &address_keys, &wrong_keys, &result.data)
         .unwrap();
 
@@ -327,7 +351,7 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
     }
 
     // Sig should be ok
-    let decrypted_attachment = metadata
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&metadata)
         .decrypt(&pgp_provider, &address_keys, &address_keys, &data)
         .unwrap();
 
@@ -341,7 +365,7 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
 
     // Sig should be not ok
     let wrong_keys = get_test_public_address_keys(&pgp_provider);
-    let decrypted_attachment_wrong = metadata
+    let decrypted_attachment_wrong = DecryptableAttachmentMetadata::new(&metadata)
         .decrypt(&pgp_provider, &address_keys, &wrong_keys, &data)
         .unwrap();
 
