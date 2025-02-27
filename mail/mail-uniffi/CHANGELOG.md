@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.50.0] - 2025-02-27
+
+### Added
+
+  - Dummy interfaces for human verification
+
+
 ## [0.49.0] - 2025-02-27
 
 ### Added
