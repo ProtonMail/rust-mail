@@ -10,7 +10,7 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    filter_responses, MailActionError, AllBottomBarMessageActions, BottomBarActions,
+    filter_responses, AllBottomBarMessageActions, BottomBarActions, MailActionError,
     MovableSystemFolderAction,
 };
 use crate::models::*;

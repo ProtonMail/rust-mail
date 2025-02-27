@@ -7,8 +7,8 @@ use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    filter_responses, MailActionError, ConversationAction, ConversationAvailableActions,
-    GeneralActions, LabelAsAction, MoveAction, MoveItemAction,
+    filter_responses, ConversationAction, ConversationAvailableActions, GeneralActions,
+    LabelAsAction, MailActionError, MoveAction, MoveItemAction,
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,

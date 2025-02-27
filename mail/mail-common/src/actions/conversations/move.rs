@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, MailActionError, ActionMoveData};
+use crate::actions::{filter_responses, ActionMoveData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use crate::MailUserContext;
