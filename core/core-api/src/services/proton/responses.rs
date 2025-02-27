@@ -39,6 +39,14 @@ use serde::Serialize;
 
 use super::response_data::ApiErrorInfo;
 
+/// The response containing the user's session UUID.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+pub struct GetSessionsUuidResponse {
+    #[serde(rename = "UUID")]
+    pub uuid: String,
+}
+
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]

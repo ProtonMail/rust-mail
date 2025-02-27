@@ -95,6 +95,24 @@ impl MailUserSession {
 
 #[uniffi_export]
 impl MailUserSession {
+    /// Get the session UUID of the active user session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`UserSessionError`] possibilities could be returned if
+    /// there is a problem with the HTTP request.
+    pub async fn session_uuid(&self) -> Result<String, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_sessions_uuid().await?;
+
+            Result::<_, RealProtonMailError>::Ok(res.uuid)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
     /// Fork the current session.
     ///
     /// This call has to be made from a parent session, and forks the current
@@ -231,6 +249,7 @@ impl MailUserSession {
         options: GetPaymentsPlansOptions,
     ) -> Result<PaymentsPlans, UserSessionError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
             let res = ctx.api().get_payments_plans(options.into()).await?;
 
@@ -251,6 +270,7 @@ impl MailUserSession {
         payment_method_id: String,
     ) -> Result<PaymentToken, UserSessionError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
             let res = ctx
                 .api()
@@ -277,6 +297,7 @@ impl MailUserSession {
         new_values: NewSubscriptionValues,
     ) -> Result<(), UserSessionError> {
         let ctx = self.ctx()?;
+
         uniffi_async(async move {
             ctx.api()
                 .post_payments_subscription(subscription.into(), new_values.into())

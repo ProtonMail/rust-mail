@@ -159,8 +159,7 @@ pub struct PlanInstance {
 }
 
 /// A plan cycle, in months.
-#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, Hash, PartialEq)]
 #[repr(u8)]
 pub enum PlanCycle {
     OneMonth = 1,

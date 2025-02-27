@@ -26,7 +26,7 @@ use crate::crypto_clock::server_crypto_clock;
 use crate::service::{ApiServiceError, ApiServiceResult};
 use crate::services::proton::prelude::*;
 use crate::services::proton::{Proton, ProtonCore};
-use crate::services::proton::{CORE_V4, CORE_V5};
+use crate::services::proton::{AUTH_V4, CORE_V4, CORE_V5};
 use crate::store::Store;
 
 pub const QUARTER_SECOND_TIMEOUT: u64 = 250;
@@ -35,6 +35,14 @@ pub const HALF_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 30;
 pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 
 impl ProtonCore for Proton {
+    async fn get_sessions_uuid(&self) -> ApiServiceResult<GetSessionsUuidResponse> {
+        Ok(GET!("{AUTH_V4}/sessions/uuid")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
         Ok(GET!("{CORE_V4}/addresses")
             .send_with(self)

@@ -1025,8 +1025,8 @@ impl User {
     ///
     /// # Parameters
     ///
-    /// * `stash` - The database instance to store the user info and settings.
-    /// * `api`   - The API instance to use to download the user info and settings.
+    /// * `stash` - The database instance to store the addresses.
+    /// * `api`   - The API instance to use to download the addresses.
     ///
     /// # Errors
     ///

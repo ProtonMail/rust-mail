@@ -90,6 +90,9 @@ pub use self::proton_impl::{
 
 mod proton_impl;
 
+/// The Proton Auth API base path (v4).
+pub const AUTH_V4: &str = "/auth/v4";
+
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";
 
@@ -140,6 +143,9 @@ pub fn build<S: Store>(
 
 #[allow(async_fn_in_trait)]
 pub trait ProtonCore {
+    /// GET the user's session UUID.
+    async fn get_sessions_uuid(&self) -> ApiServiceResult<GetSessionsUuidResponse>;
+
     /// GETs a list of addresses.
     ///
     /// # Errors

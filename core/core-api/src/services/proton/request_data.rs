@@ -25,7 +25,7 @@ use std::collections::HashMap;
 //==============================================================================
 
 /// Human verification data required for login.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct HumanVerificationData {
     /// Type of human verification where the code originated from.
     pub hv_type: HumanVerificationType,

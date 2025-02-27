@@ -55,6 +55,14 @@ impl Config {
     }
 
     #[must_use]
+    pub fn atlas_name(name: &str) -> Self {
+        Self {
+            env_id: EnvId::new_atlas_name(name),
+            ..Self::default()
+        }
+    }
+
+    #[must_use]
     pub fn custom(env: impl Env) -> Self {
         Self {
             env_id: EnvId::new_custom(env),
