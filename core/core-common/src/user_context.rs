@@ -43,12 +43,11 @@ pub trait UserDatabaseInitializer: Send + Sync {
 }
 
 /// Contains all the relevant information to an initialize user session.
-#[derive(Clone)]
 pub struct UserContext {
     session: Session,
     context: Arc<Context>,
     user_stash: Stash,
-    queue_context: Arc<ActionQueueContext>,
+    queue_context: ActionQueueContext,
     user_id: UserId,
     session_id: AuthId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
@@ -82,7 +81,7 @@ impl UserContext {
         )
         .await?;
         let cancellation_token = context.new_child_cancellation_token();
-        let queue = Arc::new(ActionQueueContext::new(user_stash.clone()).await?);
+        let queue = ActionQueueContext::new(user_stash.clone()).await?;
         let this = Arc::new(Self {
             session,
             context,
