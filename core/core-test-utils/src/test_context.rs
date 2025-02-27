@@ -197,7 +197,6 @@ impl TestContext {
             keychain.clone(),
             all_initializers,
             api_config.clone(),
-            None,
             tmp_dir.path().join("core-cache"),
             4 * 1024 * 1024,
         )

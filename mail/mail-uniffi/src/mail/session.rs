@@ -1,8 +1,5 @@
 use crate::core::datatypes::ApiConfig;
-use crate::core::{
-    FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, StoredAccountState, StoredSession,
-    StoredSessionState,
-};
+use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
@@ -74,7 +71,6 @@ pub struct MailSessionParams {
 pub fn create_mail_session(
     params: MailSessionParams,
     key_chain: Box<dyn OSKeyChain>,
-    network_callback: Option<Box<dyn NetworkStatusChanged>>,
 ) -> Result<Arc<MailSession>, UserSessionError> {
     async_runtime()
         .block_on(async move {
@@ -120,9 +116,6 @@ pub fn create_mail_session(
                 params.mail_cache_size,
                 Arc::from(FFIKeyChain::from(key_chain)),
                 api_env_config.into(),
-                network_callback.map(|v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
-                    Box::new(FFINetworkStatusChanged::from(v))
-                }),
             )
             .await?;
 
@@ -620,17 +613,6 @@ impl MailSession {
         .await
         .map_err(UserSessionError::from)
         .into()
-    }
-
-    /// Check whether the network is connected/online.
-    #[must_use]
-    pub fn is_network_connected(&self) -> bool {
-        self.mail_ctx.is_network_connected()
-    }
-
-    /// Externally notify the context that the network connection has changed.
-    pub fn set_network_connected(&self, online: bool) {
-        self.mail_ctx.set_network_connected(online);
     }
 }
 

@@ -100,7 +100,6 @@ async fn new_mail_ctx<T: KeyChain + 'static>(
         cache_size,
         kch,
         cfg,
-        None,
     )
     .await?)
 }

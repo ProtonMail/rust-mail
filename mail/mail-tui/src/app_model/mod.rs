@@ -140,7 +140,6 @@ impl AppModel {
                 2 << 30, // 1GiB
                 Arc::new(keychain),
                 app_config.api_config(),
-                None,
             )
             .await?;
 
