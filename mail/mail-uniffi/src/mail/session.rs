@@ -15,15 +15,23 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::MailContext;
+use proton_mail_common::{MailContext, MailUserContext};
 use stash::stash::{Stash, WatcherHandle};
-use std::iter;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
+
+macro_rules! execution_checkpoint {
+    ($execution_ctx:expr) => {{
+        if $execution_ctx.should_stop() {
+            $execution_ctx.stop().await;
+            return Ok(());
+        }
+    }};
+}
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -579,55 +587,45 @@ impl MailSession {
                 .filter(|session| session.account_id != primary_account.remote_id)
                 .unique_by(|session| session.account_id.clone());
 
-            let mut other_user_ctxs = vec![];
+            let mut all_user_ctxs = vec![primary_user_ctx.clone()];
 
             for session in other_sessions_iter {
                 let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
-                user_ctx.terminate_queue_executors();
-                other_user_ctxs.push(user_ctx);
+                user_ctx.pause_queue_executors();
+                all_user_ctxs.push(user_ctx);
             }
 
-            primary_user_ctx.terminate_queue_executors();
-            if !abort.is_empty() {
-                let callback = move || callback.on_update();
-                _ = async_runtime().spawn_blocking(callback).await;
-                return Ok(());
-            }
+            primary_user_ctx.pause_queue_executors();
 
-            for user_ctx in iter::once(primary_user_ctx.clone()).chain(other_user_ctxs.clone()) {
+            let execution_ctx = BackgroundExecutionContext {
+                abort,
+                callback,
+                musc: all_user_ctxs.clone(),
+            };
+
+            execution_checkpoint!(execution_ctx);
+
+            for user_ctx in &all_user_ctxs {
                 let send_executor = user_ctx
                     .action_queue()
                     .new_executor_with_group(SEND_ACTION_GROUP);
 
                 while let Some(_) = send_executor.execute_one().await? {
-                    if !abort.is_empty() {
-                        let callback = move || callback.on_update();
-                        _ = async_runtime().spawn_blocking(callback).await;
-                        return Ok(());
-                    }
+                    execution_checkpoint!(execution_ctx);
                 }
             }
 
-            if !abort.is_empty() {
-                let callback = move || callback.on_update();
-                _ = async_runtime().spawn_blocking(callback).await;
-                return Ok(());
-            }
+            execution_checkpoint!(execution_ctx);
 
-            for user_ctx in iter::once(primary_user_ctx).chain(other_user_ctxs) {
+            for user_ctx in &all_user_ctxs {
                 let default_executor = user_ctx.action_queue().new_executor();
 
                 while let Some(_) = default_executor.execute_one().await? {
-                    if !abort.is_empty() {
-                        let callback = move || callback.on_update();
-                        _ = async_runtime().spawn_blocking(callback).await;
-                        return Ok(());
-                    }
+                    execution_checkpoint!(execution_ctx);
                 }
             }
 
-            let callback = move || callback.on_update();
-            _ = async_runtime().spawn_blocking(callback).await;
+            execution_ctx.stop().await;
             Result::<_, RealProtonMailError>::Ok(())
         });
 
@@ -877,5 +875,26 @@ impl Drop for BackgroundExecutionHandle {
                 self.handle.abort();
             }
         }
+    }
+}
+
+struct BackgroundExecutionContext {
+    abort: mpsc::Receiver<()>,
+    callback: Box<dyn LiveQueryCallback>,
+    musc: Vec<Arc<MailUserContext>>,
+}
+
+impl BackgroundExecutionContext {
+    pub fn should_stop(&self) -> bool {
+        !self.abort.is_empty()
+    }
+
+    pub async fn stop(self) {
+        let callback = move || self.callback.on_update();
+        _ = async_runtime().spawn_blocking(callback).await;
+
+        self.musc
+            .iter()
+            .for_each(|ctx| ctx.unpause_queue_executors());
     }
 }

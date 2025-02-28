@@ -19,6 +19,7 @@ use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
+use tokio::sync::watch;
 use tokio::task::AbortHandle;
 use topological_sort::TopologicalSort;
 use tracing::{debug, debug_span, error, Instrument, Level};
@@ -851,6 +852,7 @@ impl QueueExecutor {
 pub struct QueueAutoExecutor {
     abort_handle: AbortHandle,
     id: String,
+    pause: watch::Sender<bool>,
 }
 
 impl Drop for QueueAutoExecutor {
@@ -862,11 +864,14 @@ impl Drop for QueueAutoExecutor {
 impl QueueAutoExecutor {
     fn new(executor: QueueExecutor) -> Self {
         let id = executor.id.clone();
-        let handle = tokio::spawn(async move { Self::run(executor).await }).abort_handle();
+        let (pause, listener) = watch::channel(false);
+        let handle =
+            tokio::spawn(async move { Self::run(executor, listener).await }).abort_handle();
 
         QueueAutoExecutor {
             abort_handle: handle,
             id,
+            pause,
         }
     }
 
@@ -875,12 +880,29 @@ impl QueueAutoExecutor {
     pub fn id(&self) -> &str {
         &self.id
     }
-    async fn run(executor: QueueExecutor) {
+
+    pub fn pause(&self) {
+        self.pause.send_replace(true);
+    }
+
+    pub fn unpause(&self) {
+        self.pause.send_replace(false);
+    }
+
+    async fn run(executor: QueueExecutor, mut pause: watch::Receiver<bool>) {
         debug!(
             "Starting auto queue executor {} with group={}",
             executor.id, executor.action_group
         );
         loop {
+            if *pause.borrow() {
+                while pause.changed().await.is_ok() {
+                    if !*pause.borrow() {
+                        break;
+                    }
+                }
+            }
+
             let should_wait = match executor
                 .execute_one()
                 .instrument(
@@ -942,6 +964,18 @@ impl QueueAutoExecutorPool {
     pub fn terminate(&self) {
         for executor in &self.executors {
             executor.terminate();
+        }
+    }
+
+    pub fn pause(&self) {
+        for executor in &self.executors {
+            executor.pause();
+        }
+    }
+
+    pub fn unpause(&self) {
+        for executor in &self.executors {
+            executor.unpause();
         }
     }
 }

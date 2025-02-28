@@ -131,6 +131,17 @@ impl MailUserContext {
     }
 
     /// Terminate all action queue executors.
+    pub fn pause_queue_executors(&self) {
+        self.user_context.queue().queue_executor.pause();
+        self.send_queue_executors.pause();
+    }
+
+    pub fn unpause_queue_executors(&self) {
+        self.user_context.queue().queue_executor.unpause();
+        self.send_queue_executors.unpause();
+    }
+
+    /// Terminate all action queue executors.
     pub fn terminate_queue_executors(&self) {
         self.user_context.queue().queue_executor.terminate();
         self.send_queue_executors.terminate();
