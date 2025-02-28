@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Context.is_network_connected` and associated traits and methods
   - `MailSession::new` does not accept optional network_callback anymore
 
+### Fixed
+  - [ET-2260] Undoing drafts is no longer causing "Opened a non-draft message as a draft".
+    - Additionally prefetching and mail scroller is no longer overriding draft message metadata.
+
 ## [0.50.0] - 2025-02-27
 
 ### Added

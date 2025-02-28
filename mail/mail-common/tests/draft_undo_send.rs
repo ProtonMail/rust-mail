@@ -36,6 +36,7 @@ async fn draft_undo_send() {
 
     let mut undo_message = sent_message.metadata.clone();
     undo_message.label_ids.clear();
+    undo_message.label_ids.push(LabelId::all_drafts());
     undo_message.label_ids.push(LabelId::drafts());
     undo_message.flags.set(MessageFlags::SENT, false);
 
@@ -71,6 +72,9 @@ async fn draft_undo_send() {
         .unwrap()
         .unwrap();
 
+    assert!(updated_local_message
+        .label_ids
+        .contains(&LabelId::all_drafts()));
     assert!(updated_local_message.label_ids.contains(&LabelId::drafts()));
     assert!(!updated_local_message.label_ids.contains(&LabelId::sent()));
     assert!(!updated_local_message
@@ -138,6 +142,9 @@ async fn draft_undo_send_failure() {
         .unwrap();
 
     assert!(!updated_local_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!updated_local_message
+        .label_ids
+        .contains(&LabelId::all_drafts()));
     assert!(updated_local_message.label_ids.contains(&LabelId::sent()));
     assert!(updated_local_message
         .flags
