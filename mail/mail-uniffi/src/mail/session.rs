@@ -5,16 +5,23 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{
+    async_runtime, spawn_async, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle,
+};
 use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
+use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContext;
 use stash::stash::{Stash, WatcherHandle};
+use std::iter;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio::task::AbortHandle;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -544,6 +551,91 @@ impl MailSession {
         .await
         .map_err(UserSessionError::from)
     }
+
+    pub fn start_background_execution(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+        let (sender, abort) = mpsc::channel(1);
+
+        let handle = spawn_async(ctx.clone(), async move {
+            let Some(primary_account) = ctx.get_primary_account().await? else {
+                return Ok(());
+            };
+            let Some(session) = ctx
+                .get_account_sessions(primary_account.remote_id.clone())
+                .await?
+                .pop()
+            else {
+                return Ok(());
+            };
+            let primary_user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+
+            let other_sessions_iter = ctx
+                .get_sessions()
+                .await?
+                .into_iter()
+                .filter(|session| session.account_id != primary_account.remote_id)
+                .unique_by(|session| session.account_id.clone());
+
+            let mut other_user_ctxs = vec![];
+
+            for session in other_sessions_iter {
+                let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+                user_ctx.terminate_queue_executors();
+                other_user_ctxs.push(user_ctx);
+            }
+
+            primary_user_ctx.terminate_queue_executors();
+            if !abort.is_empty() {
+                let callback = move || callback.on_update();
+                _ = async_runtime().spawn_blocking(callback).await;
+                return Ok(());
+            }
+
+            for user_ctx in iter::once(primary_user_ctx.clone()).chain(other_user_ctxs.clone()) {
+                let send_executor = user_ctx
+                    .action_queue()
+                    .new_executor_with_group(SEND_ACTION_GROUP);
+
+                while let Some(_) = send_executor.execute_one().await? {
+                    if !abort.is_empty() {
+                        let callback = move || callback.on_update();
+                        _ = async_runtime().spawn_blocking(callback).await;
+                        return Ok(());
+                    }
+                }
+            }
+
+            if !abort.is_empty() {
+                let callback = move || callback.on_update();
+                _ = async_runtime().spawn_blocking(callback).await;
+                return Ok(());
+            }
+
+            for user_ctx in iter::once(primary_user_ctx).chain(other_user_ctxs) {
+                let default_executor = user_ctx.action_queue().new_executor();
+
+                while let Some(_) = default_executor.execute_one().await? {
+                    if !abort.is_empty() {
+                        let callback = move || callback.on_update();
+                        _ = async_runtime().spawn_blocking(callback).await;
+                        return Ok(());
+                    }
+                }
+            }
+
+            let callback = move || callback.on_update();
+            _ = async_runtime().spawn_blocking(callback).await;
+            Result::<_, RealProtonMailError>::Ok(())
+        });
+
+        Ok(Arc::new(BackgroundExecutionHandle {
+            sender,
+            handle: handle.abort_handle(),
+        }))
+    }
 }
 
 #[uniffi_export]
@@ -752,5 +844,38 @@ impl WatchedSessions {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedSessions {
         WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct BackgroundExecutionHandle {
+    sender: mpsc::Sender<()>,
+    handle: AbortHandle,
+}
+
+#[uniffi_export]
+impl BackgroundExecutionHandle {
+    pub async fn abort(&self) {
+        if !self.sender.is_closed() && !self.handle.is_finished() {
+            if let Err(e) = self.sender.send(()).await {
+                tracing::error!(
+                    "Critical: Could not notify task to abort, force it to finish, details: `{e}`"
+                );
+                self.handle.abort();
+            }
+        }
+    }
+}
+
+impl Drop for BackgroundExecutionHandle {
+    fn drop(&mut self) {
+        if !self.sender.is_closed() && !self.handle.is_finished() {
+            if let Err(e) = self.sender.blocking_send(()) {
+                tracing::error!(
+                    "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
+                );
+                self.handle.abort();
+            }
+        }
     }
 }
