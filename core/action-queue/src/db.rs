@@ -6,6 +6,7 @@ use crate::action;
 use crate::action::{Action, ActionId, Metadata, Priority, Resources};
 use chrono::{DateTime, Utc};
 use indoc::indoc;
+use proton_sqlite3::rusqlite::ToSql;
 use proton_sqlite3::{Migration, MigratorError};
 use stash::exports::SqliteError;
 use stash::macros::Model;
@@ -237,12 +238,34 @@ impl StoredAction {
     ///
     pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Create dependencies.
-        for dep in &self.dependencies {
-            bond.execute(
-                "INSERT OR IGNORE INTO action_queue_dependencies VALUES (?,?)",
-                params![self.id, *dep],
-            )
-            .await?;
+
+        if !self.dependencies.is_empty() {
+            // Insert or ignore doesn't take into account that the foreign key does not exist.
+            // This is an SQLite limitation. So we need to manually check this before inserts.
+            #[allow(trivial_casts)]
+            let parameters = self
+                .dependencies
+                .iter()
+                .map(|i| Box::new(*i) as Box<dyn ToSql + Send>)
+                .collect::<Vec<_>>();
+            let placeholders = stash::utils::placeholders(parameters.len());
+            let dependency_ids = bond
+                .query_values::<_, ActionId>(
+                    format!(
+                        "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
+                        Self::table_name()
+                    ),
+                    parameters,
+                )
+                .await?;
+
+            for dep in dependency_ids {
+                bond.execute(
+                    "INSERT OR IGNORE INTO action_queue_dependencies VALUES (?,?)",
+                    params![self.id, dep],
+                )
+                .await?;
+            }
         }
 
         // Create resources

@@ -23,7 +23,7 @@ tracing = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber = "0.3"
+tracing-subscriber = { workspace = true }
 pretty_assertions = { workspace = true }
 clap = { workspace = true }
 tempdir = { workspace = true }
