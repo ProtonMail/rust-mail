@@ -560,6 +560,18 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Functionality to execute pending actions for all logged in accounts in controlled manner.
+    ///
+    /// This method is ment to be executed when putting application to sleep or running it in the background.
+    /// It stops automatic execution of the queues and sequentially execute actions in following priority:
+    /// * Send actions for primary account,
+    /// * Send actions for secondary accounts,
+    /// * Other actions for primary account,
+    /// * Other actions for secondary accounts,
+    ///
+    /// It will stop when aborded or when finished whatever comes first.
+    /// On exit the callback will be triggered to notify caller that it finished.
+    ///
     pub fn start_background_execution(
         &self,
         callback: Box<dyn LiveQueryCallback>,
