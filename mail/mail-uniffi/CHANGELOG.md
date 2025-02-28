@@ -13,8 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `MailSession::new` does not accept optional network_callback anymore
 
 ### Fixed
+
   - [ET-2260] Undoing drafts is no longer causing "Opened a non-draft message as a draft".
     - Additionally prefetching and mail scroller is no longer overriding draft message metadata.
+
+### Added
+
+  - [ET-2241] `start_background_execution` method on `MailSession`, to finish any peding tasks before app is terminated.
+
 
 ## [0.50.0] - 2025-02-27
 
