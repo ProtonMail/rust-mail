@@ -7,6 +7,7 @@ use crate::action::{
     Handler, Metadata, Priority, Resources, Type, WriterGuard,
 };
 use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction, DEFAULT_LOCK_TIMEOUT};
+use crate::network::WaitForOnline;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
@@ -262,6 +263,7 @@ pub struct Queue {
 pub(crate) struct Shared {
     stash: Stash,
     factory: RwLock<Factory>,
+    wait_for_online: Arc<dyn WaitForOnline>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
@@ -293,7 +295,7 @@ pub enum ActionRemoteOutput<Remote> {
     /// Action was executed successfully on local and on remote.
     Executed(Remote),
     /// Action could not be executed on the remote at this time and was queued.
-    Queued(ActionId),
+    Queued(ActionId, QueuedActionReason),
 }
 
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
@@ -312,8 +314,8 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the database migration failed.
-    pub async fn new(stash: Stash) -> Result<Self> {
-        Self::with_factory(stash, Factory::default()).await
+    pub async fn new(stash: Stash, check_for_network: Arc<dyn WaitForOnline>) -> Result<Self> {
+        Self::with_factory(stash, Factory::default(), check_for_network).await
     }
 
     /// Create a new queue with the given `stash` and `factory`;
@@ -321,7 +323,11 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the database migration failed.
-    pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
+    pub async fn with_factory(
+        stash: Stash,
+        factory: Factory,
+        wait_for_online: Arc<dyn WaitForOnline>,
+    ) -> Result<Self> {
         let mut tether = stash.connection();
         db::create_tables(&mut tether).await?;
         let default_context = Arc::new(());
@@ -333,6 +339,7 @@ impl Queue {
             execution_contexts: RwLock::new(HashMap::new()),
             broadcast_sender: sender,
             queued_action_notifier: tokio::sync::Notify::new(),
+            wait_for_online,
         });
         let queue = Self {
             shared,
@@ -622,7 +629,20 @@ pub enum QueuedActionState {
     /// The action was executed, which led to either a success or failure result.
     Executed(ActionId),
     /// The action was deferred due to lack of network.
-    Queued(ActionId),
+    Queued(ActionId, QueuedActionReason),
+}
+
+/// Reason why the action was queued
+///
+#[derive(Debug, Clone, Copy)]
+pub enum QueuedActionReason {
+    /// Action execution failed because of the network
+    ///
+    Network,
+    // In the future we may want to expand it
+    /// Action execution failed because of other reason
+    ///
+    Other,
 }
 
 /// Wrapper trait around the actual action type.
@@ -679,7 +699,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 
             Ok(match output {
                 ActionRemoteOutput::Executed(_) => QueuedActionState::Executed(self.action_id),
-                ActionRemoteOutput::Queued(id) => QueuedActionState::Queued(id),
+                ActionRemoteOutput::Queued(id, reason) => QueuedActionState::Queued(id, reason),
             })
         })
     }
@@ -793,6 +813,7 @@ impl QueueExecutor {
         };
 
         let action_id = action.id.unwrap();
+
         let action_type = action.action_type.clone();
         debug!(
             "Next Action: id={} type={} debug={}",
@@ -913,32 +934,49 @@ impl QueueAutoExecutor {
                 }
             }
 
-            let should_wait = match executor
+            let followup = match executor
                 .execute_one()
                 .instrument(
                     debug_span!("Auto Execute", id=?executor.id, group=?executor.action_group),
                 )
                 .await
             {
-                Ok(state) => {
-                    // If none is returned it means there was nothing to execute.
-                    state.is_none()
+                Ok(None) => ActionExecutionFollowup::WaitForAction,
+                Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
+                    ActionExecutionFollowup::WaitForNetwork
+                }
+                Ok(Some(QueuedActionState::Executed(_))) => ActionExecutionFollowup::PickNextAction,
+                Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Other))) => {
+                    ActionExecutionFollowup::PickNextAction
                 }
                 Err(e) => {
                     error!("Failed to execute action: {e}");
-                    false
+                    ActionExecutionFollowup::PickNextAction
                 }
             };
 
-            if should_wait {
-                // We currently wait for a signal from an action queue to start executing.
-                // The timeout is here to catch potential changes made in another process.
-                // This can be revisited once we have a cross process database observer.
-                let _ = tokio::time::timeout(
-                    DEFAULT_LOCK_TIMEOUT,
-                    executor.shared.queued_action_notifier.notified(),
-                )
-                .await;
+            match followup {
+                ActionExecutionFollowup::WaitForAction => {
+                    // We currently wait for a signal from an action queue to start executing.
+                    // The timeout is here to catch potential changes made in another process.
+                    // This can be revisited once we have a cross process database observer.
+                    let _ = tokio::time::timeout(
+                        DEFAULT_LOCK_TIMEOUT,
+                        executor.shared.queued_action_notifier.notified(),
+                    )
+                    .await;
+                }
+                ActionExecutionFollowup::WaitForNetwork => {
+                    // We currently wait for a signal from network status observer to start executing.
+                    // The timeout is here to catch potential changes made in another process.
+                    // This can be revisited once we have a cross process database observer.
+                    let _ = tokio::time::timeout(
+                        DEFAULT_LOCK_TIMEOUT,
+                        executor.shared.wait_for_online.wait_for_online(),
+                    )
+                    .await;
+                }
+                ActionExecutionFollowup::PickNextAction => (),
             }
         }
     }
@@ -947,6 +985,13 @@ impl QueueAutoExecutor {
     pub fn terminate(&self) {
         self.abort_handle.abort();
     }
+}
+
+#[derive(Clone, Copy)]
+enum ActionExecutionFollowup {
+    WaitForAction,
+    WaitForNetwork,
+    PickNextAction,
 }
 
 /// Manages a pool of queue auto executors.
@@ -1067,7 +1112,7 @@ async fn execute_action_remote<T: Action>(
     let bond = match guard.transaction(tether).await {
         Ok(tx) => tx,
         Err(ExecutionGuardError::Expired) => {
-            return Ok(ActionRemoteOutput::Queued(id));
+            return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Other));
         }
         Err(ExecutionGuardError::Stash(e)) => return Err(e.into()),
     };
@@ -1084,10 +1129,10 @@ async fn execute_action_remote<T: Action>(
                 if e.is_network_failure() {
                     debug!("Action remains in queue due to lack of network");
                     // if this failed due to network error we should leave it in the queue.
-                    return Ok(ActionRemoteOutput::Queued(id));
+                    return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
                 } else if e.is_writer_guard_expired() {
                     debug!("Action remains in queue due to expired writer guard");
-                    return Ok(ActionRemoteOutput::Queued(id));
+                    return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Other));
                 }
                 debug!("Reverting self and dependees");
                 match cancel_action_with_dependees(shared, &bond, id).await {

@@ -126,6 +126,7 @@
 //! [`Factory`]: action::Factory
 pub mod action;
 pub mod db;
+pub mod network;
 pub mod observers;
 pub mod queue;
 

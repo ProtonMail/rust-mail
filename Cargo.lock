@@ -4164,9 +4164,11 @@ name = "proton-action-queue"
 version = "0.7.29"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "clap",
  "derive_more 2.0.1",
+ "futures",
  "indoc",
  "parking_lot",
  "pretty_assertions",
@@ -4533,6 +4535,7 @@ name = "proton-mail-test-utils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64",
  "bytes",
  "flume",

@@ -1,9 +1,12 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::models::LabelError;
 use proton_action_queue::action::WriterGuardError;
+use proton_action_queue::network::WaitForOnline;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor};
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use stash::stash::{Stash, StashError};
 
 use super::CoreContextError;
@@ -15,8 +18,11 @@ pub struct ActionQueueContext {
 }
 
 impl ActionQueueContext {
-    pub async fn new(user_stash: Stash) -> Result<Self, CoreContextError> {
-        let action_queue = Queue::new(user_stash).await?;
+    pub async fn new(
+        user_stash: Stash,
+        wait_for_online: impl WaitForOnline + 'static,
+    ) -> Result<Self, CoreContextError> {
+        let action_queue = Queue::new(user_stash, Arc::new(wait_for_online)).await?;
         let queue_executor = action_queue.new_executor().into_auto_executor();
 
         Ok(Self {
@@ -70,5 +76,39 @@ impl From<WriterGuardError> for CoreActionError {
             WriterGuardError::Expired => Self::QueueWriterGuardExpired,
             WriterGuardError::Stash(e) => Self::Stash(e),
         }
+    }
+}
+
+/// Dummy implementation of [`WaitForOnline`] that always returns
+/// immediately
+///
+pub struct DummyWaitForOnline;
+impl From<StatusWatcher> for DummyWaitForOnline {
+    fn from(_: StatusWatcher) -> Self {
+        Self
+    }
+}
+#[async_trait::async_trait]
+impl WaitForOnline for DummyWaitForOnline {
+    async fn wait_for_online(&self) {}
+}
+
+/// Imlementation of [`WaitForOnline`] trait that uses
+/// API Status Watcher
+///
+pub struct CheckNetworkStatus {
+    watcher: StatusWatcher,
+}
+
+impl From<StatusWatcher> for CheckNetworkStatus {
+    fn from(watcher: StatusWatcher) -> Self {
+        Self { watcher }
+    }
+}
+
+#[async_trait::async_trait]
+impl WaitForOnline for CheckNetworkStatus {
+    async fn wait_for_online(&self) {
+        self.watcher.subscribe().wait_for_online().await;
     }
 }

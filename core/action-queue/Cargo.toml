@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
 indoc = { workspace = true }
@@ -27,6 +28,8 @@ tracing-subscriber = { workspace = true }
 pretty_assertions = { workspace = true }
 clap = { workspace = true }
 tempdir = { workspace = true }
+futures = { workspace = true }
+
 
 [lints]
 workspace = true
