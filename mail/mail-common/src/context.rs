@@ -15,11 +15,11 @@ use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,
 };
-use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
@@ -183,7 +183,6 @@ impl MailContext {
         mail_cache_size: u64,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
-        network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -194,7 +193,6 @@ impl MailContext {
             key_chain,
             initializers,
             api_config,
-            network_callback,
             core_cache_path,
             mail_cache_size,
         )
@@ -463,16 +461,6 @@ impl MailContext {
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.delete_account(user_id).await?)
-    }
-
-    /// Set the network connected status.
-    pub fn set_network_connected(&self, value: bool) {
-        self.core_context.set_network_connected(value)
-    }
-
-    /// Check if the network is connected.
-    pub fn is_network_connected(&self) -> bool {
-        self.core_context.is_network_corrected()
     }
 
     /// Path where mail content should be cached for user with `user_id`.

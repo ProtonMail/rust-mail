@@ -81,7 +81,6 @@ async fn main() {
         50 * 1204 * 1024,
         Arc::new(keychain),
         Config::default(),
-        None,
     )
     .await
     .unwrap();

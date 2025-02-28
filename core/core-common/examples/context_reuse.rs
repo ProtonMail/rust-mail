@@ -39,7 +39,6 @@ async fn main() {
         key_chain,
         [],
         config,
-        None,
         cache_dir,
         1024 * 1024,
     )

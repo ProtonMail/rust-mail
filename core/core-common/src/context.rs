@@ -30,7 +30,6 @@ use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -219,11 +218,6 @@ impl CoreSessionState {
     }
 }
 
-/// Callback when the status of the network changes.
-pub trait NetworkStatusChanged: Send + Sync {
-    fn on_network_status_changed(&self, online: bool);
-}
-
 /// Result for core operations.
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
@@ -231,12 +225,10 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
-    network_connected: AtomicBool,
     user_db_path: PathBuf,
     account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-    network_callback: Option<Box<dyn NetworkStatusChanged>>,
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
     sender_image_cache_size: u64,
@@ -270,7 +262,6 @@ impl Context {
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
-        network_callback: Option<Box<dyn NetworkStatusChanged>>,
         cache_path: impl Into<PathBuf>,
         sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
@@ -285,12 +276,10 @@ impl Context {
 
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
-            network_connected: AtomicBool::new(true),
             user_db_path,
             key_chain,
             account_stash,
             user_db_initializers: initializers,
-            network_callback,
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             sender_image_cache_size,
@@ -692,22 +681,6 @@ impl Context {
         tx.commit().await?;
 
         Ok(())
-    }
-
-    pub fn set_network_connected(&self, value: bool) {
-        let old_value = self.network_connected.load(Ordering::Acquire);
-        if old_value != value {
-            self.network_connected.store(value, Ordering::Release);
-            if let Some(cb) = &self.network_callback {
-                cb.on_network_status_changed(value);
-            }
-        }
-    }
-
-    /// Check whether a network connection is available.
-    #[must_use]
-    pub fn is_network_corrected(&self) -> bool {
-        self.network_connected.load(Ordering::Relaxed)
     }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
