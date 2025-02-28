@@ -12,8 +12,8 @@ use tracing::instrument;
 use crate::{
     datatypes::{ReadFilter, ViewMode},
     mail_scroller::MailScroller,
-    models::{Conversation, MailSettings, Message},
-    MailContextError, MailUserContext,
+    models::{Conversation, DraftMetadata, MailSettings, Message},
+    AppError, MailContextError, MailUserContext,
 };
 
 pub type PrefetchNotify = OnceLock<flume::Sender<()>>;
@@ -190,7 +190,28 @@ impl Prefetch {
         for item in items.into_iter().take(self.prefetch_count) {
             let local_id = item.local_id.unwrap();
             tracing::debug!("Prefetching message {local_id} body",);
-            let _ = Message::message_body(ctx.clone(), local_id).await;
+            let mut tether = ctx.user_stash().connection();
+            if let Some(remote_id) = item.remote_id.clone() {
+                if DraftMetadata::exists_for_message_with_remote_id(remote_id.clone(), &tether)
+                    .await?
+                {
+                    tracing::warn!(
+                        remote_id = ?remote_id,
+                        "Skipping draft, we already have it in the local DB"
+                    );
+                    continue;
+                }
+            }
+            let _ = (async {
+                let saved_message = Message::load(local_id, &tether)
+                    .await?
+                    .ok_or(AppError::MessageMissing(local_id))?;
+
+                saved_message
+                    .fetch_message_body(ctx.clone(), &mut tether)
+                    .await
+            })
+            .await;
             yield_now().await;
         }
 

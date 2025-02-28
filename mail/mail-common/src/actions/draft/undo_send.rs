@@ -1,4 +1,6 @@
-use crate::actions::draft::{local_draft_label_id, local_sent_label_id, SEND_ACTION_GROUP};
+use crate::actions::draft::{
+    local_all_draft_label_id, local_draft_label_id, local_sent_label_id, SEND_ACTION_GROUP,
+};
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::models::Message;
@@ -59,6 +61,7 @@ pub struct UndoSendHandler {}
 impl proton_action_queue::action::Handler for UndoSendHandler {
     type Action = UndoSend;
     type Context = MailUserContext;
+
     async fn apply_local(
         &self,
         _: ActionId,
@@ -87,6 +90,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             return Err(UndoError::MessageCanNotBeUndoSent(action.id).into());
         }
 
+        let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = local_sent_label_id(tx).await?;
 
@@ -105,6 +109,10 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             .await
             .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
 
+        Message::apply_label(local_all_draft_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to apply all draft label: {e:?}"))?;
+
         action.remote_id = Some(remote_id);
         Ok(())
     }
@@ -121,6 +129,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             return Ok(());
         };
 
+        let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = local_sent_label_id(tx).await?;
         message.flags.set(MessageFlags::SENT, true);
@@ -132,6 +141,10 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         Message::remove_label(local_draft_label_id, [action.id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove draft label: {e:?}"))?;
+
+        Message::remove_label(local_all_draft_label_id, [action.id], tx)
+            .await
+            .inspect_err(|e| error!("Failed to remove all draft label: {e:?}"))?;
 
         Message::apply_label(local_sent_label_id, [action.id], tx)
             .await
