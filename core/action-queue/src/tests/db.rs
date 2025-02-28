@@ -107,6 +107,33 @@ async fn action_store_and_retrieve() {
 }
 
 #[tokio::test]
+async fn action_store_with_non_existent_action_dependency_is_accepted() {
+    // It's possible to be in a situation where a given dependency action no longer exists because
+    // it was already executed. To make sure we can gracefully handle this case we should be able
+    // to gracefully accept this.
+    let state = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection();
+
+    let metadata = MetadataBuilder::new()
+        .with_debug_string("my debug string")
+        .with_dependency(ActionId::from(666))
+        .with_resource(&"Resource")
+        .unwrap()
+        .build();
+
+    let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+
+    let tx = conn.transaction().await.unwrap();
+    stored.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+}
+
+#[tokio::test]
 async fn action_execution_lock() {
     let state = TestAction {
         foo: "foo".to_string(),
