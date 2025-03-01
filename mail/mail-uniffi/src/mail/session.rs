@@ -27,7 +27,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 macro_rules! execution_checkpoint {
     ($execution_ctx:expr) => {{
         if $execution_ctx.should_stop() {
-            $execution_ctx.stop().await;
+            $execution_ctx.stop();
             return Ok(());
         }
     }};
@@ -637,7 +637,7 @@ impl MailSession {
                 }
             }
 
-            execution_ctx.stop().await;
+            execution_ctx.stop();
             Result::<_, RealProtonMailError>::Ok(())
         });
 
@@ -857,6 +857,11 @@ impl WatchedSessions {
     }
 }
 
+/// Handle for background activites execution.
+///
+/// It is meant to be hold by a caller of `start_background_execution` method.
+/// When dropped it will cease the execution.
+///
 #[derive(uniffi::Object)]
 pub struct BackgroundExecutionHandle {
     sender: mpsc::Sender<()>,
@@ -865,6 +870,10 @@ pub struct BackgroundExecutionHandle {
 
 #[uniffi_export]
 impl BackgroundExecutionHandle {
+    /// Abort background execution.
+    ///
+    /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
+    ///
     pub async fn abort(&self) {
         if !self.sender.is_closed() && !self.handle.is_finished() {
             if let Err(e) = self.sender.send(()).await {
@@ -890,6 +899,11 @@ impl Drop for BackgroundExecutionHandle {
     }
 }
 
+/// Internal representation of Execution.
+///
+/// It purpuose is to group all the operations which needs to happen,
+/// when execution is aborted.
+///
 struct BackgroundExecutionContext {
     abort: mpsc::Receiver<()>,
     callback: Box<dyn LiveQueryCallback>,
@@ -901,12 +915,18 @@ impl BackgroundExecutionContext {
         !self.abort.is_empty()
     }
 
-    pub async fn stop(self) {
-        let callback = move || self.callback.on_update();
-        _ = async_runtime().spawn_blocking(callback).await;
+    #[allow(clippy::unused_self)]
+    pub fn stop(self) {
+        tracing::debug!("Stoping execution of background activites");
+    }
+}
 
+impl Drop for BackgroundExecutionContext {
+    fn drop(&mut self) {
         self.musc
             .iter()
             .for_each(|ctx| ctx.unpause_queue_executors());
+
+        self.callback.on_update();
     }
 }

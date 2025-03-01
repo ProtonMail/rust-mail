@@ -881,10 +881,20 @@ impl QueueAutoExecutor {
         &self.id
     }
 
+    /// Pause auto execution.
+    ///
+    /// When executor is currently running it will pause before picking another task.
+    /// It will be paused until `unpause` is called.
+    ///
     pub fn pause(&self) {
         self.pause.send_replace(true);
     }
 
+    /// Unpause auto execution.
+    ///
+    /// It will have an effect only if executor was paused before calling `unpause`.
+    /// The execution will be resumed.
+    ///
     pub fn unpause(&self) {
         self.pause.send_replace(false);
     }
@@ -895,9 +905,14 @@ impl QueueAutoExecutor {
             executor.id, executor.action_group
         );
         loop {
+            // Inner pause loop, before picking any more work, make sure we should not pause.
             if *pause.borrow() {
+                let eid = executor.id();
+                tracing::debug!("Executor `{eid}` is PAUSED");
                 while pause.changed().await.is_ok() {
+                    // Break only when unpaused.
                     if !*pause.borrow() {
+                        tracing::debug!("Executor `{eid}` is running again after pause");
                         break;
                     }
                 }
@@ -967,12 +982,14 @@ impl QueueAutoExecutorPool {
         }
     }
 
+    /// Pause all queue executors.
     pub fn pause(&self) {
         for executor in &self.executors {
             executor.pause();
         }
     }
 
+    /// Unpause all queue executors.
     pub fn unpause(&self) {
         for executor in &self.executors {
             executor.unpause();
