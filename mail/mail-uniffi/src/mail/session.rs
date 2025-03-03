@@ -1,4 +1,5 @@
 use crate::core::datatypes::ApiConfig;
+use crate::core::human_verification::{ChallengeNotifier, ChallengeNotifierWrap};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
@@ -13,6 +14,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::Action;
 use proton_action_queue::db::StoredAction;
+use proton_api_core::human_verification::ChallengeObserver;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
@@ -189,12 +191,16 @@ impl MailSession {
     pub fn user_context_from_session(
         &self,
         session: Arc<StoredSession>,
+        challenge: Option<Arc<dyn ChallengeNotifier>>,
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
         async_runtime()
             .block_on(async move {
-                ctx.user_context_from_session(session.session(), None, None)
+                let challenge = challenge.map(ChallengeNotifierWrap::new);
+                let challenge = challenge.map(ChallengeObserver::new);
+
+                ctx.user_context_from_session(session.session(), None, challenge)
                     .map_ok(|ctx| self.user_ctx.insert(ctx))
                     .map_ok(MailUserSession::new)
                     .map_err(RealProtonMailError::from)

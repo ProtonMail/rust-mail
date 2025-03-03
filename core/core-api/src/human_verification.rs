@@ -70,7 +70,7 @@ pub trait ChallengeNotifier: Send + Sync + 'static {
 
 /// A type that holds registered [`ChallengeNotifier`]s.
 ///
-/// This is a placeholder for now and will be expanded in the future.
+/// This is a placeholder for now and will be expanded (or removed entirely) in the future.
 #[must_use]
 #[derive(Debug, Clone)]
 #[debug("ChallengeObserver")]
