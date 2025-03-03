@@ -241,6 +241,28 @@ pub fn async_runtime() -> &'static Runtime {
     &RUNTIME
 }
 
+/// Get slimmer version of the async runtime.
+///
+/// Comparing to [`async_runtime`] this takes very limited number of threads.
+/// It is to enable Rust SDK in apps with limited amount of memory.
+///
+#[must_use]
+pub fn async_runtime_slim() -> &'static Runtime {
+    // Those numbers are arbitrary
+    //
+    static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .max_blocking_threads(4)
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("Failed to init runtime")
+    });
+
+    &RUNTIME
+}
+
 /// Spawn an async function on the runtime.
 fn spawn_async<S, T, F>(ctx: impl AsRef<S>, future: F) -> JoinHandle<AsyncTaskResult<T>>
 where
