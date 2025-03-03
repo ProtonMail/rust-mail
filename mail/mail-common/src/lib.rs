@@ -118,7 +118,6 @@ pub enum AppError {
     RemoteLabelHasNoCounters(LabelId),
     #[error("Could not find counters for local label {0}")]
     LocalLabelHasNoCounters(LocalLabelId),
-
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
     #[error("Cache error: {0}")]

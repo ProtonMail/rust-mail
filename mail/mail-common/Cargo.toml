@@ -11,8 +11,9 @@ bitflags = { workspace = true }
 bytes = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
-derive_more = { workspace = true, features = ["try_from"]}
+derive_more = { workspace = true, features = ["try_from"] }
 email_address = { workspace = true }
+file-format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
@@ -42,6 +43,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 typed-builder = { workspace = true }
 url = { workspace = true }
+uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
 proton-mail-ids = { workspace = true }
 uniffi = { workspace = true, optional = true }

@@ -204,6 +204,10 @@ pub enum Mail {
     MessageAlreadySent = 2500,
     /// Can no longer undo send
     MessageSentCanNoLongerBeUndone = 2511,
+    /// Attachment Message already sent
+    AttachmentMessageAlreadySent = 11109,
+    /// Too Many Attachments
+    TooManyAttachments = 2024,
 }
 
 pub enum Payments {

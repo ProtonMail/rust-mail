@@ -1,6 +1,9 @@
+use crate::app::Command;
+use crate::app_model::path_select_popup::PathSelectClosure;
 use crate::app_model::{AppState, Popup};
 use anyhow::anyhow;
 use proton_mail_common::{MailContextError, MailboxError};
+use std::path::Path;
 
 /// Application messages.
 pub enum Messages {
@@ -22,15 +25,23 @@ pub enum Messages {
     /// Dismiss progress indicator (if any).
     DismissBackgroundProgress,
     /// Raise a popup window.
-    RaisePopup(Box<dyn Popup>),
+    RaisePopup(Box<dyn Popup + Send + 'static>),
     /// Dismiss active pop (if any).
     DismissPopup,
+    /// Raise a dialog to select file paths.
+    SelectFilePathPopup(PathSelectClosure),
 }
 
 impl Messages {
     /// Utility helper to create raise popup messages.
-    pub fn raise_popup(pop_up: impl Popup + 'static) -> Self {
+    pub fn raise_popup(pop_up: impl Popup + Send + 'static) -> Self {
         Self::RaisePopup(Box::new(pop_up))
+    }
+
+    pub fn select_file_path(
+        on_select: impl Fn(&Path) -> Command<Messages> + Send + 'static,
+    ) -> Self {
+        Self::SelectFilePathPopup(Box::new(on_select))
     }
 }
 

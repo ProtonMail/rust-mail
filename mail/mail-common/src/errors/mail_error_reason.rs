@@ -13,6 +13,7 @@ pub enum MailErrorReason {
     DraftSaveSendReason(DraftSaveSendErrorReason),
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
+    DraftAttachmentReason(DraftAttachmentErrorReason),
     EventReason(EventErrorReason),
     OtherReason(OtherErrorReason),
 }
@@ -149,6 +150,8 @@ pub enum DraftSaveSendErrorReason {
     MessageDoesNotExist,
     /// Message is not a draft
     MessageIsNotADraft,
+    /// Message is missing attachment uploads
+    MissingAttachmentUploads,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.
@@ -166,6 +169,23 @@ pub enum DraftUndoSendErrorReason {
     MessageIsNotADraft,
     /// This message no longer exists.
     MessageDoesNotExist,
+}
+
+/// Failure cases for draft attachment errors.
+#[derive(Debug)]
+pub enum DraftAttachmentErrorReason {
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message does not exist on the server
+    MessageDoesNotExistOnServer,
+    /// Failed to encrypt the attachment
+    Crypto,
+    /// Too Many Attachments
+    TooManyAttachments,
+    /// Message was already sent.
+    MessageAlreadySent,
+    /// the attachment size exceeds the upper limit
+    AttachmentTooLarge,
 }
 
 /// Specific Reason when attempting to discard a draft.

@@ -1288,42 +1288,15 @@ impl Message {
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids = {
-                // Create attachment from partial metadata present in a message.
-                // If attachment record already exists, only the message ids and the
-                // address id are updated.
-                // If no record exists we create a new one.
-                let mut result = Vec::with_capacity(self.attachments_metadata.len());
-                for metadata in &mut self.attachments_metadata {
-                    let mut attachment = Attachment::find_first(
-                        "WHERE remote_id = ?",
-                        params![metadata.remote_id.clone()],
-                        bond,
-                    )
-                    .await?
-                    .unwrap_or(Attachment::from(metadata.clone()));
+            let local_ids = Attachment::create_or_update_from_message_metadata(self, bond).await?;
 
-                    attachment.local_address_id = Some(self.local_address_id);
-                    attachment.remote_address_id = Some(self.remote_address_id.clone());
-                    attachment.local_message_id = self.local_id;
-                    attachment.remote_message_id = self.remote_id.clone();
-                    attachment
-                        .save(bond)
-                        .await
-                        .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
-                    let local_id = attachment.local_id.expect("Should be set");
-                    metadata.local_id = Some(local_id);
-
-                    bond.execute(
-                        "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
-                        params![self.local_id.unwrap(), local_id],
-                    )
-                    .await?;
-
-                    result.push(local_id);
-                }
-                result
-            };
+            for id in &local_ids {
+                bond.execute(
+                    "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
+                    params![self.local_id.unwrap(), *id],
+                )
+                .await?;
+            }
 
             #[allow(trivial_casts)]
             bond.execute(
@@ -3239,6 +3212,35 @@ impl MessageBodyMetadata {
             },
             api_message_body.body,
         )
+    }
+
+    /// Update the `header`, `parsed_headers` and `remote_message_id` fields after the
+    /// draft has been created or updated on the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn update_fields_after_draft_create_or_update(
+        &self,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            formatdoc! {"
+            UPDATE {} SET
+                header = ?,
+                parsed_headers = ?,
+                remote_message_id = ?
+            WHERE local_message_id = ?
+        ", Self::table_name()},
+            params![
+                self.header.clone(),
+                self.parsed_headers.clone(),
+                self.remote_message_id.clone(),
+                self.local_message_id.unwrap()
+            ],
+        )
+        .await?;
+        Ok(())
     }
 }
 

@@ -2,6 +2,7 @@ use super::login_flow::HumanChallenge;
 use crate::UniffiEnum;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
+    DraftAttachmentErrorReason as RealDraftAttachmentErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
     DraftSaveSendErrorReason as RealDraftSaveSendErrorReason,
@@ -137,6 +138,8 @@ pub enum DraftSaveSendErrorReason {
     MessageDoesNotExist,
     /// Message is not a draft
     MessageIsNotADraft,
+    /// Some attachments have not yet been uploaded.
+    MissingAttachmentUploads,
 }
 
 impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
@@ -161,6 +164,9 @@ impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
             RealDraftSaveSendErrorReason::AlreadySent => Self::AlreadySent,
             RealDraftSaveSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
             RealDraftSaveSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+            RealDraftSaveSendErrorReason::MissingAttachmentUploads => {
+                Self::MissingAttachmentUploads
+            }
         }
     }
 }
@@ -211,6 +217,37 @@ impl From<RealDraftDiscardErrorReason> for DraftDiscardErrorReason {
         match value {
             RealDraftDiscardErrorReason::DeleteFailed => Self::DeleteFailed,
             RealDraftDiscardErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftAttachmentErrorReason {
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message does not exist on the server
+    MessageDoesNotExistOnServer,
+    /// Failed to encrypt the attachment
+    Crypto,
+    /// Too Many Attachments
+    TooManyAttachments,
+    /// Message was already sent.
+    MessageAlreadySent,
+    /// Attachment is too large
+    AttachmentTooLarge,
+}
+
+impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
+    fn from(value: RealDraftAttachmentErrorReason) -> Self {
+        match value {
+            RealDraftAttachmentErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftAttachmentErrorReason::MessageDoesNotExistOnServer => {
+                Self::MessageDoesNotExistOnServer
+            }
+            RealDraftAttachmentErrorReason::Crypto => Self::Crypto,
+            RealDraftAttachmentErrorReason::TooManyAttachments => Self::TooManyAttachments,
+            RealDraftAttachmentErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+            RealDraftAttachmentErrorReason::AttachmentTooLarge => Self::AttachmentTooLarge,
         }
     }
 }

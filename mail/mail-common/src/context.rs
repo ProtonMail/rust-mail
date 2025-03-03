@@ -20,6 +20,7 @@ use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,
 };
+use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
@@ -40,6 +41,8 @@ pub enum MailContextError {
     AccountMissing(UserId),
     #[error("A Cryptography error occurred")]
     Crypto,
+    #[error(transparent)]
+    AttachmentEncryption(#[from] AttachmentEncryptionError),
     #[error("Build Error: {0}")]
     Build(#[from] BuildError),
     #[error("Keychain Error: {0}")]
