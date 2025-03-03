@@ -52,6 +52,7 @@ pub use account_details::*;
 pub use avatar::*;
 pub use connection_status::*;
 pub use contact_list::*;
+use proton_api_mail::services::proton::common::MessageId;
 use stash::stash::Tether;
 
 use core::fmt;
@@ -1137,6 +1138,39 @@ impl_into_id!(LocalContactEmailId);
 impl_into_id!(LocalAttachmentId);
 impl_into_id!(LocalMessageId);
 impl_into_id!(LocalConversationId);
+
+/// Remote ID
+///
+/// This data type should be used as a last resort.
+/// If possible, use [`Id`] instead.
+///
+/// This struct is a simple wrapper around [`String`] and
+/// is used to formalise all IDs used by our API.
+///
+#[derive(Clone, Debug, Eq, Hash, PartialEq, UniffiRecord)]
+pub struct RemoteId {
+    value: String,
+}
+
+macro_rules! impl_into_remote_id {
+    ($name:ident) => {
+        impl From<RemoteId> for $name {
+            fn from(id: RemoteId) -> Self {
+                Self::from(id.value)
+            }
+        }
+
+        impl From<$name> for RemoteId {
+            fn from(id: $name) -> Self {
+                Self {
+                    value: id.into_inner(),
+                }
+            }
+        }
+    };
+}
+
+impl_into_remote_id!(MessageId);
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
