@@ -632,7 +632,7 @@ impl MailSession {
         }))
     }
 
-    pub async fn are_unsent_messages_in_queue(&self) -> Result<bool, UserSessionError> {
+    pub async fn all_messages_were_sent(&self) -> Result<bool, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
