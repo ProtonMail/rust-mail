@@ -37,7 +37,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = context.new_login_flow().unwrap();
+    let mut flow = context.new_login_flow(None).unwrap();
 
     flow.login(user_email, user_password, LoginExtraInfo::default())
         .await

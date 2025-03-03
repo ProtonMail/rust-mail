@@ -85,7 +85,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = ctx.new_login_flow().unwrap();
+    let mut flow = ctx.new_login_flow(None).unwrap();
 
     flow.login(username, password, LoginExtraInfo::default())
         .await

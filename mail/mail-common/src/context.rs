@@ -229,8 +229,8 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub fn new_login_flow(&self) -> MailContextResult<Flow> {
-        Ok(self.core_context.new_login_flow()?)
+    pub fn new_login_flow(&self, challenge: Option<ChallengeObserver>) -> MailContextResult<Flow> {
+        Ok(self.core_context.new_login_flow(challenge)?)
     }
 
     /// Resume a partially completed login flow.
@@ -253,10 +253,11 @@ impl MailContext {
         &self,
         user_id: UserId,
         session_id: AuthId,
+        challenge: Option<ChallengeObserver>,
     ) -> MailContextResult<Flow> {
         let flow = self
             .core_context
-            .resume_login_flow(user_id, session_id)
+            .resume_login_flow(user_id, session_id, challenge)
             .await?;
 
         Ok(flow)
