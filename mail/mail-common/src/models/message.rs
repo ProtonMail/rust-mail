@@ -2727,6 +2727,28 @@ impl Message {
     pub fn is_draft(&self) -> bool {
         self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
     }
+
+    /// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on
+    /// local ids. This method translates remote id into local [`Id`].
+    ///
+    /// It may happen, that the [`RemoteId`] points to the message that does not exist in our
+    /// database yet. In that case, Rust SDK will fetch necessary information from API before returning the id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network failed or if the database cannot write/read message.
+    ///
+    pub async fn find_or_fetch_by_remote_id(
+        ctx: Arc<MailUserContext>,
+        remote_id: MessageId,
+    ) -> Result<LocalMessageId, MailContextError> {
+        let tether = &ctx.user_stash().connection();
+        if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
+            return Ok(message.local_id.expect("Local ID"));
+        }
+        let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
+        Ok(message.local_id.expect("Local ID"))
+    }
 }
 
 pub struct MessageWatcher {

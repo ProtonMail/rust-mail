@@ -13,7 +13,7 @@ use super::datatypes::{
 };
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{Id, RemoteId};
 use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
@@ -1093,6 +1093,31 @@ pub async fn move_messages(
         .await
         .map(|_| ())
         .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}
+
+/// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on
+/// local ids. This method translates remote id into local [`Id`].
+///
+/// It may happen, that the [`RemoteId`] points to the message that does not exist in our
+/// database yet. In that case, Rust SDK will fetch necessary information from API before returning the id.
+///
+/// # Errors
+///
+/// Returns an error if the network failed or if the database cannot write/read message.
+///
+#[uniffi_export]
+pub async fn resolve_message_id(
+    session: Arc<MailUserSession>,
+    remote_id: RemoteId,
+) -> Result<Id, ActionError> {
+    let user_ctx = session.ctx()?;
+    uniffi_async(async move {
+        let local_id = RealMessage::find_or_fetch_by_remote_id(user_ctx, remote_id.into()).await?;
+        Ok::<_, RealProtonMailError>(local_id.into())
     })
     .await
     .map_err(ActionError::from)
