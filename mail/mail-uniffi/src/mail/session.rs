@@ -14,6 +14,7 @@ use itertools::Itertools;
 use proton_action_queue::action::Action;
 use proton_action_queue::db::StoredAction;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -964,9 +965,24 @@ async fn get_all_logged_in_mail_user_contexts(
         .filter(|session| session.account_id != primary_account.remote_id)
         .unique_by(|session| session.account_id.clone());
 
-    let mut all_user_ctxs = vec![primary_user_ctx.clone()];
+    // There might be a case when a User logs out the primary account before putting app in the background
+    let mut all_user_ctxs = if let Some(CoreAccountState::LoggedIn(_)) = ctx
+        .get_account_state(primary_user_ctx.user_id().clone())
+        .await?
+    {
+        vec![primary_user_ctx.clone()]
+    } else {
+        vec![]
+    };
 
     for session in other_sessions_iter {
+        // Make sure we deal only with Authenticated Sessions
+        let Some(CoreSessionState::Authenticated) =
+            ctx.get_session_state(session.remote_id.clone()).await?
+        else {
+            continue;
+        };
+
         let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
         all_user_ctxs.push(user_ctx);
     }
