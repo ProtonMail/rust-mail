@@ -5,18 +5,33 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{
+    async_runtime, spawn_async, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle,
+};
 use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
+use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::MailContext;
+use proton_mail_common::{MailContext, MailUserContext};
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio::task::AbortHandle;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
+
+macro_rules! execution_checkpoint {
+    ($execution_ctx:expr) => {{
+        if $execution_ctx.should_stop() {
+            $execution_ctx.stop();
+            return Ok(());
+        }
+    }};
+}
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -544,6 +559,93 @@ impl MailSession {
         .await
         .map_err(UserSessionError::from)
     }
+
+    /// Functionality to execute pending actions for all logged in accounts in controlled manner.
+    ///
+    /// This method is ment to be executed when putting application to sleep or running it in the background.
+    /// It stops automatic execution of the queues and sequentially execute actions in following priority:
+    /// * Send actions for primary account,
+    /// * Send actions for secondary accounts,
+    /// * Other actions for primary account,
+    /// * Other actions for secondary accounts,
+    ///
+    /// It will stop when aborded or when finished whatever comes first.
+    /// On exit the callback will be triggered to notify caller that it finished.
+    ///
+    pub fn start_background_execution(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+        let (sender, abort) = mpsc::channel(1);
+
+        let handle = spawn_async(ctx.clone(), async move {
+            let Some(primary_account) = ctx.get_primary_account().await? else {
+                return Ok(());
+            };
+            let Some(session) = ctx
+                .get_account_sessions(primary_account.remote_id.clone())
+                .await?
+                .pop()
+            else {
+                return Ok(());
+            };
+            let primary_user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+
+            let other_sessions_iter = ctx
+                .get_sessions()
+                .await?
+                .into_iter()
+                .filter(|session| session.account_id != primary_account.remote_id)
+                .unique_by(|session| session.account_id.clone());
+
+            let mut all_user_ctxs = vec![primary_user_ctx.clone()];
+
+            for session in other_sessions_iter {
+                let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+                user_ctx.pause_queue_executors();
+                all_user_ctxs.push(user_ctx);
+            }
+
+            primary_user_ctx.pause_queue_executors();
+
+            let execution_ctx = BackgroundExecutionContext {
+                abort,
+                callback,
+                musc: all_user_ctxs.clone(),
+            };
+
+            execution_checkpoint!(execution_ctx);
+
+            for user_ctx in &all_user_ctxs {
+                let send_executor = user_ctx
+                    .action_queue()
+                    .new_executor_with_group(SEND_ACTION_GROUP);
+
+                while let Some(_) = send_executor.execute_one().await? {
+                    execution_checkpoint!(execution_ctx);
+                }
+            }
+
+            execution_checkpoint!(execution_ctx);
+
+            for user_ctx in &all_user_ctxs {
+                let default_executor = user_ctx.action_queue().new_executor();
+
+                while let Some(_) = default_executor.execute_one().await? {
+                    execution_checkpoint!(execution_ctx);
+                }
+            }
+
+            execution_ctx.stop();
+            Result::<_, RealProtonMailError>::Ok(())
+        });
+
+        Ok(Arc::new(BackgroundExecutionHandle {
+            sender,
+            handle: handle.abort_handle(),
+        }))
+    }
 }
 
 #[uniffi_export]
@@ -752,5 +854,79 @@ impl WatchedSessions {
         callback: Arc<dyn AsyncLiveQueryCallback>,
     ) -> WatchedSessions {
         WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
+    }
+}
+
+/// Handle for background activites execution.
+///
+/// It is meant to be hold by a caller of `start_background_execution` method.
+/// When dropped it will cease the execution.
+///
+#[derive(uniffi::Object)]
+pub struct BackgroundExecutionHandle {
+    sender: mpsc::Sender<()>,
+    handle: AbortHandle,
+}
+
+#[uniffi_export]
+impl BackgroundExecutionHandle {
+    /// Abort background execution.
+    ///
+    /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
+    ///
+    pub async fn abort(&self) {
+        if !self.sender.is_closed() && !self.handle.is_finished() {
+            if let Err(e) = self.sender.send(()).await {
+                tracing::error!(
+                    "Critical: Could not notify task to abort, force it to finish, details: `{e}`"
+                );
+                self.handle.abort();
+            }
+        }
+    }
+}
+
+impl Drop for BackgroundExecutionHandle {
+    fn drop(&mut self) {
+        if !self.sender.is_closed() && !self.handle.is_finished() {
+            if let Err(e) = self.sender.blocking_send(()) {
+                tracing::error!(
+                    "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
+                );
+                self.handle.abort();
+            }
+        }
+    }
+}
+
+/// Internal representation of Execution.
+///
+/// It purpuose is to group all the operations which needs to happen,
+/// when execution is aborted.
+///
+struct BackgroundExecutionContext {
+    abort: mpsc::Receiver<()>,
+    callback: Box<dyn LiveQueryCallback>,
+    musc: Vec<Arc<MailUserContext>>,
+}
+
+impl BackgroundExecutionContext {
+    pub fn should_stop(&self) -> bool {
+        !self.abort.is_empty()
+    }
+
+    #[allow(clippy::unused_self)]
+    pub fn stop(self) {
+        tracing::debug!("Stoping execution of background activites");
+    }
+}
+
+impl Drop for BackgroundExecutionContext {
+    fn drop(&mut self) {
+        self.musc
+            .iter()
+            .for_each(|ctx| ctx.unpause_queue_executors());
+
+        self.callback.on_update();
     }
 }
