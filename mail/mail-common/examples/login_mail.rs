@@ -117,10 +117,10 @@ async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<Flow> {
             _ => continue,
         };
 
-        return Ok(ctx.resume_login_flow(acc.remote_id, session).await?);
+        return Ok(ctx.resume_login_flow(acc.remote_id, session, None).await?);
     }
 
-    Ok(ctx.new_login_flow()?)
+    Ok(ctx.new_login_flow(None)?)
 }
 
 fn read(prompt: &str) -> IoResult<String> {

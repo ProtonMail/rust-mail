@@ -494,12 +494,12 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if there is no encryption key in the keychain.
-    pub fn new_login_flow(&self) -> CoreContextResult<Flow> {
+    pub fn new_login_flow(&self, challenge: Option<ChallengeObserver>) -> CoreContextResult<Flow> {
         // Ensure we have an encryption key
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None, None, None)?;
+        let session = self.new_api_session(None, None, challenge)?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -520,6 +520,7 @@ impl Context {
         &self,
         user_id: UserId,
         session_id: AuthId,
+        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<Flow> {
         let key = self.get_encryption_key()?;
         let tether = self.account_stash().connection();
@@ -540,14 +541,14 @@ impl Context {
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
-                self.new_api_session(Some(&session), None, None)?,
+                self.new_api_session(Some(&session), None, challenge)?,
                 user_id,
                 session_id,
                 password,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
-                self.new_api_session(Some(&session), None, None)?,
+                self.new_api_session(Some(&session), None, challenge)?,
                 user_id,
                 session_id,
             )),

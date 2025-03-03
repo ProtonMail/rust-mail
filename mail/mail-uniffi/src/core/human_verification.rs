@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use futures::TryFutureExt;
 use proton_api_core::human_verification as hv;
@@ -64,11 +64,51 @@ impl ChallengeCallback {
 /// An interface by which human verification challenges can be handled.
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
-pub trait ChallengeNotifier: Send + Sync {
+pub trait ChallengeNotifier: Send + Sync + 'static {
     async fn on_challenge(
         &self,
         loader: Arc<ChallengeLoader>,
         payload: Arc<ChallengePayload>,
         callback: Arc<ChallengeCallback>,
     );
+}
+
+#[async_trait::async_trait]
+impl<T: ?Sized + ChallengeNotifier> ChallengeNotifier for Arc<T> {
+    async fn on_challenge(
+        &self,
+        loader: Arc<ChallengeLoader>,
+        payload: Arc<ChallengePayload>,
+        callback: Arc<ChallengeCallback>,
+    ) {
+        self.deref().on_challenge(loader, payload, callback).await;
+    }
+}
+
+/// Wraps a `ChallengeNotifier` to implement the core `ChallengeNotifier` trait.
+pub(crate) struct ChallengeNotifierWrap<T> {
+    inner: T,
+}
+
+impl<T> ChallengeNotifierWrap<T> {
+    /// Create a new `ChallengeNotifierImpl`.
+    pub fn new(inner: T) -> Self {
+        Self { inner }
+    }
+}
+
+#[async_trait::async_trait]
+impl<T: ChallengeNotifier> hv::ChallengeNotifier for ChallengeNotifierWrap<T> {
+    async fn on_challenge(
+        &self,
+        loader: hv::ChallengeLoader,
+        payload: hv::ChallengePayload,
+        callback: hv::ChallengeCallback,
+    ) {
+        let loader = Arc::new(ChallengeLoader { inner: loader });
+        let payload = Arc::new(ChallengePayload { inner: payload });
+        let callback = Arc::new(ChallengeCallback { inner: callback });
+
+        self.inner.on_challenge(loader, payload, callback).await;
+    }
 }

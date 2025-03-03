@@ -1,4 +1,5 @@
 use crate::core::datatypes::ApiConfig;
+use crate::core::human_verification::{ChallengeNotifier, ChallengeNotifierWrap};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
@@ -13,6 +14,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::Action;
 use proton_action_queue::db::StoredAction;
+use proton_api_core::human_verification::ChallengeObserver;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
@@ -151,13 +153,20 @@ pub fn create_mail_session(
 #[uniffi_export]
 impl MailSession {
     /// Start new login flow.
-    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, LoginError> {
+    pub async fn new_login_flow(
+        &self,
+        challenge: Option<Arc<dyn ChallengeNotifier>>,
+    ) -> Result<Arc<LoginFlow>, LoginError> {
         let mail_ctx = self.mail_ctx.clone();
         let user_ctx = self.user_ctx.clone();
 
+        let challenge = challenge
+            .map(ChallengeNotifierWrap::new)
+            .map(ChallengeObserver::new);
+
         uniffi_async::<_, RealProtonMailError, _>(async move {
             mail_ctx
-                .new_login_flow()
+                .new_login_flow(challenge)
                 .map(|flow| LoginFlow::new(flow, mail_ctx, user_ctx))
                 .map_err(RealProtonMailError::from)
         })
@@ -170,13 +179,18 @@ impl MailSession {
         &self,
         user_id: String,
         session_id: String,
+        challenge: Option<Arc<dyn ChallengeNotifier>>,
     ) -> Result<Arc<LoginFlow>, LoginError> {
         let mail_ctx = self.mail_ctx.clone();
         let user_ctx = self.user_ctx.clone();
 
+        let challenge = challenge
+            .map(ChallengeNotifierWrap::new)
+            .map(ChallengeObserver::new);
+
         uniffi_async::<_, RealProtonMailError, _>(async move {
             Arc::clone(&mail_ctx)
-                .resume_login_flow(user_id.into(), session_id.into())
+                .resume_login_flow(user_id.into(), session_id.into(), challenge)
                 .map_ok(|flow| LoginFlow::new(flow, mail_ctx, user_ctx))
                 .map_err(RealProtonMailError::from)
                 .await
@@ -189,12 +203,17 @@ impl MailSession {
     pub fn user_context_from_session(
         &self,
         session: Arc<StoredSession>,
+        challenge: Option<Arc<dyn ChallengeNotifier>>,
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
+        let challenge = challenge
+            .map(ChallengeNotifierWrap::new)
+            .map(ChallengeObserver::new);
+
         async_runtime()
             .block_on(async move {
-                ctx.user_context_from_session(session.session(), None, None)
+                ctx.user_context_from_session(session.session(), None, challenge)
                     .map_ok(|ctx| self.user_ctx.insert(ctx))
                     .map_ok(MailUserSession::new)
                     .map_err(RealProtonMailError::from)
