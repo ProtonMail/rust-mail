@@ -10,7 +10,7 @@ use proton_mail_common::datatypes::mail_notifications::{
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
-use crate::core::datatypes::Id;
+use crate::core::datatypes::RemoteId;
 use crate::{errors::ActionError, uniffi_async};
 
 use super::MailSession;
@@ -73,9 +73,9 @@ pub struct DecryptedEmailPushNotification {
     ///
     pub sender: NotificationSender,
 
-    /// Local message ID
+    /// Remote message ID
     ///
-    pub message_id: Id,
+    pub message_id: RemoteId,
 }
 
 impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification {
@@ -127,7 +127,7 @@ pub struct NotificationSender {
     ///
     pub address: String,
 
-    /// TODO: Describe
+    /// Contact group of the sender
     ///
     pub group: String,
 }
