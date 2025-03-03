@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+### Added
+  - [ET-2204] `resolve_message_id` translating remote id into local id with necessary API lookup.
+    - `RemoteId` has been added but should be used only as a last resort. If possible local `Id` is preferable.
+
 ### Removed
 
   - `Context.is_network_connected` and associated traits and methods
@@ -15,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
   - [ET-2260] Undoing drafts is no longer causing "Opened a non-draft message as a draft".
     - Additionally prefetching and mail scroller is no longer overriding draft message metadata.
+
+### Changed
+  - [ET-2204] Decrypting push notification does not translate remote id into local id. Use `resolve_message_id` instead.
+    - This hopefully resolves Out of Memory issue for the push notification extension.
 
 ## [0.50.0] - 2025-02-27
 

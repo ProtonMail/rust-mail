@@ -4,16 +4,16 @@
 //! It's using shared base from [`proton_core_common`] but with the context of mail application
 //!
 
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
 use proton_api_mail::services::push_notifications::NotificationSender as ApiNotificationSender;
 
 use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_crypto_account::proton_crypto;
-use proton_mail_ids::LocalMessageId;
 use std::sync::Arc;
 use tracing::error;
 
-use crate::{models::Message, MailContext, MailContextError, MailUserContext};
+use crate::{MailContext, MailContextError};
 
 /// Decrypted notification usable only in the context of the Inbox application
 ///
@@ -28,50 +28,22 @@ pub enum DecryptedInboxPushNotification {
     OpenUrl(DecryptedOpenUrlPushNotification),
 }
 
-impl DecryptedInboxPushNotification {
-    /// Sync the message.
-    ///
-    /// Notification does not contain all message metadata that is necessary for us
-    /// to save the message in our SQLite database.
-    ///
-    /// In order to make it happen (and we need to make it happen, because mobile applications are operating on local ids, not remote ids),
-    /// we need to fetch missing info from API and then store it in our local cache.
-    ///
-    /// # Parameters
-    ///
-    /// * `ctx` - mail user context as we save in user specific DB
-    /// * `push_notification` - payload received from the push notification
-    ///
-    /// # Returns
-    ///
-    /// Decrypted notification that contains local IDs and refers to models stored in our database
-    ///
-    /// # Errors
-    ///
-    /// This function may return an error in case of API error or when Stash fails to write to the database
-    ///
-    pub async fn sync(
-        ctx: Arc<MailUserContext>,
-        push_notification: ApiDecryptedInboxPushNotification,
-    ) -> Result<Self, MailContextError> {
-        match push_notification {
+impl From<ApiDecryptedInboxPushNotification> for DecryptedInboxPushNotification {
+    fn from(value: ApiDecryptedInboxPushNotification) -> Self {
+        match value {
             ApiDecryptedInboxPushNotification::Email { data } => {
-                let remote_message_id = data.message_id.clone();
-                let (message, _) =
-                    Message::force_sync_message_and_body(ctx, remote_message_id, false).await?;
-
-                Ok(Self::Email(DecryptedEmailPushNotification {
+                Self::Email(DecryptedEmailPushNotification {
                     subject: data.subject,
                     sender: data.sender.into(),
-                    message_id: message.local_id.expect("Local ID"),
-                }))
+                    message_id: data.message_id,
+                })
             }
             ApiDecryptedInboxPushNotification::OpenUrl { data } => {
-                Ok(Self::OpenUrl(DecryptedOpenUrlPushNotification {
+                Self::OpenUrl(DecryptedOpenUrlPushNotification {
                     content: data.body,
                     sender: data.sender.into(),
                     url: data.url,
-                }))
+                })
             }
         }
     }
@@ -89,9 +61,9 @@ pub struct DecryptedEmailPushNotification {
     ///
     pub sender: NotificationSender,
 
-    /// Local message ID
+    /// Remote message ID
     ///
-    pub message_id: LocalMessageId,
+    pub message_id: MessageId,
 }
 
 /// Decrypted notification that is pushed for example when user logs in on a separate device.
@@ -123,7 +95,7 @@ pub struct NotificationSender {
     ///
     pub address: String,
 
-    /// TODO: Describe
+    /// Contact group of the sender
     ///
     pub group: String,
 }
@@ -150,6 +122,7 @@ pub trait DecryptableInboxPushNotification {
 }
 
 impl DecryptableInboxPushNotification for EncryptedPushNotification {
+    #[tracing::instrument(skip(ctx))]
     async fn try_into_decrypted_inbox_mail_notification(
         self,
         ctx: Arc<MailContext>,
@@ -173,10 +146,9 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
         let decrypted_mail_notification: ApiDecryptedInboxPushNotification =
             decrypted_notification.notification.inner;
 
-        tracing::warn!("Decrypted: {decrypted_mail_notification:#?}");
-
+        tracing::debug!("Decrypted: {:?}", decrypted_mail_notification);
         let decrypted_mail_notification =
-            DecryptedInboxPushNotification::sync(ctx.clone(), decrypted_mail_notification).await?;
+            DecryptedInboxPushNotification::from(decrypted_mail_notification);
 
         Ok(decrypted_mail_notification)
     }
