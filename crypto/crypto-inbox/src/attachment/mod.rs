@@ -2,6 +2,8 @@
 
 #[allow(clippy::module_name_repetitions)]
 mod decrypt;
+use std::string::FromUtf8Error;
+
 pub use decrypt::*;
 
 #[allow(clippy::module_name_repetitions)]
@@ -9,6 +11,10 @@ mod encrypt;
 pub use encrypt::*;
 
 use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
+use proton_crypto_account::proton_crypto::{
+    crypto::{ArmorerSync, PGPProviderSync},
+    CryptoError,
+};
 
 use crate::{keys::KeyPacket, string_id};
 
@@ -50,6 +56,100 @@ string_id! {
 }
 
 impl AsRef<[u8]> for AttachmentEncryptedSignature {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+/// Errors that can be returned in armoring Attachment metadata.
+#[derive(Debug, thiserror::Error)]
+pub enum ArmorEncodingError {
+    #[error("Failed to to convert to utf-8 string: {0}")]
+    Encoding(#[from] FromUtf8Error),
+    #[error("Failed to armor PGP type: {0}")]
+    Armor(CryptoError),
+}
+
+/// A raw binary detached signature over the attachment.
+#[derive(Debug, serde::Deserialize, serde::Serialize, Eq, PartialEq, Hash, Clone)]
+pub struct BinaryAttachmentSignature(pub Vec<u8>);
+
+impl<T: Into<Vec<u8>>> From<T> for BinaryAttachmentSignature {
+    fn from(v: T) -> Self {
+        Self(v.into())
+    }
+}
+
+impl ::std::ops::Deref for BinaryAttachmentSignature {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl BinaryAttachmentSignature {
+    /// Armors the signature.
+    pub fn armor<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> Result<AttachmentSignature, ArmorEncodingError> {
+        let detached_signature_armored = pgp_provider
+            .armorer()
+            .armor_signature(&self.0)
+            .map_err(ArmorEncodingError::Armor)?;
+        let signature = String::from_utf8(detached_signature_armored).map(AttachmentSignature)?;
+        Ok(signature)
+    }
+}
+
+/// A raw encrypted binary detached signature over the attachment.
+#[derive(Debug, serde::Deserialize, serde::Serialize, Eq, PartialEq, Hash, Clone)]
+pub struct BinaryAttachmentEncryptedSignature(pub Vec<u8>);
+
+impl<T: Into<Vec<u8>>> From<T> for BinaryAttachmentEncryptedSignature {
+    fn from(v: T) -> Self {
+        Self(v.into())
+    }
+}
+
+impl ::std::ops::Deref for BinaryAttachmentEncryptedSignature {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl BinaryAttachmentEncryptedSignature {
+    /// Armors the encrypted signature.
+    pub fn armor<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> Result<AttachmentEncryptedSignature, ArmorEncodingError> {
+        let encrypted_detached_signature_armored = pgp_provider
+            .armorer()
+            .armor_message(&self.0)
+            .map_err(ArmorEncodingError::Armor)?;
+        let attachment_encrypted_signature =
+            String::from_utf8(encrypted_detached_signature_armored)
+                .map(AttachmentEncryptedSignature)?;
+        Ok(attachment_encrypted_signature)
+    }
+
+    /// Encodes the encrypted signature as a base64 string.
+    #[must_use]
+    pub fn encode_base64(&self) -> Base64AttachmentEncryptedSignature {
+        Base64AttachmentEncryptedSignature(BASE_64.encode(&self.0))
+    }
+}
+
+string_id! {
+    /// A base64 encoded encrypted binary detached signature over the attachment.
+    Base64AttachmentEncryptedSignature
+}
+
+impl AsRef<[u8]> for Base64AttachmentEncryptedSignature {
     fn as_ref(&self) -> &[u8] {
         self.0.as_bytes()
     }

@@ -7,7 +7,7 @@ use proton_crypto_account::{
     keys::PrimaryUnlockedAddressKey,
     proton_crypto::{
         crypto::{
-            ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
+            AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
             EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
         },
         CryptoError,
@@ -16,7 +16,7 @@ use proton_crypto_account::{
 
 use crate::keys::{InboxSessionKey, KeyPacket, SessionKeyError};
 
-use super::{AttachmentEncryptedSignature, AttachmentSignature};
+use super::{ArmorEncodingError, BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature};
 
 /// Type for encryption metadata belonging to a specific encrypted attachment.
 ///
@@ -25,9 +25,9 @@ use super::{AttachmentEncryptedSignature, AttachmentSignature};
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct EncryptedAttachmentMetadata {
     /// Optional attachment signature.
-    pub signature: Option<AttachmentSignature>,
+    pub signature: Option<BinaryAttachmentSignature>,
     /// Optional encrypted attachment signature.
-    pub encrypted_signature: Option<AttachmentEncryptedSignature>,
+    pub encrypted_signature: Option<BinaryAttachmentEncryptedSignature>,
     /// The encrypted session key for each recipient key.
     pub key_packets: Vec<u8>,
 }
@@ -60,8 +60,8 @@ pub enum AttachmentEncryptionError {
     SessionKeyEncryption(CryptoError),
     #[error("Invalid session key: {0}")]
     SessionKeyProblem(#[from] SessionKeyError),
-    #[error("Failed to armor PGP type: {0}")]
-    Armor(CryptoError),
+    #[error("Encrypted signature armor: {0}")]
+    Armor(#[from] ArmorEncodingError),
 }
 
 pub trait EncryptableAttachment {
@@ -158,13 +158,12 @@ fn encrypt_helper<Provider: PGPProviderSync>(
         .map_err(AttachmentEncryptionError::SessionKeyEncryption)?;
 
     // Encrypt the data with the session key and produce the detached signature.
-    let (data, detached_signature_bytes, detached_signature) =
-        encrypt_attachment_and_sign_detached(
-            pgp_provider,
-            &session_key,
-            signing_keys,
-            attachment_data,
-        )?;
+    let (data, detached_signature_bytes) = encrypt_attachment_and_sign_detached(
+        pgp_provider,
+        &session_key,
+        signing_keys,
+        attachment_data,
+    )?;
 
     // Encrypt the detached signature with the session key and attach the key packets.
     let encrypted_detached_signature = encrypt_detached_signature(
@@ -173,9 +172,8 @@ fn encrypt_helper<Provider: PGPProviderSync>(
         &session_key,
         &detached_signature_bytes,
     )?;
-
     let metadata = EncryptedAttachmentMetadata {
-        signature: Some(detached_signature),
+        signature: Some(detached_signature_bytes),
         encrypted_signature: Some(encrypted_detached_signature),
         key_packets,
     };
@@ -266,7 +264,7 @@ fn encrypt_attachment_and_sign_detached<T: PGPProviderSync>(
     session_key: &T::SessionKey,
     signing_keys: &[impl AsRef<T::PrivateKey>],
     attachment_data: impl AsRef<[u8]>,
-) -> Result<(Vec<u8>, Vec<u8>, AttachmentSignature), AttachmentEncryptionError> {
+) -> Result<(Vec<u8>, BinaryAttachmentSignature), AttachmentEncryptionError> {
     let mut data = Vec::with_capacity(attachment_data.as_ref().len());
     let detached_signature_bytes = {
         // Encrypt the data and produce a detached signature.
@@ -287,22 +285,7 @@ fn encrypt_attachment_and_sign_detached<T: PGPProviderSync>(
             .finalize_with_detached_signature()
             .map_err(AttachmentEncryptionError::Encryption)?
     };
-    // The detached signature is a byte blob, but the output has to be pgp armored.
-    let detached_signature = armor_detached_signature(pgp_provider, &detached_signature_bytes)?;
-    Ok((data, detached_signature_bytes, detached_signature))
-}
-
-// Armor the detached signature and convert it to an owned String.
-fn armor_detached_signature<T: PGPProviderSync>(
-    pgp_provider: &T,
-    detached_signature_bytes: &[u8],
-) -> Result<AttachmentSignature, AttachmentEncryptionError> {
-    let detached_signature_armored = pgp_provider
-        .armorer()
-        .armor_signature(detached_signature_bytes)
-        .map_err(AttachmentEncryptionError::Encryption)?;
-    let signature = String::from_utf8(detached_signature_armored).map(AttachmentSignature)?;
-    Ok(signature)
+    Ok((data, BinaryAttachmentSignature(detached_signature_bytes)))
 }
 
 // Encrypt the detached signature with the session key and attach the key packets.
@@ -311,7 +294,7 @@ fn encrypt_detached_signature<T: PGPProviderSync>(
     key_packets: &[u8],
     session_key: &T::SessionKey,
     detached_signature_bytes: &[u8],
-) -> Result<AttachmentEncryptedSignature, AttachmentEncryptionError> {
+) -> Result<BinaryAttachmentEncryptedSignature, AttachmentEncryptionError> {
     let mut encrypted_signature_bytes =
         Vec::with_capacity(key_packets.len() + detached_signature_bytes.len());
     // The encrypted pgp message consists of `key_packets || encrypted_data`
@@ -328,15 +311,9 @@ fn encrypt_detached_signature<T: PGPProviderSync>(
     pt_signature_writer
         .finalize()
         .map_err(AttachmentEncryptionError::SignatureEncryption)?;
-
-    // PGP armor the encrypted detached signature.
-    let encrypted_detached_signature_armored = pgp_provider
-        .armorer()
-        .armor_message(&encrypted_signature_bytes)
-        .map_err(AttachmentEncryptionError::SignatureEncryption)?;
-    let attachment_encrypted_signature = String::from_utf8(encrypted_detached_signature_armored)
-        .map(AttachmentEncryptedSignature)?;
-    Ok(attachment_encrypted_signature)
+    Ok(BinaryAttachmentEncryptedSignature(
+        encrypted_signature_bytes,
+    ))
 }
 
 /// Attachment writer for encrypting and signing data.
@@ -386,8 +363,6 @@ where
             .writer
             .finalize_with_detached_signature()
             .map_err(AttachmentEncryptionError::Encryption)?;
-        let detached_signature =
-            armor_detached_signature(self.pgp_provider, &detached_signature_bytes)?;
         let encrypted_detached_signature = encrypt_detached_signature(
             self.pgp_provider,
             &self.key_packets,
@@ -395,7 +370,7 @@ where
             &detached_signature_bytes,
         )?;
         let metadata = EncryptedAttachmentMetadata {
-            signature: Some(detached_signature),
+            signature: Some(BinaryAttachmentSignature(detached_signature_bytes)),
             encrypted_signature: Some(encrypted_detached_signature),
             key_packets: self.key_packets,
         };
@@ -410,7 +385,7 @@ pub struct ExtractedAttachmentInfo {
     /// [`InboxSessionKey`] provides methods to re-encrypt the session key for new recipients.
     pub session_key: InboxSessionKey,
     /// Internal attachment detached signature bytes.
-    pub(crate) detached_signature_bytes: Option<Vec<u8>>,
+    pub(crate) detached_signature_bytes: Option<BinaryAttachmentSignature>,
 }
 
 impl ExtractedAttachmentInfo {
@@ -451,44 +426,23 @@ impl ExtractedAttachmentInfo {
         &self,
         pgp_provider: &Provider,
         recipient: &Provider::PublicKey,
-    ) -> Result<Option<AttachmentEncryptedSignature>, AttachmentEncryptionError> {
+    ) -> Result<Option<BinaryAttachmentEncryptedSignature>, AttachmentEncryptionError> {
         let Some(signature_bytes) = &self.detached_signature_bytes else {
             return Ok(None);
         };
         let encrypted_signature = pgp_provider
             .new_encryptor()
             .with_encryption_key(recipient)
-            .encrypt_raw(signature_bytes, DataEncoding::Armor)
-            .map(String::from_utf8)
-            .map_err(AttachmentEncryptionError::SignatureEncryption)?
-            .map(AttachmentEncryptedSignature)?;
+            .encrypt_raw(&**signature_bytes, DataEncoding::Bytes)
+            .map(BinaryAttachmentEncryptedSignature)
+            .map_err(AttachmentEncryptionError::SignatureEncryption)?;
+
         Ok(Some(encrypted_signature))
     }
 
-    /// Returns the internal signature as an armored PGP Signature without encrypting it.
-    ///
-    /// This function uses the PGP provider to armor the internal signature.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`AttachmentEncryptionError::Armor`] if armoring the signature fails.
-    pub fn signature<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<Option<AttachmentSignature>, AttachmentEncryptionError> {
-        let Some(signature_bytes) = &self.detached_signature_bytes else {
-            return Ok(None);
-        };
-        let armored_signature = pgp_provider
-            .armorer()
-            .armor_signature(signature_bytes)
-            .map(String::from_utf8)
-            .map_err(AttachmentEncryptionError::Armor)?
-            .map(AttachmentSignature)?;
-        Ok(Some(armored_signature))
+    /// Returns the internal signature as an binary PGP Signature without encrypting it.
+    #[must_use]
+    pub fn signature<Provider: PGPProviderSync>(&self) -> Option<&BinaryAttachmentSignature> {
+        self.detached_signature_bytes.as_ref()
     }
 }

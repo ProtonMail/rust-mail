@@ -63,10 +63,10 @@ impl ProtonMail for Proton {
         //NOTE: Even though this is a sync reader interface, this will only result in mem copies.
         form.add_reader_file("KeyPackets", Cursor::new(request.key_packets), "blob");
         if let Some(signature) = request.signature {
-            form.add_text("Signature", signature.0);
+            form.add_reader_file("Signature", Cursor::new(signature.0), "blob");
         }
         if let Some(enc_signature) = request.enc_signature {
-            form.add_text("EncSignature", enc_signature.0);
+            form.add_reader_file("EncSignature", Cursor::new(enc_signature.0), "blob");
         }
 
         //NOTE: Even though this is a sync reader interface, this will only result in mem copies.

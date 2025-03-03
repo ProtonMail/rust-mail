@@ -477,7 +477,10 @@ fn process_attachments<Provider: PGPProviderSync>(
             .encrypt_signature_to_recipient(pgp_provider, recipient_key)
             .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
         {
-            attachment_enc_signatures.insert(remote_attachment_id.to_string(), enc_signature);
+            attachment_enc_signatures.insert(
+                remote_attachment_id.to_string(),
+                enc_signature.encode_base64(),
+            );
         }
 
         attachment_key_packets.insert(remote_attachment_id.to_string(), recipient_attachment_kp);

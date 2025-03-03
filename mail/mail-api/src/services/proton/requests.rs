@@ -28,7 +28,9 @@ use crate::services::proton::request_data::{
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, AttachmentSignature};
+use proton_crypto_inbox::attachment::{
+    BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature,
+};
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
@@ -438,10 +440,10 @@ pub struct PostUploadAttachmentRequest {
     pub content_id: Option<String>,
     /// Binary asymmetric key packet.
     pub key_packets: Vec<u8>,
-    /// Optional armored detached signature
-    pub signature: Option<AttachmentSignature>,
-    /// Optional armored encrypted message containing binary detached signature.
-    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    /// Optional binary detached signature
+    pub signature: Option<BinaryAttachmentSignature>,
+    /// Optional binary encrypted message containing a binary detached signature.
+    pub enc_signature: Option<BinaryAttachmentEncryptedSignature>,
     /// Encrypted attachment payload.
     pub data_packet: Vec<u8>,
 }

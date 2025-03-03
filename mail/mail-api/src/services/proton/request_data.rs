@@ -20,7 +20,8 @@
 use crate::services::proton::common::{AttachmentId, MessageId};
 use crate::services::proton::response_data::MimeType;
 use proton_crypto_inbox::attachment::{
-    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+    Base64AttachmentEncryptedSignature, BinaryAttachmentEncryptedSignature,
+    BinaryAttachmentSignature, KeyPackets,
 };
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
 use proton_crypto_inbox::message::packages::PackageMimeType;
@@ -135,7 +136,7 @@ pub type DraftAttachmentKeyPackets = HashMap<AttachmentId, KeyPackets>;
 
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
 pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;
-pub type PackageAttachmentEncSignatures = HashMap<String, AttachmentEncryptedSignature>;
+pub type PackageAttachmentEncSignatures = HashMap<String, Base64AttachmentEncryptedSignature>;
 pub type PackageAttachmentExposedKeys = HashMap<String, ExposedKey>;
 
 /// Signature mode of a sub-package.
@@ -276,9 +277,9 @@ pub struct NewAttachmentParams {
     /// Binary asymmetric key packet.
     pub key_packets: Vec<u8>,
     /// Optional armored detached signature
-    pub signature: Option<AttachmentSignature>,
+    pub signature: Option<BinaryAttachmentSignature>,
     /// Optional armored encrypted message containing binary detached signature.
-    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub enc_signature: Option<BinaryAttachmentEncryptedSignature>,
     /// Encrypted attachment payload.
     pub data_packet: Vec<u8>,
 }
