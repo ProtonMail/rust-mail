@@ -233,6 +233,8 @@ pub enum DraftAttachmentErrorReason {
     TooManyAttachments,
     /// Message was already sent.
     MessageAlreadySent,
+    /// Attachment is too large
+    AttachmentTooLarge,
 }
 
 impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
@@ -245,6 +247,7 @@ impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
             RealDraftAttachmentErrorReason::Crypto => Self::Crypto,
             RealDraftAttachmentErrorReason::TooManyAttachments => Self::TooManyAttachments,
             RealDraftAttachmentErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+            RealDraftAttachmentErrorReason::AttachmentTooLarge => Self::AttachmentTooLarge,
         }
     }
 }

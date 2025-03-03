@@ -341,6 +341,11 @@ impl From<AttachmentError> for ProtonMailError {
             AttachmentError::AttachmentMetadataNotFound(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }
+            AttachmentError::AttachmentTooLarge => {
+                Self::Reason(MailErrorReason::DraftAttachmentReason(
+                    DraftAttachmentErrorReason::AttachmentTooLarge,
+                ))
+            }
         }
     }
 }

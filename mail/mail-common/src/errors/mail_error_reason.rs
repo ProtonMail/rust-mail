@@ -184,6 +184,8 @@ pub enum DraftAttachmentErrorReason {
     TooManyAttachments,
     /// Message was already sent.
     MessageAlreadySent,
+    /// the attachment size exceeds the upper limit
+    AttachmentTooLarge,
 }
 
 /// Specific Reason when attempting to discard a draft.

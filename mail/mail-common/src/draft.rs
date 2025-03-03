@@ -149,6 +149,8 @@ pub enum AttachmentError {
     TooManyAttachments,
     #[error("The message has already been sent")]
     MessageAlreadySent,
+    #[error("Attachment size is greater than maximum limit")]
+    AttachmentTooLarge,
 }
 
 impl From<AttachmentError> for MailContextError {

@@ -706,6 +706,13 @@ impl Attachment {
             ))
             .into());
         };
+
+        // Attachment should be <= 25 MB
+        if file_metadata.size() > 25 * 1024 * 1024 {
+            return Err(MailContextError::Draft(crate::draft::Error::Attachment(
+                crate::draft::AttachmentError::AttachmentTooLarge,
+            )));
+        }
         // File name
         let file_name = file_name.to_string_lossy();
         // Determine mime type
