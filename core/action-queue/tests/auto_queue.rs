@@ -30,8 +30,8 @@ async fn auto_queued_on_pause() {
     let mut broadcast = queue.new_broadcast_receiver();
     let auto_executor = queue.new_executor().into_auto_executor();
 
-    queue.queue_action(SuccessAction {}).await.unwrap();
     auto_executor.pause();
+    queue.queue_action(SuccessAction {}).await.unwrap();
 
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
