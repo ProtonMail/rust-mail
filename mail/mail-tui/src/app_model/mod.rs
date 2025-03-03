@@ -140,6 +140,7 @@ impl AppModel {
                 core_cache_dir,
                 mail_cache_dir,
                 2 << 30, // 1GiB
+                None,
                 Arc::new(keychain),
                 app_config.api_config(),
             )

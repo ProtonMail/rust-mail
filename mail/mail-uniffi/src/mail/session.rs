@@ -95,7 +95,7 @@ pub fn create_mail_session(
     key_chain: Box<dyn OSKeyChain>,
 ) -> Result<Arc<MailSession>, UserSessionError> {
     async_runtime()
-        .block_on(async move { create_mail_session_inner(params, key_chain).await })
+        .block_on(async move { create_mail_session_inner(params, None, key_chain).await })
         .map_err(UserSessionError::from)
 }
 
@@ -103,8 +103,10 @@ pub fn create_mail_session(
 // constructor.
 /// Create a new mail session with a slim async runtime.
 ///
-/// Comparing to [`create_mail_session`] it uses less async task workers and blocking threads,
-/// lowering memory consumption in more resource constrained devices and applications.
+/// Comparing to [`create_mail_session`] it uses less async task workers and blocking threads, and
+/// operates on lower number of connections, lowering memory consumption in more resource
+/// constrained devices and applications.
+///
 ///
 /// # Parameters
 ///
@@ -123,8 +125,9 @@ pub fn create_mail_session_slim(
     params: MailSessionParams,
     key_chain: Box<dyn OSKeyChain>,
 ) -> Result<Arc<MailSession>, UserSessionError> {
+    // This number is arbitrary
     async_runtime_slim()
-        .block_on(async move { create_mail_session_inner(params, key_chain).await })
+        .block_on(async move { create_mail_session_inner(params, Some(4), key_chain).await })
         .map_err(UserSessionError::from)
 }
 
@@ -135,8 +138,9 @@ pub fn create_mail_session_slim(
 /// # Parameters
 ///
 /// * `params`: See [`MailSessionParams`] for parameter details.
+/// * `connection_pool_size`: Maximum number of connections for account DB. If `None`,
+///   then default value is used
 /// * `key_chain`: Keychain implementation.
-/// * `network_callback`: Optional network status changes callback.
 ///
 /// # Panics
 ///
@@ -146,6 +150,7 @@ pub fn create_mail_session_slim(
 ///
 async fn create_mail_session_inner(
     params: MailSessionParams,
+    connection_pool_size: Option<u32>,
     key_chain: Box<dyn OSKeyChain>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
     let mut log_path = PathBuf::from(params.log_dir);
@@ -188,6 +193,7 @@ async fn create_mail_session_inner(
         core_cache_path,
         mail_cache_path,
         params.mail_cache_size,
+        connection_pool_size,
         Arc::from(FFIKeyChain::from(key_chain)),
         api_env_config.into(),
     )

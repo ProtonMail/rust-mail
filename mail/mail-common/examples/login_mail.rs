@@ -98,6 +98,7 @@ async fn new_mail_ctx<T: KeyChain + 'static>(
         cache_path.join("core"),
         cache_path.join("mail"),
         cache_size,
+        None,
         kch,
         cfg,
     )

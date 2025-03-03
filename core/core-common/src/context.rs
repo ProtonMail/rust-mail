@@ -26,7 +26,7 @@ use proton_api_core::status_watcher::StatusWatcher;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::stash::{Stash, StashError, WatcherHandle};
+use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -251,6 +251,7 @@ impl Context {
     /// * `network_callback`: Callback to be notified of network status changes.
     /// * `cache_path`: Cache path for cached data.
     /// * `sender_image_cache_size`: Maximum size of the sender image cache.
+    /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
     ///
     /// # Errors
     /// Returns an error if the context failed to initialize correctly.
@@ -264,6 +265,7 @@ impl Context {
         api_config: ApiConfig,
         cache_path: impl Into<PathBuf>,
         sender_image_cache_size: u64,
+        connection_pool_size: Option<u32>,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
@@ -271,7 +273,11 @@ impl Context {
         std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let account_db_path = get_account_db_path(account_db_path);
-        let account_stash = Stash::new(Some(&account_db_path))?;
+        let stash_config = StashConfiguration {
+            path: Some(&account_db_path),
+            pool_size: connection_pool_size,
+        };
+        let account_stash = Stash::new(stash_config)?;
         migrate_account_db(&account_stash).await?;
 
         Ok(Arc::new_cyclic(|this| Self {

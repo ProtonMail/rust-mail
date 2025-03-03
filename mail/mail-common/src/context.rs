@@ -184,6 +184,7 @@ impl MailContext {
         core_cache_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
         mail_cache_size: u64,
+        connection_pool_size: Option<u32>,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
     ) -> Result<Arc<Self>, MailContextError> {
@@ -198,6 +199,7 @@ impl MailContext {
             api_config,
             core_cache_path,
             mail_cache_size,
+            connection_pool_size,
         )
         .await?;
 
