@@ -107,6 +107,9 @@ pub fn create_mail_session(
 /// operates on lower number of connections, lowering memory consumption in more resource
 /// constrained devices and applications.
 ///
+/// # Warning
+///
+/// This function is designed for extension. Do not use it in the main application without thorough testing!
 ///
 /// # Parameters
 ///
