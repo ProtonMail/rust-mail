@@ -11,11 +11,15 @@ use crate::{
 use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
 use itertools::Itertools;
+use proton_action_queue::action::Action;
+use proton_action_queue::db::StoredAction;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
+use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::{MailContext, MailUserContext};
+use stash::orm::Model;
+use stash::params;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -580,34 +584,15 @@ impl MailSession {
         let (sender, abort) = mpsc::channel(1);
 
         let handle = spawn_async(ctx.clone(), async move {
-            let Some(primary_account) = ctx.get_primary_account().await? else {
+            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx).await?;
+
+            if all_user_ctxs.is_empty() {
                 return Ok(());
-            };
-            let Some(session) = ctx
-                .get_account_sessions(primary_account.remote_id.clone())
-                .await?
-                .pop()
-            else {
-                return Ok(());
-            };
-            let primary_user_ctx = ctx.user_context_from_session(&session, None, None).await?;
-
-            let other_sessions_iter = ctx
-                .get_sessions()
-                .await?
-                .into_iter()
-                .filter(|session| session.account_id != primary_account.remote_id)
-                .unique_by(|session| session.account_id.clone());
-
-            let mut all_user_ctxs = vec![primary_user_ctx.clone()];
-
-            for session in other_sessions_iter {
-                let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
-                user_ctx.pause_queue_executors();
-                all_user_ctxs.push(user_ctx);
             }
 
-            primary_user_ctx.pause_queue_executors();
+            for user_ctx in all_user_ctxs.iter().rev() {
+                user_ctx.pause_queue_executors();
+            }
 
             let execution_ctx = BackgroundExecutionContext {
                 abort,
@@ -645,6 +630,32 @@ impl MailSession {
             sender,
             handle: handle.abort_handle(),
         }))
+    }
+
+    pub async fn are_unsent_messages_in_queue(&self) -> Result<bool, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx).await?;
+            let mut all_messages_were_sent = true;
+
+            for user_ctx in &all_user_ctxs {
+                let stash = user_ctx.user_stash();
+                let tether = stash.connection();
+                let all_send_tasks = StoredAction::find(
+                    "WHERE action_type = ?",
+                    params![Send::TYPE.as_ref()],
+                    &tether,
+                )
+                .await?;
+
+                all_messages_were_sent &= all_send_tasks.is_empty();
+            }
+
+            Result::<_, RealProtonMailError>::Ok(all_messages_were_sent)
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 }
 
@@ -929,4 +940,36 @@ impl Drop for BackgroundExecutionContext {
 
         self.callback.on_update();
     }
+}
+
+async fn get_all_logged_in_mail_user_contexts(
+    ctx: &Arc<MailContext>,
+) -> Result<Vec<Arc<MailUserContext>>, RealProtonMailError> {
+    let Some(primary_account) = ctx.get_primary_account().await? else {
+        return Ok(vec![]);
+    };
+    let Some(session) = ctx
+        .get_account_sessions(primary_account.remote_id.clone())
+        .await?
+        .pop()
+    else {
+        return Ok(vec![]);
+    };
+    let primary_user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+
+    let other_sessions_iter = ctx
+        .get_sessions()
+        .await?
+        .into_iter()
+        .filter(|session| session.account_id != primary_account.remote_id)
+        .unique_by(|session| session.account_id.clone());
+
+    let mut all_user_ctxs = vec![primary_user_ctx.clone()];
+
+    for session in other_sessions_iter {
+        let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+        all_user_ctxs.push(user_ctx);
+    }
+
+    Ok(all_user_ctxs)
 }
