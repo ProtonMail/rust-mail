@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.51.0] - 2025-03-03
+
 ### Added
   - [ET-2204] `resolve_message_id` translating remote id into local id with necessary API lookup.
     - `RemoteId` has been added but should be used only as a last resort. If possible local `Id` is preferable.
