@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-02-xx
 
+## [0.52.0] - 2025-03-03
+
+### Added
+
+  - [ET-1407] `AttachmentList` for `Draft` type.
+  - [ET-1407] Attachments of disposition attachment can now be added to a draft and sent.
+
+### Changed
+
+  - [ET-1407] `Draft::attachments` is removed in favor of `Draft::attachment_list`.
+
 ## [0.51.0] - 2025-03-03
 
 ### Added
@@ -44,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-1955] `MailUserSession` has new method `execute_when_online` which accepts standard callback.
 
-  
+
 ### Changed
 
   - [ET-2204] Decrypted push notifications contain now valid and usable payloads for emails and opening urls.
