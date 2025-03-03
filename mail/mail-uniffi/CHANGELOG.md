@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-2204] `resolve_message_id` translating remote id into local id with necessary API lookup.
     - `RemoteId` has been added but should be used only as a last resort. If possible local `Id` is preferable.
   - [ET-2241] `start_background_execution` method on `MailSession`, to finish any peding tasks before app is terminated.
+  - [ET-2241] `all_messages_were_sent` method on `MailSession`, to verify if are messages were send before putting app to sleep.
 
 ### Removed
 
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Additionally prefetching and mail scroller is no longer overriding draft message metadata.
 
 ### Changed
+
   - [ET-2204] Decrypting push notification does not translate remote id into local id. Use `resolve_message_id` instead.
     - This hopefully resolves Out of Memory issue for the push notification extension.
 
