@@ -152,6 +152,8 @@ impl From<AppError> for ProtonMailError {
             AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::UnknownCid(_, _) => Self::reason(ActionErrorReason::UnknownContentId),
+            AppError::AttachmentHasNoAddressId(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::AttachmentMissingKeyPackets(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

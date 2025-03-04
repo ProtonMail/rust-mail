@@ -163,11 +163,20 @@ impl MailUserContext {
         attachment_info: &Attachment,
         data: impl Read,
     ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
+        // Can't decrypt with the remote address id.
         let Some(remote_address_id) = &attachment_info.remote_address_id else {
-            Err(AppError::Other(anyhow::anyhow!(
-                "Attachment has no address id"
-            )))?
+            return Err(
+                AppError::AttachmentHasNoAddressId(attachment_info.local_id.unwrap()).into(),
+            );
         };
+
+        // Sanity check that the key packets are set, there is an expect() in the decryption
+        // code that can trigger application crashes.
+        if attachment_info.key_packets.is_none() {
+            return Err(
+                AppError::AttachmentMissingKeyPackets(attachment_info.local_id.unwrap()).into(),
+            );
+        }
 
         let mut result_buffer: Vec<u8> =
             Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
