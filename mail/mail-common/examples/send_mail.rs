@@ -46,7 +46,7 @@ struct Args {
 #[tokio::main]
 async fn main() {
     let env_filter = EnvFilter::builder()
-        .with_default_directive(LevelFilter::TRACE.into())
+        .with_default_directive(LevelFilter::DEBUG.into())
         .parse_lossy(
             "info,proton_sqlite3=trace,\
                 proton_core_common=trace,proton_mail_common=trace,\
@@ -66,7 +66,7 @@ async fn main() {
         mut body,
     } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
-    let tmp_file = tmp_dir.path().join("attachment.txt");
+    let tmp_file = tmp_dir.path().join("hello_world.txt");
 
     let keychain = InMemoryKeyChain::default();
     let key = SessionEncryptionKey::random().to_base64();
