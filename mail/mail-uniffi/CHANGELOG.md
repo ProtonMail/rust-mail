@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.52.3] - 2025-03-04
+
+### Fix
+  - [ET-1470] Make sure draft save saves the correct state.
+
+
 ## [0.52.2] - 2025-03-04
 
 ### Added
