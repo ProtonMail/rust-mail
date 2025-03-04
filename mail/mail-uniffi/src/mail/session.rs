@@ -596,6 +596,7 @@ impl MailSession {
     /// It will stop when aborded or when finished whatever comes first.
     /// On exit the callback will be triggered to notify caller that it finished.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn start_background_execution(
         &self,
         callback: Box<dyn LiveQueryCallback>,
@@ -604,9 +605,14 @@ impl MailSession {
         let (sender, abort) = mpsc::channel(1);
 
         let handle = spawn_async(ctx.clone(), async move {
-            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx).await?;
+            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx)
+                .await
+                .inspect_err(|e| {
+                    tracing::error!("Failed to get logged in users, details: `{e:?}`");
+                })?;
 
             if all_user_ctxs.is_empty() {
+                tracing::warn!("There are no logged in users, skipping background execution");
                 return Ok(());
             }
 
@@ -621,26 +627,37 @@ impl MailSession {
             };
 
             execution_checkpoint!(execution_ctx);
+            tracing::debug!("All logged in accounts gathered, starting background execution");
 
             for user_ctx in &all_user_ctxs {
                 let send_executor = user_ctx
                     .action_queue()
                     .new_executor_with_group(SEND_ACTION_GROUP);
 
-                while let Some(_) = send_executor.execute_one().await? {
+                while let Some(_) = send_executor.execute_one().await.inspect_err(|e| {
+                    tracing::error!("Failed to send a message, details: `{e}`");
+                })? {
                     execution_checkpoint!(execution_ctx);
                 }
             }
+
+            tracing::debug!(
+                "All messages were sent, moving on to executing other background actions"
+            );
 
             execution_checkpoint!(execution_ctx);
 
             for user_ctx in &all_user_ctxs {
                 let default_executor = user_ctx.action_queue().new_executor();
 
-                while let Some(_) = default_executor.execute_one().await? {
+                while let Some(_) = default_executor.execute_one().await.inspect_err(|e| {
+                    tracing::error!("Failed to execute action, details: `{e}`");
+                })? {
                     execution_checkpoint!(execution_ctx);
                 }
             }
+
+            tracing::debug!("All other actions executed, wrapping up");
 
             execution_ctx.stop();
             Result::<_, RealProtonMailError>::Ok(())
@@ -966,6 +983,7 @@ async fn get_all_logged_in_mail_user_contexts(
     ctx: &Arc<MailContext>,
 ) -> Result<Vec<Arc<MailUserContext>>, RealProtonMailError> {
     let Some(primary_account) = ctx.get_primary_account().await? else {
+        tracing::warn!("Missing primary account, skipping background execution");
         return Ok(vec![]);
     };
     let Some(session) = ctx
@@ -973,6 +991,7 @@ async fn get_all_logged_in_mail_user_contexts(
         .await?
         .pop()
     else {
+        tracing::warn!("No active session for primary account, skipping background execution");
         return Ok(vec![]);
     };
     let primary_user_ctx = ctx.user_context_from_session(&session, None, None).await?;
@@ -991,6 +1010,7 @@ async fn get_all_logged_in_mail_user_contexts(
     {
         vec![primary_user_ctx.clone()]
     } else {
+        tracing::warn!("Primary account is not LoggedIn");
         vec![]
     };
 
@@ -999,6 +1019,7 @@ async fn get_all_logged_in_mail_user_contexts(
         let Some(CoreSessionState::Authenticated) =
             ctx.get_session_state(session.remote_id.clone()).await?
         else {
+            tracing::warn!("Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed");
             continue;
         };
 
