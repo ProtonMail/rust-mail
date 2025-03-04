@@ -16,10 +16,9 @@ use itertools::Itertools;
 use proton_action_queue::action::Action;
 use proton_action_queue::db::StoredAction;
 use proton_api_core::human_verification::ChallengeObserver;
-use proton_api_core::status_watcher::StatusWatcherSubscriber;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::{CoreAccountState, CoreSessionState};
-use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
+use proton_mail_common::actions::draft::Send;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::{MailContext, MailUserContext};
@@ -28,21 +27,10 @@ use stash::params;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
-use tokio::time::interval;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
-
-macro_rules! execution_checkpoint {
-    ($execution_ctx:expr) => {{
-        if $execution_ctx.should_stop() {
-            $execution_ctx.stop();
-            return Ok(());
-        }
-    }};
-}
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -678,69 +666,16 @@ impl MailSession {
                 return Ok(());
             }
 
-            for user_ctx in all_user_ctxs.iter().rev() {
-                user_ctx.pause_queue_executors();
-            }
-
-            let execution_ctx = BackgroundExecutionContext {
+            let mut execution_ctx = BackgroundExecutionContext {
                 abort,
                 callback,
-                musc: all_user_ctxs.clone(),
+                _musc: all_user_ctxs,
             };
 
-            execution_checkpoint!(execution_ctx);
-            tracing::debug!("All logged in accounts gathered, starting background execution");
-
-            let user_ctx = all_user_ctxs.first().unwrap();
-            if user_ctx.connection_status().await.is_offline() {
-                tracing::debug!("Status is offline, wait for online before executing");
-                let mut status = user_ctx.session().status_changes();
-                let mut interval = interval(Duration::from_secs(21));
-                tokio::select! {
-                    () = status.wait_for_online() => {
-                        tracing::debug!("Status is back online, resume background execution");
-                        execution_checkpoint!(execution_ctx);
-                    }
-                    _ = interval.tick() => {
-                        tracing::debug!("Time's up, status is still offline, halt background execution");
-                        execution_ctx.stop();
-                        return Ok(());
-                    }
-
-                }
-            }
-
-            for user_ctx in &all_user_ctxs {
-                let send_executor = user_ctx
-                    .action_queue()
-                    .new_executor_with_group(SEND_ACTION_GROUP);
-
-                while let Some(_) = send_executor.execute_one().await.inspect_err(|e| {
-                    tracing::error!("Failed to send a message, details: `{e}`");
-                })? {
-                    execution_checkpoint!(execution_ctx);
-                }
-            }
-
-            tracing::debug!(
-                "All messages were sent, moving on to executing other background actions"
-            );
-
-            execution_checkpoint!(execution_ctx);
-
-            for user_ctx in &all_user_ctxs {
-                let default_executor = user_ctx.action_queue().new_executor();
-
-                while let Some(_) = default_executor.execute_one().await.inspect_err(|e| {
-                    tracing::error!("Failed to execute action, details: `{e}`");
-                })? {
-                    execution_checkpoint!(execution_ctx);
-                }
-            }
-
-            tracing::debug!("All other actions executed, wrapping up");
-
+            tracing::debug!("Background execution is in progress... awaiting for abort");
+            execution_ctx.abort.recv().await;
             execution_ctx.stop();
+
             Result::<_, RealProtonMailError>::Ok(())
         });
 
@@ -1044,14 +979,10 @@ impl Drop for BackgroundExecutionHandle {
 struct BackgroundExecutionContext {
     abort: mpsc::Receiver<()>,
     callback: Box<dyn LiveQueryCallback>,
-    musc: Vec<Arc<MailUserContext>>,
+    _musc: Vec<Arc<MailUserContext>>,
 }
 
 impl BackgroundExecutionContext {
-    pub fn should_stop(&self) -> bool {
-        !self.abort.is_empty()
-    }
-
     #[allow(clippy::unused_self)]
     pub fn stop(self) {
         tracing::debug!("Stoping execution of background activites");
@@ -1060,10 +991,6 @@ impl BackgroundExecutionContext {
 
 impl Drop for BackgroundExecutionContext {
     fn drop(&mut self) {
-        self.musc
-            .iter()
-            .for_each(|ctx| ctx.unpause_queue_executors());
-
         self.callback.on_update();
     }
 }
