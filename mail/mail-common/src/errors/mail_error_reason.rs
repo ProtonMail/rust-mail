@@ -152,6 +152,8 @@ pub enum DraftSaveSendErrorReason {
     MessageIsNotADraft,
     /// Message is missing attachment uploads
     MissingAttachmentUploads,
+    /// Failed to send due to attachment upload.
+    AttachmentUpload,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.
