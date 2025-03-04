@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Stash's connection pool should now be less susceptible for random errors due to 262 SQLITE_LOCKED_SHAREDCACHE
 
+### Added
+
+  - [ET-2204] `create_mail_ios_extension_session` - more resource constrained sibling of `create_mail_session`, designed
+  for notification extension
+    - It spawns lower number of async runtime workers,
+    - It also limits number of DB connections from 100 to 4
+
 ## [0.52.0] - 2025-03-03
 
 ### Added
@@ -27,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.51.0] - 2025-03-03
 
 ### Added
+
   - [ET-2204] `resolve_message_id` translating remote id into local id with necessary API lookup.
     - `RemoteId` has been added but should be used only as a last resort. If possible local `Id` is preferable.
   - [ET-2241] `start_background_execution` method on `MailSession`, to finish any peding tasks before app is terminated.

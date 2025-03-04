@@ -72,6 +72,7 @@ async fn main() {
         tmp_dir.path().join("core_cache"),
         tmp_dir.path().join("mail_cache"),
         50 * 1204 * 1024,
+        None,
         Arc::new(keychain),
         Config::default(),
     )

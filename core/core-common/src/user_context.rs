@@ -12,7 +12,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
-use stash::stash::Stash;
+use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -176,7 +176,10 @@ impl UserContext {
         path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
     ) -> Result<Stash, MigratorError> {
-        let stash = Stash::new(Some(path))?;
+        let stash = Stash::new(StashConfiguration {
+            path: Some(path),
+            ..Default::default()
+        })?;
         debug!("initializing core database");
         // initialize core db
         migrate_account_db(&stash).await?;

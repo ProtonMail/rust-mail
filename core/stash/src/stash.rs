@@ -41,7 +41,7 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread;
 use thiserror::Error;
@@ -312,6 +312,26 @@ impl Query {
     }
 }
 
+/// Configuration used to create stash database pool.
+///
+#[derive(Default, Clone, Copy)]
+pub struct StashConfiguration<'a> {
+    /// The path to the SQLite database file. If `None`, an in-memory
+    /// database is created.
+    pub path: Option<&'a Path>,
+    /// How many conections are used. If `None`, [`MAX_CONNECTIONS`] is used.
+    pub pool_size: Option<u32>,
+}
+
+impl<'a> From<Option<&'a PathBuf>> for StashConfiguration<'a> {
+    fn from(value: Option<&'a PathBuf>) -> Self {
+        Self {
+            path: value.map(|v| &**v),
+            ..Default::default()
+        }
+    }
+}
+
 /// This is stash's database pool. Its main use is to create [`Tether`]s.
 // Internally this spawns a task that handles all of the operations (See [`StashOperation`]).
 #[derive(Clone)]
@@ -355,9 +375,10 @@ impl Stash {
     /// A [`StashError::TetherError`] is returned if there is a problem creating
     /// the database or connection pool.
     ///
-    pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
+    pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
+        let config = config.into();
         Ok(Self {
-            pool: Self::make_pool(path),
+            pool: Self::make_pool(config.path, config.pool_size),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
         })
     }
@@ -366,7 +387,7 @@ impl Stash {
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
     #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
-    fn make_pool(path: Option<&Path>) -> Pool<SqliteConnectionManager> {
+    fn make_pool(path: Option<&Path>, pool_size: Option<u32>) -> Pool<SqliteConnectionManager> {
         #[allow(clippy::single_match_else)]
         match path {
             Some(p) => debug!("New Stash with file: {:?}", p),
@@ -388,8 +409,10 @@ impl Stash {
             ", BUSY_TIMEOUT.as_millis()))
         );
 
+        let pool_size = pool_size.unwrap_or(MAX_CONNECTIONS);
+
         Pool::builder()
-            .max_size(MAX_CONNECTIONS)
+            .max_size(pool_size)
             .build(manager)
             .expect("Could not open that many connections")
     }
