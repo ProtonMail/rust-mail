@@ -134,6 +134,10 @@ pub enum AppError {
     UserNotFound,
     #[error("Label error: {0}")]
     Label(#[from] LabelError),
+    #[error("Attachment {0} has no address id")]
+    AttachmentHasNoAddressId(LocalAttachmentId),
+    #[error("Attachment {0} does not have key packets")]
+    AttachmentMissingKeyPackets(LocalAttachmentId),
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }
