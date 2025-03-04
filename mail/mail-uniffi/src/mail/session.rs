@@ -27,8 +27,10 @@ use stash::params;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
+use tokio::time::sleep;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -687,6 +689,7 @@ impl MailSession {
 
             execution_checkpoint!(execution_ctx);
             tracing::debug!("All logged in accounts gathered, starting background execution");
+            sleep(Duration::from_millis(250)).await;
 
             for user_ctx in &all_user_ctxs {
                 let send_executor = user_ctx
