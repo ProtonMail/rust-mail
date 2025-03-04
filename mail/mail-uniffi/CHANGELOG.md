@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.54.0] - 2025-03-04
+
+### Added
+
+  [ET-1470] `AttachmentList::retry` to upload attachments
+
+### Fixed
+
+  [ET-2295] - Crash on due missing error handling logic.
+  [ET-1470] - Do not override attachment key packets and signatures if they exist.
+
 
 ## [0.53.0] - 2025-03-04
 
