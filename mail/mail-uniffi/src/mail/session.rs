@@ -16,6 +16,7 @@ use itertools::Itertools;
 use proton_action_queue::action::Action;
 use proton_action_queue::db::StoredAction;
 use proton_api_core::human_verification::ChallengeObserver;
+use proton_api_core::status_watcher::StatusWatcherSubscriber;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::{Send, SEND_ACTION_GROUP};
@@ -30,7 +31,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
-use tokio::time::sleep;
+use tokio::time::interval;
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -689,7 +690,25 @@ impl MailSession {
 
             execution_checkpoint!(execution_ctx);
             tracing::debug!("All logged in accounts gathered, starting background execution");
-            sleep(Duration::from_millis(250)).await;
+
+            let user_ctx = all_user_ctxs.first().unwrap();
+            if user_ctx.connection_status().await.is_offline() {
+                tracing::debug!("Status is offline, wait for online before executing");
+                let mut status = user_ctx.session().status_changes();
+                let mut interval = interval(Duration::from_secs(21));
+                tokio::select! {
+                    () = status.wait_for_online() => {
+                        tracing::debug!("Status is back online, resume background execution");
+                        execution_checkpoint!(execution_ctx);
+                    }
+                    _ = interval.tick() => {
+                        tracing::debug!("Time's up, status is still offline, halt background execution");
+                        execution_ctx.stop();
+                        return Ok(());
+                    }
+
+                }
+            }
 
             for user_ctx in &all_user_ctxs {
                 let send_executor = user_ctx
