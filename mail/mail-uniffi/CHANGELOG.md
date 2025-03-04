@@ -7,11 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
-## [0.52.1] - 2025-03-04
-
-### Fix
-
-  - Stash's connection pool should now be less susceptible for random errors due to 262 SQLITE_LOCKED_SHAREDCACHE
+## [0.52.2] - 2025-03-04
 
 ### Added
 
@@ -19,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   for notification extension
     - It spawns lower number of async runtime workers,
     - It also limits number of DB connections from 100 to 4
+
+## [0.52.1] - 2025-03-04
+
+### Fix
+
+  - Stash's connection pool should now be less susceptible for random errors due to 262 SQLITE_LOCKED_SHAREDCACHE
 
 ## [0.52.0] - 2025-03-03
 
