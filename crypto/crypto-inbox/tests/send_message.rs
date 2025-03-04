@@ -384,6 +384,8 @@ fn send_external_mime_sign_only() {
 /// Contains all test models for the send email request.
 mod send_request {
 
+    use proton_crypto_inbox::attachment::Base64AttachmentEncryptedSignature;
+
     use super::*;
 
     #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -411,7 +413,7 @@ mod send_request {
         pub address_type: PackageCryptoType,
         pub body_key_packet: Option<KeyPacket>,
         pub attachment_key_packets: Option<HashMap<String, KeyPacket>>,
-        pub attachment_enc_signatures: Option<HashMap<String, AttachmentEncryptedSignature>>,
+        pub attachment_enc_signatures: Option<HashMap<String, Base64AttachmentEncryptedSignature>>,
         pub signature: Option<PackageSignaturesMode>,
         pub token: Option<String>,
         pub enc_token: Option<String>,
@@ -893,7 +895,8 @@ mod send_logic {
                 .encrypt_signature_to_recipient(pgp_provider, recipient_key)
                 .expect("Failed to encrypt signature to recipient")
             {
-                attachment_enc_signatures.insert(attachment.id.clone(), enc_signature);
+                attachment_enc_signatures
+                    .insert(attachment.id.clone(), enc_signature.encode_base64());
             }
 
             attachment_key_packets.insert(attachment.id.clone(), recipient_attachment_kp);

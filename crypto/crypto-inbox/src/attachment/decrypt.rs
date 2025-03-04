@@ -12,7 +12,8 @@ use proton_crypto_account::proton_crypto::{
 use crate::keys::{InboxSessionKey, SessionKeyError};
 
 use super::{
-    AttachmentEncryptedSignature, AttachmentSignature, ExtractedAttachmentInfo, KeyPackets,
+    AttachmentEncryptedSignature, AttachmentSignature, BinaryAttachmentSignature,
+    ExtractedAttachmentInfo, KeyPackets,
 };
 
 /// Errors thrown by attachment decryption.
@@ -218,7 +219,7 @@ pub trait DecryptableAttachment {
                 .armorer()
                 .unarmor(&attachment_signature.0)
                 .map_err(AttachmentDecryptionError::Unarmor)?;
-            Some(unarmored_signature)
+            Some(BinaryAttachmentSignature(unarmored_signature))
         } else if let Some(attachment_signature) = enc_signature_option {
             let detached_signature = pgp_provider
                 .new_decryptor()
@@ -226,7 +227,7 @@ pub trait DecryptableAttachment {
                 .decrypt(attachment_signature.0.as_bytes(), DataEncoding::Armor)
                 .map(VerifiedData::into_vec)
                 .map_err(AttachmentDecryptionError::EncryptedSignatureDecryption)?;
-            Some(detached_signature)
+            Some(BinaryAttachmentSignature(detached_signature))
         } else {
             None
         };
