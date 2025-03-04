@@ -263,6 +263,13 @@ impl Session {
         self.status.status(self.client.clone()).await
     }
 
+    /// Returns status watcher
+    ///
+    #[must_use]
+    pub fn status_watcher(&self) -> StatusWatcher {
+        self.status.clone()
+    }
+
     /// Observe changes on status via `Receiver`
     ///
     #[must_use]

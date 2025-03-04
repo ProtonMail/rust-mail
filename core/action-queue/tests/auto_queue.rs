@@ -1,14 +1,17 @@
 #![allow(clippy::ignored_unit_patterns)]
 mod common;
 
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common::DefaultError;
-use common::new_queue_typed;
+use common::{new_queue_typed, new_queue_typed_with_custom_network_waiting};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::queue::{BroadcastMessage, QueuedActionState};
+use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::queue::{BroadcastMessage, QueuedActionReason, QueuedActionState};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tokio::time::sleep;
@@ -21,7 +24,10 @@ async fn auto_queued_on_network_failure() {
     queue.queue_action(ErrorAction {}).await.unwrap();
     let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
-    assert!(matches!(output, QueuedActionState::Queued(_)),);
+    assert!(matches!(
+        output,
+        QueuedActionState::Queued(_, QueuedActionReason::Network)
+    ),);
 }
 
 #[tokio::test]
@@ -150,7 +156,10 @@ async fn auto_queued_on_writer_guard_failure() {
         .unwrap();
     let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
-    assert!(matches!(output, QueuedActionState::Queued(_)),);
+    assert!(matches!(
+        output,
+        QueuedActionState::Queued(_, QueuedActionReason::GuardExpired)
+    ),);
 }
 
 #[tokio::test]
@@ -162,6 +171,40 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
     let _ = queue.queue_action(ErrorAction {}).await.unwrap();
 
     queue.new_executor().execute_all().await.unwrap();
+}
+
+#[tokio::test]
+async fn execute_all_waits_for_network_to_reoccur() {
+    let is_offline = DeviceAlwaysOffline::default();
+    let queue =
+        new_queue_typed_with_custom_network_waiting::<ErrorAction>(is_offline.clone()).await;
+    let mut broadcast = queue.new_broadcast_receiver();
+    // We spawn an auto executor in the background.
+    let auto_executor = queue.new_executor().into_auto_executor();
+
+    auto_executor.pause();
+    queue.queue_action(ErrorAction {}).await.unwrap();
+
+    auto_executor.unpause();
+
+    sleep(Duration::from_secs(5)).await;
+
+    broadcast.recv().await.unwrap();
+
+    // Check if the executor waited for the action.
+    assert!(is_offline.0.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+/// That implementation never returns, so the device is seen as always offline
+#[derive(Clone, Default)]
+struct DeviceAlwaysOffline(Arc<AtomicBool>);
+
+#[async_trait::async_trait]
+impl WaitForOnline for DeviceAlwaysOffline {
+    async fn wait_for_online(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+        futures::future::pending::<()>().await;
+    }
 }
 
 #[derive(Serialize, Deserialize)]

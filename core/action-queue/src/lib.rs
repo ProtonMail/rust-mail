@@ -23,6 +23,7 @@
 //! use serde::{Deserialize, Serialize};
 //! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, ActionId, Metadata, Priority, Type, WriterGuardError, WriterGuard};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
+//! use proton_action_queue::network::WaitForOnline;
 //! use stash::stash::{Stash, Bond};
 //!
 //! #[derive(Serialize, Deserialize)]
@@ -92,11 +93,17 @@
 //!     }
 //! }
 //!
+//! struct DummyWaitForOnline;
+//! #[async_trait::async_trait]
+//! impl WaitForOnline for DummyWaitForOnline {
+//!     async fn wait_for_online(&self) { }
+//! }
+//!
 //! async fn example() {
 //!     // Create stash instance.
 //!     let stash = stash::stash::Stash::new(None).unwrap();
 //!     // create queue.
-//!     let queue = Queue::new(stash).await.unwrap();
+//!     let queue = Queue::new(stash, Arc::new(DummyWaitForOnline)).await.unwrap();
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
 //!     // create executor
@@ -126,6 +133,7 @@
 //! [`Factory`]: action::Factory
 pub mod action;
 pub mod db;
+pub mod network;
 pub mod observers;
 pub mod queue;
 
