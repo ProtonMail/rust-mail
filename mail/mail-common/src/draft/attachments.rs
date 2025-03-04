@@ -10,6 +10,8 @@ pub struct DraftAttachment {
     pub metadata: AttachmentMetadata,
     /// Upload status.
     pub state: DraftAttachmentUploadState,
+    /// Timestamp of the state update. It will be 0 for attachment that already exist.
+    pub state_modified_timestamp: i64,
 }
 
 impl DraftAttachment {
@@ -34,17 +36,18 @@ impl DraftAttachment {
         Ok(attachments
             .into_iter()
             .map(|attachment| {
-                let status = if let Some(metadata) = metadata_map.get(&attachment.local_id.unwrap())
-                {
-                    metadata.state()
-                } else {
-                    // If there is no metadata entry, it means there are no changes for this attachment
-                    // or it was inherited from a reply/forward.
-                    DraftAttachmentUploadState::Uploaded
-                };
+                let (status, timestamp) =
+                    if let Some(metadata) = metadata_map.get(&attachment.local_id.unwrap()) {
+                        (metadata.state(), metadata.state_timestamp())
+                    } else {
+                        // If there is no metadata entry, it means there are no changes for this attachment
+                        // or it was inherited from a reply/forward.
+                        (DraftAttachmentUploadState::Uploaded, 0)
+                    };
                 DraftAttachment {
                     state: status,
                     metadata: AttachmentMetadata::from(attachment),
+                    state_modified_timestamp: timestamp,
                 }
             })
             .collect())

@@ -46,6 +46,8 @@ pub struct DraftAttachment {
     pub state: DraftAttachmentState,
     /// Metadata related to the attachment.
     pub attachment: AttachmentMetadata,
+    /// Timestamp of the status change
+    pub state_modified_timestamp: i64,
 }
 
 impl From<RealDraftAttachment> for DraftAttachment {
@@ -53,6 +55,7 @@ impl From<RealDraftAttachment> for DraftAttachment {
         Self {
             state: attachment.state.into(),
             attachment: attachment.metadata.into(),
+            state_modified_timestamp: attachment.state_modified_timestamp,
         }
     }
 }
