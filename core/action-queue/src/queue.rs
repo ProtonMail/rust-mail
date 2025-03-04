@@ -639,10 +639,9 @@ pub enum QueuedActionReason {
     /// Action execution failed because of the network
     ///
     Network,
-    // In the future we may want to expand it
-    /// Action execution failed because of other reason
+    /// Action execution failed because of execution/writer guard expired
     ///
-    Other,
+    GuardExpired,
 }
 
 /// Wrapper trait around the actual action type.
@@ -946,7 +945,7 @@ impl QueueAutoExecutor {
                     ActionExecutionFollowup::WaitForNetwork
                 }
                 Ok(Some(QueuedActionState::Executed(_))) => ActionExecutionFollowup::PickNextAction,
-                Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Other))) => {
+                Ok(Some(QueuedActionState::Queued(_, _))) => {
                     ActionExecutionFollowup::PickNextAction
                 }
                 Err(e) => {
@@ -967,14 +966,9 @@ impl QueueAutoExecutor {
                     .await;
                 }
                 ActionExecutionFollowup::WaitForNetwork => {
-                    // We currently wait for a signal from network status observer to start executing.
-                    // The timeout is here to catch potential changes made in another process.
-                    // This can be revisited once we have a cross process database observer.
-                    let _ = tokio::time::timeout(
-                        DEFAULT_LOCK_TIMEOUT,
-                        executor.shared.wait_for_online.wait_for_online(),
-                    )
-                    .await;
+                    debug!("Waiting for the network");
+                    executor.shared.wait_for_online.wait_for_online().await;
+                    debug!("Connection has restored. Resuming the auto queue executor");
                 }
                 ActionExecutionFollowup::PickNextAction => (),
             }
@@ -1112,7 +1106,10 @@ async fn execute_action_remote<T: Action>(
     let bond = match guard.transaction(tether).await {
         Ok(tx) => tx,
         Err(ExecutionGuardError::Expired) => {
-            return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Other));
+            return Ok(ActionRemoteOutput::Queued(
+                id,
+                QueuedActionReason::GuardExpired,
+            ));
         }
         Err(ExecutionGuardError::Stash(e)) => return Err(e.into()),
     };
@@ -1132,7 +1129,10 @@ async fn execute_action_remote<T: Action>(
                     return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
                 } else if e.is_writer_guard_expired() {
                     debug!("Action remains in queue due to expired writer guard");
-                    return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Other));
+                    return Ok(ActionRemoteOutput::Queued(
+                        id,
+                        QueuedActionReason::GuardExpired,
+                    ));
                 }
                 debug!("Reverting self and dependees");
                 match cancel_action_with_dependees(shared, &bond, id).await {

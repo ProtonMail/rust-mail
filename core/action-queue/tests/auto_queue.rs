@@ -142,7 +142,7 @@ async fn auto_queued_on_writer_guard_failure() {
 
     assert!(matches!(
         output,
-        QueuedActionState::Queued(_, QueuedActionReason::Other)
+        QueuedActionState::Queued(_, QueuedActionReason::GuardExpired)
     ),);
 }
 
