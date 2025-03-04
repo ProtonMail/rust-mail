@@ -752,6 +752,11 @@ impl DraftAttachmentMetadata {
         self.state
     }
 
+    /// Timestamp of the latest state update.
+    pub fn state_timestamp(&self) -> i64 {
+        self.timestamp
+    }
+
     /// Return all [`ActionId`]s for attachments that are still uploading.
     ///
     /// # Errors

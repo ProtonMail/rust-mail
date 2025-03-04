@@ -188,6 +188,8 @@ pub enum DraftAttachmentErrorReason {
     MessageAlreadySent,
     /// the attachment size exceeds the upper limit
     AttachmentTooLarge,
+    /// Upload Retry in invalid state
+    RetryInvalidState,
 }
 
 /// Specific Reason when attempting to discard a draft.

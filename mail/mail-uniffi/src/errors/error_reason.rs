@@ -238,6 +238,8 @@ pub enum DraftAttachmentErrorReason {
     MessageAlreadySent,
     /// Attachment is too large
     AttachmentTooLarge,
+    /// Upload Retry in invalid state
+    RetryInvalidState,
 }
 
 impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
@@ -251,6 +253,7 @@ impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
             RealDraftAttachmentErrorReason::TooManyAttachments => Self::TooManyAttachments,
             RealDraftAttachmentErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
             RealDraftAttachmentErrorReason::AttachmentTooLarge => Self::AttachmentTooLarge,
+            RealDraftAttachmentErrorReason::RetryInvalidState => Self::RetryInvalidState,
         }
     }
 }

@@ -32,6 +32,15 @@ pub struct AttachmentUpload {
     address_id: AddressId,
     attachment_id: LocalAttachmentId,
     local_message_id: Option<LocalMessageId>,
+    mode: AttachmentUploadMode,
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Eq, PartialEq)]
+pub enum AttachmentUploadMode {
+    /// First time we are trying to create the attachment.
+    Create,
+    /// Retrying the request because something failed previously.
+    Retry,
 }
 
 impl AttachmentUpload {
@@ -39,12 +48,14 @@ impl AttachmentUpload {
         metadata_id: MetadataId,
         address_id: AddressId,
         attachment_id: LocalAttachmentId,
+        mode: AttachmentUploadMode,
     ) -> Self {
         Self {
             metadata_id,
             address_id,
             attachment_id,
             local_message_id: None,
+            mode,
         }
     }
 
@@ -147,11 +158,11 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
         if let Some(message_id) = action.local_message_id {
             // remove attachment from message.
             tx.execute(
-                "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id=?",
-                params![message_id, action.attachment_id],
-            )
-                .await
-                .inspect_err(|e| error!("Failed to remove attachment from message: {e}"))?;
+                    "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id=?",
+                    params![message_id, action.attachment_id],
+                )
+                    .await
+                    .inspect_err(|e| error!("Failed to remove attachment from message: {e}"))?;
         }
         Ok(())
     }

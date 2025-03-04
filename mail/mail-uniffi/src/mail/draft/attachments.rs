@@ -1,3 +1,4 @@
+use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{DraftAttachmentError, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
@@ -45,6 +46,8 @@ pub struct DraftAttachment {
     pub state: DraftAttachmentState,
     /// Metadata related to the attachment.
     pub attachment: AttachmentMetadata,
+    /// Timestamp of the status change
+    pub state_modified_timestamp: i64,
 }
 
 impl From<RealDraftAttachment> for DraftAttachment {
@@ -52,6 +55,7 @@ impl From<RealDraftAttachment> for DraftAttachment {
         Self {
             state: attachment.state.into(),
             attachment: attachment.metadata.into(),
+            state_modified_timestamp: attachment.state_modified_timestamp,
         }
     }
 }
@@ -101,6 +105,30 @@ impl AttachmentList {
 
             let mut instance = draft.instance.write().await;
             instance.add_attachment(&draft.ctx, attachment).await?;
+            Ok(())
+        })
+        .await
+        .map_err(DraftAttachmentError::from)
+    }
+
+    /// Retry the upload of a failed attachment.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the attachment is not in the error state or the action could not
+    /// be queued.
+    pub async fn retry(&self, attachment_id: Id) -> Result<(), DraftAttachmentError> {
+        let Some(draft) = self.draft.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Draft,
+            )));
+        };
+
+        uniffi_async::<(), RealProtonMailError, _>(async move {
+            let instance = draft.instance.read().await;
+            instance
+                .retry_attachment_upload(&draft.ctx, attachment_id.into())
+                .await?;
             Ok(())
         })
         .await
