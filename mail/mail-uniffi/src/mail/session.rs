@@ -26,7 +26,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 use tracing::debug;
@@ -725,6 +725,7 @@ impl MailSession {
         Ok(Arc::new(BackgroundExecutionHandle {
             sender,
             handle: handle.abort_handle(),
+            ctx: Arc::downgrade(&self.mail_ctx),
         }))
     }
 
@@ -973,6 +974,7 @@ impl WatchedSessions {
 pub struct BackgroundExecutionHandle {
     sender: mpsc::Sender<()>,
     handle: AbortHandle,
+    ctx: Weak<MailContext>,
 }
 
 #[uniffi_export]
@@ -997,16 +999,18 @@ impl Drop for BackgroundExecutionHandle {
     fn drop(&mut self) {
         let sender = self.sender.clone();
         let handle = self.handle.clone();
-        tokio::spawn(async move {
-            if !sender.is_closed() && !handle.is_finished() {
-                if let Err(e) = sender.send(()).await {
-                    tracing::error!(
-                    "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
-                );
-                    handle.abort();
+        if let Some(ctx) = self.ctx.upgrade() {
+            spawn_async(ctx, async move {
+                if !sender.is_closed() && !handle.is_finished() {
+                    if let Err(e) = sender.send(()).await {
+                        tracing::error!("Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`");
+                        handle.abort();
+                    }
                 }
-            }
-        });
+            });
+        } else {
+            tracing::warn!("MailContext already dropped, background execution handle should not live that long");
+        }
     }
 }
 
