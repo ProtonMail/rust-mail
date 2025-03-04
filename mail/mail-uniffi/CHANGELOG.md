@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased] - 2025-02-xx
+## [unreleased] - 2025-03-xx
+
+## [0.52.1] - 2025-03-04
+
+### Fix
+
+  - Stash's connection pool should now be less susceptible for random errors due to 262 SQLITE_LOCKED_SHAREDCACHE
 
 ## [0.52.0] - 2025-03-03
 
