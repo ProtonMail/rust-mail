@@ -995,14 +995,18 @@ impl BackgroundExecutionHandle {
 
 impl Drop for BackgroundExecutionHandle {
     fn drop(&mut self) {
-        if !self.sender.is_closed() && !self.handle.is_finished() {
-            if let Err(e) = self.sender.blocking_send(()) {
-                tracing::error!(
+        let sender = self.sender.clone();
+        let handle = self.handle.clone();
+        tokio::spawn(async move {
+            if !sender.is_closed() && !handle.is_finished() {
+                if let Err(e) = sender.send(()).await {
+                    tracing::error!(
                     "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
                 );
-                self.handle.abort();
+                    handle.abort();
+                }
             }
-        }
+        });
     }
 }
 
