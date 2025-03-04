@@ -1,5 +1,4 @@
-#![allow(clippy::print_stdout)]
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 use futures::TryFutureExt;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
@@ -18,24 +17,46 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt().pretty().init();
 
-    let dir = Path::new("/tmp");
-    let kch = OnDiskKeyChain::new("/tmp/kch")?;
-    let cfg = Config::default();
-    let ctx = new_mail_ctx(dir, kch, cfg).await?;
-
-    Cli::parse().run(ctx).inspect_err(|e| error!("{e}")).await?;
+    Cli::parse().run().inspect_err(|e| error!("{e}")).await?;
 
     Ok(())
 }
 
-#[derive(Parser)]
-enum Cli {
-    Login(LoginCmd),
+#[derive(Debug, Parser)]
+struct Cli {
+    /// The app version to use.
+    #[arg(long)]
+    app: Option<String>,
+
+    /// The environment to connect to.
+    #[arg(long)]
+    env: Option<String>,
+
+    #[command(subcommand)]
+    cmd: Cmd,
 }
 
 impl Cli {
+    async fn run(self) -> Result<()> {
+        info!(?self, "starting");
+
+        let dir = Path::new("/tmp");
+        let kch = OnDiskKeyChain::new("/tmp/kch")?;
+        let cfg = build_config(self.app, self.env)?;
+        let ctx = new_mail_ctx(dir, kch, cfg).await?;
+
+        self.cmd.run(ctx).await
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum Cmd {
+    Login(LoginCmd),
+}
+
+impl Cmd {
     async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
         match self {
             Self::Login(cmd) => cmd.run(ctx).await,
@@ -43,7 +64,7 @@ impl Cli {
     }
 }
 
-#[derive(Args)]
+#[derive(Debug, Args)]
 struct LoginCmd {
     username: String,
 }
@@ -79,6 +100,20 @@ impl LoginCmd {
 
         Ok(())
     }
+}
+
+fn build_config(app: Option<String>, env: Option<String>) -> Result<Config> {
+    let mut cfg = Config::default();
+
+    if let Some(app) = app {
+        cfg.app_version = app;
+    }
+
+    if let Some(env) = env {
+        cfg.env_id = env.parse()?;
+    }
+
+    Ok(cfg)
 }
 
 async fn new_mail_ctx<T: KeyChain + 'static>(
@@ -124,6 +159,7 @@ async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<Flow> {
     Ok(ctx.new_login_flow(None)?)
 }
 
+#[allow(clippy::print_stdout)]
 fn read(prompt: &str) -> IoResult<String> {
     print!("{prompt}: ");
     stdout().flush()?;
