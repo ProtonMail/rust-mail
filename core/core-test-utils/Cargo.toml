@@ -17,6 +17,7 @@ ical = { workspace = true }
 muon = { workspace = true, features = ["unsealed"] }
 num_enum = { workspace = true }
 parking_lot = { workspace = true }
+proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true, features = ["sql"] }
 proton-api-mail = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true, features = ["sql"] }

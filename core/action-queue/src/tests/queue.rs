@@ -4,7 +4,8 @@ use super::*;
 use crate::action::{
     Action, DefaultVersionConverter, Factory, MetadataBuilder, NoopError, Priority, Type,
 };
-use crate::tests::common::{DummyWaitForOnline, NoopActionHandler};
+use crate::network::DummyWaitForOnlineSubscribtion;
+use crate::tests::common::NoopActionHandler;
 use serde::{Deserialize, Serialize};
 use stash::stash::Stash;
 use std::time::Duration;
@@ -287,7 +288,7 @@ async fn new_queue() -> Queue {
     let mut factory = Factory::new();
     factory.register::<TestAction>().unwrap();
     let pool = Stash::new(None).unwrap();
-    Queue::with_factory(pool, factory, Arc::new(DummyWaitForOnline))
+    Queue::with_factory(pool, factory, Arc::new(DummyWaitForOnlineSubscribtion))
         .await
         .unwrap()
 }

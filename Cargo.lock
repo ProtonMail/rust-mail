@@ -4318,6 +4318,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "pretty_assertions",
+ "proton-action-queue",
  "proton-api-core",
  "proton-api-mail",
  "proton-core-common",
@@ -4622,7 +4623,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.55.0"
+version = "0.56.0"
 dependencies = [
  "anyhow",
  "async-trait",

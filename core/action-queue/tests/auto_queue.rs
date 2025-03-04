@@ -10,7 +10,7 @@ use common::{new_queue_typed, new_queue_typed_with_custom_network_waiting};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use proton_action_queue::queue::{BroadcastMessage, QueuedActionReason, QueuedActionState};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -199,9 +199,14 @@ async fn execute_all_waits_for_network_to_reoccur() {
 #[derive(Clone, Default)]
 struct DeviceAlwaysOffline(Arc<AtomicBool>);
 
+impl WaitForOnlineSubscribtion for DeviceAlwaysOffline {
+    fn subscribe(&self) -> Box<dyn WaitForOnline> {
+        Box::new(self.clone())
+    }
+}
 #[async_trait::async_trait]
 impl WaitForOnline for DeviceAlwaysOffline {
-    async fn wait_for_online(&self) {
+    async fn wait_for_online(&mut self) {
         self.0.store(true, std::sync::atomic::Ordering::Relaxed);
         futures::future::pending::<()>().await;
     }

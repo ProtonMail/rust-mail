@@ -7,7 +7,7 @@ use crate::action::{
     Handler, Metadata, Priority, Resources, Type, WriterGuard,
 };
 use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction, DEFAULT_LOCK_TIMEOUT};
-use crate::network::WaitForOnline;
+use crate::network::WaitForOnlineSubscribtion;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
@@ -265,7 +265,7 @@ pub struct Queue {
 pub(crate) struct Shared {
     stash: Stash,
     factory: RwLock<Factory>,
-    wait_for_online: Arc<dyn WaitForOnline>,
+    wait_for_online: Arc<dyn WaitForOnlineSubscribtion>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
@@ -316,7 +316,10 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the database migration failed.
-    pub async fn new(stash: Stash, check_for_network: Arc<dyn WaitForOnline>) -> Result<Self> {
+    pub async fn new(
+        stash: Stash,
+        check_for_network: Arc<dyn WaitForOnlineSubscribtion>,
+    ) -> Result<Self> {
         Self::with_factory(stash, Factory::default(), check_for_network).await
     }
 
@@ -328,7 +331,7 @@ impl Queue {
     pub async fn with_factory(
         stash: Stash,
         factory: Factory,
-        wait_for_online: Arc<dyn WaitForOnline>,
+        wait_for_online: Arc<dyn WaitForOnlineSubscribtion>,
     ) -> Result<Self> {
         let mut tether = stash.connection();
         db::create_tables(&mut tether).await?;
@@ -944,6 +947,7 @@ impl QueueAutoExecutor {
             "Starting auto queue executor {} with group={}",
             executor.id, executor.action_group
         );
+        let mut wait_for_online = executor.shared.wait_for_online.subscribe();
         loop {
             // Inner pause loop, before picking any more work, make sure we should not pause.
             if *pause.borrow() {
@@ -992,7 +996,9 @@ impl QueueAutoExecutor {
                 }
                 ActionExecutionFollowup::WaitForNetwork => {
                     debug!("Waiting for the network");
-                    executor.shared.wait_for_online.wait_for_online().await;
+
+                    wait_for_online.wait_for_online().await;
+
                     debug!("Connection has restored. Resuming the auto queue executor");
                 }
                 ActionExecutionFollowup::PickNextAction => (),

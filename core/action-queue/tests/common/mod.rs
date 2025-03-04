@@ -2,29 +2,27 @@
 use std::sync::Arc;
 
 use proton_action_queue::action::{Action, Factory};
-use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::network::{DummyWaitForOnlineSubscribtion, WaitForOnlineSubscribtion};
 use proton_action_queue::queue::Queue;
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether};
 
-pub(crate) struct DummyWaitForOnline;
-#[async_trait::async_trait]
-impl WaitForOnline for DummyWaitForOnline {
-    async fn wait_for_online(&self) {}
-}
-
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
-    Queue::with_factory(new_stash().await, factory, Arc::new(DummyWaitForOnline))
-        .await
-        .unwrap()
+    Queue::with_factory(
+        new_stash().await,
+        factory,
+        Arc::new(DummyWaitForOnlineSubscribtion),
+    )
+    .await
+    .unwrap()
 }
 
 /// Create a new queue with a given db `pool`.
 pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
-    Queue::with_factory(stash, factory, Arc::new(DummyWaitForOnline))
+    Queue::with_factory(stash, factory, Arc::new(DummyWaitForOnlineSubscribtion))
         .await
         .unwrap()
 }
@@ -33,7 +31,7 @@ pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
 ///
 pub async fn new_queue_with_custom_network_waiting(
     factory: Factory,
-    wait_for_online: impl WaitForOnline + 'static,
+    wait_for_online: impl WaitForOnlineSubscribtion,
 ) -> Queue {
     Queue::with_factory(new_stash().await, factory, Arc::new(wait_for_online))
         .await
@@ -54,7 +52,7 @@ pub async fn new_queue_typed<T: Action<Context: Default>>() -> Queue {
 }
 
 pub async fn new_queue_typed_with_custom_network_waiting<T: Action<Context: Default>>(
-    wait_for_online: impl WaitForOnline + 'static,
+    wait_for_online: impl WaitForOnlineSubscribtion,
 ) -> Queue {
     new_queue_with_custom_network_waiting(new_factory::<T>(), wait_for_online).await
 }

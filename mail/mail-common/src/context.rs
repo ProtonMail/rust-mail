@@ -10,7 +10,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
-use proton_core_common::action_queue::CheckNetworkStatus;
+use proton_core_common::action_queue::CheckNetworkStatusSubscriber;
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -297,7 +297,7 @@ impl MailContext {
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_session::<CheckNetworkStatus>(session, status, challenge)
+            .user_context_from_session::<CheckNetworkStatusSubscriber>(session, status, challenge)
             .await?;
         Arc::clone(self).new_user_context(ctx).await
     }
