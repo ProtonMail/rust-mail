@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-  - [ET-2204] `create_mail_session_slim` - more resource constrained sibling of `create_mail_session`, designed
+  - [ET-2204] `create_mail_ios_extension_session` - more resource constrained sibling of `create_mail_session`, designed
   for notification extension
     - It spawns lower number of async runtime workers,
     - It also limits number of DB connections from 100 to 4

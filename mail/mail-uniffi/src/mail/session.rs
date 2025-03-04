@@ -124,7 +124,7 @@ pub fn create_mail_session(
 ///
 #[must_use]
 #[uniffi_export]
-pub fn create_mail_session_slim(
+pub fn create_mail_ios_extension_session(
     params: MailSessionParams,
     key_chain: Box<dyn OSKeyChain>,
 ) -> Result<Arc<MailSession>, UserSessionError> {

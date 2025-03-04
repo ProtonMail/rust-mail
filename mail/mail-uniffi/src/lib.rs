@@ -154,7 +154,7 @@ use proton_mail_common::models::{
 };
 use proton_mail_common::{MailContext, MailUserContext};
 use std::future::Future;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, OnceLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tokio::task::JoinHandle;
@@ -227,18 +227,45 @@ impl WatchHandle {
     }
 }
 
+static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+
 /// Get the async runtime.
+///
+/// # Using both [`async_runtime`] and [`async_runtime_slim`]
+///
+/// Both functions are competing for initializing common runtime. It means, that whichever function
+/// is called first, it's configuring the runtime, and all other following calls are only
+/// returning already initialized runtime.
+///
+/// ## Examples
+///
+/// ```ignore
+/// let runtime1 = async_runtime();
+/// let runtime2 = async_runtime_slim();
+/// // This runtime2 is a static reference to FULL runtime using all possible cores,
+/// // because `async_runtime()` was called first
+/// ```
+///
+/// ```ignore
+/// let runtime1 = async_runtime_slim();
+/// let runtime2 = async_runtime();
+/// // This runtime2 is a static reference to SLIM runtime using limited number of cores,
+/// // because `async_runtime_slim()` was called first
+/// ```
+///
+/// # Panics
+///
+/// This function may panic if Tokio fails to init async runtime
+///
 #[must_use]
 pub fn async_runtime() -> &'static Runtime {
-    static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_io()
             .enable_time()
             .build()
             .expect("Failed to init runtime")
-    });
-
-    &RUNTIME
+    })
 }
 
 /// Get slimmer version of the async runtime.
@@ -246,11 +273,37 @@ pub fn async_runtime() -> &'static Runtime {
 /// Comparing to [`async_runtime`] this takes very limited number of threads.
 /// It is to enable Rust SDK in apps with limited amount of memory.
 ///
+/// # Using both [`async_runtime`] and [`async_runtime_slim`]
+///
+/// Both functions are competing for initializing common runtime. It means, that whichever function
+/// is called first, it's configuring the runtime, and all other following calls are only
+/// returning already initialized runtime.
+///
+/// ## Examples
+///
+/// ```ignore
+/// let runtime1 = async_runtime();
+/// let runtime2 = async_runtime_slim();
+/// // This runtime2 is a static reference to FULL runtime using all possible cores,
+/// // because `async_runtime()` was called first
+/// ```
+///
+/// ```ignore
+/// let runtime1 = async_runtime_slim();
+/// let runtime2 = async_runtime();
+/// // This runtime2 is a static reference to SLIM runtime using limited number of cores,
+/// // because `async_runtime_slim()` was called first
+/// ```
+///
+/// # Panics
+///
+/// This function may panic if Tokio fails to init async runtime
+///
 #[must_use]
 pub fn async_runtime_slim() -> &'static Runtime {
     // Those numbers are arbitrary
     //
-    static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .worker_threads(4)
             .max_blocking_threads(4)
@@ -258,9 +311,7 @@ pub fn async_runtime_slim() -> &'static Runtime {
             .enable_time()
             .build()
             .expect("Failed to init runtime")
-    });
-
-    &RUNTIME
+    })
 }
 
 /// Spawn an async function on the runtime.
