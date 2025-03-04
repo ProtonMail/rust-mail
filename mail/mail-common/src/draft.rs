@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::actions::draft;
-use crate::actions::draft::{AttachmentUpload, Discard, Save, UndoSend};
+use crate::actions::draft::{AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend};
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::attachments::DraftAttachment;
@@ -12,8 +12,9 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, DraftAttachmentMetadata, DraftMetadata, DraftSendResult, DraftSendResultOrigin,
-    EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
+    DraftSendResult, DraftSendResultOrigin, EmbeddedAttachmentInfo, MailSettings, Message,
+    MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use derive_more::derive::TryFrom;
@@ -151,6 +152,8 @@ pub enum AttachmentError {
     MessageAlreadySent,
     #[error("Attachment size is greater than maximum limit")]
     AttachmentTooLarge,
+    #[error("Retry attempted for Attachment {0} when not in error state")]
+    RetryInvalidState(LocalAttachmentId),
 }
 
 impl From<AttachmentError> for MailContextError {
@@ -1047,6 +1050,43 @@ impl Draft {
             self.address_id.clone(),
             attachment_id,
             save_action,
+            AttachmentUploadMode::Create,
+        )
+    }
+
+    /// Retry the upload of a failed attachment.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the attachment is not in the error state or the action could not
+    /// be queued.
+    pub async fn retry_attachment_upload(
+        &self,
+        ctx: &MailUserContext,
+        attachment_id: LocalAttachmentId,
+    ) -> Result<ActionId, MailContextError> {
+        let upload_action = self.to_retry_attachment_upload_action(attachment_id);
+
+        let queue = ctx.action_queue();
+        let tether = ctx.user_stash().connection();
+        let result = upload_action.queue(queue, &tether).await?;
+        Ok(result.id)
+    }
+
+    /// Create action queuer where the attachment upload is retried.
+    ///
+    /// It will only be accepted if the state is [`DraftAttachmentUploadState::Error`]
+    pub fn to_retry_attachment_upload_action(
+        &self,
+        attachment_id: LocalAttachmentId,
+    ) -> DraftAttachmentUploadQueuer {
+        let save_action = self.to_save_action();
+        DraftAttachmentUploadQueuer::new(
+            self.metadata_id,
+            self.address_id.clone(),
+            attachment_id,
+            save_action,
+            AttachmentUploadMode::Retry,
         )
     }
 
@@ -1202,6 +1242,7 @@ pub struct DraftAttachmentUploadQueuer {
     attachment_id: LocalAttachmentId,
     address_id: AddressId,
     save_action: DraftSaveActionQueuer,
+    mode: AttachmentUploadMode,
 }
 
 impl DraftAttachmentUploadQueuer {
@@ -1210,12 +1251,14 @@ impl DraftAttachmentUploadQueuer {
         address_id: AddressId,
         attachment_id: LocalAttachmentId,
         save_action: DraftSaveActionQueuer,
+        mode: AttachmentUploadMode,
     ) -> Self {
         Self {
             id,
             address_id,
             attachment_id,
             save_action,
+            mode,
         }
     }
 
@@ -1226,26 +1269,32 @@ impl DraftAttachmentUploadQueuer {
         queue: &Queue,
         tether: &Tether,
     ) -> Result<QueuedActionOutput<AttachmentUpload>, MailContextError> {
-        let message_has_remote_id =
-            if let Some(local_message_id) = DraftMetadata::message_id(self.id, tether).await? {
-                Message::local_id_counterpart(local_message_id, tether)
-                    .await?
-                    .is_some()
-            } else {
-                false
-            };
-
         let mut last_draft_save_action_id = None;
-        // We only want to issue a save action if the draft does not yet have a remote id, otherwise
-        // we can't upload the attachment.
-        if !message_has_remote_id {
-            // If an existing save is ongoing, we want to depend on that action first, otherwise
-            // we create a new one ourselves.
-            last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-            if last_draft_save_action_id.is_none() {
-                last_draft_save_action_id = Some(self.save_action.queue(queue, tether).await?.id)
+        // We only need this when creating, if we are retrying this must have already
+        // happened.
+        if self.mode == AttachmentUploadMode::Create {
+            let message_has_remote_id =
+                if let Some(local_message_id) = DraftMetadata::message_id(self.id, tether).await? {
+                    Message::local_id_counterpart(local_message_id, tether)
+                        .await?
+                        .is_some()
+                } else {
+                    false
+                };
+
+            // We only want to issue a save action if the draft does not yet have a remote id, otherwise
+            // we can't upload the attachment.
+            if !message_has_remote_id {
+                // If an existing save is ongoing, we want to depend on that action first, otherwise
+                // we create a new one ourselves.
+                last_draft_save_action_id =
+                    DraftMetadata::last_save_action_id(self.id, tether).await?;
+                if last_draft_save_action_id.is_none() {
+                    last_draft_save_action_id =
+                        Some(self.save_action.queue(queue, tether).await?.id)
+                };
             };
-        };
+        }
 
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
@@ -1254,10 +1303,35 @@ impl DraftAttachmentUploadQueuer {
             metadata = metadata.with_dependency(last_draft_save_action_id)
         }
 
+        // If we are retrying we should wait for the existing one to
+        if self.mode == AttachmentUploadMode::Retry {
+            let Some(attachment_metadata) =
+                DraftAttachmentMetadata::find_by_id(self.attachment_id, tether).await?
+            else {
+                return Err(AttachmentError::AttachmentDataMissing(self.attachment_id).into());
+            };
+
+            // If the state is not error, we should not allow the retry.
+            if attachment_metadata.state() != DraftAttachmentUploadState::Error {
+                error!(
+                    "Attempting attachment ({}) upload retry on non error state",
+                    self.attachment_id
+                );
+                return Err(AttachmentError::RetryInvalidState(self.attachment_id).into());
+            }
+
+            // In case there is still an action, we only want to run after that. Action id is
+            // cleaned up on cancel and failure, but due to scheduling it's possible this value
+            // is still around.
+            if let Some(action_id) = attachment_metadata.action_id {
+                metadata = metadata.with_dependency(action_id);
+            }
+        }
+
         let metadata = metadata.build();
         Ok(queue
             .queue_action_with_metadata(
-                AttachmentUpload::new(self.id, self.address_id, self.attachment_id),
+                AttachmentUpload::new(self.id, self.address_id, self.attachment_id, self.mode),
                 metadata,
             )
             .await?)
