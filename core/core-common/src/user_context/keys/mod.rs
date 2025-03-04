@@ -11,13 +11,13 @@ use crate::{
     ContactError,
 };
 use crate::{CoreContextResult, UserContext};
-use ical::VcardParser;
+use ical::{parser::ParserError, VcardParser};
 pub use manager::*;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::{auth::UserKeySecret, session::CoreSession};
 use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
-    errors::{AccountCryptoError, CardCryptoError},
+    errors::CardCryptoError,
     keys::{PinnedPublicKeys, PublicAddressKeys, UnlockedAddressKeys, UnlockedUserKeys},
     proton_crypto::{crypto::PGPProviderSync, CryptoError},
 };
@@ -42,16 +42,10 @@ pub type KeyHandlingResult<T> = Result<T, KeyHandlingError>;
 /// via the [`CryptoKeyManager`].
 #[derive(Debug, Error)]
 pub enum KeyHandlingError {
-    #[error("No keys found in contacts")]
-    NoKeys,
-    #[error("No primary key found")]
-    NoPrimaryKey,
     #[error("No user found")]
     NoUser,
     #[error("No user secret found")]
     NoUserSecret,
-    #[error("No valid pinned keys found in signed contact card")]
-    NoPinnedKeyInCard,
     #[error("No user keys unlocked but has {0} user keys")]
     UserKeyUnlock(usize),
     #[error("Failed to store user keys in the cache {0}")]
@@ -64,10 +58,12 @@ pub enum KeyHandlingError {
     DB(#[from] StashError),
     #[error("Problem decrypting and/or verifying the signature of the contact card: {0}")]
     CardDecryptionVerificationError(#[from] CardCryptoError),
-    #[error("An account crypto error occured: {0}")]
-    AccountCrypto(#[from] AccountCryptoError),
-    #[error("Failed to load key data from contact v-card: {0}")]
+    #[error("Failed to validate contact v-card: {0}")]
     VCard(#[from] VCardError),
+    #[error("Failed to parse contact v-card: {0}")]
+    VCardParse(#[from] ParserError),
+    #[error("No contact v-card found in signed data")]
+    NoVCard,
 }
 
 /// A trait that loads the user secret to unlock the user keys.
@@ -238,13 +234,10 @@ async fn extract_pinned_keys<Provider: PGPProviderSync>(
         &verification_keys,
     )?;
 
-    // Parse the v-card.
-    let vcard_parser = VcardParser::new(card_data.reader()).flatten();
-    for card in vcard_parser {
-        if let Ok(vcard) = VCard::try_from(card) {
-            return Ok(vcard.pinned_keys_for_mail(pgp_provider, email));
-        }
-    }
-
-    Err(KeyHandlingError::NoPinnedKeyInCard)
+    // Parse the v-card contact, there should be exactly one v-card
+    let vcard_contact = VcardParser::new(card_data.reader())
+        .next()
+        .ok_or(KeyHandlingError::NoVCard)??;
+    let vcard = VCard::try_from(vcard_contact)?;
+    Ok(vcard.pinned_keys_for_mail(pgp_provider, email))
 }
