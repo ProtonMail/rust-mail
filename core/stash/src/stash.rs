@@ -71,6 +71,12 @@ enum Operation {
     Execution(OperationExec),
 }
 
+impl Operation {
+    fn is_transaction_begin(&self) -> bool {
+        matches!(self, Self::Transaction(OperationTransaction::Start(_)))
+    }
+}
+
 #[derive(Debug)]
 /// Only the operations related to a transaction.
 enum OperationTransaction {
@@ -369,7 +375,19 @@ impl Stash {
         let manager = path.map_or_else(
             SqliteConnectionManager::memory,
             SqliteConnectionManager::file,
+        ).with_init(|conn|
+             conn.execute_batch(&formatdoc!("
+                PRAGMA journal_mode = WAL;         -- Better write-concurrency
+                PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
+                PRAGMA wal_autocheckpoint = 1000;  -- Write WAL changes back every 1000 pages, approx. 1MB
+                PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
+                PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
+                PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
+                PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
+                PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
+            ", BUSY_TIMEOUT.as_millis()))
         );
+
         Pool::builder()
             .max_size(MAX_CONNECTIONS)
             .build(manager)
@@ -874,6 +892,7 @@ impl Tether {
     ///                   worker and other tethered workers.
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
+    #[allow(unused_assignments)]
     fn new(stash: &Stash) -> Self {
         let (tether_sender, tether_receiver) = flume::unbounded::<Operation>();
 
@@ -891,16 +910,13 @@ impl Tether {
             // Note that most of this logic could be avoided if we made tether cration async.
 
             let connection = || {
-                let mut connection = pool.get().context("Could not connect to the database")?;
-                Self::conn_configuration(&connection)
-                    .context("Could not set connection configuration.")?;
-                State::start_tracking(&mut *connection)
-                    .context("Critical error: Failed to set watcher on the connection")?;
+                let connection = pool.get().context("Could not connect to the database")?;
+
                 debug!("Success connecting to db");
                 Ok::<_, StashError>(connection)
             };
 
-            let (first_operation, connection) = match (tether_receiver.recv(), connection()) {
+            let (first_operation, mut connection) = match (tether_receiver.recv(), connection()) {
                 (Ok(op), Ok(con)) => (op, con),
                 (Ok(op), Err(e)) => {
                     error!("Critical error creating worker {e:?}");
@@ -936,16 +952,38 @@ impl Tether {
                 }
             };
 
-            let mut sm = TetheredWorkerStateMachine {
+            let mut tracking_is_set = false;
+
+            if first_operation.is_transaction_begin() {
+                tracking_is_set = true;
+                let _ = State::start_tracking(&mut *connection)
+                    .inspect_err(|e|
+                        tracing::error!("Critical error: Failed to set watcher on the connection, detials: `{}`", e)
+                    );
+            }
+
+            let mut sm = Some(TetheredWorkerStateMachine {
                 transaction: None,
                 connection: &connection,
-            };
-            sm.handle_operation(first_operation);
+            });
+
+            if let Some(sm) = sm.as_mut() { sm.handle_operation(first_operation) }
 
             while let Ok(operation) = tether_receiver.recv() {
-                sm.handle_operation(operation);
+                let transaction_is_none = sm.as_ref().filter(|sm| sm.transaction.is_none()).is_some();
+                if operation.is_transaction_begin() && transaction_is_none && !tracking_is_set {
+                    tracking_is_set = true;
+                    sm = None;
+                    let _ = State::start_tracking(&mut *connection)
+                        .inspect_err(|e|
+                            tracing::error!("Critical error: Failed to set watcher on the connection, detials: `{}`", e)
+                        );
+
+                    sm = Some (TetheredWorkerStateMachine { transaction: None, connection: &connection });
+                }
+                if let Some(sm) = sm.as_mut() { sm.handle_operation(operation) }
             }
-            sm.handle_close();
+            if let Some(sm) = sm.as_mut() { sm.handle_close() }
         });
 
         Self {
@@ -953,22 +991,6 @@ impl Tether {
             watcher: stash.watcher.clone(),
             state: Some(State::new()),
         }
-    }
-
-    fn conn_configuration(
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(), SqliteError> {
-        connection
-        .execute_batch(&formatdoc!("
-            PRAGMA journal_mode = WAL;         -- Better write-concurrency
-            PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
-            PRAGMA wal_autocheckpoint = 1000;  -- Write WAL changes back every 1000 pages, approx. 1MB
-            PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
-            PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
-            PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
-            PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
-            PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
-        ", BUSY_TIMEOUT.as_millis()))
     }
 }
 
@@ -1260,6 +1282,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                 // In theory this should be impossible since we require a `&mut Tether` to start a
                 // transaction
                 assert!(self.transaction.is_none(), "Started transaction twice");
+
                 match self.start_transaction() {
                     Ok(transaction) => {
                         self.transaction = Some(transaction);
