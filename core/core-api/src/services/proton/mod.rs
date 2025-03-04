@@ -469,4 +469,15 @@ pub trait ProtonCore {
         subscription: NewSubscription,
         new_values: NewSubscriptionValues,
     ) -> ApiServiceResult<()>;
+
+    /// Asynchronously posts a batch of metrics to the observability endpoint.
+    ///
+    /// # Arguments
+    /// * `body` - Vector of `PostMetricsRequestElement` structs representing metrics.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn post_metrics(&self, body: Vec<PostMetricsRequestElement>) -> ApiServiceResult<()>;
 }

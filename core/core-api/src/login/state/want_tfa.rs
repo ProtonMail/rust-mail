@@ -1,6 +1,7 @@
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{state::State, LoginError};
 use crate::service::ApiServiceError;
+use crate::services::observability::metrics::{self};
 use crate::services::proton::common::{SessionId, UserId};
 use derive_more::From;
 use futures::TryFutureExt;
@@ -25,7 +26,15 @@ impl WantTfa {
     pub async fn submit_totp(self, code: String) -> Result<State, (State, LoginError)> {
         let Self { flow, data, pass } = self;
 
-        match flow.totp(&code).await {
+        let result = flow.totp(&code).await;
+
+        data.parts
+            .observability
+            .record(metrics::SignInSubmitTotpTotal::new(
+                result.as_ref().err().into(),
+            ));
+
+        match result {
             Ok(client) => {
                 Self::advance(client, data, pass)
                     .map_err(|err| (State::TfaError, err))
@@ -42,7 +51,14 @@ impl WantTfa {
     pub async fn submit_fido(self, code: String) -> Result<State, (State, LoginError)> {
         let Self { flow, data, pass } = self;
 
-        match flow.fido(&code).await {
+        let result = flow.fido(&code).await;
+        data.parts
+            .observability
+            .record(metrics::SignInSubmitFidoTotal::new(
+                result.as_ref().err().into(),
+            ));
+
+        match result {
             Ok(client) => {
                 Self::advance(client, data, pass)
                     .map_err(|err| (State::TfaError, err))
@@ -51,7 +67,7 @@ impl WantTfa {
 
             Err(err) => Err((
                 State::TfaRetry(data.user_id, data.session_id, pass),
-                LoginError::FlowTotp(err),
+                LoginError::FlowFido(err),
             )),
         }
     }

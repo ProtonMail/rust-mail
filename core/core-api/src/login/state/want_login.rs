@@ -1,5 +1,8 @@
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
+use crate::service::ApiServiceError;
+use crate::services::observability::metrics::AuthV4RequestMetric;
+use crate::services::observability::ApiServiceObservabilityResponse;
 use crate::services::proton::prelude::{SessionId, UserId};
 use crate::services::proton::Proton;
 use crate::session::SessionParts;
@@ -93,6 +96,9 @@ impl WantLogin {
         match self.flow.login_with_extra(&user, &pass, info).await {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
+                self.parts.observability.record(AuthV4RequestMetric::new(
+                    ApiServiceObservabilityResponse::Success,
+                ));
 
                 let info = get_auth_info(&flow_data, false, false);
                 self.parts.store.write().await.set_auth_info(info).await?;
@@ -106,6 +112,9 @@ impl WantLogin {
 
             LoginFlow::TwoFactor(flow, flow_data) => {
                 info!("Login flow requires 2FA");
+                self.parts.observability.record(AuthV4RequestMetric::new(
+                    ApiServiceObservabilityResponse::Success,
+                ));
 
                 let info = get_auth_info(&flow_data, flow.has_totp(), flow.has_fido());
                 self.parts.store.write().await.set_auth_info(info).await?;
@@ -119,7 +128,12 @@ impl WantLogin {
             }
 
             LoginFlow::Failed { reason, .. } => {
-                Err(LoginError::FlowLogin(muon::Error::from(reason).into()))
+                let api_service_err: ApiServiceError = muon::Error::from(reason).into();
+                let metric_response: ApiServiceObservabilityResponse = (&api_service_err).into();
+                self.parts
+                    .observability
+                    .record(AuthV4RequestMetric::new(metric_response));
+                Err(LoginError::FlowLogin(api_service_err))
             }
         }
     }
