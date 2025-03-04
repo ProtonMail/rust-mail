@@ -140,6 +140,8 @@ pub enum DraftSaveSendErrorReason {
     MessageIsNotADraft,
     /// Some attachments have not yet been uploaded.
     MissingAttachmentUploads,
+    /// Save/Send failed due to attachment upload error.
+    AttachmentUpload,
 }
 
 impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
@@ -167,6 +169,7 @@ impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
             RealDraftSaveSendErrorReason::MissingAttachmentUploads => {
                 Self::MissingAttachmentUploads
             }
+            RealDraftSaveSendErrorReason::AttachmentUpload => Self::AttachmentUpload,
         }
     }
 }

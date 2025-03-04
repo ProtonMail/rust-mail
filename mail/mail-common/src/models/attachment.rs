@@ -268,17 +268,31 @@ impl Attachment {
             }
         }
 
-        if self.local_id.is_some() && self.remote_id.is_none() {
+        if self.local_id.is_some()
+            && (self.remote_id.is_none()
+                || self.key_packets.is_none()
+                || self.enc_signature.is_none()
+                || self.signature.is_none())
+        {
             // There is currently a race because we try to write too much data at the same time
             // rather than what really changed. It's highly unlikely that we ever want to remove
             // the remote id of an attachment that already has one. This happens in the
             // context of drafts, where a local change to the message body metadata can
             // accidentally reset the attachment remote id to nothing, causing the send
             // to fail.
-            if let Some(remote_id) =
-                Self::local_id_counterpart(self.local_id.unwrap(), bond).await?
-            {
-                self.remote_id = Some(remote_id);
+            if let Some(existing) = Attachment::find_by_id(self.local_id.unwrap(), bond).await? {
+                if self.key_packets.is_none() {
+                    self.key_packets = existing.key_packets;
+                }
+                if self.remote_id.is_none() {
+                    self.remote_id = existing.remote_id;
+                }
+                if self.enc_signature.is_none() {
+                    self.enc_signature = existing.enc_signature;
+                }
+                if self.signature.is_none() {
+                    self.signature = existing.signature;
+                }
             }
         }
 

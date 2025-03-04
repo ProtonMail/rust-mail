@@ -637,9 +637,9 @@ impl From<DraftSendFailure> for ProtonMailError {
             DraftSendFailure::AlreadySent => Self::Reason(MailErrorReason::DraftSaveSendReason(
                 DraftSaveSendErrorReason::AlreadySent,
             )),
-            DraftSendFailure::AttachmentUpload(_) => {
-                todo!()
-            }
+            DraftSendFailure::AttachmentUpload(_) => Self::Reason(
+                MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::AttachmentUpload),
+            ),
         }
     }
 }
