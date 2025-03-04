@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.54.1] - 2025-03-04
+
+### Fixed
+
+  - No longer crashes if we try to decrypt attachments without key packets.
+  - [ET-2141] Queue executors now wait for network to be restored before retrying.
+  - More error logging when pinned key extraction fails.
+
 ## [0.54.0] - 2025-03-04
 
 ### Added
