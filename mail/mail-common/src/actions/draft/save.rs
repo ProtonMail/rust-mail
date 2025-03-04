@@ -53,10 +53,6 @@ pub struct Save {
     /// Draft subject
     subject: String,
     /// Unencrypted body of the draft
-    ///
-    /// This is only used when creating local state and is not needed
-    /// afterwards.
-    #[serde(skip)]
     body: String,
     /// Attachment associated with this draft
     attachments: Vec<LocalAttachmentId>,
@@ -68,6 +64,10 @@ pub struct Save {
     reply_mode: Option<ReplyMode>,
     /// For error reporting when action fails
     save_origin: DraftSendResultOrigin,
+    /// Message metadata at the time of excecution.
+    message_metadata: Option<Message>,
+    /// Message body metadata at the time of execution
+    message_body_metadata: Option<MessageBodyMetadata>,
 }
 
 impl Save {
@@ -100,6 +100,8 @@ impl Save {
             parent_id: None,
             reply_mode: None,
             save_origin,
+            message_metadata: None,
+            message_body_metadata: None,
         }
     }
 }
@@ -188,7 +190,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let time = draft::compose::create_timestamp();
-        let message = if let Some(message_id) = metadata.local_message_id {
+        let (message, body_metadata) = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
             let Some(mut message) = Message::find_by_id(message_id, tether)
                 .await
@@ -232,7 +234,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 error!("Failed to update draft body metadata: {e:?}");
             })?;
 
-            message
+            (message, body_metadata)
         } else {
             debug!("Local message id is not set, creating new draft");
             let display_order = Message::next_display_order(tether)
@@ -297,7 +299,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 error!("Failed to apply all_mail label to new message: {e:?}");
             })?;
 
-            message
+            (message, message_body_metadata)
         };
 
         // Store body in cache.
@@ -322,6 +324,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
         action.conversation_id = metadata.local_conversation_id;
         action.reply_mode = metadata.reply_mode;
         action.parent_id = metadata.local_parent_id;
+        action.message_metadata = Some(message);
+        action.message_body_metadata = Some(body_metadata);
 
         Ok(())
     }
@@ -365,10 +369,8 @@ impl Save {
         let message_id = action.message_id.expect("Should be set");
         let conversation_id = action.conversation_id.expect("Should be set");
 
-        // Load all dependencies to make sure they are up to date. For drafts
-        // this is fine so we can always access the latest value of the data
-        // without having to queue multiple actions.
-        let Some(message) = Message::find_by_id(message_id, guard.tether()).await? else {
+        let Some(message) = action.message_metadata.as_mut() else {
+            error!("Message metadata missing from actions");
             return Err(AppError::MessageMissing(message_id).into());
         };
 
@@ -379,13 +381,7 @@ impl Save {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let Some(message_body_metadata) =
-            MessageBodyMetadata::for_message(message_id, guard.tether())
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to load message body metadata for {message_id:?}: {e:?}")
-                })?
-        else {
+        let Some(message_body_metadata) = action.message_body_metadata.as_mut() else {
             return Err(AppError::MessageBodyMetadataMissing(message_id).into());
         };
 
@@ -414,12 +410,39 @@ impl Save {
             None
         };
 
-        // Load body.
-        let Some(message_body) =
-            Message::load_decrypted_message_body_from_cache(ctx, message.local_id.unwrap())?
-        else {
-            return Err(AppError::MessageBodyMissing(message.local_id.unwrap()).into());
-        };
+        // Resolve remote ids. We captured the state of the message and the body metadata, but
+        // other actions could have run at this point in time which may have updated the remote
+        // ids.
+
+        // Check message id.
+        if message.remote_id.is_none() {
+            debug!("Resolving remote message id");
+            let remote_id =
+                Message::local_id_counterpart(message.local_id.unwrap(), guard.tether())
+                    .await
+                    .inspect_err(|e| error!("Failed to resolve remote message id: {e}"))?;
+            if remote_id.is_none() {
+                debug!("Message does not have remote id yet");
+            }
+            message.remote_id = remote_id;
+        }
+
+        // Reload attachments if they don't have remote id or key packets.
+        for attachment in &mut message_body_metadata.attachments {
+            if attachment.remote_id.is_none() || attachment.key_packets.is_none() {
+                debug!(
+                    "Reloading attachment from db: {}",
+                    attachment.local_id.unwrap()
+                );
+                if let Some(db_attachment) =
+                    Attachment::find_by_id(attachment.local_id.unwrap(), guard.tether())
+                        .await
+                        .inspect_err(|e| error!("Failed to reload attachment: {e}"))?
+                {
+                    *attachment = db_attachment;
+                }
+            }
+        }
 
         // Create draft on the server.
         let new_message = if message.remote_id.is_none() {
@@ -427,9 +450,9 @@ impl Save {
                 ctx,
                 session,
                 action.address_id.clone(),
-                &message,
-                &message_body_metadata,
-                &message_body.body,
+                message,
+                message_body_metadata,
+                &action.body,
                 draft_reply_or_forward_params,
             )
             .await
@@ -441,9 +464,9 @@ impl Save {
                 ctx,
                 session,
                 action.address_id.clone(),
-                &message,
-                &message_body_metadata,
-                &message_body.body,
+                message,
+                message_body_metadata,
+                &action.body,
             )
             .await
             .inspect_err(|e| {
