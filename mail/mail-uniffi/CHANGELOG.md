@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+
+## [0.53.0] - 2025-03-04
+
 ### Added
 
   - [ET-2293] `RustInit::init_tls` to initialize the TLS subsystem on android
