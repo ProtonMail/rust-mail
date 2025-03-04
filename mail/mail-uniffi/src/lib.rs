@@ -168,6 +168,9 @@ pub mod errors;
 mod log;
 pub mod mail;
 
+#[cfg(target_os = "android")]
+pub mod tls;
+
 uniffi::setup_scaffolding!("proton_mail_uniffi");
 
 /// A callback interface for live queries.

@@ -15,6 +15,7 @@ derive_more = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
+muon = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
