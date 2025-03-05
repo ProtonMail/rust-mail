@@ -3,7 +3,7 @@ use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageB
 /// Represents different types of banners that can be displayed for a given message.
 /// These banners indicate various security warnings, expiration notices,
 /// or content-related alerts.
-#[derive(Clone, Copy, Debug, uniffi::Enum)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
 pub enum MessageBanner {
     /// The sender of this message is blocked.
     BlockedSender,
@@ -24,6 +24,10 @@ pub enum MessageBanner {
     AutoDelete {
         /// The Unix timestamp indicating when the message will be deleted.
         timestamp: u64,
+
+        /// How many days a message will stay in trash/spam until it expires
+        // FIXME: Delete this field in favor of timestamp
+        delete_days: u32,
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
@@ -48,23 +52,6 @@ pub enum MessageBanner {
     RemoteContent,
 }
 
-impl From<MessageBanner> for RealMessageBanner {
-    fn from(value: MessageBanner) -> Self {
-        match value {
-            MessageBanner::BlockedSender => Self::BlockedSender,
-            MessageBanner::PhishingAttempt => Self::PhishingAttempt,
-            MessageBanner::Spam => Self::Spam,
-            MessageBanner::Expiry { timestamp } => Self::Expiry { timestamp },
-            MessageBanner::AutoDelete { timestamp } => Self::AutoDelete { timestamp },
-            MessageBanner::UnsubscribeNewsletter => Self::UnsubscribeNewsletter,
-            MessageBanner::ScheduledSend { timestamp } => Self::ScheduledSend { timestamp },
-            MessageBanner::Snoozed { timestamp } => Self::Snoozed { timestamp },
-            MessageBanner::EmbeddedImages => Self::EmbeddedImages,
-            MessageBanner::RemoteContent => Self::RemoteContent,
-        }
-    }
-}
-
 impl From<RealMessageBanner> for MessageBanner {
     fn from(value: RealMessageBanner) -> Self {
         match value {
@@ -72,7 +59,13 @@ impl From<RealMessageBanner> for MessageBanner {
             RealMessageBanner::PhishingAttempt => Self::PhishingAttempt,
             RealMessageBanner::Spam => Self::Spam,
             RealMessageBanner::Expiry { timestamp } => Self::Expiry { timestamp },
-            RealMessageBanner::AutoDelete { timestamp } => Self::AutoDelete { timestamp },
+            RealMessageBanner::AutoDelete {
+                timestamp,
+                delete_days,
+            } => Self::AutoDelete {
+                timestamp,
+                delete_days,
+            },
             RealMessageBanner::UnsubscribeNewsletter => Self::UnsubscribeNewsletter,
             RealMessageBanner::ScheduledSend { timestamp } => Self::ScheduledSend { timestamp },
             RealMessageBanner::Snoozed { timestamp } => Self::Snoozed { timestamp },

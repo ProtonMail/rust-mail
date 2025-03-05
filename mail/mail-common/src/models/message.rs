@@ -13,6 +13,7 @@ use crate::actions::{
     filter_responses, AllBottomBarMessageActions, BottomBarActions, MailActionError,
     MovableSystemFolderAction,
 };
+use crate::datatypes::message_banner::MessageBanner;
 use crate::models::*;
 use crate::{find_in_query, MailContextError};
 use futures::try_join;
@@ -23,6 +24,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
@@ -2631,13 +2633,63 @@ impl Message {
     pub async fn find_or_fetch_by_remote_id(
         ctx: Arc<MailUserContext>,
         remote_id: MessageId,
-    ) -> Result<LocalMessageId, MailContextError> {
+    ) -> MailContextResult<LocalMessageId> {
         let tether = &ctx.user_stash().connection();
         if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
             return Ok(message.local_id.expect("Local ID"));
         }
         let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
         Ok(message.local_id.expect("Local ID"))
+    }
+
+    /// Get message banners.
+    ///
+    /// Fails if time went backwards
+    pub async fn get_banners(&self, tether: &Tether) -> anyhow::Result<Vec<MessageBanner>> {
+        let settings = MailSettings::get_or_default(tether).await;
+        let mut banners = vec![];
+
+        let flags = self.flags;
+
+        if flags.intersects(
+            MessageFlags::FLAG_SUSPICIOUS
+                | MessageFlags::PHISHING_AUTO
+                | MessageFlags::PHISHING_MANUAL,
+        ) {
+            banners.push(MessageBanner::PhishingAttempt);
+        }
+
+        if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
+            banners.push(MessageBanner::Spam);
+        }
+
+        if self.expiration_time != 0 {
+            banners.push(MessageBanner::Expiry {
+                timestamp: self.expiration_time,
+            });
+        }
+
+        if let Some(days) = settings.auto_delete_spam_and_trash_days {
+            let trash = LabelId::trash();
+            let spam = LabelId::spam();
+
+            if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
+                // FIXME: This is not correct at the moment, but it's better than nothing
+                let time = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(|_| anyhow!("Time went backwards"))?
+                    + Duration::from_secs((days * 24 * 60 * 60) as u64);
+                banners.push(MessageBanner::AutoDelete {
+                    timestamp: time.as_secs(),
+                    delete_days: days,
+                })
+            }
+        }
+
+        // TODO: blocked sender
+
+        banners.sort_unstable();
+        Ok(banners)
     }
 }
 

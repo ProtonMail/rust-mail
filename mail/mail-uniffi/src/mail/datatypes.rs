@@ -62,6 +62,7 @@ pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use mail_scroller::*;
+pub use message_banner::MessageBanner;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
