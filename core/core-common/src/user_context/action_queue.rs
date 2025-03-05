@@ -1,44 +1,9 @@
-use std::ops::Deref;
-use std::sync::Arc;
-
 use crate::models::LabelError;
 use proton_action_queue::action::WriterGuardError;
 use proton_action_queue::network::WaitForOnline;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
-use stash::stash::{Stash, StashError};
-
-use super::CoreContextError;
-
-#[allow(dead_code)]
-pub struct ActionQueueContext {
-    pub action_queue: Queue,
-    pub queue_executor: QueueAutoExecutor,
-}
-
-impl ActionQueueContext {
-    pub async fn new(
-        user_stash: Stash,
-        wait_for_online: impl WaitForOnline + 'static,
-    ) -> Result<Self, CoreContextError> {
-        let action_queue = Queue::new(user_stash, Arc::new(wait_for_online)).await?;
-        let queue_executor = action_queue.new_executor().into_auto_executor();
-
-        Ok(Self {
-            action_queue,
-            queue_executor,
-        })
-    }
-}
-
-impl Deref for ActionQueueContext {
-    type Target = Queue;
-
-    fn deref(&self) -> &Self::Target {
-        &self.action_queue
-    }
-}
+use stash::stash::StashError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreActionError {

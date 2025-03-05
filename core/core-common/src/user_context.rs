@@ -6,8 +6,8 @@ use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
-use action_queue::ActionQueueContext;
 use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::session::Session;
@@ -48,7 +48,7 @@ pub struct UserContext {
     session: Session,
     context: Arc<Context>,
     user_stash: Stash,
-    queue_context: ActionQueueContext,
+    queue: Queue,
     user_id: UserId,
     session_id: AuthId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
@@ -83,12 +83,12 @@ impl UserContext {
         )
         .await?;
         let cancellation_token = context.new_child_cancellation_token();
-        let queue = ActionQueueContext::new(user_stash.clone(), wait_for_online).await?;
+        let queue = Queue::new(user_stash.clone(), Arc::new(wait_for_online)).await?;
         let this = Arc::new(Self {
             session,
             context,
             user_stash,
-            queue_context: queue,
+            queue,
             user_id,
             session_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
@@ -137,8 +137,8 @@ impl UserContext {
 
     /// Get `ActionQueue` instance.
     #[must_use]
-    pub fn queue(&self) -> &ActionQueueContext {
-        &self.queue_context
+    pub fn queue(&self) -> &Queue {
+        &self.queue
     }
 
     /// Get the user id of this context.
