@@ -253,6 +253,47 @@ async fn action_execution_lock() {
         .unwrap();
     assert_eq!(next_action.id.unwrap(), second_action_id);
 }
+#[tokio::test]
+async fn leftover_execution_lock() {
+    // it is possible that due to crash or termination and old lock entry is left in
+    // the db for the same executor. Attempting to acquire this lock will fail due to a constraint.
+    // This can only happen if there was a crash or the queue was forcefully terminated.
+    let state = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection();
+    let mut stored1 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+    let mut stored2 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+
+    let tx = conn.transaction().await.unwrap();
+    stored1.save(&tx).await.unwrap();
+    stored2.save(&tx).await.unwrap();
+
+    // Simulate locking and never releasing.
+    let _ = ExecutionGuard::acquire_with_timestamp(
+        stored1.id.unwrap(),
+        "EXEC".to_owned(),
+        Utc::now(),
+        &tx,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+
+    // We should receive the first action.
+    let (_, next_action) = StoredAction::pop(
+        "EXEC".to_owned(),
+        ActionGroup::default().as_ref(),
+        &mut conn,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(next_action.id.unwrap(), stored1.id.unwrap());
+}
 
 #[tokio::test]
 async fn action_execution_group_selection() {
