@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+
+  - Reduce log spam from event loop if there is not network.
+
 ## [0.54.2] - 2025-03-04
 
   - [ET-2241] Rely on auto executors in `start_baground_execution`
