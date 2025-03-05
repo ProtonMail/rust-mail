@@ -411,6 +411,7 @@ impl StoredAction {
         tether: &mut Tether,
     ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
         let tx = tether.transaction().await?;
+        ExecutionGuard::clear_slate_state(executor_id.clone(), &tx).await?;
         let next_action = Self::next(action_group, &tx).await?;
 
         let Some(next_action) = next_action else {
@@ -502,6 +503,7 @@ impl ExecutionGuard {
         timestamp: DateTime<Utc>,
         bond: &Bond<'_>,
     ) -> Result<Self, StashError> {
+        let executor_id = executor_id.into();
         let permit_id = bond
             .query_value::<_, usize>(
                 indoc! {"
@@ -513,7 +515,7 @@ impl ExecutionGuard {
                 acquired_at = ?3
             RETURNING permit_id AS value
        "},
-                params![action_id, executor_id.into(), timestamp],
+                params![action_id, executor_id, timestamp],
             )
             .await?;
 
@@ -521,6 +523,20 @@ impl ExecutionGuard {
             action_id,
             permit_id,
         })
+    }
+
+    /// Clean any leftover stale locks. These can occur if the execution of background task
+    /// is aborted or if for some reason we never managed to properly release our previous lock.
+    pub(crate) async fn clear_slate_state(
+        executor_id: String,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            "DELETE FROM action_queue_lock WHERE executor_id= ?",
+            params![executor_id],
+        )
+        .await?;
+        Ok(())
     }
 
     /// Release the current access privileges.

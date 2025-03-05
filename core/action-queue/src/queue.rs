@@ -822,7 +822,25 @@ impl QueueExecutor {
         );
 
         async {
-            let (mut decoded, metadata) = decode_action(&self.shared.factory, action)?;
+            let (mut decoded, metadata) = match decode_action(&self.shared.factory, action) {
+                Ok(v) => v,
+                Err(e) => {
+                    // Release execution guard if decode failed.
+                    {
+                        if let Err(e) = async {
+                            let tx = tether.transaction().await?;
+                            exec_guard.release(&tx).await?;
+                            tx.commit().await?;
+                            Ok::<_, StashError>(())
+                        }
+                        .await
+                        {
+                            error!("Failed to release execution guard after decode failed: {e:?}");
+                        }
+                    }
+                    return Err(e);
+                }
+            };
 
             let exec_output = decoded
                 .execute(&self.shared, tether, exec_guard, metadata)
