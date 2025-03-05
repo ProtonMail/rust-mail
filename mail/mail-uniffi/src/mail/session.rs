@@ -28,7 +28,7 @@ use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
-use tokio::task::AbortHandle;
+use tokio::task::{spawn_blocking, AbortHandle};
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -663,12 +663,17 @@ impl MailSession {
 
             if all_user_ctxs.is_empty() {
                 tracing::warn!("There are no logged in users, skipping background execution");
+                let callback = move || callback.on_update();
+                let _ = spawn_blocking(move || callback()).await.inspect_err(|e| {
+                    tracing::error!(
+                        "Could not call callback in background execution, details: `{e}`"
+                    );
+                });
                 return Ok(());
             }
 
             let mut execution_ctx = BackgroundExecutionContext {
                 abort,
-                callback,
                 _musc: all_user_ctxs,
             };
 
@@ -978,7 +983,6 @@ impl Drop for BackgroundExecutionHandle {
 ///
 struct BackgroundExecutionContext {
     abort: mpsc::Receiver<()>,
-    callback: Box<dyn LiveQueryCallback>,
     _musc: Vec<Arc<MailUserContext>>,
 }
 
@@ -986,12 +990,6 @@ impl BackgroundExecutionContext {
     #[allow(clippy::unused_self)]
     pub fn stop(self) {
         tracing::debug!("Stoping execution of background activites");
-    }
-}
-
-impl Drop for BackgroundExecutionContext {
-    fn drop(&mut self) {
-        self.callback.on_update();
     }
 }
 
