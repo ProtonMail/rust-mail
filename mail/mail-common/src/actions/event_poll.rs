@@ -37,10 +37,15 @@ pub enum ActionEventLoopError {
 
 impl proton_action_queue::action::Error for ActionEventLoopError {
     fn is_network_failure(&self) -> bool {
-        // The event loop action is meant to be queued periodically, even
-        // if it fails once due to lack of network it will be run again
-        // and there is no need to keep it in the queue until network
-        // communication is restored.
+        if let ActionEventLoopError::EventLoop(EventLoopError::Provider(e))
+        | ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
+            _,
+            SubscriberError::Api(e),
+        )) = &self
+        {
+            return e.is_network_failure();
+        }
+
         false
     }
 
@@ -85,19 +90,10 @@ impl proton_action_queue::action::Handler for EventPollHandler {
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        if let Err(e) = context.poll_event_loop_impl().await {
-            if let EventLoopError::Provider(e)
-            | EventLoopError::Subscriber(_, SubscriberError::Api(e)) = &e
-            {
-                // We do not want to report network failure errors to the user so
-                // we pretend that this actually worked.
-                if e.is_network_failure() {
-                    return Ok(());
-                }
-            }
-
-            return Err(ActionEventLoopError::from(e));
-        }
+        context
+            .poll_event_loop_impl()
+            .await
+            .map_err(ActionEventLoopError::from)?;
         Ok(())
     }
 }

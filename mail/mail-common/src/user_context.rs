@@ -12,6 +12,7 @@ use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfi
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
+use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
@@ -37,6 +38,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -48,6 +50,8 @@ pub struct MailUserContext {
     event_loop: EventLoop,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
+    /// Last id of the event loop action.
+    last_event_loop_action_id: Mutex<Option<ActionId>>,
 }
 
 impl MailUserContext {
@@ -71,6 +75,7 @@ impl MailUserContext {
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
             send_queue_executors,
+            last_event_loop_action_id: Mutex::new(None),
         });
 
         this.user_context
