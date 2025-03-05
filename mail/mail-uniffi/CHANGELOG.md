@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.54.3] - 2025-03-05
+
 ### Fixed
 
   - Reduce log spam from event loop if there is not network.
+  - Do not trigger callback on abort of background execution
+  - All executor are on MailUserContext to avoid a state where executor is in never ending error loop
 
 ## [0.54.2] - 2025-03-04
 
