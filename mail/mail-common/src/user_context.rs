@@ -13,7 +13,7 @@ use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
 use proton_action_queue::action::ActionId;
-use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
+use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -48,6 +48,7 @@ pub struct MailUserContext {
     user_context: Arc<UserContext>,
     cache: Cache,
     event_loop: EventLoop,
+    default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
     /// Last id of the event loop action.
@@ -62,6 +63,10 @@ impl MailUserContext {
     ) -> MailContextResult<Arc<Self>> {
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
+
+        register_mail_actions(user_context.queue());
+
+        let default_queue_executor = user_context.queue().new_executor().into_auto_executor();
         let send_queue_executors = QueueAutoExecutorPool::new(
             user_context.queue(),
             &SEND_ACTION_GROUP,
@@ -74,6 +79,7 @@ impl MailUserContext {
             cache,
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
+            default_queue_executor,
             send_queue_executors,
             last_event_loop_action_id: Mutex::new(None),
         });
@@ -81,8 +87,6 @@ impl MailUserContext {
         this.user_context
             .queue()
             .register_execution_context(Weak::clone(&this.this));
-
-        register_mail_actions(this.user_context.queue());
 
         this.init_expiration_loop();
 
@@ -137,19 +141,19 @@ impl MailUserContext {
 
     /// Pause all action queue executors.
     pub fn pause_queue_executors(&self) {
-        self.user_context.queue().queue_executor.pause();
+        self.default_queue_executor.pause();
         self.send_queue_executors.pause();
     }
 
     /// Unpause all action queue executors.
     pub fn unpause_queue_executors(&self) {
-        self.user_context.queue().queue_executor.unpause();
+        self.default_queue_executor.unpause();
         self.send_queue_executors.unpause();
     }
 
     /// Terminate all action queue executors.
     pub fn terminate_queue_executors(&self) {
-        self.user_context.queue().queue_executor.terminate();
+        self.default_queue_executor.terminate();
         self.send_queue_executors.terminate();
     }
 
