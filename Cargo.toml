@@ -54,6 +54,7 @@ hex = "0.4.3"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"
 insta = { version = "1.42.0", features = ["toml"] }
+indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
 html2text = "0.13.6"
 file-format = { version = "0.26.0", features = ["reader"] }

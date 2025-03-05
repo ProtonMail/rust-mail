@@ -1,5 +1,4 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
-use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::draft::{Draft, ReplyMode, SaveOrSendError};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
@@ -263,12 +262,12 @@ pub fn html_to_text(input: impl AsRef<str>) -> String {
 /// never been processed before so we need to preform more operations.
 ///
 /// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_reply(session_id: &AuthId, decrypted_message: &mut DecryptedMessageBody) {
+pub fn sanitize_draft_reply(session_id: &AuthId, mime_type: MimeType, body: &mut String) {
     // This is functionality equivalent to `sanitize_draft_open` today, but
     // this can potentially change in the future with different behaviors.
-    if let Some(mut transformer) = new_html_transformer(decrypted_message) {
+    if let Some(mut transformer) = new_html_transformer(mime_type, body) {
         transformer.proxy_images(session_id);
-        decrypted_message.body = transformer.to_string();
+        *body = transformer.to_string();
     }
 }
 
@@ -277,10 +276,14 @@ pub fn sanitize_draft_reply(session_id: &AuthId, decrypted_message: &mut Decrypt
 /// For existing drafts we only need basic html sanitization and we should proxy all image content.
 ///
 /// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_open(session_id: &AuthId, decrypted_message: &mut DecryptedMessageBody) {
-    if let Some(mut transformer) = new_html_transformer(decrypted_message) {
+pub fn sanitize_draft_open(
+    session_id: &AuthId,
+    mime_type: MimeType,
+    decrypted_message: &mut String,
+) {
+    if let Some(mut transformer) = new_html_transformer(mime_type, decrypted_message) {
         transformer.proxy_images(session_id);
-        decrypted_message.body = transformer.to_string();
+        *decrypted_message = transformer.to_string();
     }
 }
 
@@ -290,21 +293,21 @@ pub fn sanitize_draft_open(session_id: &AuthId, decrypted_message: &mut Decrypte
 /// the original content to the recipients.
 ///
 /// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_save(decrypted_message: &DecryptedMessageBody) -> String {
-    if let Some(mut transformer) = new_html_transformer(decrypted_message) {
+pub fn sanitize_draft_save(mime_type: MimeType, body: &str) -> String {
+    if let Some(mut transformer) = new_html_transformer(mime_type, body) {
         transformer.undo_proxy_images();
         transformer.to_string()
     } else {
-        decrypted_message.body.clone()
+        body.to_owned()
     }
 }
 
-fn new_html_transformer(body: &DecryptedMessageBody) -> Option<Transformer> {
+fn new_html_transformer(mime_type: MimeType, body: &str) -> Option<Transformer> {
     // There is no point in sanitizing content that is not HTML.
-    if body.metadata.mime_type != MimeType::TextHtml {
+    if mime_type != MimeType::TextHtml {
         return None;
     }
-    let mut transformer = Transformer::new(&body.body);
+    let mut transformer = Transformer::new(body);
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();

@@ -29,7 +29,7 @@ fn new_draft_message_creation() {
 
 #[tokio::test]
 async fn reply_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::Sender).await;
+    let (draft, source_message, attachments) = create_reply(ReplyMode::Sender).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
@@ -37,15 +37,12 @@ async fn reply_draft_message_creation() {
     assert!(draft.to_list.contains_email(&source_message.sender.address));
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
-    assert_eq!(
-        draft.decrypted_body.metadata.attachments,
-        vec![inline_attachment()]
-    )
+    assert_eq!(attachments, vec![inline_attachment()])
 }
 
 #[tokio::test]
 async fn reply_all_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::All).await;
+    let (draft, source_message, attachments) = create_reply(ReplyMode::All).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
@@ -55,27 +52,24 @@ async fn reply_all_draft_message_creation() {
         .cc_list
         .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address)));
     assert!(draft.bcc_list.is_empty());
-    assert_eq!(
-        draft.decrypted_body.metadata.attachments,
-        vec![inline_attachment()]
-    )
+    assert_eq!(attachments, vec![inline_attachment()])
 }
 
 #[tokio::test]
 async fn check_reply_signature_html() {
-    let (draft, _) = create_reply_with(ReplyMode::All, MimeType::TextHtml).await;
-    assert_snapshot!(draft.decrypted_body.body);
+    let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextHtml).await;
+    assert_snapshot!(draft.body());
 }
 
 #[tokio::test]
 async fn check_reply_signature_text() {
-    let (draft, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
-    assert_snapshot!(draft.decrypted_body.body);
+    let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
+    assert_snapshot!(draft.body());
 }
 
 #[tokio::test]
 async fn forward_draft_message_creation() {
-    let (draft, source_message) = create_reply(ReplyMode::Forward).await;
+    let (draft, source_message, attachments) = create_reply(ReplyMode::Forward).await;
     assert_eq!(
         draft.subject,
         apply_prefix_to_subject(FORWARD_PREFIX, &source_message.subject)
@@ -83,10 +77,7 @@ async fn forward_draft_message_creation() {
     assert!(draft.to_list.is_empty());
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
-    assert_eq!(
-        draft.decrypted_body.metadata.attachments,
-        vec![inline_attachment(), normal_attachment()]
-    )
+    assert_eq!(attachments, vec![inline_attachment(), normal_attachment()])
 }
 #[test]
 fn message_signature_empty_without_address_or_mail_setting_signature() {
@@ -134,7 +125,7 @@ fn message_signature_with_all_signatures() {
 #[tokio::test]
 async fn sanitize_draft_reply_html() {
     // Draft replies need to be sanitized.
-    let (mut draft, _) = create_reply_with_mime_and_body(
+    let (mut draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextHtml,
         sanitize_message_body_metadata(MimeType::TextHtml),
@@ -142,28 +133,28 @@ async fn sanitize_draft_reply_html() {
     )
     .await;
 
-    assert_snapshot!(draft.decrypted_body.body);
+    assert_snapshot!(draft.body);
 
-    let sanitized = draft.decrypted_body.body.clone();
+    let sanitized = draft.body.clone();
 
     // Saving the draft will revert the proxying of images
-    let to_save = sanitize_draft_save(&draft.decrypted_body);
+    let to_save = sanitize_draft_save(draft.mime_type(), draft.body());
     assert_snapshot!(to_save);
-    draft.decrypted_body.body = to_save;
+    draft.body = to_save;
 
     // On open should re-instate the proxy of images.
     let session_id = AuthId::from("auth-id");
-    sanitize_draft_open(&session_id, &mut draft.decrypted_body);
+    sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
 
     // This should be identical before the save.
-    assert_eq!(sanitized, draft.decrypted_body.body);
+    assert_eq!(sanitized, draft.body);
 }
 
 #[tokio::test]
 async fn sanitize_draft_reply_plain_text() {
     // Draft replies need to be sanitized. For plain text we sanitize the body before converting
     // to text and afterwards there should be no further changes.
-    let (mut draft, _) = create_reply_with_mime_and_body(
+    let (mut draft, _, _) = create_reply_with_mime_and_body(
         ReplyMode::All,
         MimeType::TextPlain,
         sanitize_message_body_metadata(MimeType::TextHtml),
@@ -171,20 +162,20 @@ async fn sanitize_draft_reply_plain_text() {
     )
     .await;
 
-    assert_snapshot!(draft.decrypted_body.body);
+    assert_snapshot!(draft.body);
 
-    let sanitized = draft.decrypted_body.body.clone();
+    let sanitized = draft.body.clone();
 
     // Saving the draft - nothing should change
-    let to_save = sanitize_draft_save(&draft.decrypted_body);
+    let to_save = sanitize_draft_save(draft.mime_type(), draft.body());
     assert_eq!(to_save, sanitized);
 
     // On open should also be a noo-oop;
     let session_id = AuthId::from("auth-id");
-    sanitize_draft_open(&session_id, &mut draft.decrypted_body);
+    sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
 
     // This should be identical before the save.
-    assert_eq!(sanitized, draft.decrypted_body.body);
+    assert_eq!(sanitized, draft.body);
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
@@ -231,11 +222,14 @@ MwDo1PKk0jxUF4B8SYEsITKUNTEtnUXqAgSgD1AwGozk8eVSdnx8DIAydP+nvLkO"
 <html>
 "##;
 
-async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message) {
+async fn create_reply(reply_mode: ReplyMode) -> (Draft, Message, Vec<Attachment>) {
     create_reply_with(reply_mode, MimeType::default()).await
 }
 
-async fn create_reply_with(reply_mode: ReplyMode, mime_type: MimeType) -> (Draft, Message) {
+async fn create_reply_with(
+    reply_mode: ReplyMode,
+    mime_type: MimeType,
+) -> (Draft, Message, Vec<Attachment>) {
     let source_body_metadata = existing_message_body_metadata();
     let source_body = "Hello World".to_owned();
     create_reply_with_mime_and_body(reply_mode, mime_type, source_body_metadata, source_body).await
@@ -246,7 +240,7 @@ async fn create_reply_with_mime_and_body(
     mime_type: MimeType,
     source_body_metadata: MessageBodyMetadata,
     source_body: String,
-) -> (Draft, Message) {
+) -> (Draft, Message, Vec<Attachment>) {
     let source_message = existing_message();
     let address = address_with_signature("");
     let mail_settings = MailSettings {
@@ -264,21 +258,19 @@ async fn create_reply_with_mime_and_body(
     let session_id = AuthId::from("auth-id");
 
     let resolver = NullContactGroupResolver {};
-    (
-        Draft::new_draft_reply(
-            &resolver,
-            MetadataId(0),
-            reply_mode,
-            &address,
-            &mail_settings,
-            &source_message,
-            source_body,
-            true,
-            &session_id,
-        )
-        .await,
-        source_message,
+    let (draft, attachments) = Draft::new_draft_reply(
+        &resolver,
+        MetadataId(0),
+        reply_mode,
+        &address,
+        &mail_settings,
+        &source_message,
+        source_body,
+        true,
+        &session_id,
     )
+    .await;
+    (draft, source_message, attachments)
 }
 fn address_with_signature(signature: impl Into<String>) -> Address {
     Address {

@@ -305,7 +305,9 @@ pub struct Draft {
     pub send_result: Option<DraftSendResult>,
     #[debug(skip)]
     /// The decrypted message body.
-    pub decrypted_body: DecryptedMessageBody,
+    body: String,
+    /// Message mime type
+    mime_type: MimeType,
 }
 
 /// Indicates the status of syncing a draft.
@@ -385,20 +387,35 @@ impl Draft {
         let (decrypted, sync_status) = if metadata.has_pending_changes(tether).await? {
             // If we have pending changes we should not sync the data from the server
             // as that will override local state.
+            debug!("Draft metadata has pending changes, sync skipped.");
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
+            debug!("Draft metadata has no pending changes, syncing.");
             match Message::force_sync_message_and_body(context.clone(), remote_id, true).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
+
+                    debug!("Message synced, updating attachment metadata.");
+                    let tx = tether.transaction().await?;
+                    DraftAttachmentMetadata::reset_draft_attachments_after_sync(
+                        metadata.id.unwrap(),
+                        &decrypted.metadata,
+                        &tx,
+                    )
+                    .await?;
+                    tx.commit().await?;
+
                     (Some(decrypted), DraftSyncStatus::Synced)
                 }
                 // Handle network failure
                 Err(MailContextError::Api(api_err)) if api_err.is_network_failure() => {
+                    debug!("Failed to sync draft due to network error.");
                     (None, DraftSyncStatus::Cached)
                 }
                 Err(e) => return Err(e),
             }
         } else {
+            debug!("Message does not have a remote id.");
             // If we have no remote id do not return cached status. As this implies the
             // draft was created locally and the save action has not yet executed.
             // We only trigger this code path if the save action failed to execute.
@@ -436,7 +453,11 @@ impl Draft {
         .await;
 
         // Transform body.
-        sanitize_draft_open(context.session_id(), &mut decrypted);
+        sanitize_draft_open(
+            context.session_id(),
+            decrypted.metadata.mime_type,
+            &mut decrypted.body,
+        );
 
         Ok((
             Self {
@@ -448,7 +469,8 @@ impl Draft {
                 address_id: message.remote_address_id,
                 subject: message.subject,
                 send_result,
-                decrypted_body: decrypted,
+                body: decrypted.body,
+                mime_type: decrypted.metadata.mime_type,
             },
             sync_status,
         ))
@@ -499,8 +521,6 @@ impl Draft {
         mail_settings: &MailSettings,
     ) -> Self {
         let body = compose::get_signature(address, mail_settings);
-        let decrypted_message_body =
-            DecryptedMessageBody::new_draft(body, mail_settings.draft_mime_type);
         Self {
             metadata_id,
             sender: address.email.clone(),
@@ -509,8 +529,9 @@ impl Draft {
             bcc_list: RecipientList::new(),
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
-            decrypted_body: decrypted_message_body,
             send_result: None,
+            mime_type: mail_settings.draft_mime_type,
+            body,
         }
     }
 
@@ -582,11 +603,9 @@ impl Draft {
             .await
             .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
 
-        tx.commit().await?;
+        let contact_group_resolver = ProtonContactGroupResolver::new(&tx);
 
-        let contact_group_resolver = ProtonContactGroupResolver::new(&tether);
-
-        Ok(Self::new_draft_reply(
+        let (draft, attachments) = Self::new_draft_reply(
             &contact_group_resolver,
             metadata.id.unwrap(),
             reply_mode,
@@ -597,7 +616,19 @@ impl Draft {
             use_utc,
             context.session_id(),
         )
-        .await)
+        .await;
+
+        for (order, attachment) in attachments.iter().enumerate() {
+            let mut attachment_metadata =
+                DraftAttachmentMetadata::inherited(metadata.id.unwrap(), attachment, order);
+            attachment_metadata
+                .save(&tx)
+                .await
+                .inspect_err(|e| error!("Failed to save attachment metadata: {e:?}"))?
+        }
+        tx.commit().await?;
+
+        Ok(draft)
     }
 
     /// Create a draft reply.
@@ -624,7 +655,7 @@ impl Draft {
         source_message_body: DecryptedMessageBody,
         use_utc: bool,
         session_id: &AuthId,
-    ) -> Self {
+    ) -> (Self, Vec<Attachment>) {
         let mut body = get_signature(address, mail_settings);
 
         if mail_settings.draft_mime_type == MimeType::TextHtml {
@@ -644,18 +675,13 @@ impl Draft {
             );
         }
 
-        let mut reply_draft_body =
-            DecryptedMessageBody::new_draft(body, mail_settings.draft_mime_type);
-        reply_draft_body.metadata.attachments = source_message_body.metadata.attachments;
-        reply_draft_body.pgp_subject = source_message_body.pgp_subject;
-        reply_draft_body.pgp_attachments = source_message_body.pgp_attachments;
+        let mut attachments = source_message_body.metadata.attachments;
+        // TODO(ET-2348): PGP mime attachment support
+        let mut pgp_attachments = source_message_body.pgp_attachments;
 
         if reply_mode != ReplyMode::Forward {
-            reply_draft_body
-                .metadata
-                .attachments
-                .retain(|attachment| attachment.disposition == Disposition::Inline);
-            if let Some(pgp_attachments) = &mut reply_draft_body.pgp_attachments {
+            attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
+            if let Some(pgp_attachments) = &mut pgp_attachments {
                 pgp_attachments.retain(|v| {
                     v.disposition
                         == proton_crypto_inbox::proton_crypto_inbox_mime::Disposition::Inline
@@ -672,7 +698,8 @@ impl Draft {
             address_id: address.remote_id.clone().unwrap(),
             subject: String::new(),
             send_result: None,
-            decrypted_body: reply_draft_body,
+            body,
+            mime_type: mail_settings.draft_mime_type,
         };
 
         patch_draft_with_reply_mode(
@@ -684,9 +711,9 @@ impl Draft {
         )
         .await;
 
-        sanitize_draft_reply(session_id, &mut draft.decrypted_body);
+        sanitize_draft_reply(session_id, draft.mime_type(), &mut draft.body);
 
-        draft
+        (draft, attachments)
     }
 
     /// Create new draft on the server
@@ -717,8 +744,7 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = crate_draft_params(message, message_body_metadata, encrypted);
 
-        let mut attachment_key_packets =
-            DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
         debug!(
             "Draft create with {} attachments",
             message_body_metadata.attachments.len()
@@ -782,8 +808,7 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = crate_draft_params(message, message_body_metadata, encrypted);
 
-        let mut attachment_key_packets =
-            DraftAttachmentKeyPackets::with_capacity(message_body_metadata.attachments.len());
+        let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
         debug!(
             "Draft update with {} attachments",
             message_body_metadata.attachments.len()
@@ -1009,7 +1034,28 @@ impl Draft {
         ctx: &MailUserContext,
         cid: &str,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
-        self.decrypted_body.get_embedded_attachment(ctx, cid).await
+        let tether = ctx.user_stash().connection();
+        let attachments =
+            DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
+        drop(tether);
+        if let Some(attachment) = attachments
+            .iter()
+            .find(|a| a.content_id.as_deref() == Some(cid))
+        {
+            let data = ctx
+                .get_attachment_content_data(attachment)
+                .await?
+                .load()
+                .await?;
+            Ok(EmbeddedAttachmentInfo {
+                data,
+                mime: attachment.mime_type.to_string(),
+                height: attachment.image_height.clone(),
+                width: attachment.image_width.clone(),
+            })
+        } else {
+            Err(AppError::UnknownCid(cid.to_owned(), vec![]).into())
+        }
     }
 
     /// Add a new `attachment` to this draft.
@@ -1043,7 +1089,7 @@ impl Draft {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
         let attachment_id = attachment.local_id.unwrap();
-        self.decrypted_body.metadata.attachments.push(attachment);
+        //self.attachments.push(attachment);
 
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,
@@ -1097,12 +1143,30 @@ impl Draft {
 
     /// Get the list of attachments and their upload status.
     pub async fn attachments(&self, tether: &Tether) -> Result<Vec<DraftAttachment>, StashError> {
-        DraftAttachment::build_list(
-            self.metadata_id,
-            self.decrypted_body.metadata.attachments.clone(),
-            tether,
-        )
-        .await
+        DraftAttachment::build_list(self.metadata_id, tether).await
+    }
+
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+    pub fn body_mut(&mut self) -> &mut String {
+        &mut self.body
+    }
+
+    pub fn set_body(&mut self, body: String) {
+        self.body = body;
+    }
+
+    pub async fn attachments_compat(&self, tether: &Tether) -> Result<Vec<Attachment>, StashError> {
+        DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, tether).await
+    }
+
+    pub fn mime_type(&self) -> MimeType {
+        self.mime_type
+    }
+
+    pub fn set_mime_type(&mut self, mime_type: MimeType) {
+        self.mime_type = mime_type;
     }
 }
 

@@ -164,9 +164,9 @@ impl Composer {
 
     fn update_draft_from_state(&mut self) -> Result<(), recipients::RecipientError> {
         // We are TUI, what else can we do?
-        self.draft.decrypted_body.metadata.mime_type = MimeType::TextPlain;
+        self.draft.set_mime_type(MimeType::TextPlain);
         self.draft.subject = self.subject_input_state.value().to_owned();
-        self.draft.decrypted_body.body = self.text_area.lines().join("\n");
+        self.draft.set_body(self.text_area.lines().join("\n"));
         self.draft.cc_list = recipients_value_to_list(self.cc_input_state.value())?;
         self.draft.bcc_list = recipients_value_to_list(self.bcc_input_state.value())?;
         self.draft.to_list = recipients_value_to_list(self.to_input_state.value())?;
@@ -236,34 +236,22 @@ impl Composer {
         let to_list = recipient_list_to_display_value(&draft.to_list);
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
         let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
-        let text_area = if draft.decrypted_body.metadata.mime_type == MimeType::TextHtml {
+        let text_area = if draft.mime_type() == MimeType::TextHtml {
             let config = html2text::config::plain();
-            let cursor = Cursor::new(&draft.decrypted_body.body);
+            let cursor = Cursor::new(draft.body());
             let text = config
                 .string_from_read(cursor, 80)
                 .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
             TextArea::new(text.split('\n').map(str::to_owned).collect())
-        } else if draft.decrypted_body.metadata.mime_type == MimeType::TextPlain {
-            TextArea::new(
-                draft
-                    .decrypted_body
-                    .body
-                    .split('\n')
-                    .map(str::to_owned)
-                    .collect(),
-            )
+        } else if draft.mime_type() == MimeType::TextPlain {
+            TextArea::new(draft.body().split('\n').map(str::to_owned).collect())
         } else {
             TextArea::new(vec!["Unknown mime type".to_owned()])
         };
 
         let subject = draft.subject.clone();
         let tether = stash.connection();
-        let attachment_infos = Self::build_attachment_infos(
-            draft.metadata_id,
-            draft.decrypted_body.metadata.attachments.clone(),
-            &tether,
-        )
-        .await?;
+        let attachment_infos = Self::build_attachment_infos(draft.metadata_id, &tether).await?;
         drop(tether);
 
         let mut observer = DraftAttachmentObserver::new(draft.metadata_id, stash).await?;
@@ -311,16 +299,13 @@ impl Composer {
     /// Collect attachment info to be displayed.
     async fn build_attachment_infos(
         metadata_id: MetadataId,
-        attachments: Vec<Attachment>,
         tether: &Tether,
     ) -> Result<Vec<AttachmentInfo>, StashError> {
-        Ok(
-            DraftAttachment::build_list(metadata_id, attachments, tether)
-                .await?
-                .into_iter()
-                .map(AttachmentInfo::from)
-                .collect(),
-        )
+        Ok(DraftAttachment::build_list(metadata_id, tether)
+            .await?
+            .into_iter()
+            .map(AttachmentInfo::from)
+            .collect())
     }
 
     /// Discard the draft.
@@ -408,11 +393,10 @@ impl Composer {
 
     /// Add attachment to the draft
     fn refresh_attachment_list(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
-        let attachments = self.draft.decrypted_body.metadata.attachments.clone();
         let metadata_id = self.draft.metadata_id;
         Command::task(async move {
             let tether = context.user_stash().connection();
-            match DraftAttachment::build_list(metadata_id, attachments, &tether).await {
+            match DraftAttachment::build_list(metadata_id, &tether).await {
                 Ok(list) => Command::message(ComposerMessage::AttachmentListRefreshed(list).into()),
                 Err(e) => Command::message(anyhow::Error::new(e).into()),
             }
