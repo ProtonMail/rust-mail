@@ -14,7 +14,7 @@ use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::num::NonZeroUsize;
@@ -50,6 +50,8 @@ pub enum Error {
     Context(#[from] ContextError),
     #[error("Unknown action: {0}")]
     UnknownAction(String),
+    #[error("Cyclic Dependency detected")]
+    CyclicDependency,
 }
 
 /// Errors that result from queuing or apply actions via the queue.
@@ -1076,6 +1078,29 @@ async fn execute_action_local<T: Action>(
             error!("Failed to store action: {e:?}");
             e
         })?;
+    }
+
+    // Validate action dependencies for circular deps
+    {
+        let mut sorter = TopologicalSort::<ActionId>::new();
+        let mut pending_action_ids = vec![stored_action.id.unwrap()];
+        let mut visited = HashSet::new();
+        while let Some(action_id) = pending_action_ids.pop() {
+            let deps = StoredAction::dependees(&tx, action_id).await?;
+            if !visited.insert(action_id) {
+                continue;
+            }
+            if deps.is_empty() {
+                continue;
+            }
+            for dep in &deps {
+                sorter.add_dependency(action_id, *dep);
+            }
+            pending_action_ids.extend(deps);
+        }
+        if sorter.pop().is_none() && !sorter.is_empty() {
+            return Err(Error::CyclicDependency.into());
+        }
     }
 
     // Execute the local changes
