@@ -1,8 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
-use crate::action_queue::{
-    CheckNetworkStatusSubscriber, CoreActionError, WaitForOnlineSubscribtionExt,
-};
+use crate::action_queue::CoreActionError;
 use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
@@ -16,7 +14,6 @@ use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
-use proton_action_queue::network::WaitForOnlineSubscribtion;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
@@ -586,10 +583,8 @@ impl Context {
         let user_id: UserId = flow.user_id()?.to_owned();
         let session_id: AuthId = flow.session_id()?.to_owned();
         let session = flow.take_session()?;
-        let wait_for_online = CheckNetworkStatusSubscriber::create(session.status_watcher());
 
-        self.new_user_context(user_id, session, session_id, wait_for_online)
-            .await
+        self.new_user_context(user_id, session, session_id).await
     }
 
     /// Get a user context from an existing session.
@@ -598,7 +593,7 @@ impl Context {
     ///
     /// TODO: Document errors
     ///
-    pub async fn user_context_from_session<T: WaitForOnlineSubscribtionExt>(
+    pub async fn user_context_from_session(
         &self,
         session: &CoreSession,
         status: Option<StatusWatcher>,
@@ -623,9 +618,7 @@ impl Context {
         let session_id = session.remote_id.clone();
         let session = self.new_api_session(Some(session), status, challenge)?;
 
-        let wait_for_online = <T as WaitForOnlineSubscribtionExt>::create(session.status_watcher());
-        self.new_user_context(user_id, session, session_id, wait_for_online)
-            .await
+        self.new_user_context(user_id, session, session_id).await
     }
 
     /// Logs out all sessions of an account without deleting the account's data.
@@ -774,7 +767,6 @@ impl Context {
         user_id: UserId,
         session: ApiSession,
         session_id: AuthId,
-        wait_for_online: impl WaitForOnlineSubscribtion,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -812,7 +804,6 @@ impl Context {
             session_id,
             cache_path,
             self.sender_image_cache_size,
-            wait_for_online,
         )
         .await?;
 

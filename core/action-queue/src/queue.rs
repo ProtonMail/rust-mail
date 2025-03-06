@@ -7,7 +7,7 @@ use crate::action::{
     Handler, Metadata, Priority, Resources, Type, WriterGuard,
 };
 use crate::db::{self, ExecutionGuard, ExecutionGuardError, StoredAction, DEFAULT_LOCK_TIMEOUT};
-use crate::network::WaitForOnlineSubscribtion;
+use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
@@ -265,7 +265,6 @@ pub struct Queue {
 pub(crate) struct Shared {
     stash: Stash,
     factory: RwLock<Factory>,
-    wait_for_online: Arc<dyn WaitForOnlineSubscribtion>,
     execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
@@ -316,11 +315,8 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the database migration failed.
-    pub async fn new(
-        stash: Stash,
-        check_for_network: Arc<dyn WaitForOnlineSubscribtion>,
-    ) -> Result<Self> {
-        Self::with_factory(stash, Factory::default(), check_for_network).await
+    pub async fn new(stash: Stash) -> Result<Self> {
+        Self::with_factory(stash, Factory::default()).await
     }
 
     /// Create a new queue with the given `stash` and `factory`;
@@ -328,11 +324,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the database migration failed.
-    pub async fn with_factory(
-        stash: Stash,
-        factory: Factory,
-        wait_for_online: Arc<dyn WaitForOnlineSubscribtion>,
-    ) -> Result<Self> {
+    pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         let mut tether = stash.connection();
         db::create_tables(&mut tether).await?;
         let default_context = Arc::new(());
@@ -344,7 +336,6 @@ impl Queue {
             execution_contexts: RwLock::new(HashMap::new()),
             broadcast_sender: sender,
             queued_action_notifier: tokio::sync::Notify::new(),
-            wait_for_online,
         });
         let queue = Self {
             shared,
@@ -775,8 +766,8 @@ impl QueueExecutor {
 
     /// Convert this executor into a [`QueueAutoExecutor`].
     #[must_use]
-    pub fn into_auto_executor(self) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self)
+    pub fn into_auto_executor(self, wait_for_online: impl WaitForOnline) -> QueueAutoExecutor {
+        QueueAutoExecutor::new(self, wait_for_online)
     }
 
     /// Execute one action from the queue.
@@ -905,11 +896,12 @@ impl Drop for QueueAutoExecutor {
 }
 
 impl QueueAutoExecutor {
-    fn new(executor: QueueExecutor) -> Self {
+    fn new(executor: QueueExecutor, wait_for_online: impl WaitForOnline) -> Self {
         let id = executor.id.clone();
         let (pause, listener) = watch::channel(false);
         let handle =
-            tokio::spawn(async move { Self::run(executor, listener).await }).abort_handle();
+            tokio::spawn(async move { Self::run(executor, listener, wait_for_online).await })
+                .abort_handle();
 
         QueueAutoExecutor {
             abort_handle: handle,
@@ -942,12 +934,16 @@ impl QueueAutoExecutor {
         self.pause.send_replace(false);
     }
 
-    async fn run(executor: QueueExecutor, mut pause: watch::Receiver<bool>) {
+    async fn run(
+        executor: QueueExecutor,
+        mut pause: watch::Receiver<bool>,
+        mut wait_for_online: impl WaitForOnline,
+    ) {
         debug!(
             "Starting auto queue executor {} with group={}",
             executor.id, executor.action_group
         );
-        let mut wait_for_online = executor.shared.wait_for_online.subscribe();
+        // let mut wait_for_online = executor.shared.wait_for_online.subscribe();
         loop {
             // Inner pause loop, before picking any more work, make sure we should not pause.
             if *pause.borrow() {
@@ -1027,13 +1023,19 @@ pub struct QueueAutoExecutorPool {
 impl QueueAutoExecutorPool {
     /// Create a new auto executor pool with `count` executors for the `action_group`.
     #[must_use]
-    pub fn new(queue: &Queue, action_group: &ActionGroup, count: NonZeroUsize) -> Self {
+    pub fn new(
+        queue: &Queue,
+        action_group: &ActionGroup,
+        count: NonZeroUsize,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+    ) -> Self {
         let executors = std::iter::repeat(())
             .take(count.get())
             .map(|()| {
+                let wait_for_online = wait_for_online.subscribe();
                 queue
                     .new_executor_with_group(action_group.clone())
-                    .into_auto_executor()
+                    .into_auto_executor(wait_for_online)
             })
             .collect::<Vec<_>>();
 

@@ -111,6 +111,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
+            &DummyWaitForOnlineSubscribtion,
         );
         wait_on_queue_empty(&queue).await;
     } else {
@@ -159,6 +160,7 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
+            &DummyWaitForOnlineSubscribtion,
         );
         notifier.notified().await;
     }
@@ -195,9 +197,7 @@ fn spawn_process(
 
 async fn new_queue(directory: &Path) -> Queue {
     let stash = stash::stash::Stash::new(Some(&directory.join("sqlite.db"))).unwrap();
-    let queue = Queue::new(stash, Arc::new(DummyWaitForOnlineSubscribtion))
-        .await
-        .unwrap();
+    let queue = Queue::new(stash).await.unwrap();
     queue.register::<TestAction>().unwrap();
     queue
 }

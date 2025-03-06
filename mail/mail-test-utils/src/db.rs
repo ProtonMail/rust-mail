@@ -1,14 +1,10 @@
-use proton_action_queue::network::{DummyWaitForOnlineSubscribtion, WaitForOnlineSubscribtion};
 use proton_core_common::db::migrations::migrate_core_db;
 use proton_mail_common::db::migrations::migrate_db;
 use stash::stash::Stash;
-use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
 
 /// # Panics
-pub async fn new_test_connection_with_custom_online_await(
-    c: impl WaitForOnlineSubscribtion,
-) -> Stash {
+pub async fn new_test_connection() -> Stash {
     use std::io::stdout;
     use tracing::subscriber::set_global_default;
     use tracing::Level;
@@ -28,15 +24,10 @@ pub async fn new_test_connection_with_custom_online_await(
     // We need the action queue table due to message delete triggering
     // some foreign key constrains in draft metadata that relate to the action queue
     // table.
-    let _ = proton_action_queue::queue::Queue::new(stash.clone(), Arc::new(c))
+    let _ = proton_action_queue::queue::Queue::new(stash.clone())
         .await
         .unwrap();
     stash
-}
-
-/// # Panics
-pub async fn new_test_connection() -> Stash {
-    new_test_connection_with_custom_online_await(DummyWaitForOnlineSubscribtion).await
 }
 
 /// # Panics
@@ -61,11 +52,8 @@ pub async fn new_test_connection_file() -> (Stash, TempDir) {
     // We need the action queue table due to message delete triggering
     // some foreign key constrains in draft metadata that relate to the action queue
     // table.
-    let _ = proton_action_queue::queue::Queue::new(
-        stash.clone(),
-        Arc::new(DummyWaitForOnlineSubscribtion),
-    )
-    .await
-    .unwrap();
+    let _ = proton_action_queue::queue::Queue::new(stash.clone())
+        .await
+        .unwrap();
     (stash, db_dir)
 }

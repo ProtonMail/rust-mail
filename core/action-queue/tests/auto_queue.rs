@@ -6,11 +6,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common::DefaultError;
-use common::{new_queue_typed, new_queue_typed_with_custom_network_waiting};
+use common::new_queue_typed;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::network::{WaitForOnline, WaitForOnlineSubscribtion};
+use proton_action_queue::network::{DummyWaitForOnline, WaitForOnline, WaitForOnlineSubscribtion};
 use proton_action_queue::queue::{BroadcastMessage, QueuedActionReason, QueuedActionState};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -34,7 +34,7 @@ async fn auto_queued_on_network_failure() {
 async fn auto_queued_on_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let auto_executor = queue.new_executor().into_auto_executor();
+    let auto_executor = queue.new_executor().into_auto_executor(DummyWaitForOnline);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -62,7 +62,7 @@ async fn auto_queued_on_multiple_unpause() {
 
     queue.queue_action(SuccessAction {}).await.unwrap();
 
-    let auto_executor = queue.new_executor().into_auto_executor();
+    let auto_executor = queue.new_executor().into_auto_executor(DummyWaitForOnline);
 
     // Calling unpause should have no effect as auto executors starts unpaused.
     auto_executor.unpause();
@@ -84,7 +84,7 @@ async fn auto_queued_on_multiple_unpause() {
 async fn auto_queued_on_multiple_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let auto_executor = queue.new_executor().into_auto_executor();
+    let auto_executor = queue.new_executor().into_auto_executor(DummyWaitForOnline);
 
     // Calling pause multiple times should still end up in paused state.
     auto_executor.pause();
@@ -115,7 +115,7 @@ async fn auto_queued_on_multiple_pause() {
 async fn auto_queued_on_pause_and_partially_manual_execution() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let auto_executor = queue.new_executor().into_auto_executor();
+    let auto_executor = queue.new_executor().into_auto_executor(DummyWaitForOnline);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -176,11 +176,10 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
 #[tokio::test]
 async fn execute_all_waits_for_network_to_reoccur() {
     let is_offline = DeviceAlwaysOffline::default();
-    let queue =
-        new_queue_typed_with_custom_network_waiting::<ErrorAction>(is_offline.clone()).await;
+    let queue = new_queue_typed::<ErrorAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
     // We spawn an auto executor in the background.
-    let auto_executor = queue.new_executor().into_auto_executor();
+    let auto_executor = queue.new_executor().into_auto_executor(is_offline.clone());
 
     auto_executor.pause();
     queue.queue_action(ErrorAction {}).await.unwrap();
@@ -200,8 +199,8 @@ async fn execute_all_waits_for_network_to_reoccur() {
 struct DeviceAlwaysOffline(Arc<AtomicBool>);
 
 impl WaitForOnlineSubscribtion for DeviceAlwaysOffline {
-    fn subscribe(&self) -> Box<dyn WaitForOnline> {
-        Box::new(self.clone())
+    fn subscribe(&self) -> impl WaitForOnline {
+        self.clone()
     }
 }
 #[async_trait::async_trait]

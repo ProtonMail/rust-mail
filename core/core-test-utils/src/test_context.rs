@@ -1,7 +1,6 @@
 use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use crate::utils::catch_all;
 use async_trait::async_trait;
-use proton_action_queue::network::DummyWaitForOnlineSubscribtion;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
@@ -259,7 +258,7 @@ impl TestContext {
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
         self.context
-            .user_context_from_session::<DummyWaitForOnlineSubscribtion>(
+            .user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
                 Some(ChallengeObserver::default()),

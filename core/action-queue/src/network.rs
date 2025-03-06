@@ -8,7 +8,7 @@ use async_trait::async_trait;
 ///
 pub trait WaitForOnlineSubscribtion: Send + Sync + 'static {
     /// Returns a listener waiting for network to re-appear
-    fn subscribe(&self) -> Box<dyn WaitForOnline>;
+    fn subscribe(&self) -> impl WaitForOnline;
 }
 
 #[async_trait]
@@ -24,8 +24,8 @@ pub trait WaitForOnline: Send + Sync + 'static {
 pub struct DummyWaitForOnlineSubscribtion;
 
 impl WaitForOnlineSubscribtion for DummyWaitForOnlineSubscribtion {
-    fn subscribe(&self) -> Box<dyn WaitForOnline> {
-        Box::new(DummyWaitForOnline)
+    fn subscribe(&self) -> impl WaitForOnline {
+        DummyWaitForOnline
     }
 }
 

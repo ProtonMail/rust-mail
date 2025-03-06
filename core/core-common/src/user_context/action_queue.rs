@@ -72,10 +72,10 @@ impl WaitForOnlineSubscribtionExt for CheckNetworkStatusSubscriber {
 }
 
 impl WaitForOnlineSubscribtion for CheckNetworkStatusSubscriber {
-    fn subscribe(&self) -> Box<dyn WaitForOnline> {
-        Box::new(CheckForNetworkStatus {
+    fn subscribe(&self) -> impl WaitForOnline {
+        CheckForNetworkStatus {
             receiver: self.watcher.subscribe(),
-        })
+        }
     }
 }
 

@@ -1,5 +1,4 @@
 use clap::Parser;
-use proton_action_queue::network::DummyWaitForOnlineSubscribtion;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -83,7 +82,7 @@ async fn main() {
         .await
         .unwrap();
     let ctx2 = context
-        .user_context_from_session::<DummyWaitForOnlineSubscribtion>(&sessions[0], None, None)
+        .user_context_from_session(&sessions[0], None, None)
         .await
         .unwrap();
 

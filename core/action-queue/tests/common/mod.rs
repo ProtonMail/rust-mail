@@ -1,8 +1,6 @@
 #![allow(dead_code)]
-use std::sync::Arc;
 
 use proton_action_queue::action::{Action, Factory};
-use proton_action_queue::network::{DummyWaitForOnlineSubscribtion, WaitForOnlineSubscribtion};
 use proton_action_queue::queue::Queue;
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
@@ -11,31 +9,14 @@ use stash::stash::{Bond, Stash, StashError, Tether};
 
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
-    Queue::with_factory(
-        new_stash().await,
-        factory,
-        Arc::new(DummyWaitForOnlineSubscribtion),
-    )
-    .await
-    .unwrap()
+    Queue::with_factory(new_stash().await, factory)
+        .await
+        .unwrap()
 }
 
 /// Create a new queue with a given db `pool`.
 pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
-    Queue::with_factory(stash, factory, Arc::new(DummyWaitForOnlineSubscribtion))
-        .await
-        .unwrap()
-}
-
-/// Create a new queue with given mechanism for waiting for online status
-///
-pub async fn new_queue_with_custom_network_waiting(
-    factory: Factory,
-    wait_for_online: impl WaitForOnlineSubscribtion,
-) -> Queue {
-    Queue::with_factory(new_stash().await, factory, Arc::new(wait_for_online))
-        .await
-        .unwrap()
+    Queue::with_factory(stash, factory).await.unwrap()
 }
 
 pub async fn new_stash() -> Stash {
@@ -49,12 +30,6 @@ pub async fn new_stash() -> Stash {
 
 pub async fn new_queue_typed<T: Action<Context: Default>>() -> Queue {
     new_queue(new_factory::<T>()).await
-}
-
-pub async fn new_queue_typed_with_custom_network_waiting<T: Action<Context: Default>>(
-    wait_for_online: impl WaitForOnlineSubscribtion,
-) -> Queue {
-    new_queue_with_custom_network_waiting(new_factory::<T>(), wait_for_online).await
 }
 
 /// Create a new factory with an action.
