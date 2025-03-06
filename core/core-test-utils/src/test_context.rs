@@ -21,7 +21,7 @@ use proton_core_common::models::{ModelExtension, User, UserSettings};
 use proton_core_common::utils::MapVec;
 use proton_core_common::{
     db::account::SessionEncryptionKey,
-    os::{InMemoryKeyChain, KeyChain},
+    os::{InMemoryKeyChain, KeyChain, KeyChainExt},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
 };
@@ -79,7 +79,7 @@ pub trait BaseTestContext {
     }
 
     #[must_use]
-    fn keychain() -> Arc<InMemoryKeyChain> {
+    fn keychain() -> Arc<impl KeyChain> {
         Arc::new(InMemoryKeyChain::default())
     }
 
@@ -89,11 +89,11 @@ pub trait BaseTestContext {
     }
 
     fn store_encryption_key_in_keychain(
-        keychain: Arc<InMemoryKeyChain>,
+        keychain: Arc<impl KeyChain>,
         encryption_key: SessionEncryptionKey,
     ) {
         keychain
-            .store(encryption_key.to_base64())
+            .store(encryption_key)
             .expect("failed to store in keychain");
     }
 
@@ -172,12 +172,12 @@ impl TestContext {
         let mock_web_server = Arc::new(MockServer::start().await);
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
-        let keychain: Arc<InMemoryKeyChain> = Self::keychain();
+        let keychain = Self::keychain();
         let api_config = Self::api_config(&mock_web_server);
         let key = Self::encryption_key();
 
         keychain
-            .store(key.to_base64())
+            .store(key.clone())
             .expect("failed to store in keychain");
 
         // Use the given data or fall back to the default

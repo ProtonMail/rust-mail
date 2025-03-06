@@ -4643,6 +4643,7 @@ dependencies = [
  "proton-mail-common",
  "proton-mail-test-utils",
  "proton-uniffi-macros",
+ "secrecy",
  "serde_json",
  "smart-default",
  "sqlite-watcher",

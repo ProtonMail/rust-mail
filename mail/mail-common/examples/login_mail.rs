@@ -4,9 +4,10 @@ use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
 use proton_core_common::CoreAccountState;
 use proton_mail_common::{MailContext, MailUserContext};
+use secrecy::{ExposeSecret, SecretString};
 use std::fs;
 use std::io::{stdin, stdout, Result as IoResult, Write};
 use std::path::{Path, PathBuf};
@@ -186,27 +187,36 @@ impl OnDiskKeyChain {
 
         Ok(Self { path })
     }
+
+    fn kind_to_path(&self, kind: KeyChainEntryKind) -> PathBuf {
+        self.path.join(match kind {
+            KeyChainEntryKind::EncryptionKey => "encryption",
+        })
+    }
 }
 
 impl KeyChain for OnDiskKeyChain {
-    fn store(&self, key: String) -> Result<(), KeyChainError> {
-        fs::write(&self.path, key).map_err(|e| KeyChainError::new(Box::new(e)))?;
+    fn store_entry(&self, kind: KeyChainEntryKind, key: SecretString) -> Result<(), KeyChainError> {
+        fs::write(self.kind_to_path(kind), key.expose_secret().as_bytes())
+            .map_err(|e| KeyChainError::new(Box::new(e)))?;
 
         Ok(())
     }
 
-    fn delete(&self) -> Result<(), KeyChainError> {
-        fs::remove_file(&self.path).map_err(|e| KeyChainError::new(Box::new(e)))?;
+    fn delete_entry(&self, kind: KeyChainEntryKind) -> Result<(), KeyChainError> {
+        fs::remove_file(self.kind_to_path(kind)).map_err(|e| KeyChainError::new(Box::new(e)))?;
 
         Ok(())
     }
 
-    fn get(&self) -> Result<Option<String>, KeyChainError> {
-        let Ok(true) = fs::exists(&self.path) else {
+    fn load_entry(&self, kind: KeyChainEntryKind) -> Result<Option<SecretString>, KeyChainError> {
+        let path = self.kind_to_path(kind);
+        let Ok(true) = fs::exists(&path) else {
             return Ok(None);
         };
 
-        fs::read_to_string(&self.path)
+        fs::read_to_string(&path)
+            .map(SecretString::new)
             .map(Some)
             .map_err(|e| KeyChainError::new(Box::new(e)))
     }

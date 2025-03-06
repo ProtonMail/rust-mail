@@ -15,6 +15,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::os::KeyChainExt;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::errors::unexpected::Unexpected;
@@ -165,10 +166,15 @@ async fn create_mail_session_inner(
 
     // Generate session key;
     debug!("Checking keychain");
-    if key_chain.get().map_err(|_| Unexpected::Os)?.is_none() {
+    let key_chain = FFIKeyChain(key_chain);
+    if key_chain
+        .load::<SessionEncryptionKey>()
+        .map_err(|_| Unexpected::Os)?
+        .is_none()
+    {
         debug!("Key chain has no key, generating");
         let key = SessionEncryptionKey::random();
-        key_chain.store(key.to_base64()).map_err(|_e| {
+        key_chain.store(key).map_err(|_e| {
             tracing::error!("Failed to store key in keychain");
             Unexpected::Os
         })?;
@@ -185,7 +191,7 @@ async fn create_mail_session_inner(
         mail_cache_path,
         params.mail_cache_size,
         connection_pool_size,
-        Arc::from(FFIKeyChain::from(key_chain)),
+        Arc::new(key_chain),
         api_env_config.into(),
     )
     .await?;

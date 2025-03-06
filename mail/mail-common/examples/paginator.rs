@@ -5,7 +5,7 @@ use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
-use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
 use proton_mail_common::{
@@ -63,7 +63,7 @@ async fn main() {
     info!("TEMP_DIR = {tmp_dir:?}");
 
     let keychain = InMemoryKeyChain::default();
-    let key = SessionEncryptionKey::random().to_base64();
+    let key = SessionEncryptionKey::random();
     keychain.store(key).unwrap();
 
     let ctx = MailContext::new(
