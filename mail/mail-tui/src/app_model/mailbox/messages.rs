@@ -257,6 +257,7 @@ impl MessagesState {
         ))
     }
 
+    #[allow(clippy::zombie_processes)]
     pub fn open_message_body(&mut self, ctx: Arc<MailUserContext>) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
