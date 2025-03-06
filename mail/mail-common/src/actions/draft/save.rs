@@ -35,7 +35,7 @@ use tracing::{debug, error};
 /// the conversation and message are updated.
 ///
 /// If the action failed, nothing is reverted.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Save {
     metadata_id: MetadataId,
     /// To Recipients - only email to preserve display name privacy
