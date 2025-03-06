@@ -6,7 +6,7 @@ use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
-use proton_action_queue::queue::QueuedError;
+use proton_action_queue::queue::{ActionError, Error, QueuedError};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -145,6 +145,64 @@ async fn cancel_causes_revert_with_dependees() {
     assert!(!queue.contains(action_id1).await.unwrap());
     assert!(!queue.contains(action_id3).await.unwrap());
     assert!(!queue.contains(action_id2).await.unwrap());
+}
+
+#[tokio::test]
+async fn accidental_cyclic_dependency_with_replace() {
+    fn create_action(value: u32) -> ChainCancelAction {
+        ChainCancelAction {
+            key: "foo".to_string(),
+            value,
+            old_value: 0,
+        }
+    }
+
+    // Action 143 has [ActionId(145), ActionId(146), ActionId(147), ActionId(148)]
+    // 147:[143]
+    // 184:[]
+    let queue = new_queue_typed::<ChainCancelAction>().await;
+
+    let action_143 = create_action(143);
+    let action_145 = create_action(145);
+    let action_146 = create_action(146);
+    let action_147 = create_action(147);
+    let action_148 = create_action(148);
+
+    {
+        let mut conn = queue.stash().connection();
+        let tx = conn.transaction().await.unwrap();
+        tx.ext_insert_value("foo", 0).await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    let action_148_id = queue.queue_action(action_148).await.unwrap().id;
+    let action_145_id = queue.queue_action(action_145).await.unwrap().id;
+    let action_146_id = queue.queue_action(action_146).await.unwrap().id;
+    let action_147_id = queue.queue_action(action_147).await.unwrap().id;
+    let action_143_id = queue
+        .queue_action_with_metadata(
+            action_143,
+            MetadataBuilder::new()
+                .with_dependencies([action_146_id, action_147_id, action_145_id, action_148_id])
+                .build(),
+        )
+        .await
+        .unwrap()
+        .id;
+
+    let Err(err) = queue
+        .replace_or_queue_action_with_metadata(
+            action_147_id,
+            create_action(1472),
+            MetadataBuilder::new()
+                .with_dependency(action_143_id)
+                .build(),
+        )
+        .await
+    else {
+        panic!("expected error");
+    };
+    assert!(matches!(err, ActionError::Queue(Error::CyclicDependency)));
 }
 #[derive(Serialize, Deserialize)]
 pub struct CancelAction {

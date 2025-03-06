@@ -1128,22 +1128,8 @@ impl DraftSaveActionQueuer {
         // We need to be aware of the last save action id to try and replace the existing one.
         // On failure, we only execute after the previous one has finished,
         let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-        let mut metadata_builder = MetadataBuilder::new()
-            .with_resource(&self.id)
-            .expect("This should never fail");
-        if let Some(action_id) = last_draft_save_action_id {
-            metadata_builder = metadata_builder.with_dependency(action_id);
-        }
-        let metadata = metadata_builder.build();
-        if let Some(previous_action_id) = last_draft_save_action_id {
-            queue
-                .replace_or_queue_action_with_metadata(previous_action_id, self.action, metadata)
-                .await
-        } else {
-            queue
-                .queue_action_with_metadata(self.action, metadata)
-                .await
-        }
+        queue_or_replace_draft_save(queue, self.action, self.id, last_draft_save_action_id, [])
+            .await
     }
 }
 
@@ -1174,24 +1160,14 @@ impl DraftSendActionQueuer {
         let attachment_action_ids =
             DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
         let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-        let save_metadata = MetadataBuilder::new()
-            .with_resource(&self.id)
-            .expect("This should never fail")
-            .with_dependencies(attachment_action_ids)
-            .build();
-        let save_output = if let Some(last_draft_save_action_id) = last_draft_save_action_id {
-            queue
-                .replace_or_queue_action_with_metadata(
-                    last_draft_save_action_id,
-                    self.save_action,
-                    save_metadata,
-                )
-                .await?
-        } else {
-            queue
-                .queue_action_with_metadata(self.save_action, save_metadata)
-                .await?
-        };
+        let save_output = queue_or_replace_draft_save(
+            queue,
+            self.save_action,
+            self.id,
+            last_draft_save_action_id,
+            attachment_action_ids,
+        )
+        .await?;
         let send_metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
@@ -1342,4 +1318,50 @@ fn attachment_staging_path(context: &MailUserContext, metadata_id: MetadataId) -
     context
         .attachment_staging_path()
         .join(metadata_id.to_string())
+}
+
+async fn queue_or_replace_draft_save(
+    queue: &Queue,
+    save_action: Save,
+    metadata_id: MetadataId,
+    last_draft_save_action_id: Option<ActionId>,
+    other_dependencies: impl IntoIterator<Item = ActionId>,
+) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
+    let mut metadata_builder = MetadataBuilder::new()
+        .with_resource(&metadata_id)
+        .expect("This should never fail");
+    if let Some(action_id) = last_draft_save_action_id {
+        metadata_builder = metadata_builder.with_dependency(action_id);
+    }
+    let metadata = metadata_builder
+        .with_dependencies(other_dependencies)
+        .build();
+    if let Some(previous_action_id) = last_draft_save_action_id {
+        match queue
+            .replace_or_queue_action_with_metadata(
+                previous_action_id,
+                save_action.clone(),
+                metadata.clone(),
+            )
+            .await
+        {
+            Ok(v) => Ok(v),
+            //TODO(ET-2277): More elegant solution
+            // It is possible under certain circumstances to issue a replace
+            // that can end of up in a cyclic dependency. E.g: Save(A) -> Upload Attachment (B) ->
+            // Save (C). Replacing A with C will cause C to Depend on B and B on C rather
+            // than A. Extra book keeping is required to prevent this. For now, in the interest
+            // of saving time, we just queue the action normally when a cycle is detected.
+            Err(ActionError::Queue(proton_action_queue::queue::Error::CyclicDependency)) => {
+                queue
+                    .queue_action_with_metadata(save_action, metadata)
+                    .await
+            }
+            Err(e) => Err(e),
+        }
+    } else {
+        queue
+            .queue_action_with_metadata(save_action, metadata)
+            .await
+    }
 }
