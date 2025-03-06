@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../tests/models/draft_metadata.rs"]
+mod draft_metadata;
+
 use crate::datatypes::LocalMessageId;
 use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
@@ -24,6 +28,7 @@ use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
+use typed_builder::TypedBuilder;
 
 /// Identifier for draft [`DraftMetadata`]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -52,33 +57,41 @@ impl ToSql for MetadataId {
 ///
 /// This metadata will be created for every draft we open or create so it
 /// can be kept up to date with ongoing changes.
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, TypedBuilder)]
 #[TableName("draft_metadata")]
 pub struct DraftMetadata {
+    #[builder(default, setter(strip_option))]
     #[IdField(autoincrement)]
     pub id: Option<MetadataId>,
     /// Id of the draft message.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,
+    #[builder(default, setter(strip_option))]
     #[DbField]
     /// Id of the conversation this draft belongs to.
     pub local_conversation_id: Option<LocalConversationId>,
     /// Local id of the message being replied to.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_parent_id: Option<LocalMessageId>,
     /// Reply mode used for the draft, if `None` is an empty draft.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub reply_mode: Option<ReplyMode>,
     /// Last save action id.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub save_action_id: Option<ActionId>,
     /// Last send action id.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub send_action_id: Option<ActionId>,
 
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
+    #[builder(default, setter(strip_option))]
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -267,6 +280,22 @@ impl DraftMetadata {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn messages_with_pending_send(
+        tether: &Tether,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let msg_ids = Self::find(
+            "WHERE local_message_id IS NOT NULL AND send_action_id IS NOT NULL",
+            vec![],
+            tether,
+        )
+        .await?
+        .into_iter()
+        .filter_map(|draft| draft.local_message_id)
+        .collect();
+
+        Ok(msg_ids)
     }
 }
 

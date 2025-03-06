@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Added
+
+  - [ET-2141] `get_unsent_messages_ids_in_queue` method on `MailSession` to get MessageIds of unsent messages for given user_id
+
+
 ## [0.54.4] - 2025-03-06
 
 ### Fixed
