@@ -546,6 +546,11 @@ impl Queue {
         Ok(StoredAction::pending_count(&tether).await?)
     }
 
+    pub async fn typed_actions_count<T: Action>(&self) -> Result<u64> {
+        let tether = self.shared.stash.connection();
+        Ok(StoredAction::type_count::<T>(&tether).await?)
+    }
+
     /// Check whether the action with `action_id` is present in the queue.
     ///
     /// # Errors

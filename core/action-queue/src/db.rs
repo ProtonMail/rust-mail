@@ -85,8 +85,9 @@ impl StoredAction {
         Ok(Self::new_impl::<T>(serialized_state, metadata))
     }
 
+    #[must_use]
     /// Create a stored action without any state and the given `metadata`.
-    pub(crate) fn without_state<T: Action>(metadata: Metadata) -> Self {
+    pub fn without_state<T: Action>(metadata: Metadata) -> Self {
         Self::new_impl::<T>(vec![], metadata)
     }
 
@@ -159,9 +160,11 @@ impl StoredAction {
     ///
     /// Returns error if the query failed.
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
-        tether
-            .query_value::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
-            .await
+        Self::count("", vec![], tether).await
+    }
+
+    pub async fn type_count<T: Action>(tether: &Tether) -> Result<u64, StashError> {
+        Self::count("where action_type = ?", params![T::TYPE.as_ref()], tether).await
     }
 
     /// Check whether the action with `id` is in the queue.

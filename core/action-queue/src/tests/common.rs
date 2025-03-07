@@ -1,19 +1,19 @@
 #![allow(non_snake_case)]
 #![allow(clippy::ignored_unit_patterns)]
 
-use crate::action::{Action, ActionId, Handler, WriterGuard};
+use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
 use crate::network::WaitForOnline;
-use stash::stash::Bond;
+use stash::stash::{Bond, StashError};
 use std::future::Future;
 use std::marker::PhantomData;
 
-pub(crate) struct DummyWaitForOnline;
+pub struct DummyWaitForOnline;
 #[async_trait::async_trait]
 impl WaitForOnline for DummyWaitForOnline {
     async fn wait_for_online(&self) {}
 }
 
-pub(crate) struct NoopActionHandler<T: Action>(PhantomData<T>);
+pub struct NoopActionHandler<T: Action>(PhantomData<T>);
 
 impl<T: Action> Default for NoopActionHandler<T> {
     fn default() -> Self {
@@ -57,5 +57,38 @@ where
         _: WriterGuard,
     ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {
         std::future::ready(Ok(T::RemoteOutput::default()))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DefaultError {
+    #[error("Network Failure")]
+    NetworkFailure,
+    #[error("API Failure")]
+    APIFailure,
+    #[error("{0}")]
+    Other(anyhow::Error),
+    #[error("{0}")]
+    DB(#[from] StashError),
+    #[error("Writer Guard Expired")]
+    WriterGuardExpired,
+}
+
+impl From<WriterGuardError> for DefaultError {
+    fn from(value: WriterGuardError) -> Self {
+        match value {
+            WriterGuardError::Expired => Self::WriterGuardExpired,
+            WriterGuardError::Stash(e) => Self::DB(e),
+        }
+    }
+}
+
+impl Error for DefaultError {
+    fn is_network_failure(&self) -> bool {
+        matches!(self, DefaultError::NetworkFailure)
+    }
+
+    fn is_writer_guard_expired(&self) -> bool {
+        matches!(self, DefaultError::WriterGuardExpired)
     }
 }
