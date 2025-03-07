@@ -36,7 +36,6 @@ mod mail_settings;
 mod mailbox_labels;
 mod message;
 mod network;
-mod paginator;
 mod rollback_item;
 
 pub use attachment::*;
@@ -48,7 +47,6 @@ pub use mail_settings::*;
 pub use mailbox_labels::*;
 pub use message::*;
 pub use network::*;
-pub use paginator::*;
 pub use rollback_item::*;
 
 #[path = "tests/models.rs"]

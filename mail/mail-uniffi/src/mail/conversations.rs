@@ -10,14 +10,12 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::core::paginator::ConversationPaginator;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
 };
 use crate::mail::{MailUserSession, Mailbox};
-use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::Session;
@@ -31,7 +29,6 @@ use proton_mail_common::errors::{
 };
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::Conversation as RealConversation;
-use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::sync::Arc;
@@ -525,55 +522,6 @@ pub async fn move_conversations(
     .await
     .map_err(ActionError::from)
     .into()
-}
-
-/// Paginate conversations for the given label.
-///
-/// Gets a paginator for conversations belonging to the specified label, which
-/// allows navigation through the conversations by page/window, and watches for
-/// changes. When the conversations change, the callback will be invoked.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `filter`   - The filter options for pagination.
-/// * `callback` - The callback to use for updates. When the specified
-///                conversations change, the callback will be invoked.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-/// TODO: Outdated, remove when `scroll_conversations_for_label` is utilized.
-#[allow(clippy::missing_panics_doc)]
-#[uniffi_export]
-pub async fn paginate_conversations_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    filter: PaginatorFilter,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<ConversationPaginator>, ActionError> {
-    let context = session.ctx()?;
-    uniffi_async(async move {
-        let real_paginator = RealConversation::paginate_in_label(
-            &context,
-            label_id.into(),
-            50,
-            RealPaginatorFilter::from(filter),
-            true,
-        )
-        .await?;
-        let handle = real_paginator.watch()?;
-
-        Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationPaginator {
-            real_paginator,
-            handle: watch_channel(context, handle, callback),
-            label_id,
-        }))
-    })
-    .await
-    .map_err(ActionError::from)
 }
 
 /// Paginate conversations for the given label.

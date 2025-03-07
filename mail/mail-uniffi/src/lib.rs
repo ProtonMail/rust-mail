@@ -149,9 +149,6 @@ pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
-use proton_mail_common::models::{
-    PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
-};
 use proton_mail_common::{MailContext, MailUserContext};
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
@@ -438,50 +435,11 @@ pub fn watch_channel_async<S: AsyncSpawnable>(
     Arc::new(WatchHandle::new(handle, &task_handle))
 }
 
-/// Filter options for pagination
-#[derive(uniffi::Record)]
-pub struct PaginatorFilter {
-    /// If true, only return unread conversations/messages
-    pub unread: Option<bool>,
-}
-
-impl From<PaginatorFilter> for RealPaginatorFilter {
-    fn from(filter: PaginatorFilter) -> Self {
-        RealPaginatorFilter {
-            unread: filter.unread,
-        }
-    }
-}
-
-impl From<RealPaginatorFilter> for PaginatorFilter {
-    fn from(filter: RealPaginatorFilter) -> Self {
-        PaginatorFilter {
-            unread: filter.unread,
-        }
-    }
-}
-
 /// Search options for pagination
 #[derive(uniffi::Record)]
 pub struct PaginatorSearchOptions {
     /// Keywords to use in search.
     pub keywords: Option<String>,
-}
-
-impl From<PaginatorSearchOptions> for RealPaginatorSearchOptions {
-    fn from(filter: PaginatorSearchOptions) -> Self {
-        RealPaginatorSearchOptions {
-            keywords: filter.keywords,
-        }
-    }
-}
-
-impl From<RealPaginatorSearchOptions> for PaginatorSearchOptions {
-    fn from(filter: RealPaginatorSearchOptions) -> Self {
-        PaginatorSearchOptions {
-            keywords: filter.keywords,
-        }
-    }
 }
 
 impl From<PaginatorSearchOptions> for RealSearchOptions {

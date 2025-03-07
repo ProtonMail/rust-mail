@@ -14,18 +14,16 @@ use super::datatypes::{
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
 use crate::core::datatypes::{Id, RemoteId};
-use crate::core::paginator::MessagePaginator;
 use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
+use crate::PaginatorSearchOptions;
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
-use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
-use proton_api_core::services::proton::common::LabelId as RealLabelId;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Label as RealLabel, ModelIdExtension};
+use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
-use proton_mail_common::datatypes::{LocalConversationId, SystemLabelId};
+use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
 };
@@ -34,9 +32,6 @@ use proton_mail_common::errors::{
 };
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{self, Message as RealMessage};
-use proton_mail_common::models::{
-    PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
-};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
@@ -357,53 +352,6 @@ pub async fn messages_for_label(
 ///
 #[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
-pub async fn paginate_messages_for_label(
-    session: Arc<MailUserSession>,
-    label_id: Id,
-    filter: PaginatorFilter,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<MessagePaginator>, ActionError> {
-    let context = session.ctx()?;
-    uniffi_async(async move {
-        let real_paginator = RealMessage::paginate_in_label(
-            &context,
-            label_id.into(),
-            50,
-            RealPaginatorFilter::from(filter),
-            RealPaginatorSearchOptions::default(),
-            true,
-        )
-        .await?;
-        let handle = real_paginator.watch()?;
-        Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
-            real_paginator,
-            handle: watch_channel(context, handle, callback),
-        }))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
-/// Paginate messages for the given label.
-///
-/// Gets a paginator for messages belonging to the specified label, which allows
-/// navigation through the messages by page/window, and watches for changes.
-/// When the messages change, the callback will be invoked.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `filter`   - The filter options for pagination.
-/// * `callback` - The callback to use for updates. When the specified messages
-///                change, the callback will be invoked.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[allow(clippy::missing_panics_doc)]
-#[uniffi_export]
 pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
@@ -426,16 +374,17 @@ pub async fn scroll_messages_for_label(
     .map_err(ActionError::from)
 }
 
-/// Paginate messages returned from a search.
+/// Search for messages for the given keywords.
 ///
-/// Gets a paginator for messages returned from a search, which allows
+/// Gets a scroller for messages containing keywords, which allows
 /// navigation through the messages by page/window, and watches for changes.
 /// When the messages change, the callback will be invoked.
 ///
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `options`  - The search options for pagination.
+/// * `label_id` - The local ID of the label to watch.
+/// * `filter`   - The filter options for pagination.
 /// * `callback` - The callback to use for updates. When the specified messages
 ///                change, the callback will be invoked.
 ///
@@ -443,38 +392,6 @@ pub async fn scroll_messages_for_label(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
-#[uniffi_export]
-pub async fn paginate_search(
-    session: Arc<MailUserSession>,
-    options: PaginatorSearchOptions,
-    callback: Box<dyn LiveQueryCallback>,
-) -> Result<Arc<MessagePaginator>, ActionError> {
-    let user_context = session.ctx()?;
-    let stash = session.user_stash()?;
-    uniffi_async(async move {
-        let tether = stash.connection();
-        let real_paginator = RealMessage::paginate_in_label(
-            &user_context,
-            RealLabel::remote_id_counterpart(RealLabelId::all_mail(), &tether)
-                .await?
-                .expect("All mail system label not found"),
-            50,
-            RealPaginatorFilter::default(),
-            RealPaginatorSearchOptions::from(options),
-            false,
-        )
-        .await?;
-        let handle = real_paginator.watch()?;
-        Result::<_, RealProtonMailError>::Ok(Arc::new(MessagePaginator {
-            real_paginator,
-            handle: watch_channel(user_context, handle, callback),
-        }))
-    })
-    .await
-    .map_err(ActionError::from)
-}
-
 #[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn scroller_search(
