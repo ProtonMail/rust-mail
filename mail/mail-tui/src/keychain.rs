@@ -8,13 +8,16 @@ use std::sync::Arc;
 
 pub struct AppKeyChain {
     session_key: Arc<keyring::Entry>,
+    device_key: Arc<keyring::Entry>,
 }
 
 impl AppKeyChain {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let entry = keyring::Entry::new(APP_ID, "session_key")?;
+        let session_key = keyring::Entry::new(APP_ID, "session_key")?;
+        let device_key = keyring::Entry::new(APP_ID, "device_key")?;
         Ok(Self {
-            session_key: Arc::new(entry),
+            session_key: Arc::new(session_key),
+            device_key: Arc::new(device_key),
         })
     }
 
@@ -30,6 +33,7 @@ impl AppKeyChain {
     fn kind_to_entry(&self, kind: KeyChainEntryKind) -> &Arc<keyring::Entry> {
         match kind {
             KeyChainEntryKind::EncryptionKey => &self.session_key,
+            KeyChainEntryKind::DeviceKey => &self.device_key,
         }
     }
 }

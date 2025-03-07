@@ -35,12 +35,16 @@ pub enum OSKeyChainEntryKind {
     /// Session key used to encrypt and decrypt sensitive data
     ///
     EncryptionKey,
+    /// Shared key between all accounts, used to decrypt push notifications
+    ///
+    DeviceKey,
 }
 
 impl From<KeyChainEntryKind> for OSKeyChainEntryKind {
     fn from(value: KeyChainEntryKind) -> Self {
         match value {
             KeyChainEntryKind::EncryptionKey => Self::EncryptionKey,
+            KeyChainEntryKind::DeviceKey => Self::DeviceKey,
         }
     }
 }

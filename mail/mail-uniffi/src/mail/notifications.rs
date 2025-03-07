@@ -11,9 +11,8 @@ use proton_mail_common::datatypes::mail_notifications::{
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::core::datatypes::RemoteId;
+use crate::core::{FFIKeyChain, OSKeyChain};
 use crate::{errors::ActionError, uniffi_async};
-
-use super::MailSession;
 
 /// Encrypted push notification
 ///
@@ -158,14 +157,13 @@ impl From<RealNotificationSender> for NotificationSender {
 ///
 #[uniffi_export]
 pub async fn decrypt_push_notification(
-    session: Arc<MailSession>,
+    key_chain: Box<dyn OSKeyChain>,
     encrypted: EncryptedPushNotification,
 ) -> Result<DecryptedPushNotification, ActionError> {
     uniffi_async(async move {
-        let ctx = session.ctx_arc();
         let real_encrypted = RealEncryptedPushNotification::from(encrypted);
         let real_decrypted = real_encrypted
-            .try_into_decrypted_inbox_mail_notification(ctx)
+            .try_into_decrypted_inbox_mail_notification(Arc::new(FFIKeyChain::from(key_chain)))
             .await?;
 
         let decrypted = DecryptedPushNotification::from(real_decrypted);

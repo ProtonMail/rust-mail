@@ -447,7 +447,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -2085,9 +2085,9 @@ dependencies = [
 
 [[package]]
 name = "gopenpgp-sys"
-version = "0.2.14"
+version = "0.2.15"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "a6bcbc546b6c504e5445116b490a71b5cbc5fa2a1e1836c41a5d087e3459305d"
+checksum = "68542c9833b580af250fc3109f4f46499018fdebac5d19db729edaed420214ee"
 dependencies = [
  "base64",
  "bindgen",
@@ -2882,7 +2882,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -4349,9 +4349,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto"
-version = "0.4.12"
+version = "0.4.13"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "4a532e3ea9da0f6756bd58e83672faea59b49d181562f1349ddc98e6a1537d4d"
+checksum = "93db7f8c93adc50afc202fd5e8f57e93203b8abf629e3dc0d6e964505731161a"
 dependencies = [
  "gopenpgp-sys",
  "hex",
@@ -4365,9 +4365,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.8.3"
+version = "0.9.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "99df54f589dcccd76301610a898464e32daff26f56fd1f1cc50b709ec1b2ceb8"
+checksum = "353e54597e073c38ac8be7ba2813259c8c39062f9c01cec3fc11200ac7c2d0f6"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
@@ -4712,6 +4712,7 @@ dependencies = [
  "base64",
  "bcrypt",
  "crypto-bigint",
+ "pgp",
  "rand 0.8.5",
  "sha2",
  "thiserror 1.0.69",
@@ -7068,7 +7069,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

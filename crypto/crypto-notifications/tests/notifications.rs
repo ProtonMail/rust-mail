@@ -1,5 +1,9 @@
-use proton_crypto_account::proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, PGPProviderSync, PrivateKey, PublicKey,
+use proton_crypto_account::{
+    keys::PGPDeviceKey,
+    proton_crypto::crypto::{
+        AsPublicKeyRef, DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, PrivateKey,
+        PublicKey,
+    },
 };
 use proton_crypto_notifications::{DecryptableNotification, PGPEncryptedNotification};
 use serde::{Deserialize, Serialize};
@@ -40,8 +44,8 @@ impl PGPEncryptedNotification for EncryptedTestNotification {
 
 impl DecryptableNotification for EncryptedTestNotification {}
 
-pub struct TestUserKey<T: PrivateKey>(T);
-impl<T: PrivateKey> AsRef<T> for TestUserKey<T> {
+pub struct TestDeviceKey<T: PrivateKey>(T);
+impl<T: PrivateKey> AsRef<T> for TestDeviceKey<T> {
     fn as_ref(&self) -> &T {
         &self.0
     }
@@ -60,39 +64,92 @@ enum Kind {
     Foo,
 }
 
-pub struct TestUserPublicKey<T: PublicKey>(T);
+pub struct TestDevicePublicKey<T: PublicKey>(T);
 
-impl<T: PublicKey> AsPublicKeyRef<T> for TestUserPublicKey<T> {
+impl<T: PublicKey> AsPublicKeyRef<T> for TestDevicePublicKey<T> {
     fn as_public_key(&self) -> &T {
         &self.0
     }
 }
 
-fn get_test_user_keys<T: PGPProviderSync>(pgp_provider: &T) -> Vec<TestUserKey<T::PrivateKey>> {
-    get_test_user_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
+fn get_test_device_key<T: PGPProviderSync>(pgp_provider: &T) -> TestDeviceKey<T::PrivateKey> {
+    get_test_device_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_user_key_source<T: PGPProviderSync>(
+pub fn get_test_device_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,
     passphrase: &str,
-) -> Vec<TestUserKey<T::PrivateKey>> {
+) -> TestDeviceKey<T::PrivateKey> {
     let decryption_key = pgp_provider
         .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
-    vec![TestUserKey(decryption_key)]
+    TestDeviceKey(decryption_key)
 }
 
 #[test]
 fn decrypt_notification() {
     let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
 
-    let decryption_keys = get_test_user_keys(&pgp_provider);
+    let decryption_key = get_test_device_key(&pgp_provider);
 
     let test_notification = EncryptedTestNotification(TEST_NOTIFICATION.into());
     let decrypted_notification = test_notification
-        .decrypt(&pgp_provider, &decryption_keys)
+        .decrypt(&pgp_provider, &decryption_key)
+        .unwrap();
+
+    let notification: DecryptedTestNotification = decrypted_notification.inner;
+    assert_eq!(notification, TEST_EXPECTED_NOTIFICATION);
+}
+
+#[test]
+fn integration_test() {
+    let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
+
+    // Simulating registration of the token:
+    let device_key = PGPDeviceKey::generate(&pgp_provider).expect("key generation failed");
+    let server_public_key = device_key
+        .export_public_key(&pgp_provider)
+        .expect("export failed");
+
+    // Simulating storing the key in keychain:
+    let decryption_key_in_keychain = device_key
+        .serialize_to_secure_storage(&pgp_provider)
+        .expect("Failed to ''store'' the key");
+
+    // Simulating the server:
+    let server_public_key_imported = pgp_provider
+        .public_key_import(server_public_key.as_bytes(), DataEncoding::Armor)
+        .expect("Server failed to import the key");
+
+    let push_notification = serde_json::json!({
+        "data": 1234,
+        "type": "foo"
+    });
+    let serialized_push_notification = serde_json::to_string(&push_notification)
+        .expect("Server failed to serialize push notification");
+    let encrypted_notification = pgp_provider
+        .new_encryptor()
+        .with_encryption_key(&server_public_key_imported)
+        .encrypt_raw(serialized_push_notification.as_bytes(), DataEncoding::Armor)
+        .expect("Server failed to encrypt the message");
+
+    let encrypted_notification = EncryptedTestNotification(
+        String::from_utf8(encrypted_notification).expect("Failed to store message as string"),
+    );
+
+    // Message has arrived on our end.
+
+    // Simulating fetching key from keychain
+    let decryption_key = PGPDeviceKey::deserialize_from_secure_storage(
+        &pgp_provider,
+        decryption_key_in_keychain.as_bytes(),
+    )
+    .expect("Failed to ''load'' key from the keychain");
+
+    let decrypted_notification = encrypted_notification
+        .decrypt(&pgp_provider, &decryption_key)
         .unwrap();
 
     let notification: DecryptedTestNotification = decrypted_notification.inner;
