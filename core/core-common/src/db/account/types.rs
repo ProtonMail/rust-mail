@@ -6,6 +6,7 @@ use crate::datatypes::{
     AccountDetails, AuthScopes, AvatarInformation, PasswordMode, TfaStatus, Timestamp,
 };
 use crate::models::ModelExtension;
+use crate::os::StoreInKeyChain;
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
@@ -18,6 +19,7 @@ use base64::Engine;
 use derive_more::{AsRef, Deref};
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::common::{AuthId, UserId};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
@@ -630,6 +632,19 @@ impl FromSql for EncryptedPassword {
 #[derive(Clone)]
 pub struct SessionEncryptionKey {
     key: Key<Aes256Gcm>,
+}
+
+impl StoreInKeyChain for SessionEncryptionKey {
+    fn kind() -> crate::os::KeyChainEntryKind {
+        crate::os::KeyChainEntryKind::EncryptionKey
+    }
+    fn from_stored_string(s: SecretString) -> Self {
+        Self::from_base64(s.expose_secret()).expect("Keychain contains invalid key")
+    }
+
+    fn to_stored_string(&self) -> SecretString {
+        SecretString::new(self.to_base64())
+    }
 }
 
 impl Drop for SessionEncryptionKey {
