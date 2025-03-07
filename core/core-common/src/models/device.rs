@@ -2,8 +2,6 @@
 #[path = "../tests/models/device.rs"]
 mod tests;
 
-use std::sync::Arc;
-
 use proton_api_core::{
     service::ApiServiceError,
     services::proton::{prelude::RegisterDeviceRequest, ProtonCore},
@@ -114,7 +112,7 @@ impl RegisteredDevice {
     pub async fn save(
         &mut self,
         bond: &Bond<'_>,
-        ctx: &Arc<Context>,
+        ctx: &Context,
     ) -> Result<(), RegisteredDeviceError> {
         // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
