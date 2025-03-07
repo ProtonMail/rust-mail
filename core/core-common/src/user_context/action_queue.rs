@@ -1,9 +1,13 @@
 use crate::models::LabelError;
 use proton_action_queue::action::WriterGuardError;
-use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::network::{
+    DummyWaitForOnlineSubscribtion, WaitForOnline, WaitForOnlineSubscribtion,
+};
+use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use stash::stash::StashError;
+use tokio::sync::watch::Receiver;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreActionError {
@@ -44,36 +48,46 @@ impl From<WriterGuardError> for CoreActionError {
     }
 }
 
-/// Dummy implementation of [`WaitForOnline`] that always returns
-/// immediately
-///
-pub struct DummyWaitForOnline;
-impl From<StatusWatcher> for DummyWaitForOnline {
-    fn from(_: StatusWatcher) -> Self {
+pub trait WaitForOnlineSubscribtionExt: WaitForOnlineSubscribtion {
+    fn create(watcher: StatusWatcher) -> Self;
+}
+
+impl WaitForOnlineSubscribtionExt for DummyWaitForOnlineSubscribtion {
+    fn create(_: StatusWatcher) -> Self {
         Self
     }
 }
-#[async_trait::async_trait]
-impl WaitForOnline for DummyWaitForOnline {
-    async fn wait_for_online(&self) {}
-}
 
-/// Imlementation of [`WaitForOnline`] trait that uses
+/// Creates an imlementation of [`WaitForOnline`] trait that uses
 /// API Status Watcher
 ///
-pub struct CheckNetworkStatus {
+pub struct CheckNetworkStatusSubscriber {
     watcher: StatusWatcher,
 }
 
-impl From<StatusWatcher> for CheckNetworkStatus {
-    fn from(watcher: StatusWatcher) -> Self {
+impl WaitForOnlineSubscribtionExt for CheckNetworkStatusSubscriber {
+    fn create(watcher: StatusWatcher) -> Self {
         Self { watcher }
     }
 }
 
+impl WaitForOnlineSubscribtion for CheckNetworkStatusSubscriber {
+    fn subscribe(&self) -> impl WaitForOnline {
+        CheckForNetworkStatus {
+            receiver: self.watcher.subscribe(),
+        }
+    }
+}
+
+/// An implementation of [`WaitForOnline`] trai that uses API Status Watcher
+///
+pub struct CheckForNetworkStatus {
+    receiver: Receiver<ConnectionStatus>,
+}
+
 #[async_trait::async_trait]
-impl WaitForOnline for CheckNetworkStatus {
-    async fn wait_for_online(&self) {
-        self.watcher.subscribe().wait_for_online().await;
+impl WaitForOnline for CheckForNetworkStatus {
+    async fn wait_for_online(&mut self) {
+        self.receiver.wait_for_online().await;
     }
 }

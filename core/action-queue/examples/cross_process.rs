@@ -25,7 +25,7 @@ use clap::{Parser, Subcommand};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, NoopError, Type, WriterGuard,
 };
-use proton_action_queue::network::WaitForOnline;
+use proton_action_queue::network::DummyWaitForOnlineSubscribtion;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -111,6 +111,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
+            &DummyWaitForOnlineSubscribtion,
         );
         wait_on_queue_empty(&queue).await;
     } else {
@@ -159,6 +160,7 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
+            &DummyWaitForOnlineSubscribtion,
         );
         notifier.notified().await;
     }
@@ -195,9 +197,7 @@ fn spawn_process(
 
 async fn new_queue(directory: &Path) -> Queue {
     let stash = stash::stash::Stash::new(Some(&directory.join("sqlite.db"))).unwrap();
-    let queue = Queue::new(stash, Arc::new(DummyWaitForOnline))
-        .await
-        .unwrap();
+    let queue = Queue::new(stash).await.unwrap();
     queue.register::<TestAction>().unwrap();
     queue
 }
@@ -276,10 +276,4 @@ fn executor_id() -> &'static str {
     EXECUTOR_ID
         .get_or_init(|| Uuid::new_v4().to_string())
         .as_ref()
-}
-
-pub(crate) struct DummyWaitForOnline;
-#[async_trait::async_trait]
-impl WaitForOnline for DummyWaitForOnline {
-    async fn wait_for_online(&self) {}
 }

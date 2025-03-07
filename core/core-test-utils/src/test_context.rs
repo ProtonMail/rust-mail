@@ -13,7 +13,6 @@ use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
-use proton_core_common::action_queue::DummyWaitForOnline;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
@@ -259,7 +258,7 @@ impl TestContext {
     /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
         self.context
-            .user_context_from_session::<DummyWaitForOnline>(
+            .user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
                 Some(ChallengeObserver::default()),

@@ -6,7 +6,6 @@ use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
-use proton_action_queue::network::WaitForOnline;
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::common::{AuthId, UserId};
@@ -73,7 +72,6 @@ impl UserContext {
         session_id: AuthId,
         cache_path: PathBuf,
         sender_image_cache_size: u64,
-        wait_for_online: impl WaitForOnline,
     ) -> CoreContextResult<Arc<Self>> {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let images_logo_cache = Self::init_sender_image_cache(
@@ -83,7 +81,7 @@ impl UserContext {
         )
         .await?;
         let cancellation_token = context.new_child_cancellation_token();
-        let queue = Queue::new(user_stash.clone(), Arc::new(wait_for_online)).await?;
+        let queue = Queue::new(user_stash.clone()).await?;
         let this = Arc::new(Self {
             session,
             context,

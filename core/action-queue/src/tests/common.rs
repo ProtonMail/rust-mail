@@ -2,16 +2,9 @@
 #![allow(clippy::ignored_unit_patterns)]
 
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
-use crate::network::WaitForOnline;
 use stash::stash::{Bond, StashError};
 use std::future::Future;
 use std::marker::PhantomData;
-
-pub struct DummyWaitForOnline;
-#[async_trait::async_trait]
-impl WaitForOnline for DummyWaitForOnline {
-    async fn wait_for_online(&self) {}
-}
 
 pub struct NoopActionHandler<T: Action>(PhantomData<T>);
 

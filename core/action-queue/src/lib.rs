@@ -93,17 +93,11 @@
 //!     }
 //! }
 //!
-//! struct DummyWaitForOnline;
-//! #[async_trait::async_trait]
-//! impl WaitForOnline for DummyWaitForOnline {
-//!     async fn wait_for_online(&self) { }
-//! }
-//!
 //! async fn example() {
 //!     // Create stash instance.
 //!     let stash = stash::stash::Stash::new(None).unwrap();
 //!     // create queue.
-//!     let queue = Queue::new(stash, Arc::new(DummyWaitForOnline)).await.unwrap();
+//!     let queue = Queue::new(stash).await.unwrap();
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
 //!     // create executor

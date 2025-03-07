@@ -10,7 +10,9 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
-use proton_core_common::action_queue::CheckNetworkStatus;
+use proton_core_common::action_queue::{
+    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
+};
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
@@ -282,7 +284,9 @@ impl MailContext {
             .core_context
             .user_context_from_login_flow(login_flow)
             .await?;
-        Arc::clone(self).new_user_context(ctx).await
+        Arc::clone(self)
+            .new_user_context::<CheckNetworkStatusSubscriber>(ctx)
+            .await
     }
 
     /// Create a new context from an existing session.
@@ -297,9 +301,11 @@ impl MailContext {
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_session::<CheckNetworkStatus>(session, status, challenge)
+            .user_context_from_session(session, status, challenge)
             .await?;
-        Arc::clone(self).new_user_context(ctx).await
+        Arc::clone(self)
+            .new_user_context::<CheckNetworkStatusSubscriber>(ctx)
+            .await
     }
 
     /// Get all available accounts.
@@ -486,7 +492,7 @@ impl MailContext {
     }
 
     /// Create a new user context or return an existing one.
-    async fn new_user_context(
+    async fn new_user_context<WFO: WaitForOnlineSubscribtionExt>(
         self: Arc<Self>,
         core_context: Arc<UserContext>,
     ) -> Result<Arc<MailUserContext>, MailContextError> {
@@ -508,7 +514,7 @@ impl MailContext {
             }
         }
 
-        let ctx = MailUserContext::new(self.clone(), core_context).await?;
+        let ctx = MailUserContext::new::<WFO>(self.clone(), core_context).await?;
 
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
 

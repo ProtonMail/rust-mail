@@ -20,6 +20,7 @@ use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
@@ -57,7 +58,7 @@ pub struct MailUserContext {
 
 impl MailUserContext {
     /// Create a new user context.
-    pub(crate) async fn new(
+    pub(crate) async fn new<WFO: WaitForOnlineSubscribtionExt>(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
@@ -66,11 +67,16 @@ impl MailUserContext {
 
         register_mail_actions(user_context.queue());
 
-        let default_queue_executor = user_context.queue().new_executor().into_auto_executor();
+        let wait_for_online = WFO::create(user_context.session().status_watcher());
+        let default_queue_executor = user_context
+            .queue()
+            .new_executor()
+            .into_auto_executor(wait_for_online.subscribe());
         let send_queue_executors = QueueAutoExecutorPool::new(
             user_context.queue(),
             &SEND_ACTION_GROUP,
             NonZeroUsize::new(4).unwrap(),
+            &wait_for_online,
         );
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
