@@ -193,26 +193,6 @@ impl DecryptedMessageBody {
         }
     }
 
-    /// Create a new decrypted message body that corresponds to an empty draft with
-    /// the given `body` and `mime_type`.
-    pub fn new_draft(body: String, mime_type: MimeType) -> Self {
-        Self {
-            body,
-            metadata: MessageBodyMetadata {
-                local_message_id: None,
-                remote_message_id: None,
-                header: "".to_string(),
-                mime_type,
-                parsed_headers: Default::default(),
-                attachments: vec![],
-                row_id: None,
-            },
-            pgp_attachments: None,
-            pgp_subject: None,
-            in_flight: Default::default(),
-        }
-    }
-
     fn request_attachments(
         ctx: Arc<MailUserContext>,
         atts: Vec<Attachment>,

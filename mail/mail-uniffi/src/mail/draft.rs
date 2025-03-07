@@ -187,7 +187,7 @@ impl Draft {
 
     /// Get the draft's body.
     pub fn body(&self) -> String {
-        async_runtime().block_on(async { self.instance.read().await.decrypted_body.body.clone() })
+        async_runtime().block_on(async { self.instance.read().await.body().to_owned() })
     }
 
     /// Set the draft's `subject`.
@@ -211,7 +211,7 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
-                instance.decrypted_body.body = body;
+                instance.set_body(body);
                 save_draft(&self.ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
@@ -222,15 +222,7 @@ impl Draft {
 
     /// Get the draft's body mime type.
     pub fn mime_type(&self) -> MimeType {
-        async_runtime().block_on(async {
-            self.instance
-                .read()
-                .await
-                .decrypted_body
-                .metadata
-                .mime_type
-                .into()
-        })
+        async_runtime().block_on(async { self.instance.read().await.mime_type().into() })
     }
 
     /// Get the Draft's message id .

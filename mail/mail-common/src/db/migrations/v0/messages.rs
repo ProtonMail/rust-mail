@@ -260,6 +260,8 @@ pub async fn create_message_tables(tx: &Bond<'_>) -> Result<(), StashError> {
                 state INTEGER NOT NULL,
                 error TEXT DEFAULT NULL,
                 action_id INTEGER DEFAULT NULL,
+                display_order INTEGER NOT NULL DEFAULT 0,
+                ownership INTEGER NOT NULL,
 
             CONSTRAINT draft_attachment_metadata_attachment_id
                 FOREIGN KEY (local_attachment_id)

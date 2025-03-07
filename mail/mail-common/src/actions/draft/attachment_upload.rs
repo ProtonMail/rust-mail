@@ -105,14 +105,23 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        let mut attachment_upload_metadata =
+        let mut attachment_upload_metadata = if let Some(metadata) =
             DraftAttachmentMetadata::find_by_id(action.attachment_id, tx)
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachment metadata: {e:?}"))?
-                .unwrap_or(DraftAttachmentMetadata::new(
-                    action.attachment_id,
-                    action.metadata_id,
-                ));
+        {
+            metadata
+        } else {
+            let next_display_order =
+                DraftAttachmentMetadata::next_display_order(action.metadata_id, tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to get the next display order: {e:?}"))?;
+            DraftAttachmentMetadata::new(
+                action.attachment_id,
+                action.metadata_id,
+                next_display_order,
+            )
+        };
 
         if let Some(id) = attachment_upload_metadata.action_id {
             error!("Attempting to create new attachment upload action when existing action ({id}) exists");

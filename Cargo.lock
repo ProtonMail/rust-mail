@@ -4222,6 +4222,7 @@ dependencies = [
  "bytes",
  "common-multipart-rfc7578",
  "futures-util",
+ "indexmap 2.7.1",
  "muon",
  "pretty_assertions",
  "proton-api-core",

@@ -1,20 +1,23 @@
 use crate::actions::draft::{
     local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
 };
+use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, LocalAttachmentId, LocalMessageId, MessageSender,
-    MessageSenders, MimeType, SystemLabelId,
+    AttachmentMetadata, Disposition, LocalMessageId, MessageSender, MessageSenders, MimeType,
+    SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBodyRef;
 use crate::draft::compose::sanitize_draft_save;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, ReplyMode, SaveOrSendError};
 use crate::models::{
-    Attachment, Conversation, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, Message, MessageBodyMetadata, MetadataId,
+    Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
+    MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use indoc::formatdoc;
+use anyhow::anyhow;
+use indoc::{formatdoc, indoc};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
@@ -27,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 /// Action which creates or updates a draft on the server.
 ///
@@ -54,8 +57,6 @@ pub struct Save {
     subject: String,
     /// Unencrypted body of the draft
     body: String,
-    /// Attachment associated with this draft
-    attachments: Vec<LocalAttachmentId>,
     /// Draft's mime type
     mime_type: MimeType,
     /// Parent message id, used with forward and update only.
@@ -74,7 +75,7 @@ impl Save {
     /// Create a new empty draft.
     pub fn new(draft: &Draft, save_origin: DraftSendResultOrigin) -> Self {
         // Undo all transformations to the body
-        let transformed = sanitize_draft_save(&draft.decrypted_body);
+        let transformed = sanitize_draft_save(draft.mime_type(), draft.body());
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
@@ -89,14 +90,7 @@ impl Save {
                 draft.subject.clone()
             },
             body: transformed,
-            attachments: draft
-                .decrypted_body
-                .metadata
-                .attachments
-                .iter()
-                .map(|v| v.local_id.unwrap())
-                .collect(),
-            mime_type: draft.decrypted_body.metadata.mime_type,
+            mime_type: draft.mime_type(),
             parent_id: None,
             reply_mode: None,
             save_origin,
@@ -444,8 +438,10 @@ impl Save {
             }
         }
 
+        let is_create = message.remote_id.is_none();
+
         // Create draft on the server.
-        let new_message = if message.remote_id.is_none() {
+        let new_message = if is_create {
             Draft::remote_create(
                 ctx,
                 session,
@@ -477,7 +473,6 @@ impl Save {
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
         let bond = guard.transaction().await?;
-
         // Update the remote conversation id.
         Conversation::update_remote_id(
             conversation_id,
@@ -494,6 +489,129 @@ impl Save {
                 .inspect_err(|e| {
                     error!("Failed to convert api message: {e:?}");
                 })?;
+
+        if is_create {
+            // When we create a draft on the server, all inherited attachments get a new remote
+            // id. We need to remove and update those items for things to work correctly
+
+            // API always returns the same amount, but tests may not.
+            debug_assert_eq!(
+                new_message_body_metadata.attachments.len(),
+                message_body_metadata.attachments.len()
+            );
+            for (index, original_attachment) in message_body_metadata
+                .attachments
+                .iter()
+                .enumerate()
+                .filter(|(_, a)| a.remote_id().is_some())
+            {
+                let Some(remote_id) = original_attachment.remote_id.as_ref() else {
+                    // We can't do this if the attachment has no remote id.
+                    continue;
+                };
+                let Some(attachment_metadata) = DraftAttachmentMetadata::find_by_id(
+                    original_attachment.local_id.unwrap(),
+                    &bond,
+                )
+                .await?
+                else {
+                    warn!(
+                        "Could not find attachment with id {}",
+                        original_attachment.local_id.unwrap()
+                    );
+                    continue;
+                };
+
+                if attachment_metadata.ownership == DraftAttachmentOwnership::Inherited {
+                    let new_attachment = &mut new_message_body_metadata.attachments[index];
+                    debug_assert_eq!(original_attachment.filename, new_attachment.filename);
+                    debug_assert_eq!(original_attachment.disposition, new_attachment.disposition);
+                    debug_assert_eq!(original_attachment.content_id, new_attachment.content_id);
+                    // Safe to unwrap, server responses always have remote id.
+                    debug_assert_ne!(
+                        original_attachment.remote_id.as_ref().unwrap(),
+                        new_attachment.remote_id.as_ref().unwrap()
+                    );
+                    //Inherited attachment will be removed and replaced by a new id.
+                    debug!(
+                        "Removing inherited attachment {}: {}",
+                        original_attachment.local_id.unwrap(),
+                        remote_id,
+                    );
+                    // Unlink previous attachment.
+                    bond.execute(indoc! {
+                        "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
+                    }, params![message.local_id.unwrap(), original_attachment.local_id.unwrap()]).await.inspect_err(|e|
+                        error!("Failed to unlink attachment from message: {e:?}"))?;
+                    // Remove attachment metadata
+                    let current_display_order = attachment_metadata.display_order;
+                    attachment_metadata.delete(&bond).await.inspect_err(|e| {
+                        error!("Failed to delete draft attachment metadata {e:?}")
+                    })?;
+
+                    // Create new attachment.
+                    new_attachment
+                        .save(&bond)
+                        .await
+                        .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
+                    // Create link
+                    bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![message.local_id.unwrap(), new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
+                    // Creat new metadata entry
+                    let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
+                        action.metadata_id,
+                        new_attachment.local_id.unwrap(),
+                        current_display_order,
+                    );
+                    new_attachment_metadata.save(&bond).await.inspect_err(|e| {
+                        error!("Failed to save new draft attachment metadata: {e:?}")
+                    })?;
+
+                    // Ensure the newly created attachment has a data copy. This is required
+                    // for sending to external (non-proton) addresses.
+                    let ctx_arc = ctx.as_arc();
+                    let original_attachment_id = original_attachment.local_id.unwrap();
+                    let original_file_size = original_attachment.size;
+                    let original_attachment_key = CacheAttachmentKey::from(original_attachment);
+                    let new_attachment_key =
+                        CacheAttachmentKey::from(new_attachment as &Attachment);
+                    tokio::task::spawn_blocking(move || {
+                        // TODO(post cache rfc): Optimized copy
+                        let Some(mut reader) = ctx_arc
+                            .attachements_cache()
+                            .get_item(&original_attachment_key)
+                            .inspect_err(|e| {
+                                error!("Failed to get attachment from cache: {e:?}")
+                            })?
+                        else {
+                            error!("Attachment could not be found in cache");
+                            return Err(AppError::AttachmentMissing(original_attachment_id).into());
+                        };
+
+                        let mut data =
+                            Vec::with_capacity(original_file_size.try_into().unwrap_or(0));
+
+                        std::io::copy(&mut reader, &mut data).inspect_err(|e| {
+                            error!("Failed to load original attachment data: {e:?}")
+                        })?;
+
+                        ctx_arc
+                            .attachements_cache()
+                            .add_item(new_attachment_key, &data)
+                            .inspect_err(|e| {
+                                error!("Failed to write attachment into the cache: {e:?}")
+                            })?;
+
+                        Ok::<_, MailContextError>(())
+                    })
+                    .await
+                    .map_err(|e| {
+                        let e = anyhow!("Failed to join blocking task: {e:?}");
+                        error!("{e:?}");
+                        MailContextError::Other(e)
+                    })??;
+                }
+            }
+        }
 
         // Do not override all the data as it may override local data that we modified
         // but is out of date when we are making this request. The only value we should
@@ -655,7 +773,7 @@ impl Save {
     }
 
     async fn attachments(&self, tether: &Bond<'_>) -> Result<Vec<Attachment>, StashError> {
-        Attachment::find_by_ids(self.attachments.iter().cloned(), tether).await
+        DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, tether).await
     }
     fn attachment_metadata(attachments: &[Attachment]) -> Vec<AttachmentMetadata> {
         attachments

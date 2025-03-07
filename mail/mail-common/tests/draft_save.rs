@@ -4,12 +4,14 @@ use itertools::Itertools;
 use proton_api_core::consts::{CoreBundle, Mail};
 use proton_api_core::services::proton::common::{LabelId, UserId};
 use proton_api_core::services::proton::prelude::ApiErrorInfo;
+use proton_api_mail::services::proton::prelude::AttachmentId;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
 };
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -20,6 +22,7 @@ use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn create_empty_draft() {
@@ -244,7 +247,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Update the draft
     draft.subject = new_subject.to_owned();
-    draft.decrypted_body.body = new_body.to_owned();
+    draft.set_body(new_body.to_owned());
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
@@ -259,7 +262,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
 
     // Opening the draft and check if all the information is up to date
     let (draft, _) = Draft::open(user_ctx, draft_message_id).await.unwrap();
-    assert_eq!(draft.decrypted_body.body, new_body);
+    assert_eq!(draft.body(), new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
     assert_eq!(draft.cc_list, new_cc_list);
@@ -504,7 +507,7 @@ async fn create_draft_forward_inherits_all_attachments() {
     let normal_attachment = gen_normal_attachment();
 
     compare_inline_attachment(attachment_1, inline_attachment);
-    assert_eq!(
+    assert_ne!(
         attachment_2.remote_id.clone().unwrap(),
         normal_attachment.id
     );
@@ -517,7 +520,7 @@ async fn create_draft_forward_inherits_all_attachments() {
 }
 
 fn compare_inline_attachment(attachment: &Attachment, inline_attachment: MessageAttachment) {
-    assert_eq!(attachment.remote_id.clone().unwrap(), inline_attachment.id);
+    assert_ne!(attachment.remote_id.clone().unwrap(), inline_attachment.id);
     assert_eq!(attachment.disposition, inline_attachment.disposition.into());
     assert_eq!(attachment.filename, inline_attachment.name);
     assert_eq!(attachment.size, inline_attachment.size);
@@ -543,6 +546,8 @@ async fn create_draft_reply_impl(
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
+    remote_existing_message.body.attachments.reverse();
+
     ctx.setup_user(params.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 
@@ -565,6 +570,10 @@ async fn create_draft_reply_impl(
             .body
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
+    }
+    // Inherited attachments get new remote ids
+    for attachment in &mut message.body.attachments {
+        attachment.id = AttachmentId::from(Uuid::new_v4().to_string());
     }
 
     let key_packets = DraftAttachmentKeyPackets::from_iter(
@@ -612,6 +621,19 @@ async fn create_draft_reply_impl(
     )
     .await
     .unwrap();
+
+    // Insert attachment data into the cache.
+    for attachment in &remote_existing_message.body.attachments {
+        let local_attachment_id = Attachment::remote_id_counterpart(attachment.id.clone(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let attachment_cache_key = CacheAttachmentKey::new(local_attachment_id, &attachment.name);
+        user_ctx
+            .attachements_cache()
+            .add_item(attachment_cache_key, attachment.name.as_bytes())
+            .unwrap();
+    }
 
     // Create draft.
     let mut draft = Draft::reply(
