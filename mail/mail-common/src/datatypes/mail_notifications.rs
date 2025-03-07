@@ -140,7 +140,7 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
         };
         let pgp_device_key = PGPDeviceKey::deserialize_from_secure_storage(
             &pgp_provider,
-            key.as_ref().expose_secret().as_bytes(),
+            key.as_ref().expose_secret().as_slice(),
         )
         .map_err(|_e| {
             error!("Could not load device key");

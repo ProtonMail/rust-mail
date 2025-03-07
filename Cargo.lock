@@ -4272,6 +4272,7 @@ dependencies = [
  "proton-action-queue",
  "proton-api-core",
  "proton-core-test-utils",
+ "proton-crypto",
  "proton-crypto-account",
  "proton-crypto-notifications",
  "proton-event-loop",

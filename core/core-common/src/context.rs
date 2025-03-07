@@ -4,7 +4,9 @@ use crate::action_queue::CoreActionError;
 use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
+use crate::datatypes::{
+    LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
+};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
@@ -23,6 +25,8 @@ use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
 use proton_api_core::status_watcher::StatusWatcher;
+use proton_crypto_account::keys::PGPDeviceKey;
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
 use secrecy::ExposeSecret;
@@ -699,6 +703,34 @@ impl Context {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
         Ok(key)
+    }
+
+    /// Creates a new pair of public and private device keys, used for decrypting and encrypting
+    /// push notifications.
+    ///
+    /// It stores the private part in the key chain.
+    ///
+    /// # Errors
+    ///
+    /// It may return an error if crypto operation fails or if it fails to store key in the keychain.
+    ///
+    pub fn gen_device_key_pair<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> CoreContextResult<StoredDevicePublicKey> {
+        let key = PGPDeviceKey::generate(pgp_provider).map_err(|_| CoreContextError::Crypto)?;
+        let private_key = key
+            .serialize_to_secure_storage(pgp_provider)
+            .map_err(|_| CoreContextError::Crypto)?;
+        let private_key = StoredDevicePrivateKey::with_bytes(private_key.as_bytes().to_vec());
+        let public_key = key
+            .export_public_key(pgp_provider)
+            .map_err(|_| CoreContextError::Crypto)?;
+
+        self.key_chain
+            .store::<StoredDevicePrivateKey>(private_key)?;
+
+        Ok(StoredDevicePublicKey::from(public_key))
     }
 
     fn user_db_path(&self, user_id: &UserId) -> PathBuf {

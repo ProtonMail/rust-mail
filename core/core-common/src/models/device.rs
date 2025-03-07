@@ -2,6 +2,8 @@
 #[path = "../tests/models/device.rs"]
 mod tests;
 
+use std::sync::Arc;
+
 use proton_api_core::{
     service::ApiServiceError,
     services::proton::{prelude::RegisterDeviceRequest, ProtonCore},
@@ -12,7 +14,20 @@ use stash::{
     stash::{Bond, StashError, Tether},
 };
 
-use crate::datatypes::DeviceEnvironment;
+use crate::{datatypes::DeviceEnvironment, Context};
+
+/// Error encountered during operatin on registered device model
+///
+#[derive(Debug, thiserror::Error)]
+pub enum RegisteredDeviceError {
+    #[error("API error: {0}")]
+    API(#[from] ApiServiceError),
+    #[error("Stash error: {0}")]
+    Stash(#[from] StashError),
+
+    #[error("Failed to generate device key pair")]
+    Crypto,
+}
 
 /// This model is used to registed the device for Push notifications.
 ///
@@ -89,16 +104,36 @@ impl RegisteredDevice {
     /// This method ensures that there is only one registered device in the table.
     /// Otherwise, it overwrites old record.
     ///
+    /// If public key does not exist in the record, it generates a new key pair, stores private part in keychain and then
+    /// saves such a model to DB.
+    ///
     /// # Errors
     ///
     /// Returns an error if the query fails
     ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // // Make sure there will be only one row.
-        if let Some(existing) = Self::find_first("", vec![], bond).await? {
+    pub async fn save(
+        &mut self,
+        bond: &Bond<'_>,
+        ctx: &Arc<Context>,
+    ) -> Result<(), RegisteredDeviceError> {
+        // Make sure there will be only one row.
+        if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
+            self.public_key = existing.public_key;
         }
 
-        <Self as Model>::save(self, bond).await
+        if self.public_key.is_none() {
+            let pgp_provider = proton_crypto::new_pgp_provider();
+
+            let new_key = ctx
+                .gen_device_key_pair(&pgp_provider)
+                .map_err(|_| RegisteredDeviceError::Crypto)?;
+
+            self.public_key = Some(new_key.into());
+        }
+
+        <Self as Model>::save(self, bond).await?;
+
+        Ok(())
     }
 }

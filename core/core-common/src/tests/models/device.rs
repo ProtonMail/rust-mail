@@ -2,7 +2,10 @@ use proton_core_test_utils::test_context::TestContext;
 use proton_sqlite3::rusqlite::ErrorCode;
 use stash::{orm::Model, stash::StashError};
 
-use crate::{datatypes::DeviceEnvironment, models::RegisteredDevice};
+// To break cyclic dependency
+use proton_core_test_utils::reexport::proton_core_common::{
+    datatypes::DeviceEnvironment, models::RegisteredDevice,
+};
 
 #[tokio::test]
 async fn test_save_registered_device_and_retrieve_it() {
@@ -25,7 +28,10 @@ async fn test_save_registered_device_and_retrieve_it() {
 
     let mut tether = user_ctx.stash().connection();
     let tx = tether.transaction().await.unwrap();
-    device_to_register.save(&tx).await.unwrap();
+    device_to_register
+        .save(&tx, ctx.core_context())
+        .await
+        .unwrap();
 
     tx.commit().await.unwrap();
 
@@ -71,7 +77,7 @@ async fn only_last_device_token_can_be_retrieved() {
         row_id: None,
     };
 
-    first.save(&tx).await.unwrap();
+    first.save(&tx, ctx.core_context()).await.unwrap();
     tx.commit().await.unwrap();
 
     // Crash
@@ -96,7 +102,7 @@ async fn only_last_device_token_can_be_retrieved() {
         row_id: None,
     };
 
-    second.save(&tx).await.unwrap();
+    second.save(&tx, ctx.core_context()).await.unwrap();
 
     tx.commit().await.unwrap();
 

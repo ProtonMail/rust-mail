@@ -11,8 +11,6 @@ pub struct RegisteredDevice {
     pub device_token: String,
     /// Environment to which we register
     pub environment: DeviceEnvironment,
-    /// PGP Public Key
-    pub public_key: Option<String>,
     /// TODO: Document this field
     pub ping_notification_status: Option<i32>,
     /// TODO: Document this field
@@ -40,7 +38,9 @@ pub async fn get_registered_device(
     .map_err(ActionError::from)
 }
 
-/// Register and save device into the database
+/// Register and save device into the database.
+///
+/// It also generates public and private device key (storing it in keychain) the first time its needed.
 ///
 /// # Session
 ///
@@ -65,7 +65,9 @@ pub async fn register_and_save_device(
             .connection();
 
         let tx = tether.transaction().await?;
-        real_device.save(&tx).await?;
+        real_device
+            .save(&tx, ctx.mail_context().core_context())
+            .await?;
         tx.commit().await?;
 
         real_device.register(ctx.api()).await?;
@@ -95,7 +97,8 @@ pub async fn save_registered_device(
         let mut real_device = RealRegisteredDevice::from(device);
         let mut tether = session.ctx().session_stash().connection();
         let tx = tether.transaction().await?;
-        real_device.save(&tx).await?;
+
+        real_device.save(&tx, session.ctx().core_context()).await?;
 
         tx.commit().await?;
 
@@ -111,7 +114,6 @@ impl From<RealRegisteredDevice> for RegisteredDevice {
         Self {
             device_token: value.device_token,
             environment: value.environment.into(),
-            public_key: value.public_key,
             ping_notification_status: value.ping_notification_status,
             push_notification_status: value.push_notification_status,
         }
@@ -123,7 +125,7 @@ impl From<RegisteredDevice> for RealRegisteredDevice {
         Self {
             device_token: value.device_token,
             environment: value.environment.into(),
-            public_key: value.public_key,
+            public_key: None,
             ping_notification_status: value.ping_notification_status,
             push_notification_status: value.push_notification_status,
             row_id: None,
