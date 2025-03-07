@@ -282,6 +282,12 @@ impl DraftMetadata {
         }
     }
 
+    /// Retrive all message ids for with send action is pending.
+    ///
+    /// # Errors
+    ///
+    /// When database query fails
+    ///
     pub async fn messages_with_pending_send(
         tether: &Tether,
     ) -> Result<Vec<LocalMessageId>, StashError> {

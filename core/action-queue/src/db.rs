@@ -163,6 +163,13 @@ impl StoredAction {
         Self::count("", vec![], tether).await
     }
 
+    /// Return the number of pending actions in the queue for a given action type.
+    ///
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
     pub async fn type_count<T: Action>(tether: &Tether) -> Result<u64, StashError> {
         Self::count("where action_type = ?", params![T::TYPE.as_ref()], tether).await
     }
