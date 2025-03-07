@@ -688,6 +688,8 @@ impl MailSession {
         }))
     }
 
+    /// Check if any message for all logged in accounts is still pending to send
+    ///
     pub async fn all_messages_were_sent(&self) -> Result<bool, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -711,6 +713,8 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Get all unsent message ids for given user id
+    ///
     pub async fn get_unsent_messages_ids_in_queue(
         &self,
         user_id: String,
