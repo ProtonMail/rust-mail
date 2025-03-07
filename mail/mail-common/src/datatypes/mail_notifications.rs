@@ -9,11 +9,16 @@ use proton_api_mail::services::push_notifications::DecryptedInboxPushNotificatio
 use proton_api_mail::services::push_notifications::NotificationSender as ApiNotificationSender;
 
 use proton_core_common::datatypes::EncryptedPushNotification;
+use proton_core_common::datatypes::StoredDevicePrivateKey;
+use proton_core_common::os::KeyChain;
+use proton_core_common::os::KeyChainExt;
+use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto;
+use secrecy::ExposeSecret;
 use std::sync::Arc;
 use tracing::error;
 
-use crate::{MailContext, MailContextError};
+use crate::MailContextError;
 
 /// Decrypted notification usable only in the context of the Inbox application
 ///
@@ -117,29 +122,33 @@ pub trait DecryptableInboxPushNotification {
     ///
     async fn try_into_decrypted_inbox_mail_notification(
         self,
-        ctx: Arc<MailContext>,
+        key_chain: Arc<dyn KeyChain>,
     ) -> Result<DecryptedInboxPushNotification, MailContextError>;
 }
 
 impl DecryptableInboxPushNotification for EncryptedPushNotification {
-    #[tracing::instrument(skip(ctx))]
+    #[tracing::instrument(skip(key_chain))]
     async fn try_into_decrypted_inbox_mail_notification(
         self,
-        ctx: Arc<MailContext>,
+        key_chain: Arc<dyn KeyChain>,
     ) -> Result<DecryptedInboxPushNotification, MailContextError> {
         let pgp_provider = proton_crypto::new_pgp_provider();
 
-        let auth_id = &self.auth_id;
-        let Some(session) = ctx.get_session(auth_id.clone()).await? else {
-            error!("Could not find a session with id {auth_id}");
-            return Err(MailContextError::SessionMissing(auth_id.clone()));
+        let Some(key) = key_chain.load::<StoredDevicePrivateKey>()? else {
+            error!("Missing device decryption key in the keychain");
+            return Err(MailContextError::Crypto);
         };
-        let ctx = ctx.user_context_from_session(&session, None, None).await?;
-        let tether = ctx.user_stash().connection();
-        let user_keys = ctx.unlocked_user_keys(&pgp_provider, &tether).await?;
+        let pgp_device_key = PGPDeviceKey::deserialize_from_secure_storage(
+            &pgp_provider,
+            key.as_ref().expose_secret().as_bytes(),
+        )
+        .map_err(|_e| {
+            error!("Could not load device key");
+            MailContextError::Crypto
+        })?;
 
         let decrypted_notification = self
-            .into_decrypted_push_notification(&pgp_provider, &user_keys)
+            .into_decrypted_push_notification(&pgp_provider, &pgp_device_key)
             .inspect_err(|e| error!("Failed to decrypt mail notification: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 

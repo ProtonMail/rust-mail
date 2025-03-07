@@ -1,12 +1,38 @@
 use proton_api_core::services::proton::common::AuthId;
-use proton_crypto_account::{keys::UnlockedUserKeys, proton_crypto::crypto::PGPProviderSync};
+use proton_crypto_account::{keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync};
 use proton_crypto_notifications::{
     DecryptableNotification, NotificationError, PGPEncryptedNotification,
 };
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
 pub use proton_crypto_notifications::DecryptedNotification;
+
+use crate::os::{KeyChainEntryKind, StoreInKeyChain};
+
+/// Device key stored in the keychain
+pub struct StoredDevicePrivateKey(SecretString);
+
+impl AsRef<SecretString> for StoredDevicePrivateKey {
+    fn as_ref(&self) -> &SecretString {
+        &self.0
+    }
+}
+
+impl StoreInKeyChain for StoredDevicePrivateKey {
+    fn kind() -> KeyChainEntryKind {
+        KeyChainEntryKind::DeviceKey
+    }
+
+    fn from_stored_string(s: SecretString) -> Self {
+        Self(s)
+    }
+
+    fn to_stored_string(&self) -> SecretString {
+        self.0.clone()
+    }
+}
 
 /// Decrypted push notification
 ///
@@ -54,14 +80,14 @@ impl EncryptedPushNotification {
     pub fn into_decrypted_push_notification<P, O>(
         self,
         pgp_provider: &P,
-        user_keys: &UnlockedUserKeys<P>,
+        device_key: &PGPDeviceKey<P::PrivateKey, P::PublicKey>,
     ) -> Result<DecryptedPushNotification<O>, NotificationError>
     where
         P: PGPProviderSync,
         for<'de> O: Deserialize<'de>,
     {
         let notification = self
-            .decrypt(pgp_provider, user_keys)
+            .decrypt(pgp_provider, device_key)
             .inspect_err(|e| error!("Failed to decrypt push notification: {e:?}"))?;
 
         Ok(DecryptedPushNotification {

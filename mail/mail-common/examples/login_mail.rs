@@ -191,6 +191,7 @@ impl OnDiskKeyChain {
     fn kind_to_path(&self, kind: KeyChainEntryKind) -> PathBuf {
         self.path.join(match kind {
             KeyChainEntryKind::EncryptionKey => "encryption",
+            KeyChainEntryKind::DeviceKey => "device",
         })
     }
 }

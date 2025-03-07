@@ -33,6 +33,9 @@ pub enum KeyChainEntryKind {
     /// Session key used to encrypt and decrypt sensitive data
     ///
     EncryptionKey,
+    /// Shared key between all accounts, used to decrypt push notifications
+    ///
+    DeviceKey,
 }
 
 /// A type that can be stored in the [`KeyChain`]

@@ -45,7 +45,7 @@ pub trait DecryptableNotification: PGPEncryptedNotification {
     fn decrypt<T, O>(
         &self,
         pgp_provider: &T,
-        decryption_keys: &[impl AsRef<T::PrivateKey>],
+        decryption_key: &impl AsRef<T::PrivateKey>,
     ) -> Result<DecryptedNotification<O>, NotificationError>
     where
         T: PGPProviderSync,
@@ -54,7 +54,7 @@ pub trait DecryptableNotification: PGPEncryptedNotification {
         let data = self.pgp_encrypted_notification_data();
         let decrypted_notification = pgp_provider
             .new_decryptor()
-            .with_decryption_key_refs(decryption_keys)
+            .with_decryption_key(decryption_key.as_ref())
             .decrypt(data, DataEncoding::Armor)
             .map_err(NotificationError::Decryption)?;
 

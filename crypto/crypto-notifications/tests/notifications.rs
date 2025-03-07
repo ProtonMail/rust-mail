@@ -40,8 +40,8 @@ impl PGPEncryptedNotification for EncryptedTestNotification {
 
 impl DecryptableNotification for EncryptedTestNotification {}
 
-pub struct TestUserKey<T: PrivateKey>(T);
-impl<T: PrivateKey> AsRef<T> for TestUserKey<T> {
+pub struct TestDeviceKey<T: PrivateKey>(T);
+impl<T: PrivateKey> AsRef<T> for TestDeviceKey<T> {
     fn as_ref(&self) -> &T {
         &self.0
     }
@@ -60,39 +60,39 @@ enum Kind {
     Foo,
 }
 
-pub struct TestUserPublicKey<T: PublicKey>(T);
+pub struct TestDevicePublicKey<T: PublicKey>(T);
 
-impl<T: PublicKey> AsPublicKeyRef<T> for TestUserPublicKey<T> {
+impl<T: PublicKey> AsPublicKeyRef<T> for TestDevicePublicKey<T> {
     fn as_public_key(&self) -> &T {
         &self.0
     }
 }
 
-fn get_test_user_keys<T: PGPProviderSync>(pgp_provider: &T) -> Vec<TestUserKey<T::PrivateKey>> {
-    get_test_user_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
+fn get_test_device_key<T: PGPProviderSync>(pgp_provider: &T) -> TestDeviceKey<T::PrivateKey> {
+    get_test_device_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_user_key_source<T: PGPProviderSync>(
+pub fn get_test_device_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,
     passphrase: &str,
-) -> Vec<TestUserKey<T::PrivateKey>> {
+) -> TestDeviceKey<T::PrivateKey> {
     let decryption_key = pgp_provider
         .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
-    vec![TestUserKey(decryption_key)]
+    TestDeviceKey(decryption_key)
 }
 
 #[test]
 fn decrypt_notification() {
     let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
 
-    let decryption_keys = get_test_user_keys(&pgp_provider);
+    let decryption_key = get_test_device_key(&pgp_provider);
 
     let test_notification = EncryptedTestNotification(TEST_NOTIFICATION.into());
     let decrypted_notification = test_notification
-        .decrypt(&pgp_provider, &decryption_keys)
+        .decrypt(&pgp_provider, &decryption_key)
         .unwrap();
 
     let notification: DecryptedTestNotification = decrypted_notification.inner;
