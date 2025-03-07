@@ -2,7 +2,7 @@
 
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
-use crate::os::KeyChain;
+use crate::os::{KeyChain, KeyChainExt};
 use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
@@ -42,13 +42,13 @@ impl AuthStore {
     }
 
     fn encryption_key(&self) -> Result<SessionEncryptionKey, StoreError> {
-        let key = (self.key_chain.get())
+        let key = (self.key_chain.load::<SessionEncryptionKey>())
             .context("failed to load secret from key chain")
             .inspect_err(|e| error!("{e:?}"))?
             .context("keychain has no decryption key")
             .inspect_err(|e| error!("{e:?}"))?;
 
-        SessionEncryptionKey::from_base64(&key).context("invalid encryption key")
+        Ok(key)
     }
 
     async fn try_get_auth(&self) -> Result<Auth, StoreError> {

@@ -4222,6 +4222,7 @@ dependencies = [
  "bytes",
  "common-multipart-rfc7578",
  "futures-util",
+ "indexmap 2.7.1",
  "muon",
  "pretty_assertions",
  "proton-api-core",
@@ -4621,7 +4622,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.54.4"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4642,6 +4643,7 @@ dependencies = [
  "proton-mail-common",
  "proton-mail-test-utils",
  "proton-uniffi-macros",
+ "secrecy",
  "serde_json",
  "smart-default",
  "sqlite-watcher",

@@ -8,7 +8,7 @@ use crate::datatypes::{LocalContactId, PasswordMode, TfaStatus};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
-use crate::os::{KeyChain, KeyChainError};
+use crate::os::{KeyChain, KeyChainError, KeyChainExt};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
@@ -26,7 +26,7 @@ use proton_api_core::session::Session as ApiSession;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_sqlite3::MigratorError;
 use proton_vcard::VcardValidationError;
-use secrecy::{ExposeSecret, SecretString};
+use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -696,11 +696,14 @@ impl Context {
     }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
-        let Some(key) = self.key_chain.get().map_err(CoreContextError::KeyChain)? else {
+        let Some(key) = self
+            .key_chain
+            .load::<SessionEncryptionKey>()
+            .map_err(CoreContextError::KeyChain)?
+        else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
-        let key = SecretString::new(key);
-        SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
+        Ok(key)
     }
 
     fn user_db_path(&self, user_id: &UserId) -> PathBuf {

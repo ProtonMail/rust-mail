@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::draft::Draft;
@@ -13,7 +15,6 @@ use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
-use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::{error, info};
 use tracing_subscriber::filter::LevelFilter;
@@ -69,7 +70,7 @@ async fn main() {
     let tmp_file = tmp_dir.path().join("hello_world.txt");
 
     let keychain = InMemoryKeyChain::default();
-    let key = SessionEncryptionKey::random().to_base64();
+    let key = SessionEncryptionKey::random();
     keychain.store(key).unwrap();
 
     info!("TMP DIR: {:?}", tmp_dir.path());
@@ -104,8 +105,8 @@ async fn main() {
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
 
     draft.subject = subject;
-    body.push_str(&draft.decrypted_body.body);
-    draft.decrypted_body.body = body;
+    body.push_str(draft.body());
+    draft.set_body(body);
     draft
         .to_list
         .add_single(RecipientEntry {

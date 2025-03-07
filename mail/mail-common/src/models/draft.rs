@@ -1,12 +1,17 @@
+#[cfg(test)]
+#[path = "../tests/models/draft_metadata.rs"]
+mod draft_metadata;
+
 use crate::datatypes::LocalMessageId;
 use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{DraftSaveSendErrorReason, MailErrorReason, ProtonMailError};
-use crate::models::Message;
+use crate::models::{Attachment, Message, MessageBodyMetadata};
 use crate::MailContextError;
 use chrono::Utc;
 use derive_more::derive::TryFrom;
+use indoc::formatdoc;
 use proton_action_queue::action::ActionId;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
@@ -24,6 +29,8 @@ use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
+use tracing::error;
+use typed_builder::TypedBuilder;
 
 /// Identifier for draft [`DraftMetadata`]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
@@ -52,33 +59,41 @@ impl ToSql for MetadataId {
 ///
 /// This metadata will be created for every draft we open or create so it
 /// can be kept up to date with ongoing changes.
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, TypedBuilder)]
 #[TableName("draft_metadata")]
 pub struct DraftMetadata {
+    #[builder(default, setter(strip_option))]
     #[IdField(autoincrement)]
     pub id: Option<MetadataId>,
     /// Id of the draft message.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,
+    #[builder(default, setter(strip_option))]
     #[DbField]
     /// Id of the conversation this draft belongs to.
     pub local_conversation_id: Option<LocalConversationId>,
     /// Local id of the message being replied to.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_parent_id: Option<LocalMessageId>,
     /// Reply mode used for the draft, if `None` is an empty draft.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub reply_mode: Option<ReplyMode>,
     /// Last save action id.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub save_action_id: Option<ActionId>,
     /// Last send action id.
+    #[builder(default, setter(strip_option))]
     #[DbField]
     pub send_action_id: Option<ActionId>,
 
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
+    #[builder(default, setter(strip_option))]
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -267,6 +282,28 @@ impl DraftMetadata {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    /// Retrive all message ids for with send action is pending.
+    ///
+    /// # Errors
+    ///
+    /// When database query fails
+    ///
+    pub async fn messages_with_pending_send(
+        tether: &Tether,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let msg_ids = Self::find(
+            "WHERE local_message_id IS NOT NULL AND send_action_id IS NOT NULL",
+            vec![],
+            tether,
+        )
+        .await?
+        .into_iter()
+        .filter_map(|draft| draft.local_message_id)
+        .collect();
+
+        Ok(msg_ids)
     }
 }
 
@@ -683,12 +720,18 @@ pub struct DraftAttachmentMetadata {
     /// Whether an error occurred while uploading the attachment.
     #[DbField]
     state: DraftAttachmentUploadState,
+    /// Ownership of this attachment.
+    #[DbField]
+    pub ownership: DraftAttachmentOwnership,
     /// Last upload error, if any.
     ///
     /// We record the error separate as we need to ascertain the upload state. It's easier
     /// to match against an integer rather than a json object on the database.
     #[DbField]
     pub error: Option<DraftAttachmentUploadError>,
+    /// Order in which this attachment should be displayed.
+    #[DbField]
+    pub display_order: usize,
     /// Upload action that is currently queued or running.
     #[DbField]
     pub action_id: Option<ActionId>,
@@ -698,7 +741,11 @@ pub struct DraftAttachmentMetadata {
 
 impl DraftAttachmentMetadata {
     /// Create a new instance
-    pub fn new(local_attachment_id: LocalAttachmentId, metadata_id: MetadataId) -> Self {
+    pub fn new(
+        local_attachment_id: LocalAttachmentId,
+        metadata_id: MetadataId,
+        display_order: usize,
+    ) -> Self {
         Self {
             local_attachment_id,
             metadata_id,
@@ -706,6 +753,49 @@ impl DraftAttachmentMetadata {
             state: DraftAttachmentUploadState::Uploading,
             action_id: None,
             error: None,
+            ownership: DraftAttachmentOwnership::Owned,
+            display_order,
+            row_id: None,
+        }
+    }
+
+    /// Create a new inherited `attachment`.
+    ///
+    /// Inherited attachments are inherited when creating replies or forwarding messages.
+    /// The first time we save a draft, they will receive new remote attachment ids.
+    pub fn inherited(
+        metadata_id: MetadataId,
+        attachment: &Attachment,
+        display_order: usize,
+    ) -> Self {
+        Self {
+            local_attachment_id: attachment.local_id.unwrap(),
+            metadata_id,
+            timestamp: Utc::now().timestamp(),
+            action_id: None,
+            error: None,
+            state: DraftAttachmentUploadState::Uploaded,
+            ownership: DraftAttachmentOwnership::Inherited,
+            display_order,
+            row_id: None,
+        }
+    }
+
+    /// Create a new owned attachment that has already been uploaded.
+    pub fn owned_and_uploaded(
+        metadata_id: MetadataId,
+        attachment_id: LocalAttachmentId,
+        display_order: usize,
+    ) -> Self {
+        Self {
+            local_attachment_id: attachment_id,
+            metadata_id,
+            timestamp: Utc::now().timestamp(),
+            action_id: None,
+            error: None,
+            state: DraftAttachmentUploadState::Uploaded,
+            ownership: DraftAttachmentOwnership::Owned,
+            display_order,
             row_id: None,
         }
     }
@@ -814,6 +904,80 @@ impl DraftAttachmentMetadata {
     ) -> Result<Vec<Self>, StashError> {
         Self::find("WHERE metadata_id = ?", params![metadata_id], tether).await
     }
+
+    /// Find all attachments associated with the draft with `metadata_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn attachment_for_draft(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Vec<Attachment>, StashError> {
+        Attachment::find(
+            formatdoc! {"
+              JOIN {} ON {}.local_attachment_id = {}.local_id
+              WHERE {}.metadata_id = ?
+              ORDER BY {}.display_order ASC
+        ", Self::table_name(), Self::table_name(), Attachment::table_name(), Self::table_name(), Self::table_name()},
+            params![metadata_id],
+            tether,
+        )
+        .await
+    }
+
+    /// Reset the tracked attachment state after a draft has been synced from the server.
+    ///
+    /// Reset deletes all existing records and creates new ones that reflect the new state.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn reset_draft_attachments_after_sync(
+        metadata_id: MetadataId,
+        body_metadata: &MessageBodyMetadata,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let new_state = body_metadata
+            .attachments
+            .iter()
+            .enumerate()
+            .map(|(order, a)| DraftAttachmentMetadata {
+                local_attachment_id: a.local_id.unwrap(),
+                metadata_id,
+                timestamp: Utc::now().timestamp(),
+                state: DraftAttachmentUploadState::Uploaded,
+                ownership: DraftAttachmentOwnership::Owned,
+                error: None,
+                action_id: None,
+                display_order: order,
+                row_id: None,
+            })
+            .collect::<Vec<_>>();
+
+        bond.execute(
+            formatdoc! {"DELETE FROM {} WHERE metadata_id = ?", Self::table_name()},
+            params![metadata_id],
+        )
+        .await
+        .inspect_err(|e| error!("Failed to delete existing draft metadata records: {e:?}"))?;
+        for mut state in new_state {
+            state
+                .save(bond)
+                .await
+                .inspect_err(|e| error!("Failed to save attachment metadata: {e:?}"))?;
+        }
+
+        Ok(())
+    }
+
+    /// Get the next display order index for a new attachment.
+    pub async fn next_display_order(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<usize, StashError> {
+        tether.query_value::<_,usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) AS value FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
+    }
 }
 
 /// Contains the state of the attachment.
@@ -843,6 +1007,39 @@ impl FromSql for DraftAttachmentUploadState {
             1 => Ok(DraftAttachmentUploadState::Uploaded),
             2 => Ok(DraftAttachmentUploadState::Error),
             3 => Ok(DraftAttachmentUploadState::Offline),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
+    }
+}
+
+/// Contains the state of the attachment.
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
+#[repr(u8)]
+pub enum DraftAttachmentOwnership {
+    /// Inherited from a reply or forward action.
+    ///
+    /// When we save a draft with inherited attachments the first time, they receive new
+    /// identifiers and we must transition those into an owned version afterwards.
+    Inherited = 0,
+    /// This is an attachment that we have full control over.
+    #[default]
+    Owned = 1,
+    /// This attachments originated from a PGP/Mime message
+    PgpMime = 2,
+}
+
+impl ToSql for DraftAttachmentOwnership {
+    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for DraftAttachmentOwnership {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value.as_i64()? {
+            0 => Ok(Self::Inherited),
+            1 => Ok(Self::Owned),
+            2 => Ok(Self::PgpMime),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }

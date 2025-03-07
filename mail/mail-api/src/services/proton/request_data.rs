@@ -19,6 +19,7 @@
 
 use crate::services::proton::common::{AttachmentId, MessageId};
 use crate::services::proton::response_data::MimeType;
+use indexmap::IndexMap;
 use proton_crypto_inbox::attachment::{
     Base64AttachmentEncryptedSignature, BinaryAttachmentEncryptedSignature,
     BinaryAttachmentSignature, KeyPackets,
@@ -132,7 +133,7 @@ pub struct DraftParams {
     pub mime_type: MimeType,
 }
 
-pub type DraftAttachmentKeyPackets = HashMap<AttachmentId, KeyPackets>;
+pub type DraftAttachmentKeyPackets = IndexMap<AttachmentId, KeyPackets>;
 
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
 pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;

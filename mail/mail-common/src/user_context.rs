@@ -93,6 +93,12 @@ impl MailUserContext {
         Ok(this)
     }
 
+    /// Get the current Arc instance for this context.
+    #[must_use]
+    pub fn as_arc(&self) -> Arc<Self> {
+        self.this.upgrade().expect("Should never fail")
+    }
+
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
     /// that have an expiration date.
     fn init_expiration_loop(&self) {

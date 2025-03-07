@@ -1,5 +1,5 @@
 use crate::datatypes::AttachmentMetadata;
-use crate::models::{Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, MetadataId};
+use crate::models::{DraftAttachmentMetadata, DraftAttachmentUploadState, MetadataId};
 use proton_mail_ids::LocalAttachmentId;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
@@ -23,9 +23,10 @@ impl DraftAttachment {
     /// Returns error if the query failed.
     pub async fn build_list(
         metadata_id: MetadataId,
-        attachments: impl IntoIterator<Item = Attachment>,
         tether: &Tether,
     ) -> Result<Vec<DraftAttachment>, StashError> {
+        let attachments =
+            DraftAttachmentMetadata::attachment_for_draft(metadata_id, tether).await?;
         let metadata_map: HashMap<LocalAttachmentId, DraftAttachmentMetadata> = HashMap::from_iter(
             DraftAttachmentMetadata::find_by_metadata_id(metadata_id, tether)
                 .await?

@@ -137,7 +137,7 @@ pub mod network;
 pub mod observers;
 pub mod queue;
 
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 pub mod tests {
     #[path = "../tests/common.rs"]
     pub mod common;

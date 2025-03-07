@@ -1,4 +1,4 @@
-use crate::core::datatypes::ApiConfig;
+use crate::core::datatypes::{ApiConfig, Id};
 use crate::core::human_verification::{ChallengeNotifier, ChallengeNotifierWrap};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
@@ -13,17 +13,15 @@ use crate::{
 use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_action_queue::action::Action;
-use proton_action_queue::db::StoredAction;
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::os::KeyChainExt;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContext, MailUserContext};
-use stash::orm::Model;
-use stash::params;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
@@ -168,10 +166,15 @@ async fn create_mail_session_inner(
 
     // Generate session key;
     debug!("Checking keychain");
-    if key_chain.get().map_err(|_| Unexpected::Os)?.is_none() {
+    let key_chain = FFIKeyChain(key_chain);
+    if key_chain
+        .load::<SessionEncryptionKey>()
+        .map_err(|_| Unexpected::Os)?
+        .is_none()
+    {
         debug!("Key chain has no key, generating");
         let key = SessionEncryptionKey::random();
-        key_chain.store(key.to_base64()).map_err(|_e| {
+        key_chain.store(key).map_err(|_e| {
             tracing::error!("Failed to store key in keychain");
             Unexpected::Os
         })?;
@@ -188,7 +191,7 @@ async fn create_mail_session_inner(
         mail_cache_path,
         params.mail_cache_size,
         connection_pool_size,
-        Arc::from(FFIKeyChain::from(key_chain)),
+        Arc::new(key_chain),
         api_env_config.into(),
     )
     .await?;
@@ -691,6 +694,8 @@ impl MailSession {
         }))
     }
 
+    /// Check if any message for all logged in accounts is still pending to send
+    ///
     pub async fn all_messages_were_sent(&self) -> Result<bool, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -699,19 +704,52 @@ impl MailSession {
             let mut all_messages_were_sent = true;
 
             for user_ctx in &all_user_ctxs {
-                let stash = user_ctx.user_stash();
-                let tether = stash.connection();
-                let all_send_tasks = StoredAction::find(
-                    "WHERE action_type = ?",
-                    params![Send::TYPE.as_ref()],
-                    &tether,
-                )
-                .await?;
+                let send_task_count_eq_zero = user_ctx
+                    .action_queue()
+                    .typed_actions_count::<Send>()
+                    .await?
+                    == 0;
 
-                all_messages_were_sent &= all_send_tasks.is_empty();
+                all_messages_were_sent &= send_task_count_eq_zero;
             }
 
             Result::<_, RealProtonMailError>::Ok(all_messages_were_sent)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Get all unsent message ids for given user id
+    ///
+    pub async fn get_unsent_messages_ids_in_queue(
+        &self,
+        user_id: String,
+    ) -> Result<Vec<Id>, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let session = ctx.get_account_sessions(user_id.into()).await?.pop();
+
+            let msg_ids = match session {
+                Some(session)
+                    if matches!(
+                        ctx.get_session_state(session.remote_id.clone()).await?,
+                        Some(CoreSessionState::Authenticated)
+                    ) =>
+                {
+                    let user_ctx = ctx.user_context_from_session(&session, None, None).await?;
+                    let tether = user_ctx.user_stash().connection();
+
+                    DraftMetadata::messages_with_pending_send(&tether)
+                        .await?
+                        .into_iter()
+                        .map_into()
+                        .collect()
+                }
+                _ => vec![],
+            };
+
+            Result::<_, RealProtonMailError>::Ok(msg_ids)
         })
         .await
         .map_err(UserSessionError::from)

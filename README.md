@@ -3,6 +3,35 @@
 This repo maps part of the Core proton REST api. It's designed so that each team can extend this
 with their own primitives, requests and domain types as needed.
 
+## Releases
+
+### Conventions
+
+When your product/crate is ready for a release, create a new branch with the following syntax:
+
+* `releases/$PRODUCT/$MAJOR.$MINOR`
+
+When you are ready to release create a tag with the following syntax:
+
+* `$PRODUCT-v$MAJOR.$MINOR.$PATCH`
+
+For instance for the `mail-uniffi` crate this would translate into:
+
+* Branch: `releases/mail-uniffi/0.55`
+* Tag: `mail-uniffi/0.55`
+
+### Guidelines
+
+* After creating a release, the version in the master branch should be bumped to the next release
+  candidate.
+* Tags should **always be created from the release branches**.
+* If you are working on bug fix or improvement directly related to the release, create a merge
+  request targeting the release branch and then port the release to master.
+* Backporting fixes from master should be avoided if possible as you are likely to pull in new
+  unrelated changes. This may not be avoidable in all cases and it may be better to create a new
+  release if the merge conflicts are too great.
+
+
 ## Crate Publishing
 
 Until we move to the mono-repo, any time changes need to be made available to
@@ -29,7 +58,7 @@ create mode 100644 downloads/proton-core-common@0.6.31.crate
 create mode 100644 downloads/proton-core-common@0.6.31.json
 warning: redirecting to https: //gitlab.protontech.ch/rust/shared/registry.git/
 remote:
-remote: View merge request for package/proton-core-common-0.6.31: 
+remote: View merge request for package/proton-core-common-0.6.31:
 remote:   https: //gitlab.protontech.ch/rust/shared/registry/-/merge_requests/456  # <----- click this
 remote:
 To https: //gitlab.protontech.ch/rust/shared/registry

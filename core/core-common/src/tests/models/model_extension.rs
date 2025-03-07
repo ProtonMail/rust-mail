@@ -1,10 +1,10 @@
 use proton_api_core::services::proton::prelude::AddressId;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
-use stash::params;
+use stash::{orm::Model, params};
 
 use crate::{
     datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType},
-    models::{Address, ModelExtension},
+    models::Address,
     tests::common::new_core_test_connection,
 };
 

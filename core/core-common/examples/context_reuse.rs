@@ -3,7 +3,7 @@ use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::action_queue::DummyWaitForOnline;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_core_common::{Context, CoreContextError};
 use std::sync::Arc;
 use tempdir::TempDir;
@@ -29,15 +29,15 @@ async fn main() {
     let user_db_dir = dir.path().join("users");
     let cache_dir = dir.path().join("cache");
 
-    let key = SessionEncryptionKey::random().to_base64();
-    let key_chain = Arc::new(InMemoryKeyChain::default());
+    let key = SessionEncryptionKey::random();
+    let key_chain = InMemoryKeyChain::default();
     key_chain.store(key).unwrap();
 
     let config = Config::default();
     let context = Context::new(
         session_db_dir,
         user_db_dir,
-        key_chain,
+        Arc::new(key_chain),
         [],
         config,
         cache_dir,

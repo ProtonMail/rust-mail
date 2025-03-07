@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.55.0] - 2025-03-07
+
+### Added
+
+  - [ET-2141] `get_unsent_messages_ids_in_queue` method on `MailSession` to get MessageIds of unsent messages for given user_id
+
+### Fixed
+
+  - [ET-2317] Restore forward/reply with attachments.
+
+
+### Changed
+
+  - Key chain takes `OSKeyChainEntryKind` parameter. Key chain implementation must support
+     more than one entry at the time.
+     - get -> load method rename
+
 ## [0.54.4] - 2025-03-06
 
 ### Fixed
