@@ -17,7 +17,6 @@ use crate::datatypes::{
 };
 use crate::find_in_query;
 use crate::models::*;
-use crate::MailUserContext;
 use crate::{actions::conversations::Delete, AppError};
 use anyhow::{anyhow, Context};
 use futures::future;
@@ -38,7 +37,6 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
-use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
@@ -51,7 +49,6 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
-use std::num::NonZeroU32;
 use std::ops::AddAssign;
 use tracing::{debug, error, info, warn};
 
@@ -2826,77 +2823,6 @@ impl Conversation {
         .await
     }
 
-    /// Create a paginator for conversations in a given label.
-    ///
-    /// # Params
-    ///
-    /// * `context`        - Active user context.
-    /// * `local_label_id` - Label to paginate in.
-    /// * `page_count`     - Number of elements per page.
-    /// * `filter`         - Filter options for pagination.
-    /// * `local_first`    - Load local data immediately, to return to the
-    ///                      caller without the delay of remote lookup. If set
-    ///                      to `false`, no results will be returned until the
-    ///                      remote API calls have completed. This only affects
-    ///                      the first call to the paginator.
-    /// * `queue`          - Optional subscriber for changes.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query fails.
-    ///
-    pub async fn paginate_in_label(
-        context: &MailUserContext,
-        local_label_id: LocalLabelId,
-        page_count: u32,
-        filter: PaginatorFilter,
-        local_first: bool,
-    ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
-        let remote_source =
-            ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
-
-        let mut query = formatdoc!(
-            "
-            JOIN conversation_labels
-                ON conversations.local_id = conversation_labels.local_conversation_id
-            WHERE
-                conversation_labels.local_label_id = ?
-            AND
-                conversation_labels.deleted = 0
-            "
-        );
-
-        let params = vec![Param::Integer(
-            i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
-            })?,
-        )];
-
-        if let Some(unread) = filter.unread {
-            query += &format!(
-                "AND conversation_labels.context_num_unread {} 0 ",
-                if unread { ">" } else { "=" }
-            );
-        }
-
-        query += "ORDER BY
-            conversation_labels.context_time DESC,
-            conversations.display_order DESC
-        ";
-
-        Ok(PaginatorCompat::new(
-            Paginator::new(
-                query,
-                params,
-                context.user_stash(),
-                NonZeroU32::new(page_count)
-                    .ok_or(StashError::Custom(anyhow!("Invalid Page Count value")))?,
-                remote_source,
-                local_first,
-            )
-            .await?,
-        ))
-    }
     /// This fn should be called for conversation endpoints.
     /// Repeatedly calls `endpoint` in batches of 1 in parallel.
     async fn split_request<F, Fut, T>(
@@ -3470,201 +3396,6 @@ impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
         }
         self.num_attachments += metadata.num_attachments;
         self.snooze_time = self.snooze_time.max(metadata.snooze_time);
-    }
-}
-
-/// A data source for a [`Paginator`] which syncs pages of [`Message`]s in
-/// a [`Label`].
-pub struct ConversationDataSource {
-    /// Session for network request
-    session: Session,
-
-    /// Remote id of the label.
-    remote_label_id: LabelId,
-
-    /// Local id of the label.
-    local_label_id: LocalLabelId,
-
-    /// Filter options for pagination.
-    filter: PaginatorFilter,
-}
-
-impl ConversationDataSource {
-    /// Create a new data source for the given `label_id`.
-    ///
-    /// # Parameters
-    ///
-    /// * `context`  - Active user context.
-    /// * `label_id` - Local id of the label.
-    /// * `filter`   - Filter options for pagination.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the remote id for the label can't be resolved.
-    ///
-    pub async fn new(
-        context: &MailUserContext,
-        label_id: LocalLabelId,
-        filter: PaginatorFilter,
-    ) -> Result<Self, AppError> {
-        let tether = context.user_stash().connection();
-        let Some(remote_id) = Label::local_id_counterpart(label_id, &tether).await? else {
-            return Err(AppError::LabelDoesNotHaveRemoteId(label_id));
-        };
-
-        Ok(Self {
-            remote_label_id: remote_id,
-            session: context.session().clone(),
-            local_label_id: label_id,
-            filter,
-        })
-    }
-}
-
-impl DataSource for ConversationDataSource {
-    type Item = Conversation;
-    type Error = AppError;
-
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, tether))]
-    async fn total(&self, tether: &Tether) -> Result<usize, Self::Error> {
-        let counter = ConversationCounters::find_by_id(self.local_label_id, tether)
-            .await?
-            .ok_or(AppError::LabelNotFound(self.local_label_id))?;
-        debug!("Total conversations: {}", counter.total);
-        Ok(counter.total.try_into().unwrap_or(0))
-    }
-
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self))]
-    async fn sync_first_page(
-        &self,
-        page_size: NonZeroU32,
-        tether: &mut Tether,
-    ) -> Result<Vec<Self::Item>, Self::Error> {
-        let response = self
-            .session
-            .api()
-            .get_conversations(GetConversationsOptions {
-                desc: Some(true),
-                label_id: Some(self.remote_label_id.clone()),
-                page_size: page_size.get() as u64,
-                unread: self.filter.unread,
-                ..Default::default()
-            })
-            .await?;
-        debug!(
-            "Fetched {} conversations. Total={}",
-            response.conversations.len(),
-            response.total
-        );
-        Ok(self
-            .save_to_database(
-                response.conversations.into_iter().map_into().collect(),
-                tether,
-            )
-            .await?)
-    }
-
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, elements))]
-    async fn sync_page_after(
-        &self,
-        _: u32,
-        page_size: NonZeroU32,
-        elements: Vec<Self::Item>,
-        tether: &mut Tether,
-    ) -> Result<Vec<Self::Item>, Self::Error> {
-        if elements.is_empty() {
-            warn!("No element to sync");
-            return Ok(vec![]);
-        }
-
-        // Find the first last element with a valid remote id.
-        let Some(last_element) = elements
-            .iter()
-            .rev()
-            .find(|element| element.remote_id.is_some())
-        else {
-            return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
-        };
-        // Safe to unwrap as we have validated this before.
-        let last_element_id = last_element.remote_id.clone().unwrap();
-
-        debug!("Last Element= {last_element_id}");
-
-        let Some(last_element_time) = last_element
-            .labels
-            .iter()
-            .find(|l| l.local_label_id.unwrap() == self.local_label_id)
-            .map(|v| v.context_time)
-        else {
-            return Err(AppError::Other(anyhow!(
-                "Conversation does not have active label"
-            )));
-        };
-
-        let mut response = self
-            .session
-            .api()
-            .get_conversations(GetConversationsOptions {
-                desc: Some(true),
-                end: Some(last_element_time),
-                end_id: Some(last_element_id.clone()),
-                label_id: Some(self.remote_label_id.clone()),
-                page_size: page_size.get() as u64 + 1_u64,
-                unread: self.filter.unread,
-                ..Default::default()
-            })
-            .await?;
-        debug!(
-            "Fetched {} conversations. Total={}",
-            response.conversations.len(),
-            response.total
-        );
-
-        // `end_id` always returns the given conversation in the search results
-        // if it exists.
-        if response.conversations.is_empty() {
-            return Ok(vec![]);
-        }
-
-        if response.conversations[0].id == last_element_id {
-            response.conversations.remove(0);
-        } else if response.conversations.len() > page_size.get() as usize {
-            response.conversations.pop();
-        }
-
-        if response.conversations.is_empty() {
-            return Ok(vec![]);
-        }
-
-        Ok(self
-            .save_to_database(
-                response.conversations.into_iter().map_into().collect(),
-                tether,
-            )
-            .await?)
-    }
-
-    fn watch_tables(&self) -> Vec<String> {
-        vec![
-            Conversation::table_name().to_string(),
-            ConversationLabel::table_name().to_string(),
-            ConversationCounters::table_name().to_string(),
-        ]
-    }
-}
-
-impl ConversationDataSource {
-    async fn save_to_database(
-        &self,
-        mut records: Vec<Conversation>,
-        tether: &mut Tether,
-    ) -> Result<Vec<Conversation>, StashError> {
-        let tx = tether.transaction().await?;
-        for record in &mut records {
-            Conversation::save(record, &tx).await?;
-        }
-        tx.commit().await?;
-        Ok(records)
     }
 }
 
