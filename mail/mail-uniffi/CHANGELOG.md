@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-2317] Restore forward/reply with attachments.
 
 
+### Changed
+
+  - Key chain takes `OSKeyChainEntryKind` parameter. Key chain implementation must support
+     more than one entry at the time.
+     - get -> load method rename
+
 ## [0.54.4] - 2025-03-06
 
 ### Fixed

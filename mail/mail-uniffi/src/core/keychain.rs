@@ -24,7 +24,7 @@ pub trait OSKeyChain: Send + Sync {
     fn delete(&self, kind: OSKeyChainEntryKind) -> Result<(), OSKeyChainError>;
 
     /// Retrieve the secret from the keychain.
-    fn get(&self, kind: OSKeyChainEntryKind) -> Result<Option<String>, OSKeyChainError>;
+    fn load(&self, kind: OSKeyChainEntryKind) -> Result<Option<String>, OSKeyChainError>;
 }
 
 /// What is the kind of the data. OS key chains might support multiple
@@ -75,7 +75,7 @@ impl KeyChain for FFIKeyChain {
     fn load_entry(&self, kind: KeyChainEntryKind) -> Result<Option<SecretString>, KeyChainError> {
         let kind = kind.into();
         self.0
-            .get(kind)
+            .load(kind)
             .map_err(Into::into)
             .map(|o| o.map(SecretString::new))
     }

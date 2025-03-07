@@ -5,8 +5,6 @@ use std::error::Error;
 use std::fmt::Formatter;
 use std::sync::Arc;
 
-use crate::db::account::SessionEncryptionKey;
-
 #[derive(Debug)]
 pub struct KeyChainError(Box<dyn Error + Send + Sync>);
 
@@ -97,7 +95,7 @@ pub trait KeyChainExt: KeyChain {
     ///
     /// # Errors
     /// Should return error if the operation failed.
-    fn load<T: StoreInKeyChain>(&self) -> Result<Option<SessionEncryptionKey>, KeyChainError> {
+    fn load<T: StoreInKeyChain>(&self) -> Result<Option<T>, KeyChainError> {
         self.load_entry(T::kind())
             .map(|o| o.map(StoreInKeyChain::from_stored_string))
     }
