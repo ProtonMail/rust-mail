@@ -54,10 +54,10 @@ impl StoredDevicePrivateKey {
         SecretString::new(BASE64_STANDARD.encode(key))
     }
 
-    fn from_base64(val: &SecretString) -> Option<Self> {
+    fn from_base64(val: &SecretString) -> Result<Self, base64::DecodeError> {
         let val = val.expose_secret();
-        let bytes = BASE64_STANDARD.decode(val).ok()?;
-        Some(Self::with_bytes(bytes))
+        let bytes = BASE64_STANDARD.decode(val)?;
+        Ok(Self::with_bytes(bytes))
     }
 }
 
@@ -66,8 +66,10 @@ impl StoreInKeyChain for StoredDevicePrivateKey {
         KeyChainEntryKind::DeviceKey
     }
 
-    fn from_stored_string(s: SecretString) -> Self {
-        Self::from_base64(&s).expect("Keychain contains invalid key")
+    fn from_stored_string(
+        s: SecretString,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(Self::from_base64(&s)?)
     }
 
     fn to_stored_string(&self) -> SecretString {

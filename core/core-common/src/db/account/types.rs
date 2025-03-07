@@ -627,6 +627,10 @@ impl FromSql for EncryptedPassword {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("The length of the key is invalid")]
+pub struct InvalidLengthOfSessionKey;
+
 //TODO: This could potentially be reused in other contexts.
 /// Encryption key for encryption of session data.
 #[derive(Clone)]
@@ -638,8 +642,10 @@ impl StoreInKeyChain for SessionEncryptionKey {
     fn kind() -> crate::os::KeyChainEntryKind {
         crate::os::KeyChainEntryKind::EncryptionKey
     }
-    fn from_stored_string(s: SecretString) -> Self {
-        Self::from_base64(s.expose_secret()).expect("Keychain contains invalid key")
+    fn from_stored_string(
+        s: SecretString,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::try_from_base64(s.expose_secret())
     }
 
     fn to_stored_string(&self) -> SecretString {
@@ -733,14 +739,17 @@ impl SessionEncryptionKey {
     /// Create a key from a base64 string.
     #[must_use]
     pub fn from_base64(value: &str) -> Option<Self> {
-        let Ok(bytes) = BASE64_STANDARD.decode(value) else {
-            return None;
-        };
+        Self::try_from_base64(value).ok()
+    }
 
-        let Ok(key) = Self::with_bytes(bytes) else {
-            return None;
-        };
+    /// Tries to create a key from base64.
+    /// Comparing to [`Self::from_base64`] it does not return an option, but
+    /// a proper error.
+    pub fn try_from_base64(value: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let bytes = BASE64_STANDARD.decode(value)?;
 
-        Some(key)
+        let key = Self::with_bytes(bytes).map_err(|_| InvalidLengthOfSessionKey)?;
+
+        Ok(key)
     }
 }
