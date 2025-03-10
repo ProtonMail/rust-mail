@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Added
+
+  - [ET-2374] Only for Android: Added field `action` to the email push notification.
+    This field represents whether it is a new message or a silent notification.
+
 ### Changed
 
   - [ET-2367] Key chain takes `OSKeyChainEntryKind` parameter. Key chain implementation must support

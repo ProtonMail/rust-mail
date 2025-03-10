@@ -86,6 +86,32 @@ pub struct DecryptedEmailPushNotification {
     #[serde(default)]
     #[serde_as(as = "BoolFromInt")]
     pub vibrate: bool,
+
+    /// What kind of action was made for this email
+    /// Note: This field is available only on Android
+    ///
+    #[serde(default)]
+    pub action: Option<DecryptedEmailPushNotificationAction>,
+}
+
+/// What kind of action was made for this email
+/// Note: This enum is available only on Android
+///
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecryptedEmailPushNotificationAction {
+    /// Message has been created. It requires a full notification
+    ///
+    MessageCreated,
+    /// Message has been touched on another device. We want to hide
+    /// notification
+    ///
+    MessageTouched,
+
+    /// Unexpected action
+    ///
+    #[serde(untagged)]
+    Unexpected(String),
 }
 
 /// This is decrypted notification that after clicking opens a web page.
