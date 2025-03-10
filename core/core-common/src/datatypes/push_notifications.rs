@@ -15,8 +15,8 @@ use crate::os::{KeyChainEntryKind, StoreInKeyChain};
 /// Device public key stored in the database
 pub struct StoredDevicePublicKey(String);
 
-impl AsRef<String> for StoredDevicePublicKey {
-    fn as_ref(&self) -> &String {
+impl AsRef<str> for StoredDevicePublicKey {
+    fn as_ref(&self) -> &str {
         &self.0
     }
 }
@@ -25,9 +25,9 @@ impl From<String> for StoredDevicePublicKey {
         Self(value)
     }
 }
-impl From<StoredDevicePublicKey> for String {
-    fn from(value: StoredDevicePublicKey) -> Self {
-        value.0
+impl std::fmt::Display for StoredDevicePublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

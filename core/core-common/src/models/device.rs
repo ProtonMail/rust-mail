@@ -127,7 +127,7 @@ impl RegisteredDevice {
                 .gen_device_key_pair(&pgp_provider)
                 .map_err(|_| RegisteredDeviceError::Crypto)?;
 
-            self.public_key = Some(new_key.into());
+            self.public_key = Some(new_key.to_string());
         }
 
         <Self as Model>::save(self, bond).await?;
