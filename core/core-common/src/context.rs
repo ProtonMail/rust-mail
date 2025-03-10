@@ -277,6 +277,7 @@ impl Context {
         let stash_config = StashConfiguration {
             path: Some(&account_db_path),
             pool_size: connection_pool_size,
+            ..Default::default()
         };
         let account_stash = Stash::new(stash_config)?;
         migrate_account_db(&account_stash).await?;

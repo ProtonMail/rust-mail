@@ -48,10 +48,6 @@ async fn auto_queued_on_pause() {
 
     assert!(matches!(output, BroadcastMessage::Success(_)));
     assert!(broadcast.is_empty());
-
-    auto_executor.terminate();
-    sleep(Duration::from_millis(100)).await;
-
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 
@@ -73,10 +69,6 @@ async fn auto_queued_on_multiple_unpause() {
 
     assert!(matches!(output, BroadcastMessage::Success(_)));
     assert!(broadcast.is_empty());
-
-    auto_executor.terminate();
-    sleep(Duration::from_millis(100)).await;
-
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 
@@ -104,10 +96,6 @@ async fn auto_queued_on_multiple_pause() {
 
     assert!(matches!(output, BroadcastMessage::Success(_)));
     assert!(broadcast.is_empty());
-
-    auto_executor.terminate();
-    sleep(Duration::from_millis(100)).await;
-
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 
@@ -138,10 +126,6 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
 
     assert!(matches!(output, BroadcastMessage::Success(_)));
     assert!(broadcast.is_empty());
-
-    auto_executor.terminate();
-    sleep(Duration::from_millis(100)).await;
-
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 

@@ -1,7 +1,7 @@
 use proton_action_queue::network::WaitForOnline;
 use proton_core_common::db::migrations::migrate_core_db;
 use proton_mail_common::db::migrations::migrate_db;
-use stash::stash::Stash;
+use stash::stash::{Stash, StashConfiguration};
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
 
@@ -28,7 +28,7 @@ pub async fn new_test_connection_with_custom_online_await(
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
 
-    let stash = Stash::new(None).expect("failed to create stash");
+    let stash = Stash::new(StashConfiguration::test()).expect("failed to create stash");
     migrate_core_db(&stash).await.unwrap();
     migrate_db(&stash).await.expect("failed to migrate");
     // We need the action queue table due to message delete triggering
@@ -61,7 +61,10 @@ pub async fn new_test_connection_file() -> (Stash, TempDir) {
     ));
 
     let db_dir = tempdir().unwrap();
-    let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("failed to create stash");
+    let stash = Stash::new(StashConfiguration::test_with_path(
+        &db_dir.path().join("test"),
+    ))
+    .expect("failed to create stash");
     migrate_core_db(&stash).await.unwrap();
     migrate_db(&stash).await.expect("failed to migrate");
     // We need the action queue table due to message delete triggering

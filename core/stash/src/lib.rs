@@ -17,6 +17,7 @@
 //!
 
 // Standard modules
+pub(crate) mod connection_manager;
 pub mod datatypes;
 pub mod orm;
 pub mod stash;

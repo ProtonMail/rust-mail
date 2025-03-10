@@ -7,6 +7,7 @@ use crate::action::{
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
+use stash::stash::StashConfiguration;
 use stash::{orm::Model, stash::Stash};
 
 #[derive(Deserialize, Serialize, Eq, PartialEq)]
@@ -405,7 +406,7 @@ async fn new_test_connection() -> Stash {
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    let stash = Stash::new(None).unwrap();
+    let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut tether = stash.connection();
     create_tables(&mut tether).await.unwrap();
     stash

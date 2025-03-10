@@ -28,7 +28,7 @@ use proton_action_queue::action::{
 use proton_action_queue::network::WaitForOnline;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
+use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -194,7 +194,10 @@ fn spawn_process(
 }
 
 async fn new_queue(directory: &Path) -> Queue {
-    let stash = stash::stash::Stash::new(Some(&directory.join("sqlite.db"))).unwrap();
+    let stash = stash::stash::Stash::new(StashConfiguration::test_with_path(
+        &directory.join("sqlite.db"),
+    ))
+    .unwrap();
     let queue = Queue::new(stash, Arc::new(DummyWaitForOnline))
         .await
         .unwrap();

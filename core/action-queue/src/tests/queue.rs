@@ -6,7 +6,7 @@ use crate::action::{
 };
 use crate::tests::common::{DummyWaitForOnline, NoopActionHandler};
 use serde::{Deserialize, Serialize};
-use stash::stash::Stash;
+use stash::stash::{Stash, StashConfiguration};
 use std::time::Duration;
 
 #[derive(Copy, Clone, Serialize, Deserialize)]
@@ -286,7 +286,7 @@ async fn check_action_only_executed_without_dependencies() {
 async fn new_queue() -> Queue {
     let mut factory = Factory::new();
     factory.register::<TestAction>().unwrap();
-    let pool = Stash::new(None).unwrap();
+    let pool = Stash::new(StashConfiguration::test()).unwrap();
     Queue::with_factory(pool, factory, Arc::new(DummyWaitForOnline))
         .await
         .unwrap()
