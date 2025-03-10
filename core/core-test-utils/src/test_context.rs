@@ -267,6 +267,13 @@ impl TestContext {
             .expect("failed to create user context")
     }
 
+    /// Get the core context
+    ///
+    #[must_use]
+    pub fn core_context(&self) -> &Arc<Context> {
+        &self.context
+    }
+
     /// Set up a catch-all mock for the mock server.
     ///
     /// Calls to this function need to come at the END of the test setup, AFTER

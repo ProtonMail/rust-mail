@@ -1,9 +1,10 @@
+use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_api_core::services::proton::common::AuthId;
 use proton_crypto_account::{keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync};
 use proton_crypto_notifications::{
     DecryptableNotification, NotificationError, PGPEncryptedNotification,
 };
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, Secret, SecretString};
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -11,12 +12,52 @@ pub use proton_crypto_notifications::DecryptedNotification;
 
 use crate::os::{KeyChainEntryKind, StoreInKeyChain};
 
-/// Device key stored in the keychain
-pub struct StoredDevicePrivateKey(SecretString);
+/// Device public key stored in the database
+pub struct StoredDevicePublicKey(String);
 
-impl AsRef<SecretString> for StoredDevicePrivateKey {
-    fn as_ref(&self) -> &SecretString {
+impl AsRef<str> for StoredDevicePublicKey {
+    fn as_ref(&self) -> &str {
         &self.0
+    }
+}
+impl From<String> for StoredDevicePublicKey {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+impl std::fmt::Display for StoredDevicePublicKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Device key stored in the keychain
+pub struct StoredDevicePrivateKey(Secret<Vec<u8>>);
+
+impl AsRef<Secret<Vec<u8>>> for StoredDevicePrivateKey {
+    fn as_ref(&self) -> &Secret<Vec<u8>> {
+        &self.0
+    }
+}
+
+impl StoredDevicePrivateKey {
+    /// Takes raw bytes
+    ///
+    #[must_use]
+    pub fn with_bytes(value: Vec<u8>) -> Self {
+        Self(Secret::new(value))
+    }
+
+    #[must_use]
+    fn to_base64(&self) -> SecretString {
+        let key = self.0.expose_secret();
+        SecretString::new(BASE64_STANDARD.encode(key))
+    }
+
+    fn from_base64(val: &SecretString) -> Result<Self, base64::DecodeError> {
+        let val = val.expose_secret();
+        let bytes = BASE64_STANDARD.decode(val)?;
+        Ok(Self::with_bytes(bytes))
     }
 }
 
@@ -25,12 +66,14 @@ impl StoreInKeyChain for StoredDevicePrivateKey {
         KeyChainEntryKind::DeviceKey
     }
 
-    fn from_stored_string(s: SecretString) -> Self {
-        Self(s)
+    fn from_stored_string(
+        s: SecretString,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(Self::from_base64(&s)?)
     }
 
     fn to_stored_string(&self) -> SecretString {
-        self.0.clone()
+        self.to_base64()
     }
 }
 

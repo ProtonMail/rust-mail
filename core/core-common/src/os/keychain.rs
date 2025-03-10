@@ -40,14 +40,14 @@ pub enum KeyChainEntryKind {
 
 /// A type that can be stored in the [`KeyChain`]
 ///
-pub trait StoreInKeyChain {
+pub trait StoreInKeyChain: Sized {
     /// What is the kind of the data. OS key chains might support multiple
     /// entries. This method helps picking the right entry.
     ///
     fn kind() -> KeyChainEntryKind;
     /// Used to load entry from plaintext
     ///
-    fn from_stored_string(s: SecretString) -> Self;
+    fn from_stored_string(s: SecretString) -> Result<Self, Box<dyn Error + Send + Sync>>;
     /// Used to store entry in the plaintext
     ///
     fn to_stored_string(&self) -> SecretString;
@@ -99,8 +99,11 @@ pub trait KeyChainExt: KeyChain {
     /// # Errors
     /// Should return error if the operation failed.
     fn load<T: StoreInKeyChain>(&self) -> Result<Option<T>, KeyChainError> {
-        self.load_entry(T::kind())
-            .map(|o| o.map(StoreInKeyChain::from_stored_string))
+        let entry = self.load_entry(T::kind())?;
+        entry
+            .map(StoreInKeyChain::from_stored_string)
+            .transpose()
+            .map_err(KeyChainError)
     }
 }
 

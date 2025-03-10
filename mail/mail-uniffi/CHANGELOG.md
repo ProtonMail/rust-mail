@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Changed
+
+  - [ET-2367] Key chain takes `OSKeyChainEntryKind` parameter. Key chain implementation must support
+     more than one entry at the time.
+     - get -> load method rename
+  - [ET-2368] Saving registered device is now generating new device token key pair if necessary.
+  - [ET-2368] Registering device is now using device key instead of user key.
+
 ## [0.55.0] - 2025-03-07
 
 ### Added
@@ -16,13 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - [ET-2317] Restore forward/reply with attachments.
-
-
-### Changed
-
-  - Key chain takes `OSKeyChainEntryKind` parameter. Key chain implementation must support
-     more than one entry at the time.
-     - get -> load method rename
 
 ## [0.54.4] - 2025-03-06
 
