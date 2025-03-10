@@ -5,6 +5,7 @@
 //!
 
 use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
 use proton_api_mail::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
 use proton_api_mail::services::push_notifications::NotificationSender as ApiNotificationSender;
 
@@ -41,6 +42,7 @@ impl From<ApiDecryptedInboxPushNotification> for DecryptedInboxPushNotification 
                     subject: data.subject,
                     sender: data.sender.into(),
                     message_id: data.message_id,
+                    action: data.action.map(From::from),
                 })
             }
             ApiDecryptedInboxPushNotification::OpenUrl { data } => {
@@ -69,6 +71,39 @@ pub struct DecryptedEmailPushNotification {
     /// Remote message ID
     ///
     pub message_id: MessageId,
+
+    /// What kind of action was made for this email
+    /// Note: This field is available only on Android
+    ///
+    pub action: Option<DecryptedEmailPushNotificationAction>,
+}
+
+/// What kind of action was made for this email
+/// Note: This enum is available only on Android
+///
+#[derive(Clone, Debug)]
+pub enum DecryptedEmailPushNotificationAction {
+    /// Message has been created. It requires a full notification
+    ///
+    MessageCreated,
+    /// Message has been touched on another device. We want to hide
+    /// notification
+    ///
+    MessageTouched,
+
+    /// Unexpected action
+    ///
+    Unexpected(String),
+}
+
+impl From<ApiDecryptedEmailPushNotificationAction> for DecryptedEmailPushNotificationAction {
+    fn from(value: ApiDecryptedEmailPushNotificationAction) -> Self {
+        match value {
+            ApiDecryptedEmailPushNotificationAction::MessageCreated => Self::MessageCreated,
+            ApiDecryptedEmailPushNotificationAction::MessageTouched => Self::MessageTouched,
+            ApiDecryptedEmailPushNotificationAction::Unexpected(action) => Self::Unexpected(action),
+        }
+    }
 }
 
 /// Decrypted notification that is pushed for example when user logs in on a separate device.

@@ -4,6 +4,7 @@ use proton_core_common::datatypes::EncryptedPushNotification as RealEncryptedPus
 use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
+    DecryptedEmailPushNotificationAction as RealDecryptedEmailPushNotificationAction,
     DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
     DecryptedOpenUrlPushNotification as RealDecryptedOpenUrlPushNotification,
     NotificationSender as RealNotificationSender,
@@ -75,6 +76,11 @@ pub struct DecryptedEmailPushNotification {
     /// Remote message ID
     ///
     pub message_id: RemoteId,
+
+    /// What kind of action was made for this email
+    /// Note: This field is available only on Android
+    ///
+    pub action: Option<DecryptedEmailPushNotificationAction>,
 }
 
 impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification {
@@ -83,6 +89,37 @@ impl From<RealDecryptedEmailPushNotification> for DecryptedEmailPushNotification
             subject: value.subject,
             sender: value.sender.into(),
             message_id: value.message_id.into(),
+            action: value.action.map(From::from),
+        }
+    }
+}
+
+/// What kind of action was made for this email
+/// Note: This enum is available only on Android
+///
+#[derive(Clone, Debug, uniffi::Enum)]
+pub enum DecryptedEmailPushNotificationAction {
+    /// Message has been created. It requires a full notification
+    ///
+    MessageCreated,
+    /// Message has been touched on another device. We want to hide
+    /// notification
+    ///
+    MessageTouched,
+
+    /// Unexpected action
+    ///
+    Unexpected(String),
+}
+
+impl From<RealDecryptedEmailPushNotificationAction> for DecryptedEmailPushNotificationAction {
+    fn from(value: RealDecryptedEmailPushNotificationAction) -> Self {
+        match value {
+            RealDecryptedEmailPushNotificationAction::MessageCreated => Self::MessageCreated,
+            RealDecryptedEmailPushNotificationAction::MessageTouched => Self::MessageTouched,
+            RealDecryptedEmailPushNotificationAction::Unexpected(action) => {
+                Self::Unexpected(action)
+            }
         }
     }
 }
