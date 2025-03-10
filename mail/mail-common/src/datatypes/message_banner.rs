@@ -2,7 +2,7 @@
 /// These banners indicate various security warnings, expiration notices,
 /// or content-related alerts.
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MessageBanner {
     /// The sender of this message is blocked.
     BlockedSender,
@@ -23,6 +23,9 @@ pub enum MessageBanner {
     AutoDelete {
         /// The Unix timestamp indicating when the message will be deleted.
         timestamp: u64,
+        /// How many days a message will stay in trash/spam until it expires
+        // FIXME: Delete this field in favor of timestamp
+        delete_days: u32,
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
