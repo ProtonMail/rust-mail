@@ -27,7 +27,7 @@ use proton_core_common::{
 use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
 use serde::Deserialize;
-use stash::stash::Stash;
+use stash::stash::{Stash, StashConfiguration};
 use std::io::stdout;
 use std::sync::Arc;
 use std::sync::Weak;
@@ -208,7 +208,8 @@ impl TestContext {
         let (core_account, core_session) = {
             // Create a temporary stash just to insert the fake data.
             let path = tmp_dir.path().join("account.db");
-            let stash = Stash::new(Some(&path)).expect("failed to create stash");
+            let stash = Stash::new(StashConfiguration::test_with_path(&path))
+                .expect("failed to create stash");
             let mut tether = stash.connection();
             let tx = tether
                 .transaction()

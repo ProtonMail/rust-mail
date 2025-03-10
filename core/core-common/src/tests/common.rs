@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use stash::stash::Stash;
+use stash::stash::{Stash, StashConfiguration};
 
 /// Macro wrapping u64 into Option<LocalId> for easier model definition.
 #[macro_export]
@@ -99,7 +99,7 @@ pub async fn new_core_test_connection() -> Stash {
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    let stash = Stash::new(None).expect("Failed to create Stash");
+    let stash = Stash::new(StashConfiguration::test()).expect("Failed to create Stash");
     migrate_core_db(&stash).await.unwrap();
     stash
 }
