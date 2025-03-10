@@ -48,6 +48,7 @@ impl StashConnectionManager {
     /// This allows for flexibility of memory database and stability of file database in nice wrapping.
     /// Since the production usage is exclusively file database it is nice bonus to run all tests in the
     /// file.
+    ///
     pub fn memory() -> Self {
         let tmp_dir =
             TempDir::new(Uuid::new_v4().to_string().as_str()).expect("failed to create temp dir");
@@ -62,17 +63,6 @@ impl StashConnectionManager {
     /// Converts `StashConnectionMananger` into one that calls an initialization
     /// function upon connection creation. Could be used to set PRAGMAs, for
     /// example.
-    ///
-    /// ### Example
-    ///
-    /// Make a `StashConnectionMananger` that sets the `foreign_keys` pragma to
-    /// true for every connection.
-    ///
-    /// ```rust,no_run
-    /// # use r2d2_sqlite::{StashConnectionMananger};
-    /// let manager = StashConnectionMananger::file("app.db")
-    ///     .with_init(|c| c.execute_batch("PRAGMA foreign_keys=1;"));
-    /// ```
     ///
     pub fn with_init<F>(mut self, init: F) -> Self
     where
@@ -94,7 +84,6 @@ impl r2d2::ManageConnection for StashConnectionManager {
                 Connection::open_with_flags(tmp.path().join("test"), self.flags)
             }
         }
-        .map_err(Into::into)
         .and_then(|mut c| match self.init {
             None => Ok(c),
             Some(ref init) => init(&mut c).map(|_| c),
@@ -102,7 +91,7 @@ impl r2d2::ManageConnection for StashConnectionManager {
     }
 
     fn is_valid(&self, conn: &mut Connection) -> Result<(), Error> {
-        conn.execute_batch("SELECT 1").map_err(Into::into)
+        conn.execute_batch("SELECT 1")
     }
 
     fn has_broken(&self, _: &mut Connection) -> bool {
