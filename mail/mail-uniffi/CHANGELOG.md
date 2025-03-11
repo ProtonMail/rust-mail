@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
   - Rename `auth_id` to `session_id` in `EncryptedPushNotification` type.
 
+### Fixed
+  - [ET-2001] Account avatar not showing initials when display_name is an empty string.
 
 ## [0.56.0] - 2025-03-11
 

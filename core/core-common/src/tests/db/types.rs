@@ -87,6 +87,36 @@ mod core_account_details_tests {
         assert_account_details(&result, "Dricus", "dricus@proton.me");
     }
 
+    #[test]
+    fn test_blank_display_name_fallback_to_username() {
+        let sut = CoreAccount {
+            name_or_addr: "dricus@proton.me".to_string(),
+            display_name: Some(String::new()),
+            username: Some("Dricus Du Plessis".to_string()),
+            primary_addr: None,
+            ..Default::default()
+        };
+
+        let result = sut.details();
+
+        assert_account_details(&result, "Dricus Du Plessis", "dricus@proton.me");
+    }
+
+    #[test]
+    fn test_blank_display_name_or_username_fallback_to_name_or_addr() {
+        let sut = CoreAccount {
+            name_or_addr: "dricus@proton.me".to_string(),
+            display_name: Some(String::new()),
+            username: Some(String::new()),
+            primary_addr: None,
+            ..Default::default()
+        };
+
+        let result = sut.details();
+
+        assert_account_details(&result, "dricus@proton.me", "dricus@proton.me");
+    }
+
     fn assert_account_details(result: &AccountDetails, expected_name: &str, expected_email: &str) {
         assert_eq!(result.name, expected_name);
         assert_eq!(result.email, expected_email);

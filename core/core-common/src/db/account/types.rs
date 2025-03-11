@@ -256,7 +256,9 @@ impl CoreAccount {
         let name = self
             .display_name
             .clone()
+            .filter(|name| !name.is_empty())
             .or(self.username.clone())
+            .filter(|username| !username.is_empty())
             .unwrap_or_else(|| self.name_or_addr.clone());
         let email = self
             .primary_addr
