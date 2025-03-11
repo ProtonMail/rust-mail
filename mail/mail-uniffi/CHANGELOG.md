@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.56.0] - 2025-03-11
+
 ### Added
 
   - [ET-2374] Only for Android: Added field `action` to the email push notification.
     This field represents whether it is a new message or a silent notification.
+  - [ET-2394] Expose message banners (new field in `WatchedConversation`)
 
 ### Changed
 
@@ -20,9 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-2368] Saving registered device is now generating new device token key pair if necessary.
   - [ET-2368] Registering device is now using device key instead of user key.
 
-### Added
+### Fixed
 
-  - [ET-2394] Expose message banners (new field in `WatchedConversation`)
+  - [ET-2288] Multiple Stash improvements for database stability and mitigating random crashes
+
 
 ## [0.55.0] - 2025-03-07
 
