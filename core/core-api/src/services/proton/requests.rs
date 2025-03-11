@@ -176,9 +176,6 @@ pub struct PostPaymentsTokensRequest {
     pub amount: u64,
     pub currency: Currency,
     pub payment: PaymentReceipt,
-
-    #[serde(rename = "PaymentMethodID")]
-    pub payment_method_id: PaymentMethodId,
 }
 
 /// Parameters required to create a payment subscription.
@@ -186,7 +183,7 @@ pub struct PostPaymentsTokensRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct PostPaymentsSubscriptionRequest {
     #[serde(flatten)]
-    pub subscription: Subscription,
+    pub subscription: NewSubscription,
 
     #[serde(flatten)]
     pub new_values: NewSubscriptionValues,

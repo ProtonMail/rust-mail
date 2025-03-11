@@ -172,6 +172,15 @@ pub struct GetPaymentsPlansResponse {
     pub default_cycle: PlanCycle,
 }
 
+/// The response containing the current subscription of the user.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetPaymentsSubscriptionResponse {
+    pub subscriptions: Vec<Subscription>,
+    pub upcoming_subscriptions: Vec<Subscription>,
+}
+
 /// The response containing the created payment token.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]

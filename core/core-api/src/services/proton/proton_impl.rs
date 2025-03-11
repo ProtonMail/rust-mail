@@ -292,15 +292,21 @@ impl ProtonCore for Proton {
         amount: u64,
         currency: Currency,
         payment: PaymentReceipt,
-        payment_method_id: PaymentMethodId,
     ) -> ApiServiceResult<PostPaymentsTokensResponse> {
         Ok(POST!("/payments/v5/tokens")
             .body_json(PostPaymentsTokensRequest {
                 amount,
                 currency,
                 payment,
-                payment_method_id,
             })?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_payments_subscription(&self) -> ApiServiceResult<GetPaymentsSubscriptionResponse> {
+        Ok(GET!("/payments/v5/subscription")
             .send_with(self)
             .await?
             .ok()?
@@ -309,7 +315,7 @@ impl ProtonCore for Proton {
 
     async fn post_payments_subscription(
         &self,
-        subscription: Subscription,
+        subscription: NewSubscription,
         new_values: NewSubscriptionValues,
     ) -> ApiServiceResult<()> {
         POST!("/payments/v5/subscription")

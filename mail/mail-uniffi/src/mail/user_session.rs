@@ -4,17 +4,15 @@ mod initialization;
 mod labels;
 
 use crate::core::datatypes::{
-    AccountDetails, ConnectionStatus, Currency, Id, NewSubscriptionValues, PaymentReceipt,
-    Subscription, User,
+    AccountDetails, ConnectionStatus, Currency, GetPaymentsPlansOptions, Id, NewSubscription,
+    NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, Subscriptions, User,
 };
-use crate::core::datatypes::{Plan, PlanCycle};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, spawn_async, MapIntoResult};
 use crate::{uniffi_async, LiveQueryCallback};
 use futures::TryFutureExt;
-use proton_api_core::services::proton::requests::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
 use proton_api_core::services::proton::ProtonCore;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
@@ -262,24 +260,19 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Post a payment token to the server.
     pub async fn post_payments_tokens(
         &self,
         amount: u64,
         currency: Currency,
         payment: PaymentReceipt,
-        payment_method_id: String,
     ) -> Result<PaymentToken, UserSessionError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
             let res = ctx
                 .api()
-                .post_payments_tokens(
-                    amount,
-                    currency.into(),
-                    payment.into(),
-                    payment_method_id.into(),
-                )
+                .post_payments_tokens(amount, currency.into(), payment.into())
                 .await?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentToken {
@@ -291,9 +284,30 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Get the current subscription of the user.
+    pub async fn get_payments_subscription(&self) -> Result<Subscriptions, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_payments_subscription().await?;
+            let current = res.subscriptions.into_iter().map(Into::into);
+            let upcoming = res.upcoming_subscriptions.into_iter().map(Into::into);
+
+            let subscriptions = Subscriptions {
+                current: current.collect(),
+                upcoming: upcoming.collect(),
+            };
+
+            Result::<_, RealProtonMailError>::Ok(subscriptions)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Post a payment subscription to the server.
     pub async fn post_payments_subscription(
         &self,
-        subscription: Subscription,
+        subscription: NewSubscription,
         new_values: NewSubscriptionValues,
     ) -> Result<(), UserSessionError> {
         let ctx = self.ctx()?;
@@ -326,55 +340,4 @@ pub struct DecryptedAttachment {
     pub attachment_metadata: AttachmentMetadata,
     /// The attachment content.
     pub data_path: String,
-}
-
-/// Options for getting payments plans.
-#[derive(uniffi::Record)]
-pub struct GetPaymentsPlansOptions {
-    pub currency: Option<String>,
-    pub vendor: Option<String>,
-    pub state: Option<u8>,
-    pub timestamp: Option<u64>,
-    pub fallback: Option<bool>,
-}
-
-impl From<GetPaymentsPlansOptions> for RealGetPaymentsPlansOptions {
-    fn from(filter: GetPaymentsPlansOptions) -> Self {
-        RealGetPaymentsPlansOptions {
-            currency: filter.currency,
-            vendor: filter.vendor,
-            state: filter.state,
-            timestamp: filter.timestamp,
-            fallback: filter.fallback,
-        }
-    }
-}
-
-impl From<RealGetPaymentsPlansOptions> for GetPaymentsPlansOptions {
-    fn from(filter: RealGetPaymentsPlansOptions) -> Self {
-        GetPaymentsPlansOptions {
-            currency: filter.currency,
-            vendor: filter.vendor,
-            state: filter.state,
-            timestamp: filter.timestamp,
-            fallback: filter.fallback,
-        }
-    }
-}
-
-/// Payment plans available to the user.
-#[derive(uniffi::Record)]
-pub struct PaymentsPlans {
-    /// The list of plans available to the user.
-    pub plans: Vec<Plan>,
-
-    /// What cycle to display by default
-    pub default_cycle: PlanCycle,
-}
-
-/// A payment token.
-#[derive(uniffi::Record)]
-pub struct PaymentToken {
-    pub token: String,
-    pub status: u64,
 }

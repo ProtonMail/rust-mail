@@ -240,6 +240,44 @@ pub enum PlanDecoration {
     },
 }
 
+/// Represents an active subscription.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Subscription {
+    #[serde(rename = "ID")]
+    pub id: SubscriptionId,
+    pub name: Option<String>,
+
+    pub title: String,
+    pub description: String,
+
+    pub cycle: Option<PlanCycle>,
+    pub cycle_description: Option<String>,
+
+    pub currency: Option<Currency>,
+    pub offer: Option<String>,
+
+    pub amount: Option<u64>,
+    pub renew_amount: Option<u64>,
+
+    pub discount: Option<i64>,
+    pub renew_discount: Option<i64>,
+
+    pub period_start: Option<u64>,
+    pub period_end: Option<u64>,
+    pub create_time: Option<u64>,
+    pub coupon_code: Option<String>,
+
+    pub renew: Option<u8>,
+    pub external: Option<u8>,
+    pub billing_platform: Option<u8>,
+
+    pub entitlements: Vec<PlanEntitlement>,
+    pub decorations: Vec<PlanDecoration>,
+}
+
 //  TRAITS
 //==============================================================================
 
@@ -436,6 +474,11 @@ declare_proton_id! {
 }
 
 declare_proton_id! {
-    /// Represents the Id of a customer.
+    /// Represents the Id of a payment method.
     pub PaymentMethodId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a subscription.
+    pub SubscriptionId
 }

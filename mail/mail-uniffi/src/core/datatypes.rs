@@ -1594,6 +1594,7 @@ impl From<RealUserSettings> for UserSettings {
     }
 }
 
+use proton_api_core::services::proton::common::Currency as RealCurrency;
 use proton_api_core::services::proton::common::Plan as RealPlan;
 use proton_api_core::services::proton::common::PlanCycle as RealPlanCycle;
 use proton_api_core::services::proton::common::PlanDecoration as RealPlanDecoration;
@@ -1603,11 +1604,12 @@ use proton_api_core::services::proton::common::PlanPrice as RealPlanPrice;
 use proton_api_core::services::proton::common::PlanType as RealPlanType;
 use proton_api_core::services::proton::common::PlanVendor as RealPlanVendor;
 use proton_api_core::services::proton::common::PlanVendorName as RealPlanVendorName;
-use proton_api_core::services::proton::common::{Currency as RealCurrency, CustomerId};
+use proton_api_core::services::proton::common::Subscription as RealSubscription;
 use proton_api_core::services::proton::request_data::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
+use proton_api_core::services::proton::request_data::NewSubscription as RealNewSubscription;
 use proton_api_core::services::proton::request_data::NewSubscriptionValues as RealNewSubscriptionValues;
 use proton_api_core::services::proton::request_data::PaymentReceipt as RealPaymentReceipt;
-use proton_api_core::services::proton::request_data::Subscription as RealSubscription;
+use proton_api_core::services::proton::requests::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
 
 /// Represents a single payment plan from the Proton API.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
@@ -1826,7 +1828,7 @@ impl From<RealPlanVendor> for PlanVendor {
     fn from(vendor: RealPlanVendor) -> Self {
         Self {
             product_id: vendor.product_id.into_inner(),
-            customer_id: vendor.customer_id.map(CustomerId::into_inner),
+            customer_id: vendor.customer_id.map(|id| id.into_inner()),
         }
     }
 }
@@ -1944,9 +1946,80 @@ impl From<AppleRecurringReceiptDetails> for RealAppleRecurringReceiptDetails {
     }
 }
 
-/// Subscription details
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Subscription {
+    pub id: String,
+    pub name: Option<String>,
+
+    pub title: String,
+    pub description: String,
+
+    pub cycle: Option<PlanCycle>,
+    pub cycle_description: Option<String>,
+
+    pub currency: Option<Currency>,
+    pub offer: Option<String>,
+
+    pub amount: Option<u64>,
+    pub renew_amount: Option<u64>,
+
+    pub discount: Option<i64>,
+    pub renew_discount: Option<i64>,
+
+    pub period_start: Option<u64>,
+    pub period_end: Option<u64>,
+    pub create_time: Option<u64>,
+    pub coupon_code: Option<String>,
+
+    pub renew: Option<u8>,
+    pub external: Option<u8>,
+
+    pub entitlements: Vec<PlanEntitlement>,
+    pub decorations: Vec<PlanDecoration>,
+}
+
+impl From<RealSubscription> for Subscription {
+    fn from(subscription: RealSubscription) -> Self {
+        let entitlements = subscription
+            .entitlements
+            .into_iter()
+            .map(From::from)
+            .collect();
+
+        let decorations = subscription
+            .decorations
+            .into_iter()
+            .map(From::from)
+            .collect();
+
+        Self {
+            id: subscription.id.into_inner(),
+            name: subscription.name,
+            title: subscription.title,
+            description: subscription.description,
+            cycle: subscription.cycle.map(From::from),
+            cycle_description: subscription.cycle_description,
+            currency: subscription.currency.map(From::from),
+            offer: subscription.offer,
+            amount: subscription.amount,
+            renew_amount: subscription.renew_amount,
+            discount: subscription.discount,
+            renew_discount: subscription.renew_discount,
+            period_start: subscription.period_start,
+            period_end: subscription.period_end,
+            create_time: subscription.create_time,
+            coupon_code: subscription.coupon_code,
+            renew: subscription.renew,
+            external: subscription.external,
+            entitlements,
+            decorations,
+        }
+    }
+}
+
+/// Subscription details
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct NewSubscription {
     pub cycle: PlanCycle,
     pub currency: Option<Currency>,
     pub currency_id: Option<i32>,
@@ -1957,8 +2030,8 @@ pub struct Subscription {
     pub gift_code: Option<String>,
 }
 
-impl From<Subscription> for RealSubscription {
-    fn from(subscription: Subscription) -> Self {
+impl From<NewSubscription> for RealNewSubscription {
+    fn from(subscription: NewSubscription) -> Self {
         Self {
             cycle: subscription.cycle.into(),
             currency: subscription.currency.map(Into::into),
@@ -1990,4 +2063,62 @@ impl From<NewSubscriptionValues> for RealNewSubscriptionValues {
             payment_method_id: values.payment_method_id.map(Into::into),
         }
     }
+}
+
+/// Options for getting payments plans.
+#[derive(uniffi::Record)]
+pub struct GetPaymentsPlansOptions {
+    pub currency: Option<String>,
+    pub vendor: Option<String>,
+    pub state: Option<u8>,
+    pub timestamp: Option<u64>,
+    pub fallback: Option<bool>,
+}
+
+impl From<GetPaymentsPlansOptions> for RealGetPaymentsPlansOptions {
+    fn from(filter: GetPaymentsPlansOptions) -> Self {
+        RealGetPaymentsPlansOptions {
+            currency: filter.currency,
+            vendor: filter.vendor,
+            state: filter.state,
+            timestamp: filter.timestamp,
+            fallback: filter.fallback,
+        }
+    }
+}
+
+impl From<RealGetPaymentsPlansOptions> for GetPaymentsPlansOptions {
+    fn from(filter: RealGetPaymentsPlansOptions) -> Self {
+        GetPaymentsPlansOptions {
+            currency: filter.currency,
+            vendor: filter.vendor,
+            state: filter.state,
+            timestamp: filter.timestamp,
+            fallback: filter.fallback,
+        }
+    }
+}
+
+/// Payment plans available to the user.
+#[derive(uniffi::Record)]
+pub struct PaymentsPlans {
+    /// The list of plans available to the user.
+    pub plans: Vec<Plan>,
+
+    /// What cycle to display by default
+    pub default_cycle: PlanCycle,
+}
+
+/// A payment token.
+#[derive(uniffi::Record)]
+pub struct PaymentToken {
+    pub token: String,
+    pub status: u64,
+}
+
+/// Current subscriptions.
+#[derive(uniffi::Record)]
+pub struct Subscriptions {
+    pub current: Vec<Subscription>,
+    pub upcoming: Vec<Subscription>,
 }

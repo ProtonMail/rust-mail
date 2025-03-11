@@ -38,6 +38,7 @@ pub struct HumanVerificationData {
 #[derive(Clone, Debug, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case", tag = "Type")]
 pub enum PaymentReceipt {
+    #[serde(rename_all = "PascalCase")]
     AppleRecurring {
         details: AppleRecurringReceiptDetails,
     },
@@ -45,29 +46,33 @@ pub enum PaymentReceipt {
 
 #[derive(Clone, Debug, Serialize, Eq, PartialEq)]
 pub struct AppleRecurringReceiptDetails {
-    #[serde(rename = "transactionID")]
+    #[serde(rename = "TransactionID")]
     pub transaction_id: TransactionId,
 
-    #[serde(rename = "productID")]
+    #[serde(rename = "ProductID")]
     pub product_id: ProductId,
 
-    #[serde(rename = "bundleID")]
+    #[serde(rename = "BundleID")]
     pub bundle_id: BundleId,
 
+    #[serde(rename = "Receipt")]
     pub receipt: String,
 }
 
 /// Subscription details
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
-pub struct Subscription {
+pub struct NewSubscription {
     pub cycle: PlanCycle,
+
     pub currency: Option<Currency>,
     #[serde(rename = "CurrencyID")]
     pub currency_id: Option<i32>,
+
     pub plans: Option<HashMap<String, i32>>,
     #[serde(rename = "PlanIDs")]
     pub plan_ids: Option<Vec<i32>>,
+
     pub codes: Option<Vec<String>>,
     pub coupon_code: Option<String>,
     pub gift_code: Option<String>,

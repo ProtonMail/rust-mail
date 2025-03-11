@@ -450,8 +450,14 @@ pub trait ProtonCore {
         amount: u64,
         currency: Currency,
         payment: PaymentReceipt,
-        payment_method_id: PaymentMethodId,
     ) -> ApiServiceResult<PostPaymentsTokensResponse>;
+
+    /// Get the current active subscription of the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_subscription(&self) -> ApiServiceResult<GetPaymentsSubscriptionResponse>;
 
     /// Create a payment subscription.
     ///
@@ -460,7 +466,7 @@ pub trait ProtonCore {
     /// Returns an error if the request fails.
     async fn post_payments_subscription(
         &self,
-        subscription: Subscription,
+        subscription: NewSubscription,
         new_values: NewSubscriptionValues,
     ) -> ApiServiceResult<()>;
 }
