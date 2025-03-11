@@ -7,7 +7,7 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
-use proton_api_core::services::proton::common::{AuthId, UserId};
+use proton_api_core::services::proton::common::{SessionId, UserId};
 use proton_api_core::store::{AuthInfo, Store, StoreError, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;
@@ -21,7 +21,7 @@ pub struct AuthStore {
     stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_id: Option<UserId>,
-    session_id: Option<AuthId>,
+    session_id: Option<SessionId>,
     name_or_addr: Option<String>,
 }
 
@@ -30,7 +30,7 @@ impl AuthStore {
         stash: &Stash,
         key_chain: Arc<dyn KeyChain>,
         user_id: Option<UserId>,
-        session_id: Option<AuthId>,
+        session_id: Option<SessionId>,
     ) -> Self {
         Self {
             key_chain,
@@ -133,7 +133,7 @@ impl Store for AuthStore {
 
         // Get the user and session IDs from the incoming auth session.
         let user_id = UserId::from(auth.user_id().context("missing user ID")?);
-        let session_id = AuthId::from(auth.uid().context("missing session ID")?);
+        let session_id = SessionId::from(auth.uid().context("missing session ID")?);
         let tokens = auth.tokens().context("missing tokens")?;
 
         // Get the encryption key.

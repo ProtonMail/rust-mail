@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use crate::core::datatypes::AccountDetails;
-use proton_api_core::services::proton::common::AuthId;
+use proton_api_core::services::proton::common::SessionId;
 use proton_core_common::{
     datatypes::{PasswordMode, TfaStatus},
     db::account::{CoreAccount, CoreSession},
@@ -157,8 +157,8 @@ impl From<CoreAccountState> for StoredAccountState {
 
 impl From<&CoreAccountState> for StoredAccountState {
     fn from(value: &CoreAccountState) -> Self {
-        fn from_inner(value: &[AuthId]) -> Vec<String> {
-            value.iter().cloned().map(AuthId::into_inner).collect()
+        fn from_inner(value: &[SessionId]) -> Vec<String> {
+            value.iter().cloned().map(SessionId::into_inner).collect()
         }
 
         match value {

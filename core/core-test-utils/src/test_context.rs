@@ -3,7 +3,7 @@ use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::human_verification::ChallengeObserver;
-use proton_api_core::services::proton::common::{AuthId, EventId, UserId};
+use proton_api_core::services::proton::common::{EventId, SessionId, UserId};
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
@@ -43,8 +43,8 @@ use wiremock::MockServer;
 pub trait BaseTestContext {
     /// Generate a test UID.
     #[must_use]
-    fn test_uid() -> AuthId {
-        AuthId::from("TEST_UID")
+    fn test_uid() -> SessionId {
+        SessionId::from("TEST_UID")
     }
 
     /// Generate a test user ID.

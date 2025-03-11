@@ -4,7 +4,7 @@ use crate::draft::{Draft, ReplyMode, SaveOrSendError};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
-use proton_api_core::services::proton::common::{AddressId, AuthId};
+use proton_api_core::services::proton::common::{AddressId, SessionId};
 use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
@@ -262,7 +262,7 @@ pub fn html_to_text(input: impl AsRef<str>) -> String {
 /// never been processed before so we need to preform more operations.
 ///
 /// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_reply(session_id: &AuthId, mime_type: MimeType, body: &mut String) {
+pub fn sanitize_draft_reply(session_id: &SessionId, mime_type: MimeType, body: &mut String) {
     // This is functionality equivalent to `sanitize_draft_open` today, but
     // this can potentially change in the future with different behaviors.
     if let Some(mut transformer) = new_html_transformer(mime_type, body) {
@@ -277,7 +277,7 @@ pub fn sanitize_draft_reply(session_id: &AuthId, mime_type: MimeType, body: &mut
 ///
 /// Only html content is sanitized, plain text is ignored.
 pub fn sanitize_draft_open(
-    session_id: &AuthId,
+    session_id: &SessionId,
     mime_type: MimeType,
     decrypted_message: &mut String,
 ) {

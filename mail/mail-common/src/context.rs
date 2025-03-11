@@ -6,7 +6,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::{AuthId, UserId};
+use proton_api_core::services::proton::common::{SessionId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
@@ -39,7 +39,7 @@ use tokio::task::{JoinError, JoinHandle};
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
     #[error("Session with id {0} is missing in the DB")]
-    SessionMissing(AuthId),
+    SessionMissing(SessionId),
     #[error("Account with user id {0} is missing in the DB")]
     AccountMissing(UserId),
     #[error("A Cryptography error occurred")]
@@ -260,7 +260,7 @@ impl MailContext {
     pub async fn resume_login_flow(
         &self,
         user_id: UserId,
-        session_id: AuthId,
+        session_id: SessionId,
         challenge: Option<ChallengeObserver>,
     ) -> MailContextResult<Flow> {
         let flow = self
@@ -424,7 +424,10 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(&self, session_id: AuthId) -> MailContextResult<Option<CoreSession>> {
+    pub async fn get_session(
+        &self,
+        session_id: SessionId,
+    ) -> MailContextResult<Option<CoreSession>> {
         Ok(self.core_context.get_session(session_id).await?)
     }
 
@@ -435,7 +438,7 @@ impl MailContext {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
-        session_id: AuthId,
+        session_id: SessionId,
     ) -> MailContextResult<Option<CoreSessionState>> {
         Ok(self.core_context.get_session_state(session_id).await?)
     }

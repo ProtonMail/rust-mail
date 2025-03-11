@@ -18,7 +18,7 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use derive_more::{AsRef, Deref};
 use proton_api_core::auth::{Tokens, UserKeySecret};
-use proton_api_core::services::proton::common::{AuthId, UserId};
+use proton_api_core::services::proton::common::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
@@ -298,7 +298,7 @@ impl TableObserver for CoreAccountWatcher {
 pub struct CoreSession {
     /// Remote ID of the session (i.e. the API Auth UID).
     #[IdField]
-    pub remote_id: AuthId,
+    pub remote_id: SessionId,
 
     /// Account ID the session is associated with (i.e. the API User ID).
     #[DbField]
@@ -362,7 +362,7 @@ impl CoreSession {
     /// Returns an error if the encryption fails.
     pub fn new(
         user_id: UserId,
-        session_id: AuthId,
+        session_id: SessionId,
         tokens: &Tokens,
         key: &SessionEncryptionKey,
     ) -> Result<Self, CoreSessionError> {

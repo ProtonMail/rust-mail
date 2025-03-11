@@ -111,7 +111,7 @@ impl Flow {
     pub fn new_from_tfa(
         session: Session,
         user_id: UserId,
-        session_id: AuthId,
+        session_id: SessionId,
         pass: Option<String>,
     ) -> Self {
         let (client, parts) = session.to_parts();
@@ -122,7 +122,7 @@ impl Flow {
 
     /// Resume the login flow at the mailbox password step.
     #[must_use]
-    pub fn new_from_mbp(session: Session, user_id: UserId, session_id: AuthId) -> Self {
+    pub fn new_from_mbp(session: Session, user_id: UserId, session_id: SessionId) -> Self {
         let (client, parts) = session.to_parts();
         let state = State::new_from_mbp(client, parts, user_id, session_id);
 
@@ -230,8 +230,8 @@ impl Flow {
     /// # Errors
     ///
     /// Returns an error if the session ID is not yet known.
-    pub fn session_id(&self) -> Result<&AuthId, LoginError> {
-        self.state.auth_id()
+    pub fn session_id(&self) -> Result<&SessionId, LoginError> {
+        self.state.session_id()
     }
 
     /// Try to transition the flow to the next state.
@@ -261,12 +261,12 @@ impl Flow {
                 self.state = State::new(client, parts);
             }
 
-            State::TfaRetry(user_id, auth_id, pass) => {
-                self.state = State::new_from_tfa(client, parts, user_id, auth_id, pass);
+            State::TfaRetry(user_id, session_id, pass) => {
+                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass);
             }
 
-            State::MbpRetry(user_id, auth_id) => {
-                self.state = State::new_from_mbp(client, parts, user_id, auth_id);
+            State::MbpRetry(user_id, session_id) => {
+                self.state = State::new_from_mbp(client, parts, user_id, session_id);
             }
 
             state => self.state = state,

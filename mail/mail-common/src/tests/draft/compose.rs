@@ -143,7 +143,7 @@ async fn sanitize_draft_reply_html() {
     draft.body = to_save;
 
     // On open should re-instate the proxy of images.
-    let session_id = AuthId::from("auth-id");
+    let session_id = SessionId::from("auth-id");
     sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
 
     // This should be identical before the save.
@@ -171,7 +171,7 @@ async fn sanitize_draft_reply_plain_text() {
     assert_eq!(to_save, sanitized);
 
     // On open should also be a noo-oop;
-    let session_id = AuthId::from("auth-id");
+    let session_id = SessionId::from("auth-id");
     sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
 
     // This should be identical before the save.
@@ -255,7 +255,7 @@ async fn create_reply_with_mime_and_body(
         in_flight: Default::default(),
     };
 
-    let session_id = AuthId::from("auth-id");
+    let session_id = SessionId::from("auth-id");
 
     let resolver = NullContactGroupResolver {};
     let (draft, attachments) = Draft::new_draft_reply(

@@ -1,7 +1,7 @@
-use crate::login::state::{HasAuthId, HasUserId, StateData};
+use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{state::State, LoginError};
 use crate::service::ApiServiceError;
-use crate::services::proton::common::{AuthId, UserId};
+use crate::services::proton::common::{SessionId, UserId};
 use derive_more::From;
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};
@@ -33,7 +33,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.auth_id, pass),
+                State::TfaRetry(data.user_id, data.session_id, pass),
                 LoginError::FlowTotp(err),
             )),
         }
@@ -50,7 +50,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.auth_id, pass),
+                State::TfaRetry(data.user_id, data.session_id, pass),
                 LoginError::FlowTotp(err),
             )),
         }
@@ -79,9 +79,9 @@ impl HasUserId for WantTfa {
     }
 }
 
-impl HasAuthId for WantTfa {
-    fn auth_id(&self) -> &AuthId {
-        &self.data.auth_id
+impl HasSessionId for WantTfa {
+    fn session_id(&self) -> &SessionId {
+        &self.data.session_id
     }
 }
 

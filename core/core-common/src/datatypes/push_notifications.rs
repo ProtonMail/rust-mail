@@ -1,5 +1,5 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
-use proton_api_core::services::proton::common::AuthId;
+use proton_api_core::services::proton::common::SessionId;
 use proton_crypto_account::{keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync};
 use proton_crypto_notifications::{
     DecryptableNotification, NotificationError, PGPEncryptedNotification,
@@ -87,7 +87,7 @@ impl StoreInKeyChain for StoredDevicePrivateKey {
 pub struct DecryptedPushNotification<T> {
     /// Which account is recepient of the message
     ///
-    pub auth_id: AuthId,
+    pub session_id: SessionId,
     /// Decrypted notification.
     ///
     /// This notification is BU agnostic. You may want to deserialize the internal data further.
@@ -103,7 +103,7 @@ pub struct DecryptedPushNotification<T> {
 pub struct EncryptedPushNotification {
     /// Which account is recepient of the message
     #[serde(rename = "UID")]
-    pub auth_id: AuthId,
+    pub session_id: SessionId,
     /// Message that is encrypted using PGP key.
     /// Not only the body of the message is encrypted, but metadata as well.
     pub encrypted_message: String,
@@ -134,7 +134,7 @@ impl EncryptedPushNotification {
             .inspect_err(|e| error!("Failed to decrypt push notification: {e:?}"))?;
 
         Ok(DecryptedPushNotification {
-            auth_id: self.auth_id,
+            session_id: self.session_id,
             notification,
         })
     }

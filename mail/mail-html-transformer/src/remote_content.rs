@@ -129,16 +129,16 @@ const PROXY_BASE_URL: &str = "https://mail.proton.me/api/core/v4/images";
 
 /// Proxies all images through proton's proxy.
 ///
-/// `auth_id` must be a valid `UID`.
+/// `session_id` must be a valid `UID`.
 #[allow(clippy::missing_panics_doc)] // url parsing should not fail
-pub fn proxy_images(document: NodeRef, auth_id: &str) -> u64 {
+pub fn proxy_images(document: NodeRef, session_id: &str) -> u64 {
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
     let attribute_list = AttributeInfo::default_list();
 
     let mut base = Url::parse(PROXY_BASE_URL).expect("Should always be valid");
-    base.query_pairs_mut().append_pair("UID", auth_id);
+    base.query_pairs_mut().append_pair("UID", session_id);
     let mut count = 0;
 
     for node in document.traverse_inclusive() {

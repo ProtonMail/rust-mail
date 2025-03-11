@@ -4,7 +4,7 @@ use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
 use crate::login::LoginError;
-use crate::services::proton::common::{AuthId, UserId};
+use crate::services::proton::common::{SessionId, UserId};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::session::{Session, SessionParts};
@@ -39,7 +39,7 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(UserId, AuthId, Option<String>),
+    TfaRetry(UserId, SessionId, Option<String>),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -51,7 +51,7 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantMbp` state.
     #[debug("MbpRetry")]
-    MbpRetry(UserId, AuthId),
+    MbpRetry(UserId, SessionId),
 
     /// The flow is complete.
     #[debug("Complete")]
@@ -129,8 +129,8 @@ impl State {
     }
 
     /// Get the session ID that has been (or is in the process of) being created.
-    pub fn auth_id(&self) -> Result<&AuthId, LoginError> {
-        let state: &dyn HasAuthId = match self {
+    pub fn session_id(&self) -> Result<&SessionId, LoginError> {
+        let state: &dyn HasSessionId = match self {
             Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
             Self::Complete(state) => state,
@@ -138,7 +138,7 @@ impl State {
             _ => return Err(LoginError::InvalidState),
         };
 
-        Ok(state.auth_id())
+        Ok(state.session_id())
     }
 }
 
@@ -154,13 +154,13 @@ impl State {
         client: Proton,
         parts: SessionParts,
         user_id: UserId,
-        auth_id: AuthId,
+        session_id: SessionId,
         pass: Option<String>,
     ) -> Self {
         let data = StateData {
             parts,
             user_id,
-            auth_id,
+            session_id,
         };
 
         Self::want_tfa(client.auth().into(), data, pass)
@@ -171,12 +171,12 @@ impl State {
         client: Proton,
         parts: SessionParts,
         user_id: UserId,
-        auth_id: AuthId,
+        session_id: SessionId,
     ) -> Self {
         let data = StateData {
             parts,
             user_id,
-            auth_id,
+            session_id,
         };
 
         Self::want_mbp(client, data)
@@ -258,7 +258,7 @@ impl State {
 pub(crate) struct StateData {
     parts: SessionParts,
     user_id: UserId,
-    auth_id: AuthId,
+    session_id: SessionId,
 }
 
 /// A trait for states in which the user ID is known.
@@ -267,8 +267,8 @@ trait HasUserId {
 }
 
 /// A trait for states in which the auth ID is known.
-trait HasAuthId {
-    fn auth_id(&self) -> &AuthId;
+trait HasSessionId {
+    fn session_id(&self) -> &SessionId;
 }
 
 /// A helper trait for working with user keys.
