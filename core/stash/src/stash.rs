@@ -27,6 +27,7 @@ use core::future::Future;
 use core::mem;
 use core::ops::Deref;
 use core::time::Duration;
+use derivative::Derivative;
 use flume::{unbounded, Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
 use r2d2::Pool;
@@ -202,27 +203,23 @@ pub enum StashError {
 /// the result is the number of rows affected, along with other similar
 /// commands.
 ///
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
+    #[derivative(Debug = "ignore")]
     sender: OneshotSender<Result<usize, StashError>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
     /// between threads.
+    #[derivative(Debug = "ignore")]
     params: Vec<Box<dyn ToSql + Send>>,
 
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
-}
-
-impl Debug for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut builder = f.debug_struct("Instruction");
-        let _ = builder.field("query", &self.query);
-        builder.finish_non_exhaustive()
-    }
 }
 
 impl Instruction {
@@ -278,32 +275,29 @@ pub struct Notification {
 /// the results can be converted into the desired type. This is because the
 /// [`Rows`] type returned by the [`rusqlite`] library is not thread-safe.
 ///
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
+    #[derivative(Debug = "ignore")]
     sender: OneshotSender<Result<DbRecords, StashError>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
+    #[derivative(Debug = "ignore")]
     converter: Converter,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
     /// between threads.
+    #[derivative(Debug = "ignore")]
     params: Vec<Box<dyn ToSql + Send>>,
 
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
-}
-
-impl Debug for Query {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut builder = f.debug_struct("Query");
-        let _ = builder.field("query", &self.query);
-        builder.finish_non_exhaustive()
-    }
 }
 
 impl Query {
@@ -433,7 +427,7 @@ impl Stash {
         }
         let manager = path
             .map_or_else(
-                StashConnectionManager::memory,
+                StashConnectionManager::tmp_file,
                 StashConnectionManager::file,
             )
             .with_init(|connection| {
@@ -441,7 +435,6 @@ impl Stash {
                     .execute_batch(&formatdoc!("
                         PRAGMA journal_mode = WAL;         -- Better write-concurrency
                         PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
-                        PRAGMA wal_autocheckpoint = 1000;  -- Write WAL changes back every 1000 pages, approx. 1MB
                         PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
                         PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
                         PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints

@@ -8,7 +8,7 @@ use uuid::Uuid;
 #[derive(Debug)]
 enum Source {
     File(PathBuf),
-    Memory(TempDir),
+    TmpFile(TempDir),
 }
 
 type InitFn = dyn Fn(&mut Connection) -> Result<(), rusqlite::Error> + Send + Sync + 'static;
@@ -49,12 +49,12 @@ impl StashConnectionManager {
     /// Since the production usage is exclusively file database it is nice bonus to run all tests in the
     /// file.
     ///
-    pub fn memory() -> Self {
+    pub fn tmp_file() -> Self {
         let tmp_dir =
             TempDir::new(Uuid::new_v4().to_string().as_str()).expect("failed to create temp dir");
 
         Self {
-            source: Source::Memory(tmp_dir),
+            source: Source::TmpFile(tmp_dir),
             flags: OpenFlags::default(),
             init: None,
         }
@@ -80,7 +80,7 @@ impl r2d2::ManageConnection for StashConnectionManager {
     fn connect(&self) -> Result<Connection, Error> {
         match self.source {
             Source::File(ref path) => Connection::open_with_flags(path, self.flags),
-            Source::Memory(ref tmp) => {
+            Source::TmpFile(ref tmp) => {
                 Connection::open_with_flags(tmp.path().join("test"), self.flags)
             }
         }
