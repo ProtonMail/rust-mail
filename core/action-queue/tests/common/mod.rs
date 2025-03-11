@@ -5,7 +5,7 @@ use proton_action_queue::queue::Queue;
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether};
+use stash::stash::{Bond, Stash, StashConfiguration, StashError, Tether};
 
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
@@ -20,7 +20,7 @@ pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
 }
 
 pub async fn new_stash() -> Stash {
-    let stash = Stash::new(None).unwrap();
+    let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut conn = stash.connection();
     let tx = conn.transaction().await.unwrap();
     tx.ext_create_table().await.unwrap();

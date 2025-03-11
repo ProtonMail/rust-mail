@@ -7,11 +7,11 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+derivative = { workspace = true }
 flume = { workspace = true }
 indoc = { workspace = true }
 parking_lot = { workspace = true }
 r2d2 = "0.8.10"
-r2d2_sqlite = { version = "0.25.0", features = ["bundled"] }
 rusqlite = { workspace = true, features = ["hooks"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -22,6 +22,8 @@ tracing = { workspace = true }
 fastrand = "2.3.0"
 sqlite-watcher = { workspace = true }
 itertools = { workspace = true }
+uuid = { workspace = true }
+tempdir = { workspace = true }
 
 [dev-dependencies]
 tempdir = { workspace = true }

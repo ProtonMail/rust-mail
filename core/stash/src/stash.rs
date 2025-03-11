@@ -18,6 +18,7 @@
 //! to interface with sqlite.
 //!
 
+use crate::connection_manager::StashConnectionManager;
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
 use anyhow::{anyhow, Context};
 use core::fmt;
@@ -26,10 +27,10 @@ use core::future::Future;
 use core::mem;
 use core::ops::Deref;
 use core::time::Duration;
+use derivative::Derivative;
 use flume::{unbounded, Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
-use r2d2::{Pool, PooledConnection};
-use r2d2_sqlite::SqliteConnectionManager;
+use r2d2::Pool;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
@@ -43,7 +44,7 @@ use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
+use std::thread::{self, yield_now};
 use thiserror::Error;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace, warn};
@@ -56,13 +57,17 @@ type StdSender<T> = flume::Sender<T>;
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The maximum number of simultaneous connections allowed to the database. This
-/// defaults to 10.
+/// defaults to 100.
 // TODO: Test perf of lower values.
 const MAX_CONNECTIONS: u32 = 100;
+
+/// The maximum number of opened idle connections.
+const IDLE_CONNECTIONS: u32 = 5;
 
 /// A type alias for a field convertor function.
 type Converter = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>;
 
+#[derive(Debug)]
 /// These are all the operations allowed on a tether.
 enum Operation {
     /// Only the operations related to a transaction.
@@ -89,6 +94,7 @@ enum OperationTransaction {
     RollbackAbort,
 }
 
+#[derive(Debug)]
 enum OperationExec {
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
@@ -197,14 +203,18 @@ pub enum StashError {
 /// the result is the number of rows affected, along with other similar
 /// commands.
 ///
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
+    #[derivative(Debug = "ignore")]
     sender: OneshotSender<Result<usize, StashError>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
     /// between threads.
+    #[derivative(Debug = "ignore")]
     params: Vec<Box<dyn ToSql + Send>>,
 
     /// The query to execute. This is in raw SQL format ready for parameter
@@ -265,19 +275,24 @@ pub struct Notification {
 /// the results can be converted into the desired type. This is because the
 /// [`Rows`] type returned by the [`rusqlite`] library is not thread-safe.
 ///
+#[derive(Derivative)]
+#[derivative(Debug)]
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
+    #[derivative(Debug = "ignore")]
     sender: OneshotSender<Result<DbRecords, StashError>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
+    #[derivative(Debug = "ignore")]
     converter: Converter,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
     /// between threads.
+    #[derivative(Debug = "ignore")]
     params: Vec<Box<dyn ToSql + Send>>,
 
     /// The query to execute. This is in raw SQL format ready for parameter
@@ -315,6 +330,25 @@ pub struct StashConfiguration<'a> {
     pub path: Option<&'a Path>,
     /// How many conections are used. If `None`, [`MAX_CONNECTIONS`] is used.
     pub pool_size: Option<u32>,
+    /// How many idle connections are allowed to be maintained before new connections are established
+    /// For `None` the default of [`IDLE_CONNECTIONS`]  or [`pool_size`] will be used whichever is lower.
+    pub idle_count: Option<u32>,
+}
+
+#[cfg(any(test, debug_assertions))]
+impl<'a> StashConfiguration<'a> {
+    pub fn test() -> Self {
+        Self {
+            idle_count: Some(0),
+            ..Default::default()
+        }
+    }
+
+    pub fn test_with_path(path: &'a Path) -> Self {
+        let mut config = Self::test();
+        config.path = Some(path);
+        config
+    }
 }
 
 impl<'a> From<Option<&'a PathBuf>> for StashConfiguration<'a> {
@@ -337,7 +371,7 @@ pub struct Stash {
     watcher: Arc<Watcher>,
 
     /// The pool used for database connections.
-    pool: Pool<SqliteConnectionManager>,
+    pool: Pool<StashConnectionManager>,
 }
 
 impl Debug for Stash {
@@ -370,9 +404,8 @@ impl Stash {
     /// the database or connection pool.
     ///
     pub fn new<'a>(config: impl Into<StashConfiguration<'a>>) -> Result<Self, StashError> {
-        let config = config.into();
         Ok(Self {
-            pool: Self::make_pool(config.path, config.pool_size),
+            pool: Self::make_pool(config.into()),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
         })
     }
@@ -381,20 +414,46 @@ impl Stash {
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
     #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
-    fn make_pool(path: Option<&Path>, pool_size: Option<u32>) -> Pool<SqliteConnectionManager> {
-        #[allow(clippy::single_match_else)]
+    fn make_pool(config: StashConfiguration<'_>) -> Pool<StashConnectionManager> {
+        let StashConfiguration {
+            path,
+            pool_size,
+            idle_count,
+        } = config;
+
         match path {
             Some(p) => debug!("New Stash with file: {:?}", p),
             None => debug!("New Stash with in-memory database"),
         }
-        let manager = path.map_or_else(
-            SqliteConnectionManager::memory,
-            SqliteConnectionManager::file,
-        );
+        let manager = path
+            .map_or_else(
+                StashConnectionManager::tmp_file,
+                StashConnectionManager::file,
+            )
+            .with_init(|connection| {
+                connection
+                    .execute_batch(&formatdoc!("
+                        PRAGMA journal_mode = WAL;         -- Better write-concurrency
+                        PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
+                        PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
+                        PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
+                        PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
+                        PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
+                        PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
+                    ", BUSY_TIMEOUT.as_millis()))?;
+                State::start_tracking(connection)?;
+
+                Ok(())
+            });
+
         let pool_size = pool_size.unwrap_or(MAX_CONNECTIONS);
+        let idle_count = idle_count
+            .or(Some(IDLE_CONNECTIONS))
+            .map(|idle| std::cmp::min(idle, pool_size));
 
         Pool::builder()
             .max_size(pool_size)
+            .min_idle(idle_count)
             .build(manager)
             .expect("Could not open that many connections")
     }
@@ -899,8 +958,8 @@ impl Tether {
     ///
     fn new(stash: &Stash) -> Self {
         let (tether_sender, tether_receiver) = flume::unbounded::<Operation>();
-
         let pool = stash.pool.clone();
+
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
@@ -909,21 +968,18 @@ impl Tether {
         let thread_builder = thread::Builder::new().name("Tether worker".to_string());
         _ = thread_builder.spawn(move || {
             debug!("Creating worker thread");
-            // The first time an operation is received, we attempt to acquire a database
-            // connection from the pool. This is done lazily so that creating tethers is sync.
-            // Note that most of this logic could be avoided if we made tether cration async.
 
-            let connection = || {
-                let mut connection = pool.get().context("Could not connect to the database")?;
-                Self::conn_configuration(&connection)
-                    .context("Could not set connection configuration.")?;
-                State::start_tracking(&mut *connection)
-                    .context("Critical error: Failed to set watcher on the connection")?;
-                debug!("Success connecting to db");
-                Ok::<_, StashError>(connection)
-            };
+            let connection = pool
+                .get()
+                .context("Could not connect to the database")
+                .map_err(StashError::from);
 
-            let (first_operation, connection) = match (tether_receiver.recv(), connection()) {
+            // There might be a race between initializing connection
+            // and handling first operation. Yield ensures to pause a thread for
+            // just enough to shuffle execution order and ensure connection is ready to use.
+            yield_now();
+
+            let (first_operation, connection) = match (tether_receiver.recv(), connection) {
                 (Ok(op), Ok(con)) => (op, con),
                 (Ok(op), Err(e)) => {
                     error!("Critical error creating worker {e:?}");
@@ -976,22 +1032,6 @@ impl Tether {
             watcher: stash.watcher.clone(),
             state: Some(State::new()),
         }
-    }
-
-    fn conn_configuration(
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(), SqliteError> {
-        connection
-        .execute_batch(&formatdoc!("
-            PRAGMA journal_mode = WAL;         -- Better write-concurrency
-            PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
-            PRAGMA wal_autocheckpoint = 1000;  -- Write WAL changes back every 1000 pages, approx. 1MB
-            PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
-            PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
-            PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
-            PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
-            PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
-        ", BUSY_TIMEOUT.as_millis()))
     }
 }
 
@@ -1242,7 +1282,7 @@ struct TetheredWorkerStateMachine<'a> {
     /// The transaction that might or might not be active
     transaction: Option<Transaction<'a>>,
     /// The sender we use to communicate with the main worker thread.
-    connection: &'a PooledConnection<SqliteConnectionManager>,
+    connection: &'a Connection,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {

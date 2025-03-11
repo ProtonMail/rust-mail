@@ -6,7 +6,7 @@ use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
-use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
+use proton_action_queue::queue::{ActionError, AsActionError, BroadcastMessage, QueuedError};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -162,8 +162,14 @@ async fn revert_cancels_all_dependent_actions() {
         value4
     );
 
+    let mut broadcast = queue.new_broadcast_receiver();
+
     // Cancel
     executor.execute_all().await.expect_err("Should fail");
+
+    let output = broadcast.recv().await.unwrap();
+    assert!(matches!(output, BroadcastMessage::Cancelled(_)));
+
     // Check state is reverted.
     assert_eq!(
         queue

@@ -10,7 +10,7 @@ use proton_api_core::services::proton::common::{AuthId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, Tether};
+use stash::stash::{Stash, StashConfiguration, Tether};
 use std::io::stdout;
 use tracing::subscriber::set_global_default;
 use tracing::Level;
@@ -28,7 +28,7 @@ async fn new_test_connection() -> Stash {
             .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
-    let stash = Stash::new(None).expect("Failed to create Stash");
+    let stash = Stash::new(StashConfiguration::test()).expect("Failed to create Stash");
     migrate_account_db(&stash).await.expect("failed to migrate");
     stash
 }
