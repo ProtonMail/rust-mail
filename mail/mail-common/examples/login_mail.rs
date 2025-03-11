@@ -3,6 +3,7 @@ use futures::TryFutureExt;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::services::proton::muon::util::BoxErrExt;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
@@ -99,6 +100,8 @@ impl LoginCmd {
             .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
             .map_err(|(_, err)| err)
             .await?;
+
+        println!("{:#?}", user_ctx.api().get_payments_subscription().await?);
 
         Ok(())
     }

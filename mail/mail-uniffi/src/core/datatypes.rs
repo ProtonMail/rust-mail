@@ -2048,10 +2048,9 @@ impl From<NewSubscription> for RealNewSubscription {
 /// New subscription values
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct NewSubscriptionValues {
-    pub amount: Option<i32>,
+    pub amount: Option<u64>,
     pub payments: Option<Vec<String>>,
     pub payment_token: Option<String>,
-    pub payment_method_id: Option<String>,
 }
 
 impl From<NewSubscriptionValues> for RealNewSubscriptionValues {
@@ -2060,7 +2059,6 @@ impl From<NewSubscriptionValues> for RealNewSubscriptionValues {
             amount: values.amount,
             payments: values.payments,
             payment_token: values.payment_token,
-            payment_method_id: values.payment_method_id.map(Into::into),
         }
     }
 }

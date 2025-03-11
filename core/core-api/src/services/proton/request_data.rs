@@ -82,9 +82,7 @@ pub struct NewSubscription {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub struct NewSubscriptionValues {
-    pub amount: Option<i32>,
+    pub amount: Option<u64>,
     pub payments: Option<Vec<String>>,
     pub payment_token: Option<String>,
-    #[serde(rename = "PaymentMethodID")]
-    pub payment_method_id: Option<PaymentMethodId>,
 }
