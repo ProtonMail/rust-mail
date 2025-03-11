@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.55.1] - 2025-03-11
+
+### Fixed
+
+  - [ET-2288] Multiple Stash improvements for database stability and mitigating random crashes
+
+
 ## [0.55.0] - 2025-03-07
 
 ### Added
