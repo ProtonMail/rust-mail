@@ -1824,6 +1824,7 @@ pub struct PlanVendor {
     pub customer_id: Option<String>,
 }
 
+#[allow(clippy::redundant_closure_for_method_calls)]
 impl From<RealPlanVendor> for PlanVendor {
     fn from(vendor: RealPlanVendor) -> Self {
         Self {
