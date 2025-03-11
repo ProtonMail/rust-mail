@@ -1,6 +1,6 @@
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
-use crate::services::proton::prelude::{AuthId, UserId};
+use crate::services::proton::prelude::{SessionId, UserId};
 use crate::session::SessionParts;
 use crate::store::{AuthInfo, MbpMode, TfaMode};
 use futures::TryFutureExt;
@@ -79,7 +79,7 @@ impl WantLogin {
 fn get_auth_info(data: &LoginFlowData, totp: bool, fido: bool) -> AuthInfo {
     AuthInfo {
         user_id: UserId::from(data.user_id.clone()),
-        session_id: AuthId::from(data.session_id.clone()),
+        session_id: SessionId::from(data.session_id.clone()),
         tfa_mode: TfaMode::new(totp, fido),
         mbp_mode: MbpMode::from(data.password_mode),
     }
@@ -89,6 +89,6 @@ fn get_state_data(data: &LoginFlowData, parts: SessionParts) -> StateData {
     StateData {
         parts,
         user_id: UserId::from(data.user_id.clone()),
-        auth_id: AuthId::from(data.session_id.clone()),
+        session_id: SessionId::from(data.session_id.clone()),
     }
 }

@@ -24,7 +24,7 @@ use crate::{errors::ActionError, uniffi_async};
 pub struct EncryptedPushNotification {
     /// UID
     ///
-    pub auth_id: String,
+    pub session_id: String,
     /// Encrypted payload of the notification
     ///
     pub encrypted_message: String,
@@ -33,7 +33,7 @@ pub struct EncryptedPushNotification {
 impl From<EncryptedPushNotification> for RealEncryptedPushNotification {
     fn from(value: EncryptedPushNotification) -> Self {
         Self {
-            auth_id: value.auth_id.into(),
+            session_id: value.session_id.into(),
             encrypted_message: value.encrypted_message,
         }
     }

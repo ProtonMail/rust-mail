@@ -17,7 +17,7 @@ use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
-use proton_api_core::services::proton::common::{AddressId, AuthId, UserId};
+use proton_api_core::services::proton::common::{AddressId, SessionId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;
@@ -196,7 +196,7 @@ impl MailUserContext {
     }
 
     /// Get the remote (API) ID of the session associated with this context.
-    pub fn session_id(&self) -> &AuthId {
+    pub fn session_id(&self) -> &SessionId {
         self.user_context.session_id()
     }
 

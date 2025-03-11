@@ -8,7 +8,7 @@ use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::services::proton::common::{AuthId, UserId};
+use proton_api_core::services::proton::common::{SessionId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
@@ -49,7 +49,7 @@ pub struct UserContext {
     user_stash: Stash,
     queue: Queue,
     user_id: UserId,
-    session_id: AuthId,
+    session_id: SessionId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
     pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
     cancellation_token: CancellationToken,
@@ -69,7 +69,7 @@ impl UserContext {
         user_stash_path: &Path,
         db_initializers: &[Box<dyn UserDatabaseInitializer>],
         user_id: UserId,
-        session_id: AuthId,
+        session_id: SessionId,
         cache_path: PathBuf,
         sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
@@ -163,7 +163,7 @@ impl UserContext {
 
     /// Get the session id of this context.
     #[must_use]
-    pub fn session_id(&self) -> &AuthId {
+    pub fn session_id(&self) -> &SessionId {
         &self.session_id
     }
 

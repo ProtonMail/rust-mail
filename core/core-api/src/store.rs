@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
-use crate::services::proton::common::{AuthId, UserId};
+use crate::services::proton::common::{SessionId, UserId};
 
 /// A shared store.
 pub type BoxStore = Box<dyn Store>;
@@ -25,7 +25,7 @@ pub struct AuthInfo {
     pub user_id: UserId,
 
     /// The session ID.
-    pub session_id: AuthId,
+    pub session_id: SessionId,
 
     /// The 2FA mode.
     pub tfa_mode: TfaMode,

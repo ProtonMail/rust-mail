@@ -7,7 +7,7 @@ use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeT
 use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_api_core::services::proton::common::AuthId;
+use proton_api_core::services::proton::common::SessionId;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{self, ProcessedAttachment};
 use proton_mail_html_transformer::Transformer;
@@ -42,7 +42,7 @@ pub struct TransformOptsResolved<'a> {
     pub show_block_quote: bool,
     pub hide_remote_images: bool,
     pub hide_embedded_images: bool,
-    pub image_proxy: Option<&'a AuthId>,
+    pub image_proxy: Option<&'a SessionId>,
 }
 
 impl TransformOpts {
@@ -52,7 +52,7 @@ impl TransformOpts {
     pub async fn resolve<'a>(
         self,
         tether: &'_ Tether,
-        auth_id: &'a AuthId,
+        session_id: &'a SessionId,
     ) -> TransformOptsResolved<'a> {
         let show_block_quote = self.show_block_quote;
         if let (Some(hide_embedded_images), Some(hide_remote_images), Some(image_proxy)) = (
@@ -64,7 +64,7 @@ impl TransformOpts {
                 show_block_quote,
                 hide_remote_images,
                 hide_embedded_images,
-                image_proxy: image_proxy.then_some(auth_id),
+                image_proxy: image_proxy.then_some(session_id),
             };
         }
 
@@ -83,7 +83,7 @@ impl TransformOpts {
             image_proxy: self
                 .image_proxy
                 .unwrap_or(image_proxy | 2 == 2)
-                .then_some(auth_id),
+                .then_some(session_id),
         }
     }
 }
@@ -343,7 +343,7 @@ impl DecryptedMessageBody {
     pub async fn transformed(
         &self,
         opts: TransformOpts,
-        session_id: &AuthId,
+        session_id: &SessionId,
         tether: &Tether,
     ) -> BodyOutput {
         // FIXME: We enable all views since there is no way yet in the clients to change the
@@ -364,7 +364,7 @@ impl DecryptedMessageBody {
     pub async fn transform_draft_reply(
         &self,
         opts: TransformOpts,
-        session_id: &AuthId,
+        session_id: &SessionId,
         tether: &Tether,
     ) -> BodyOutput {
         // FIXME: We enable all views since there is no way yet in the clients to change the
@@ -385,7 +385,7 @@ impl DecryptedMessageBody {
     pub async fn transform_draft_open(
         &self,
         opts: TransformOpts,
-        session_id: &AuthId,
+        session_id: &SessionId,
         tether: &Tether,
     ) -> BodyOutput {
         // FIXME: We enable all views since there is no way yet in the clients to change the
@@ -624,9 +624,9 @@ mime_type: {mime_type:?}"
     let mut images_proxied = 0;
     if hide_remote_images {
         remote_images_disabled = transformer.disable_remote_content();
-    } else if let Some(auth_id) = image_proxy {
+    } else if let Some(session_id) = image_proxy {
         // Doesn't make sense to proxy images if they have been disabled ;)
-        images_proxied = transformer.proxy_images(auth_id.as_ref());
+        images_proxied = transformer.proxy_images(session_id.as_ref());
     }
 
     let had_blockquote = if !show_block_quote {

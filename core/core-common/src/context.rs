@@ -20,7 +20,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::{AuthId, UserId};
+use proton_api_core::services::proton::common::{SessionId, UserId};
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
@@ -149,15 +149,15 @@ pub enum CoreAccountState {
 
     /// The account has at least one fully logged-in session;
     /// the variant holds the (remote) IDs of the fullly logged-in sessions.
-    LoggedIn(Vec<AuthId>),
+    LoggedIn(Vec<SessionId>),
 
     /// The account has authenticated sessions but they are missing the key secret.
     /// The variant holds the (remote) IDs of the sessions that are missing the key secret.
-    NeedMbp(Vec<AuthId>),
+    NeedMbp(Vec<SessionId>),
 
     /// The account has partially authenticated sessions that require a second factor.
     /// The variant holds the (remote) IDs of the sessions that require a second factor.
-    NeedTfa(Vec<AuthId>),
+    NeedTfa(Vec<SessionId>),
 
     /// The account has no active sessions.
     LoggedOut,
@@ -439,7 +439,10 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn get_session(&self, session_id: AuthId) -> CoreContextResult<Option<CoreSession>> {
+    pub async fn get_session(
+        &self,
+        session_id: SessionId,
+    ) -> CoreContextResult<Option<CoreSession>> {
         let tether = self.account_stash().connection();
         Ok(CoreSession::find_by_id(session_id, &tether).await?)
     }
@@ -451,7 +454,7 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
-        session_id: AuthId,
+        session_id: SessionId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
         let tether = self.account_stash().connection();
         let Some(session) = CoreSession::find_by_id(session_id, &tether).await? else {
@@ -530,7 +533,7 @@ impl Context {
     pub async fn resume_login_flow(
         &self,
         user_id: UserId,
-        session_id: AuthId,
+        session_id: SessionId,
         challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<Flow> {
         let key = self.get_encryption_key()?;
@@ -586,7 +589,7 @@ impl Context {
         }
 
         let user_id: UserId = flow.user_id()?.to_owned();
-        let session_id: AuthId = flow.session_id()?.to_owned();
+        let session_id: SessionId = flow.session_id()?.to_owned();
         let session = flow.take_session()?;
 
         self.new_user_context(user_id, session, session_id).await
@@ -799,7 +802,7 @@ impl Context {
         &self,
         user_id: UserId,
         session: ApiSession,
-        session_id: AuthId,
+        session_id: SessionId,
     ) -> Result<Arc<UserContext>, CoreContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 

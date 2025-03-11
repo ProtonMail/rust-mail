@@ -1,5 +1,5 @@
-use crate::login::state::{HasAuthId, HasUserId, StateData};
-use crate::services::proton::common::{AuthId, UserId};
+use crate::login::state::{HasSessionId, HasUserId, StateData};
+use crate::services::proton::common::{SessionId, UserId};
 use crate::services::proton::Proton;
 use crate::session::Session;
 
@@ -25,8 +25,8 @@ impl HasUserId for Complete {
     }
 }
 
-impl HasAuthId for Complete {
-    fn auth_id(&self) -> &AuthId {
-        &self.data.auth_id
+impl HasSessionId for Complete {
+    fn session_id(&self) -> &SessionId {
+        &self.data.session_id
     }
 }

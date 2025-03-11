@@ -220,8 +220,8 @@ declare_proton_id! {
 }
 
 declare_proton_id! {
-    /// Represents the Id of an active network Session.
-    pub AuthId
+    /// Represents the Id of an active API Session.
+    pub SessionId
 }
 
 declare_proton_id! {
