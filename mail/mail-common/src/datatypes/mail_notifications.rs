@@ -162,7 +162,7 @@ pub trait DecryptableInboxPushNotification {
 }
 
 impl DecryptableInboxPushNotification for EncryptedPushNotification {
-    #[tracing::instrument(skip(key_chain))]
+    #[tracing::instrument(skip(key_chain, self))]
     async fn try_into_decrypted_inbox_mail_notification(
         self,
         key_chain: Arc<dyn KeyChain>,
