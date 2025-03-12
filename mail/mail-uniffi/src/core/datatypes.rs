@@ -1715,7 +1715,7 @@ impl From<RealPlanInstance> for PlanInstance {
             .collect();
 
         Self {
-            cycle: instance.cycle.into(),
+            cycle: instance.cycle,
             description: instance.description,
             period_end: instance.period_end,
 
@@ -1940,7 +1940,7 @@ impl From<RealSubscription> for Subscription {
             name: subscription.name,
             title: subscription.title,
             description: subscription.description,
-            cycle: subscription.cycle.map(From::from),
+            cycle: subscription.cycle,
             cycle_description: subscription.cycle_description,
             currency: subscription.currency,
             offer: subscription.offer,
@@ -1976,7 +1976,7 @@ pub struct NewSubscription {
 impl From<NewSubscription> for RealNewSubscription {
     fn from(subscription: NewSubscription) -> Self {
         Self {
-            cycle: subscription.cycle.into(),
+            cycle: subscription.cycle,
             currency: subscription.currency,
             currency_id: subscription.currency_id,
             plans: subscription.plans,
