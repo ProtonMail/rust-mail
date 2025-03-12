@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.55.2] - 2025-03-12
+
+### Fixed
+
+  - [ET-2434] Do not panic on `delete_conversations` action when label id does not have remote id.
+
+
 ## [0.55.1] - 2025-03-11
 
 ### Fixed
