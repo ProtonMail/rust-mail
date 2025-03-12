@@ -21,8 +21,6 @@ use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, warn};
 
-use super::message_banner::MessageBanner;
-
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
 ///
@@ -206,17 +204,10 @@ impl ContextualConversation {
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
-        let message = messages
-            .iter()
-            .find(|m| m.id() == Some(id_to_open))
-            .expect("The message to open was not in the list");
-        let banners = message.get_banners(&conn).await?;
-
         Ok(Some(ContextualConversationAndMessages {
             conversation,
             messages,
             message_id_to_open: id_to_open,
-            banners,
         }))
     }
 
@@ -377,9 +368,6 @@ pub struct ContextualConversationAndMessages {
 
     /// The id of message to display first.
     pub message_id_to_open: LocalMessageId,
-
-    /// The banners to display in the message
-    pub banners: Vec<MessageBanner>,
 }
 
 pub struct ContextualConversationWatcher {

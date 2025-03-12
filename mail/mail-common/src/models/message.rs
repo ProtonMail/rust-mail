@@ -2645,8 +2645,7 @@ impl Message {
     /// Get message banners.
     ///
     /// Fails if time went backwards
-    pub async fn get_banners(&self, tether: &Tether) -> anyhow::Result<Vec<MessageBanner>> {
-        let settings = MailSettings::get_or_default(tether).await;
+    pub fn get_banners(&self, settings: &MailSettings) -> Vec<MessageBanner> {
         let mut banners = vec![];
 
         let flags = self.flags;
@@ -2675,21 +2674,20 @@ impl Message {
 
             if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
                 // FIXME: This is not correct at the moment, but it's better than nothing
-                let time = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|_| anyhow!("Time went backwards"))?
-                    + Duration::from_secs((days * 24 * 60 * 60) as u64);
-                banners.push(MessageBanner::AutoDelete {
-                    timestamp: time.as_secs(),
-                    delete_days: days,
-                })
+                if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                    let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
+                    banners.push(MessageBanner::AutoDelete {
+                        timestamp: time.as_secs(),
+                        delete_days: days,
+                    })
+                }
             }
         }
 
         // TODO: blocked sender
 
         banners.sort_unstable();
-        Ok(banners)
+        banners
     }
 }
 

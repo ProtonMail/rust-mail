@@ -3,6 +3,7 @@
 /// or content-related alerts.
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageBanner {
     /// The sender of this message is blocked.
     BlockedSender,

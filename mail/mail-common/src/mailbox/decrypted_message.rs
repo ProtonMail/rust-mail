@@ -3,8 +3,11 @@
 //! Everything related to processing a decrypted message.
 
 use crate::datatypes::attachment::MimeType as AttachmentMimeType;
+use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
-use crate::models::{Attachment, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
+use crate::models::{
+    Attachment, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
+};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_api_core::services::proton::common::SessionId;
@@ -84,28 +87,6 @@ impl TransformOpts {
                 .image_proxy
                 .unwrap_or(image_proxy | 2 == 2)
                 .then_some(session_id),
-        }
-    }
-}
-
-/// Which banners related to the body the client should show.
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct BodyBanners {
-    /// Whether to show the "enable remote images" banner
-    pub enable_show_remote_images: bool,
-    /// Whether to show the "enable embedded images" banner
-    pub enable_show_embedded_images: bool,
-    /// Whether to show the "show blockquote" banner
-    pub enable_show_blockquote: bool,
-}
-
-impl BodyBanners {
-    fn new(opts: TransformOptsResolved<'_>, stripped_blockquote: bool) -> Self {
-        Self {
-            enable_show_remote_images: opts.hide_remote_images,
-            enable_show_embedded_images: opts.hide_embedded_images,
-            enable_show_blockquote: stripped_blockquote,
         }
     }
 }
@@ -346,19 +327,26 @@ impl DecryptedMessageBody {
         session_id: &SessionId,
         tether: &Tether,
     ) -> BodyOutput {
-        // FIXME: We enable all views since there is no way yet in the clients to change the
-        // settings. Remove me when we can.
-        // https://protonag.atlassian.net/browse/ET-1926
         let opts = TransformOpts {
-            hide_remote_images: Some(false),
-            hide_embedded_images: Some(false),
             // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
             image_proxy: Some(false),
             ..opts
         };
 
+        // FIXME:(perf) settings get loaded twice.
         let resolved = opts.resolve(tether, session_id).await;
-        transform_html(&self.body, resolved, self.metadata.mime_type, true)
+
+        let banners = if let Some(id) = self.metadata.local_message_id {
+            if let Ok(Some(message)) = Message::load(id, tether).await {
+                message.get_banners(&MailSettings::get_or_default(tether).await)
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, true, banners)
     }
 
     pub async fn transform_draft_reply(
@@ -574,15 +562,25 @@ pub struct BodyOutput {
     pub transform_opts: TransformOpts,
 
     /// This instructs the client on what banners they should show.
-    pub body_banners: BodyBanners,
+    pub body_banners: Vec<MessageBanner>,
 }
 
-#[tracing::instrument(skip_all)]
 pub fn transform_html(
     html: &str,
     opts: TransformOptsResolved<'_>,
     mime_type: MimeType,
     inject_style: bool,
+) -> BodyOutput {
+    transform_html_with_banners(html, opts, mime_type, inject_style, vec![])
+}
+
+#[tracing::instrument(skip_all)]
+pub fn transform_html_with_banners(
+    html: &str,
+    opts: TransformOptsResolved<'_>,
+    mime_type: MimeType,
+    inject_style: bool,
+    mut prev_banners: Vec<MessageBanner>,
 ) -> BodyOutput {
     trace!(
         "\
@@ -643,6 +641,16 @@ mime_type: {mime_type:?}"
         transformer.inject_style();
     }
 
+    if opts.hide_remote_images {
+        prev_banners.push(MessageBanner::RemoteContent);
+    }
+
+    if opts.hide_embedded_images {
+        prev_banners.push(MessageBanner::EmbeddedImages);
+    }
+
+    prev_banners.sort_unstable();
+
     let output = BodyOutput {
         body: transformer.to_string(),
         had_blockquote,
@@ -652,7 +660,7 @@ mime_type: {mime_type:?}"
         embedded_images_disabled,
         images_proxied,
         transform_opts: opts.into(),
-        body_banners: BodyBanners::new(opts, had_blockquote),
+        body_banners: prev_banners,
     };
     debug!("HTML Transform done");
     trace!("BodyOutput: {output:#?}");
