@@ -1,7 +1,7 @@
 use crate::actions::{filter_responses, GenericActionData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
-use crate::MailUserContext;
+use crate::{AppError, MailUserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -86,7 +86,7 @@ impl proton_action_queue::action::Handler for Handler {
             .0
             .remote_label_id
             .clone()
-            .expect("Should not be none");
+            .ok_or_else(|| AppError::LabelDoesNotHaveRemoteId(action.0.label_id))?;
 
         action.0.resolve_ids(guard.tether()).await?;
 
