@@ -1,8 +1,8 @@
-use crate::ParameterType;
-use crate::properties::related::{Related, RelatedValue, validate_related};
+use crate::properties::related::{validate_related, Related, RelatedValue};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
 use crate::values::uri::Uri;
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]
@@ -108,25 +108,21 @@ fn related_property() {
         ]),
     ))
     .unwrap();
-    assert!(
-        validate_related(&make_property(
-            "RELATED",
-            Some("text"),
-            Some(vec![("MEDIATYPE", vec!["type/subtype"])]),
-        ))
-        .is_err()
-    );
-    assert!(
-        validate_related(&make_property(
-            "RELATED",
-            Some("uri:uri"),
-            Some(vec![
-                ("VALUE", vec!["uri"]),
-                ("LANGUAGE", vec!["zh-cmn-Hans-CN"])
-            ]),
-        ))
-        .is_err()
-    );
+    assert!(validate_related(&make_property(
+        "RELATED",
+        Some("text"),
+        Some(vec![("MEDIATYPE", vec!["type/subtype"])]),
+    ))
+    .is_err());
+    assert!(validate_related(&make_property(
+        "RELATED",
+        Some("uri:uri"),
+        Some(vec![
+            ("VALUE", vec!["uri"]),
+            ("LANGUAGE", vec!["zh-cmn-Hans-CN"])
+        ]),
+    ))
+    .is_err());
     property_reject_parameters(
         validate_related,
         "RELATED",

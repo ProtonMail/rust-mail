@@ -3,7 +3,7 @@
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainExt};
-use anyhow::{Context, bail};
+use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};

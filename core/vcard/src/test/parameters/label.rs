@@ -1,4 +1,4 @@
-use crate::parameters::label::{Label, is_label_param};
+use crate::parameters::label::{is_label_param, Label};
 
 #[test]
 fn label_struct() {

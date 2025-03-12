@@ -2,10 +2,10 @@
 
 mod profiler;
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use proton_mail_html_transformer::{
-    Transformer, message_detector, remote_content, sanitizer, transforms, utm,
+    message_detector, remote_content, sanitizer, transforms, utm, Transformer,
 };
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");

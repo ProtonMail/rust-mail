@@ -1,7 +1,7 @@
-use crate::MailUserContext;
-use crate::actions::{ActionMoveData, MailActionError, filter_responses};
+use crate::actions::{filter_responses, ActionMoveData, MailActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
+use crate::MailUserContext;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};

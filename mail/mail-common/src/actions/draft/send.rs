@@ -1,6 +1,6 @@
 use crate::actions::draft::{
-    SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_outbox_label_id,
-    local_sent_label_id,
+    local_all_draft_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
+    SEND_ACTION_GROUP,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::draft::send::{
@@ -17,8 +17,8 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_api_core::consts::Mail;
-use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::MessageId;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};

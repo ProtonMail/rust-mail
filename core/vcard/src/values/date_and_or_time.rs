@@ -2,9 +2,9 @@ use std::fmt::{Debug, Formatter};
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
-use crate::values::date::{DateValue, is_date_value};
-use crate::values::date_time::{DateTimeValue, is_date_time_value};
-use crate::values::time::{TimeValue, is_time_value};
+use crate::values::date::{is_date_value, DateValue};
+use crate::values::date_time::{is_date_time_value, DateTimeValue};
+use crate::values::time::{is_time_value, TimeValue};
 
 // TODO: transform into an enum with all 3 cases
 /// Representation of a date-and-or-time value from vCard RFC6350

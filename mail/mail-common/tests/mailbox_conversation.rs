@@ -4,9 +4,9 @@ use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
+use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;

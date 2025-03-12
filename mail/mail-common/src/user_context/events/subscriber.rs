@@ -1,8 +1,8 @@
-use crate::MailUserContext;
 use crate::datatypes::MessageLabelsCount;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
+use crate::MailUserContext;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::anyhow;
 use async_trait::async_trait;

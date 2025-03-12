@@ -1,7 +1,7 @@
-use crate::UniffiEnum;
-use crate::errors::OtherErrorReason;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
+use crate::errors::OtherErrorReason;
+use crate::UniffiEnum;
 use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;

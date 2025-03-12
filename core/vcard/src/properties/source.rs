@@ -5,16 +5,16 @@ use url::Url;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
-use crate::parameters::ParameterType;
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::mediatype::MediaType;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
+use crate::parameters::ParameterType;
+use crate::properties::{any_debug, optional_debug, validate_parameters, VcardProperty};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::{is_uri_value, Uri};
 use crate::vcard::group_from_name;
 use crate::{PropertyKind, VCardError, VCardResult};
 

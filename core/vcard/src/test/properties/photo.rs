@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::ParameterType;
-use crate::properties::photo::{Photo, validate_photo};
+use crate::properties::photo::{validate_photo, Photo};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
+use crate::ParameterType;
 
 #[test]
 fn photo_struct() {

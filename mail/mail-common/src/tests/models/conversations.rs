@@ -3,8 +3,8 @@
 use super::*;
 use crate as proton_mail_common;
 use crate::datatypes::{
-    ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
-    MovableSystemFolder, SystemLabelId, attachment,
+    attachment, ContextualConversation, ConversationLabelsCount, MessageFlags, MessageSender,
+    MovableSystemFolder, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, Message};
 use futures::StreamExt;
@@ -25,8 +25,8 @@ use proton_mail_test_utils::db_states::{
 };
 use proton_mail_test_utils::label;
 use proton_mail_test_utils::search::{
-    MY_ATTACHMENT_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation,
-    test_starred_label,
+    create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID, MY_LABEL_ID1,
+    MY_LABEL_ID2,
 };
 use proton_mail_test_utils::utils::{
     conv_counts_as_map, create_address, message_counts_for_conversation, msg_counts_as_map,

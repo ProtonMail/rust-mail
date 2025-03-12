@@ -7,8 +7,8 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
-    MovableSystemFolder, SystemLabelId, attachment,
+    attachment, ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
+    MovableSystemFolder, SystemLabelId,
 };
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
@@ -33,8 +33,8 @@ use proton_mail_test_utils::db_states::{
 };
 use proton_mail_test_utils::label;
 use proton_mail_test_utils::search::{
-    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
-    test_conversation, test_starred_label,
+    create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID, MY_CONVERSATION_ID,
+    MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use proton_mail_test_utils::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
@@ -1330,16 +1330,14 @@ pub async fn test_delete_local_message() {
                 .deleted
         );
 
-        assert!(
-            Conversation::find(
-                "WHERE local_id = ? AND deleted = 0",
-                params![local_conv_id],
-                &conn,
-            )
-            .await
-            .unwrap()
-            .is_empty()
-        );
+        assert!(Conversation::find(
+            "WHERE local_id = ? AND deleted = 0",
+            params![local_conv_id],
+            &conn,
+        )
+        .await
+        .unwrap()
+        .is_empty());
     }
 }
 
@@ -1528,12 +1526,10 @@ pub async fn test_undelete_local_message() {
         }
 
         // Conversation should be deleted
-        assert!(
-            Conversation::load(local_conv_id, &conn)
-                .await
-                .unwrap()
-                .is_some()
-        );
+        assert!(Conversation::load(local_conv_id, &conn)
+            .await
+            .unwrap()
+            .is_some());
     }
 }
 

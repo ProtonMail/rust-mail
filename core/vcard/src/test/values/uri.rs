@@ -1,4 +1,4 @@
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::{is_uri_value, Uri};
 use url::Url;
 
 #[test]

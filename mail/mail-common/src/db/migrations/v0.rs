@@ -10,7 +10,7 @@ mod scroller;
 mod settings;
 
 use stash::stash::{Bond, StashError};
-use tracing::{Instrument, debug_span};
+use tracing::{debug_span, Instrument};
 
 pub struct MigrationV0 {}
 

@@ -1,10 +1,10 @@
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use std::fmt::{Debug, Formatter};
 
+use crate::values::iana_token::{is_iana_token_value, IanaToken};
+use crate::values::param_value::{is_param_value, ParamValue};
+use crate::values::x_name::{is_x_name_value, XName};
 use crate::ParameterType;
-use crate::values::iana_token::{IanaToken, is_iana_token_value};
-use crate::values::param_value::{ParamValue, is_param_value};
-use crate::values::x_name::{XName, is_x_name_value};
 
 /// Additional parameter authorized but not defined by RFC6350
 #[derive(Clone, Eq, Hash, PartialEq)]

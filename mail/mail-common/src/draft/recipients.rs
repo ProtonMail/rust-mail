@@ -1,5 +1,5 @@
-use crate::MailUserContext;
 use crate::datatypes::MessageRecipient;
+use crate::MailUserContext;
 use email_address::{EmailAddress, Options};
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};

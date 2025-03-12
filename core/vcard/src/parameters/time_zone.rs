@@ -2,10 +2,10 @@ use std::fmt::{Debug, Formatter};
 
 use url::Url;
 
-use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use crate::values::param_value::{ParamValue, is_param_value};
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::param_value::{is_param_value, ParamValue};
+use crate::values::uri::{is_uri_value, Uri};
+use crate::ParameterType;
 
 /// The TZ parameter can be used to indicate time zone information that is specific to an address.
 #[derive(Clone, PartialEq)]

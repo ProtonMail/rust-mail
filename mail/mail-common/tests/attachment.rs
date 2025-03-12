@@ -1,9 +1,9 @@
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_mail_common::Mailbox;
 use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
+use proton_mail_common::Mailbox;
 use proton_mail_test_utils::attachment::{
     testdata_attachment_data, testdata_expected_attachment_decrypted,
 };

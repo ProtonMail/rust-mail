@@ -1,8 +1,8 @@
 use crate::errors::{UserSessionError, VoidSessionResult};
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
-use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailUserContext;
 
 #[uniffi_export]
 impl MailUserSession {

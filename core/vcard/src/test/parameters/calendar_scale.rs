@@ -1,4 +1,4 @@
-use crate::parameters::calendar_scale::{CalendarScale, is_calscale_param};
+use crate::parameters::calendar_scale::{is_calscale_param, CalendarScale};
 use crate::values::iana_token::IanaToken;
 use crate::values::x_name::XName;
 

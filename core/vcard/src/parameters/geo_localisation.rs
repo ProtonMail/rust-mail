@@ -3,8 +3,8 @@ use std::fmt::{Debug, Formatter};
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use url::Url;
 
+use crate::values::uri::{is_uri_value, Uri};
 use crate::ParameterType;
-use crate::values::uri::{Uri, is_uri_value};
 
 /// The GEO parameter can be used to indicate global positioning information that is specific to an
 /// address.

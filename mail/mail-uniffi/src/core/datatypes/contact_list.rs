@@ -1,5 +1,5 @@
-use crate::{UniffiEnum, UniffiRecord};
 use crate::{core::datatypes::AvatarInformation, core::datatypes::Id};
+use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_core_common::datatypes::{
     ContactEmailItem as RealContactEmailItem, ContactGroupItem as RealContactGroupItem,

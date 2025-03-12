@@ -1,4 +1,4 @@
-use proton_mail_html_transformer::{Transformer, message_detector::SplitDoc};
+use proton_mail_html_transformer::{message_detector::SplitDoc, Transformer};
 use wasm_bindgen::prelude::*;
 
 // To build the wasm version

@@ -5,7 +5,7 @@
 #[path = "tests/ios.rs"]
 mod tests;
 
-use html5ever::{QualName, namespace_url, ns};
+use html5ever::{namespace_url, ns, QualName};
 use kuchikiki::{Attributes, ElementData, NodeData, NodeRef};
 use std::cell::RefCell;
 

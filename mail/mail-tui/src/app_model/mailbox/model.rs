@@ -20,8 +20,8 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::actions::event_poll::EventPoll;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
-use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{
     ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
     MessageCounters,

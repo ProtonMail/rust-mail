@@ -53,11 +53,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use muon::App;
 use muon::client::middleware::{DisplayLogger, Tagger};
 use muon::common::{IntoDyn, RetryPolicy};
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
+use muon::App;
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use responses::{GetAddressResponse, PutDeleteContactsResponse};
 use serde::Deserialize;

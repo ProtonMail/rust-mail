@@ -1,6 +1,6 @@
 use proton_sqlite3::Migration;
 use stash::stash::{Bond, StashError};
-use tracing::{Instrument, debug_span};
+use tracing::{debug_span, Instrument};
 
 mod addresses;
 mod contacts;

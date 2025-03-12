@@ -1,16 +1,16 @@
-use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::{AppState, AppStateHandler, YesNoPopup, login, mailbox};
+use crate::app_model::{login, mailbox, AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
-use anyhow::{Context as _, anyhow};
+use crate::CLI_ARGS;
+use anyhow::{anyhow, Context as _};
 use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::{MailContext, MailContextError};
-use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, List, ListItem};
+use ratatui::Frame;
 use std::sync::Arc;
 use tracing::{debug, error};
 

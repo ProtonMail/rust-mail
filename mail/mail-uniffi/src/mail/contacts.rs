@@ -1,12 +1,11 @@
 use super::MailUserSession;
 use crate::core::datatypes::ContactSuggestions;
 use crate::errors::{ActionError, VoidActionResult};
-use crate::{UniffiRecord, watch_channel_inner};
 use crate::{
-    WatchHandle,
     core::datatypes::{DeviceContact, GroupedContacts, Id},
-    uniffi_async,
+    uniffi_async, WatchHandle,
 };
+use crate::{watch_channel_inner, UniffiRecord};
 use itertools::Itertools;
 use proton_core_common::datatypes::DeviceContact as RealDeviceContact;
 use proton_core_common::models::Contact as RealContact;
@@ -15,8 +14,8 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::{
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::Duration,
 };

@@ -1,8 +1,8 @@
 #![allow(clippy::ignored_unit_patterns)]
 mod common;
 
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::common::DefaultError;

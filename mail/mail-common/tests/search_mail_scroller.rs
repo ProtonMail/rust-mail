@@ -22,8 +22,8 @@ use stash::{
 };
 use std::vec;
 use wiremock::{
-    Mock, ResponseTemplate,
     matchers::{method, path, query_param_contains},
+    Mock, ResponseTemplate,
 };
 
 async fn save_single_message(label: &Label, message: &mut Message, bond: &Bond<'_>) {

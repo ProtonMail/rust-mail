@@ -6,11 +6,11 @@
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{ToTokens, quote};
+use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::{
-    Data, DeriveInput, Error as SynError, Field, Fields, Ident, LitStr, Path, Token, Type,
-    parse_macro_input,
+    parse_macro_input, Data, DeriveInput, Error as SynError, Field, Fields, Ident, LitStr, Path,
+    Token, Type,
 };
 
 /// Automatically derive the `DbRecord` trait for a struct.

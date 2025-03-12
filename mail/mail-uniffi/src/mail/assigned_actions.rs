@@ -6,8 +6,8 @@ use crate::uniffi_async;
 use uniffi::Enum as UniffiEnum;
 use uniffi::Record as UniffiRecord;
 
-use super::MailUserSession;
 use super::datatypes::SystemLabel;
+use super::MailUserSession;
 use proton_mail_common::datatypes::{
     AssignedSwipeAction as RealAssignedSwipeAction,
     AssignedSwipeActions as RealAssignedSwipeActions,

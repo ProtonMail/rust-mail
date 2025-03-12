@@ -1,5 +1,5 @@
-use crate::VCardError;
 use crate::vcard::VCard;
+use crate::VCardError;
 use ical::VcardParser;
 
 #[test]

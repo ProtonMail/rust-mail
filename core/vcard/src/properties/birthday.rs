@@ -12,8 +12,8 @@ use crate::parameters::language::Language;
 use crate::parameters::value::ValueType;
 use crate::properties::{any_debug, get_value_type, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::date_and_or_time::{DateAndOrTimeValue, is_date_and_or_time_value};
-use crate::values::text::{Text, is_text_value};
+use crate::values::date_and_or_time::{is_date_and_or_time_value, DateAndOrTimeValue};
+use crate::values::text::{is_text_value, Text};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

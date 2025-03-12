@@ -5,9 +5,9 @@ use crate::models::Address;
 use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
-use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::services::proton::common::{AddressId, UserId};
 use proton_api_core::services::proton::requests::GetKeysAllOptions;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{
@@ -19,10 +19,10 @@ use stash::stash::Tether;
 use std::{collections::HashMap, time::Duration};
 
 use super::{
-    CachedAddressKeys, CachedUserKeys,
     cache::{
-        ADDRESS_KEY_LIFETIME, CacheOption, CachedAddressKey, CachedUserKey, USER_KEY_LIFETIME,
+        CacheOption, CachedAddressKey, CachedUserKey, ADDRESS_KEY_LIFETIME, USER_KEY_LIFETIME,
     },
+    CachedAddressKeys, CachedUserKeys,
 };
 
 /// Manages an caches the PGP keys.

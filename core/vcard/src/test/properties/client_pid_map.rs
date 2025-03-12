@@ -1,4 +1,4 @@
-use crate::properties::client_pid_map::{ClientPidMap, validate_clientpidmap};
+use crate::properties::client_pid_map::{validate_clientpidmap, ClientPidMap};
 use crate::test::make_property;
 use crate::values::uri::Uri;
 

@@ -5,8 +5,8 @@ use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
-use muon::client::Tokens;
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use muon::client::Tokens;
 use std::fmt::Debug;
 use thiserror::Error;
 

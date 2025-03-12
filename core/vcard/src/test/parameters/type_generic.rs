@@ -1,7 +1,7 @@
-use crate::PropertyKind;
-use crate::parameters::type_generic::{GenericType, is_type_param};
+use crate::parameters::type_generic::{is_type_param, GenericType};
 use crate::values::iana_token::IanaToken;
 use crate::values::x_name::XName;
+use crate::PropertyKind;
 
 #[test]
 fn generic_type_enum() {

@@ -1,5 +1,5 @@
 use crate::values::text::Text;
-use crate::values::text_list::{TextList, is_text_list_value};
+use crate::values::text_list::{is_text_list_value, TextList};
 
 #[test]
 fn text_list_struct() {

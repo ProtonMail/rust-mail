@@ -4,7 +4,7 @@ use proton_core_common::cache::{
 };
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::{File, read_dir};
+use std::fs::{read_dir, File};
 use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::sync::Arc;

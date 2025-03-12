@@ -10,10 +10,10 @@ use proton_core_common::{
     models::{Label, ModelExtension, ModelIdExtension},
 };
 use proton_mail_common::{
-    MailContextError,
     datatypes::{ContextualConversation, ReadFilter},
     mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
+    MailContextError,
 };
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
@@ -26,8 +26,8 @@ use stash::{
 use std::{collections::HashMap, time::Duration};
 use tokio::time::sleep;
 use wiremock::{
-    Mock, ResponseTemplate,
     matchers::{method, path, query_param_contains},
+    Mock, ResponseTemplate,
 };
 
 fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
@@ -97,8 +97,8 @@ fn expected_conversations(
 }
 
 #[tokio::test]
-async fn test_conversation_mail_scroller_reads_correct_items_within_visible_range_for_cached_scroll_data()
- {
+async fn test_conversation_mail_scroller_reads_correct_items_within_visible_range_for_cached_scroll_data(
+) {
     const REMOTE_LABEL_ID: &str = "rid1";
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
@@ -367,8 +367,8 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
 }
 
 #[tokio::test]
-async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request()
- {
+async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request(
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -415,8 +415,8 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
 }
 
 #[tokio::test]
-async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_is_empty()
- {
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_is_empty(
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -471,8 +471,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 }
 
 #[tokio::test]
-async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_one_item()
- {
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_one_item(
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -520,8 +520,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
-async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_multiple_pages()
- {
+async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_multiple_pages(
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();

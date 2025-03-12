@@ -18,11 +18,11 @@ pub mod mail_scroller;
 mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
-pub use mailbox::{DecryptedAttachment, Mailbox, MailboxError, MailboxResult, decrypted_message};
+pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
 use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::{
-    MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage, cache,
+    cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
 };
 
 // re-exports

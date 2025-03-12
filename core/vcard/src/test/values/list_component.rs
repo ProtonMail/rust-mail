@@ -1,5 +1,5 @@
 use crate::values::component::Component;
-use crate::values::list_component::{ListComponent, is_list_component_value};
+use crate::values::list_component::{is_list_component_value, ListComponent};
 
 #[test]
 fn list_component_struct() {

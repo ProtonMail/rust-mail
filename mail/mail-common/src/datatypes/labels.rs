@@ -1,6 +1,6 @@
-use crate::AppError;
 use crate::datatypes::{LabelColor, ViewMode};
 use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
+use crate::AppError;
 use proton_core_common::models::{Label, ModelExtension};
 use stash::orm::Model;
 use stash::stash::Tether;

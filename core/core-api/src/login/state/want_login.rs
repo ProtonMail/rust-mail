@@ -1,12 +1,12 @@
 use crate::login::state::StateData;
-use crate::login::{LoginError, state::State};
-use crate::services::proton::Proton;
+use crate::login::{state::State, LoginError};
 use crate::services::proton::prelude::{SessionId, UserId};
+use crate::services::proton::Proton;
 use crate::session::SessionParts;
 use crate::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use futures::TryFutureExt;
-use muon::client::PasswordMode::{One, Two};
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
+use muon::client::PasswordMode::{One, Two};
 use muon::client::{Auth, Tokens};
 use tracing::info;
 

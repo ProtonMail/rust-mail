@@ -3,8 +3,8 @@
 use crate::macros::DbRecord;
 use crate::{self as stash};
 use core::fmt::Debug;
-use rusqlite::ToSql;
 use rusqlite::types::FromSql;
+use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
 
 /// A query result that returns an ID field plus a row ID.

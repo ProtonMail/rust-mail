@@ -1,10 +1,10 @@
 use crate::app::Command;
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
-use futures::FutureExt;
 use futures::future::BoxFuture;
-use proton_mail_common::MailContextError;
+use futures::FutureExt;
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
+use proton_mail_common::MailContextError;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use tokio::sync::Mutex;

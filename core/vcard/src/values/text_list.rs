@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter};
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::values::check_list;
-use crate::values::text::{Text, is_text_value};
+use crate::values::text::{is_text_value, Text};
 use crate::vcard::split_list;
 
 /// Represent a text-list value from vCard RFC6350

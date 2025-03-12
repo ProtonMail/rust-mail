@@ -1,6 +1,6 @@
-use crate::AppError;
 use crate::events::MessageEvent;
 use crate::models::{DraftMetadata, Message};
+use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
 use stash::stash::Bond;

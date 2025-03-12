@@ -1,4 +1,4 @@
-use crate::values::date_and_or_time::{DateAndOrTimeValue, is_date_and_or_time_value};
+use crate::values::date_and_or_time::{is_date_and_or_time_value, DateAndOrTimeValue};
 
 #[test]
 fn date_and_or_time_struct() {

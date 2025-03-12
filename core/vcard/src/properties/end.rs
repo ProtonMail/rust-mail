@@ -1,6 +1,6 @@
-use crate::PropertyKind;
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::have_no_param;
+use crate::PropertyKind;
 use ical::generator::Property;
 
 /// Validate that the given `property` respect the format for a `END` property

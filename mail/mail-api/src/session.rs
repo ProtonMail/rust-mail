@@ -2,9 +2,9 @@
 
 use crate::services::proton::response_data::MailEvent;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::services::proton::common::EventId;
 use proton_api_core::services::proton::prelude::GetEventOptions;
+use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::{CoreSession, Session};
 
 /// Authenticated Session from which one can access mail related functionality

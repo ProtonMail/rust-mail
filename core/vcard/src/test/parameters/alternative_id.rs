@@ -1,4 +1,4 @@
-use crate::parameters::alternative_id::{AlternativeId, is_altid_param};
+use crate::parameters::alternative_id::{is_altid_param, AlternativeId};
 
 #[test]
 fn altid_struct() {

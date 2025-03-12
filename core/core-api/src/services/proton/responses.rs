@@ -32,7 +32,7 @@ use proton_crypto_account::keys::{
     APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup,
 };
 use serde::Deserialize;
-use serde_with::{BoolFromInt, serde_as};
+use serde_with::{serde_as, BoolFromInt};
 
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;

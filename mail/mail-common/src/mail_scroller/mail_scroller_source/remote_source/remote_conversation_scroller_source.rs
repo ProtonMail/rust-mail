@@ -4,18 +4,18 @@ use proton_api_core::{
     session::{CoreSession, Session},
 };
 use proton_api_mail::services::proton::{
-    ProtonMail,
     common::ConversationId,
     prelude::{GetConversationsOptions, GetConversationsResponse},
+    ProtonMail,
 };
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
 use crate::{
-    MailContextError, MailUserContext,
     datatypes::{ContextualConversation, ReadFilter},
     models::{Conversation, ConversationScrollData},
+    MailContextError, MailUserContext,
 };
 
 use super::{MailPaginatorJoinHandle, RemoteSource};

@@ -1,5 +1,5 @@
-use crate::widgets::AsTable;
 use crate::widgets::utils::{date_from_timestamp, sender_name};
+use crate::widgets::AsTable;
 use proton_mail_common::models::Message;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;

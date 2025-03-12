@@ -1,11 +1,11 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::app::Command;
-use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::paginator::Paginator;
-use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message};
+use crate::app_model::mailbox::{ConversationMessage, Item, Message, ITEM_LIMIT};
+use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
@@ -16,10 +16,10 @@ use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId,
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
 use proton_mail_common::models::{Conversation, ConversationScrollData, MailSettings};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
-use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
+use ratatui::Frame;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 

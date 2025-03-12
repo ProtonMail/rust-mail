@@ -6,19 +6,19 @@ use std::{
 
 use derive_more::Deref;
 use muon::{
-    Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult,
     common::{BoxFut, RetryPolicy, Sender, SenderLayer},
     error::ErrorKind,
+    Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult,
 };
 use tokio::{
-    sync::{RwLock, watch},
+    sync::{watch, RwLock},
     task::JoinHandle,
 };
 use tracing::trace;
 
 use crate::{
     connection_status::ConnectionStatus,
-    services::proton::{HALF_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT, Proton, ProtonCore},
+    services::proton::{Proton, ProtonCore, HALF_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT},
 };
 
 type StatusJoinHandle = JoinHandle<()>;

@@ -14,7 +14,7 @@ use crate::parameters::sort_as::SortAs;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
+    any_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
 };
 use crate::validation::get_property_kind;
 use crate::values::component::Component;

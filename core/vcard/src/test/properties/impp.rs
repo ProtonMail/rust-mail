@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::ParameterType;
-use crate::properties::impp::{Impp, validate_impp};
+use crate::properties::impp::{validate_impp, Impp};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
+use crate::ParameterType;
 
 #[test]
 fn impp_struct() {

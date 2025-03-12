@@ -9,13 +9,13 @@ use clap::Parser;
 use proton_mail_common::proton_api_mail::proton_api_core::session::Config;
 
 use crate::app_model::AppModel;
-use crossterm::ExecutableCommand;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
-use ratatui::Terminal;
+use crossterm::ExecutableCommand;
 use ratatui::backend::CrosstermBackend;
-use std::io::{Stdout, stdout};
+use ratatui::Terminal;
+use std::io::{stdout, Stdout};
 use std::path::PathBuf;
 use std::sync::LazyLock;
 use tokio::runtime::Runtime;
@@ -61,7 +61,11 @@ struct CliArgs {
 
 impl CliArgs {
     pub fn dir(&self) -> &'static str {
-        if self.api_dev_env { "dev" } else { "" }
+        if self.api_dev_env {
+            "dev"
+        } else {
+            ""
+        }
     }
 
     pub fn api_config(&self) -> Config {

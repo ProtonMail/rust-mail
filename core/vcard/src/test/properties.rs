@@ -34,13 +34,13 @@ mod uid;
 mod url;
 mod xml;
 
-use crate::ParameterType;
 use crate::properties::begin::validate_begin;
 use crate::properties::end::validate_end;
 use crate::properties::version::validate_version;
 use crate::properties::xtended::Xtended;
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::x_name::XName;
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

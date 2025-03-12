@@ -43,12 +43,12 @@ use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
     MessageEvent as ApiMessageEvent, MessageMetadata,
 };
-use proton_core_common::CoreEvent;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::events::ContactEvent;
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
 use proton_core_common::models::{Label, User, UserSettings};
 use proton_core_common::utils::MapVec as _;
+use proton_core_common::CoreEvent;
 use proton_event_loop::Event;
 
 /// TODO: Document this struct.

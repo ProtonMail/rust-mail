@@ -1,6 +1,6 @@
-use crate::ParameterType;
-use crate::properties::gender::{Gender, GenderValue, validate_gender};
+use crate::properties::gender::{validate_gender, Gender, GenderValue};
 use crate::test::{make_property, property_reject_parameters};
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

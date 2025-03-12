@@ -1,5 +1,5 @@
-use proton_sqlite3::rusqlite::ToSql;
 use proton_sqlite3::rusqlite::types::ToSqlOutput;
+use proton_sqlite3::rusqlite::ToSql;
 use serde::Serialize;
 use stash::orm::ConversionError;
 use stash::stash::StashError;

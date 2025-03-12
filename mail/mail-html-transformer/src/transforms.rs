@@ -3,9 +3,9 @@
 #[path = "tests/transforms.rs"]
 mod tests;
 
-use html5ever::{LocalName, QualName, namespace_url, tendril::TendrilSink};
+use html5ever::{namespace_url, tendril::TendrilSink, LocalName, QualName};
 use kuchikiki::{
-    Attribute, Attributes, ElementData, ExpandedName, NodeData, NodeRef, iter::NodeEdge,
+    iter::NodeEdge, Attribute, Attributes, ElementData, ExpandedName, NodeData, NodeRef,
 };
 use std::cell::RefCell;
 use url::Url;

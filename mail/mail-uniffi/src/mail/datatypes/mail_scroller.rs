@@ -5,7 +5,7 @@
 
 use crate::errors::UserSessionError;
 use crate::mail::datatypes::Conversation;
-use crate::{WatchHandle, async_runtime, uniffi_async};
+use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ReadFilter as RealReadFilter;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;

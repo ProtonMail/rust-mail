@@ -2,8 +2,8 @@ use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 
-use crate::parameters::Parameters;
 use crate::parameters::preference::Preference;
+use crate::parameters::Parameters;
 use crate::properties::VcardProperty;
 use crate::values::x_name::XName;
 use crate::{PropertyKind, VCardError, VCardResult};

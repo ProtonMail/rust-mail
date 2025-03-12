@@ -2,9 +2,9 @@ use std::fmt::{Debug, Formatter};
 
 use oxilangtag::LanguageTag as OxiLanguageTag;
 
-use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use crate::values::language_tag::{LanguageTag, is_language_tag_value};
+use crate::values::language_tag::{is_language_tag_value, LanguageTag};
+use crate::ParameterType;
 
 /// The LANGUAGE property parameter is used to identify data in multiple languages.
 #[derive(Clone)]

@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::ParameterType;
-use crate::properties::categories::{Category, validate_categories};
+use crate::properties::categories::{validate_categories, Category};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text_list::TextList;
+use crate::ParameterType;
 
 #[test]
 fn categories_struct() {

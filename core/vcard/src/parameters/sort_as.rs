@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 
-use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use crate::values::param_value::{ParamValue, is_param_value};
+use crate::values::param_value::{is_param_value, ParamValue};
+use crate::ParameterType;
 
 /// The "sort-as" parameter is used to specify the string to be used for national-language-specific
 /// sorting.

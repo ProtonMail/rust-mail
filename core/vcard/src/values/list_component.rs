@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter};
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::values::check_list;
-use crate::values::component::{Component, is_component_value};
+use crate::values::component::{is_component_value, Component};
 use crate::vcard::split_list;
 
 /// A list of component values

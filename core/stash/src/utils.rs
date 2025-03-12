@@ -4,8 +4,8 @@
 //!
 
 use core::str::from_utf8;
-use rusqlite::Error as SqliteError;
 use rusqlite::types::{FromSqlError, ToSqlOutput, ValueRef};
+use rusqlite::Error as SqliteError;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 use std::borrow::Cow;

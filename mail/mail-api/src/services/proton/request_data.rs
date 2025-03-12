@@ -25,12 +25,12 @@ use proton_crypto_inbox::attachment::{
     BinaryAttachmentSignature, KeyPackets,
 };
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
-use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::message::packages::PackageMimeType;
+use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto::crypto::SessionKeyAlgorithm;
 use serde::Serialize;
 use serde_repr::Serialize_repr;
-use serde_with::{BoolFromInt, DisplayFromStr, base64::Base64, serde_as};
+use serde_with::{base64::Base64, serde_as, BoolFromInt, DisplayFromStr};
 use std::collections::HashMap;
 //  ENUMS
 //==============================================================================
@@ -154,7 +154,11 @@ pub enum PackageSignaturesMode {
 
 impl From<bool> for PackageSignaturesMode {
     fn from(value: bool) -> Self {
-        if value { Self::Attachments } else { Self::None }
+        if value {
+            Self::Attachments
+        } else {
+            Self::None
+        }
     }
 }
 

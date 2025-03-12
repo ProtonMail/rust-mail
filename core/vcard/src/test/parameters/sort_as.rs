@@ -1,4 +1,4 @@
-use crate::parameters::sort_as::{SortAs, is_sort_as_param};
+use crate::parameters::sort_as::{is_sort_as_param, SortAs};
 
 #[test]
 fn sort_as_struct() {

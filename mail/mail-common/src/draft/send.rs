@@ -2,7 +2,7 @@ use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::ValidationState;
-use crate::draft::{PackageError, SaveOrSendError, compose::html_to_text};
+use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_mail::services::proton::request_data::{
@@ -17,7 +17,7 @@ use proton_crypto_inbox::keys::{
     ComposerPreference, CryptoMailSettings, InboxSessionKey, PackageCryptoType, SendPreferences,
 };
 use proton_crypto_inbox::message::packages::{
-    EncryptedPackageBody, PackageMimeType, package_body_encrypt,
+    package_body_encrypt, EncryptedPackageBody, PackageMimeType,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use stash::stash::Bond;

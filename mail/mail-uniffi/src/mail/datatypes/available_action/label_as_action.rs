@@ -1,6 +1,6 @@
 use super::IsSelected;
-use crate::UniffiRecord;
 use crate::mail::datatypes::{Id, LabelColor};
+use crate::UniffiRecord;
 use proton_mail_common::actions::LabelAsAction as RealLabelAsAction;
 
 /// This struct represents a label that can be used as an action.

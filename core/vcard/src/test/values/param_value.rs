@@ -1,4 +1,4 @@
-use crate::values::param_value::{ParamValue, is_param_value};
+use crate::values::param_value::{is_param_value, ParamValue};
 
 #[test]
 fn param_value_struct() {

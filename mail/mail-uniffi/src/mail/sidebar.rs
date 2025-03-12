@@ -7,13 +7,13 @@
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, VoidActionResult};
-use crate::mail::MailUserSession;
-use crate::mail::datatypes::LabelType;
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
+use crate::mail::datatypes::LabelType;
 use crate::mail::state::MailUserContextPtr;
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::mail::MailUserSession;
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::LabelWithCounters as RealLabelWithCounters;

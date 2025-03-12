@@ -10,10 +10,10 @@ use tokio::task::yield_now;
 use tracing::instrument;
 
 use crate::{
-    AppError, MailContextError, MailUserContext,
     datatypes::{ReadFilter, ViewMode},
     mail_scroller::MailScroller,
     models::{Conversation, DraftMetadata, MailSettings, Message},
+    AppError, MailContextError, MailUserContext,
 };
 
 pub type PrefetchNotify = OnceLock<flume::Sender<()>>;

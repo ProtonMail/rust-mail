@@ -1,4 +1,4 @@
-use crate::parameters::time_zone::{TimeZone, is_tz_param};
+use crate::parameters::time_zone::{is_tz_param, TimeZone};
 use crate::values::param_value::ParamValue;
 use crate::values::uri::Uri;
 

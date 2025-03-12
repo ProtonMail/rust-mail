@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
-use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
+use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
 use crate::datatypes::{
@@ -12,7 +12,7 @@ use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError, KeyChainExt};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
-use anyhow::{Error as AnyhowError, anyhow};
+use anyhow::{anyhow, Error as AnyhowError};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -20,8 +20,8 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::BuildError;
 use proton_api_core::services::proton::common::{SessionId, UserId};
+use proton_api_core::services::proton::BuildError;
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
 use proton_api_core::status_watcher::StatusWatcher;
@@ -39,7 +39,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{Level, error, info, warn};
+use tracing::{error, info, warn, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {

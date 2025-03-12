@@ -19,8 +19,8 @@
 //!
 
 use crate::connection_manager::StashConnectionManager;
-use crate::orm::{ConversionError, DbRecord, DbRecords, Model, from_rows, perform_load};
-use anyhow::{Context, anyhow};
+use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
+use anyhow::{anyhow, Context};
 use core::fmt;
 use core::fmt::Debug;
 use core::future::Future;
@@ -28,7 +28,7 @@ use core::mem;
 use core::ops::Deref;
 use core::time::Duration;
 use derivative::Derivative;
-use flume::{Receiver as QueueReceiver, Sender as QueueSender, unbounded};
+use flume::{unbounded, Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
 use r2d2::Pool;
 use rusqlite::hooks::Action;
@@ -1083,9 +1083,8 @@ impl SqlExecutorAsync for Tether {
 impl SqlConnectionAsync for Tether {
     fn sql_transaction(
         &mut self,
-    ) -> impl Future<
-        Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>,
-    > + Send {
+    ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
+           + Send {
         async {
             Ok(self
                 .quiet_transaction()

@@ -8,8 +8,8 @@ use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::datatypes::Disposition;
-use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
+use proton_mail_common::draft::Draft;
 use proton_mail_common::models::Attachment;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -17,8 +17,8 @@ use proton_mail_common::{
 };
 use tempdir::TempDir;
 use tracing::{error, info};
-use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::EnvFilter;
 
 struct InitCallback;
 

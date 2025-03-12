@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::errors::UserSessionError;
-use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::MailSettings as RealSettings;
 use tokio::task::JoinError;
 
-use super::{MailUserSession, datatypes::MailSettings};
+use super::{datatypes::MailSettings, MailUserSession};
 
 /// Gets the latest settings or a default if it can't find it.
 #[uniffi_export]

@@ -10,12 +10,12 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    AllBottomBarMessageActions, BottomBarActions, MailActionError, MovableSystemFolderAction,
-    filter_responses,
+    filter_responses, AllBottomBarMessageActions, BottomBarActions, MailActionError,
+    MovableSystemFolderAction,
 };
 use crate::datatypes::message_banner::MessageBanner;
 use crate::models::*;
-use crate::{MailContextError, find_in_query};
+use crate::{find_in_query, MailContextError};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
@@ -26,7 +26,6 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::MailContextResult;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
 };
@@ -38,15 +37,14 @@ use crate::datatypes::{
 use crate::decrypted_message::{StorableMessageBody, StorableMessageBodyRef};
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::user_context::cache::CacheMessageKey;
+use crate::MailContextResult;
 use crate::{AppError, MailUserContext};
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::{ConversationId, ExternalId, MessageId};
 use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{
@@ -54,6 +52,8 @@ use proton_api_mail::services::proton::response_data::{
     MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::GetMessagesResponse;
+use proton_api_mail::services::proton::ProtonMail;
+use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;

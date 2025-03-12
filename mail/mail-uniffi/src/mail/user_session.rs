@@ -10,12 +10,12 @@ use crate::core::datatypes::{
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
-use crate::{LiveQueryCallback, uniffi_async};
-use crate::{MapIntoResult, async_runtime, spawn_async};
+use crate::{async_runtime, spawn_async, MapIntoResult};
+use crate::{uniffi_async, LiveQueryCallback};
 use futures::TryFutureExt;
 use proton_api_core::services::proton::ProtonCore;
-use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
 use std::sync::Arc;
 

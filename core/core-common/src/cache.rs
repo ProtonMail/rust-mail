@@ -21,7 +21,7 @@ use stash::stash::{Stash, StashError};
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fmt::Debug;
-use std::fs::{File, OpenOptions, Permissions, create_dir_all, remove_file, set_permissions};
+use std::fs::{create_dir_all, remove_file, set_permissions, File, OpenOptions, Permissions};
 use std::future::Future;
 use std::hash::Hash;
 use std::io::{self, Read, Write};

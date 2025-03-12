@@ -1,8 +1,8 @@
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use std::fmt::{Debug, Formatter};
 
+use crate::values::param_value::{is_param_value, ParamValue};
 use crate::ParameterType;
-use crate::values::param_value::{ParamValue, is_param_value};
 
 /// The ALTID parameter is used to "tag" property instances as being alternative representations of
 /// the same logical property.  For example, translations of a property in multiple languages

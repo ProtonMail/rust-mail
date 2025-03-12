@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::ParameterType;
-use crate::properties::note::{Note, validate_note};
+use crate::properties::note::{validate_note, Note};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
+use crate::ParameterType;
 
 #[test]
 fn note_struct() {

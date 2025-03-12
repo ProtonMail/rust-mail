@@ -6,11 +6,11 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
-    LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, spawn_async, uniffi_async,
-    watch_channel,
+    async_runtime, async_runtime_slim, spawn_async, uniffi_async, watch_channel, LiveQueryCallback,
+    WatchHandle,
 };
+use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::human_verification::ChallengeObserver;
@@ -18,15 +18,15 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContext, MailUserContext};
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
-use tokio::task::{AbortHandle, spawn_blocking};
+use tokio::task::{spawn_blocking, AbortHandle};
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 

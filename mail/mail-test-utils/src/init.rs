@@ -36,11 +36,11 @@ use proton_api_mail::services::proton::responses::{
 };
 use proton_core_common::datatypes::ALL_LABEL_TYPES;
 use proton_core_test_utils::account::{
-    TEST_ADDRESS_ID, TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
-    testdata_address_keys_for_user_address, testdata_user_keys,
+    testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
+    TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
 };
 use proton_core_test_utils::addresses_public::{
-    TEST_OTHER_USER_EMAIL, testdata_address_keys_other_user,
+    testdata_address_keys_other_user, TEST_OTHER_USER_EMAIL,
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{

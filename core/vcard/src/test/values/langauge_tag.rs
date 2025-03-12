@@ -1,4 +1,4 @@
-use crate::values::language_tag::{LanguageTag, is_language_tag_value};
+use crate::values::language_tag::{is_language_tag_value, LanguageTag};
 use oxilangtag::LanguageTag as OxiLanguageTag;
 
 #[test]

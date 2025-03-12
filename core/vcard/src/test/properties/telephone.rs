@@ -1,8 +1,8 @@
-use crate::ParameterType;
-use crate::properties::telephone::{Telephone, TelephoneValue, validate_tel};
+use crate::properties::telephone::{validate_tel, Telephone, TelephoneValue};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
 use crate::values::uri::Uri;
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

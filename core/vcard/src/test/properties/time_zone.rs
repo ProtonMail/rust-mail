@@ -1,11 +1,11 @@
 use velcro::hash_set;
 
-use crate::ParameterType;
-use crate::properties::time_zone::{TimeZone, TimeZoneValue, validate_tz};
+use crate::properties::time_zone::{validate_tz, TimeZone, TimeZoneValue};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
 use crate::values::uri::Uri;
 use crate::values::utc_offset::UTCOffset;
+use crate::ParameterType;
 
 #[test]
 fn time_zone_struct() {

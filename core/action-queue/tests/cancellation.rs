@@ -2,7 +2,7 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{TestReadExtension, TestWriteExtension, new_queue_typed};
+use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
@@ -42,15 +42,13 @@ async fn cancel_causes_revert() {
     queue.cancel(action_id).await.unwrap();
 
     // Check state is reverted.
-    assert!(
-        queue
-            .stash()
-            .connection()
-            .ext_get_value(key)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(queue
+        .stash()
+        .connection()
+        .ext_get_value(key)
+        .await
+        .unwrap()
+        .is_none());
     // Double cancel is error:
     assert!(matches!(
         queue.cancel(action_id).await.unwrap_err(),

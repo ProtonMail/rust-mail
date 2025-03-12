@@ -17,9 +17,9 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
-use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
+use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::Message;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::{

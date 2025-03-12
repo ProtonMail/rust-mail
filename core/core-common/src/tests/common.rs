@@ -5,7 +5,9 @@ use stash::stash::{Stash, StashConfiguration};
 /// Macro wrapping u64 into Option<LocalId> for easier model definition.
 #[macro_export]
 macro_rules! lid {
-    ($id:expr) => {{ Some($id.into()) }};
+    ($id:expr) => {{
+        Some($id.into())
+    }};
 }
 
 #[macro_export]
@@ -58,7 +60,9 @@ macro_rules! label {
 
 #[macro_export]
 macro_rules! label_id {
-    ($id:expr) => {{ proton_api_core::services::proton::common::LabelId::from($id) }};
+    ($id:expr) => {{
+        proton_api_core::services::proton::common::LabelId::from($id)
+    }};
 }
 
 #[macro_export]
@@ -84,12 +88,12 @@ macro_rules! device_contact {
 pub async fn new_core_test_connection() -> Stash {
     use crate::db::migrations::migrate_core_db;
     use std::io::stdout;
-    use tracing::Level;
     use tracing::subscriber::set_global_default;
+    use tracing::Level;
     use tracing_subscriber::fmt::layer;
     use tracing_subscriber::fmt::writer::MakeWriterExt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::{EnvFilter, registry};
+    use tracing_subscriber::{registry, EnvFilter};
     drop(set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))

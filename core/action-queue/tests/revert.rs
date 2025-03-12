@@ -2,7 +2,7 @@
 mod common;
 
 use crate::common::DefaultError;
-use common::{TestReadExtension, TestWriteExtension, new_queue_typed};
+use common::{new_queue_typed, TestReadExtension, TestWriteExtension};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
@@ -35,15 +35,13 @@ async fn network_failure_causes_revert_on_apply() {
         }
         _ => panic!("unexpected result"),
     }
-    assert!(
-        queue
-            .stash()
-            .connection()
-            .ext_get_value(key)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(queue
+        .stash()
+        .connection()
+        .ext_get_value(key)
+        .await
+        .unwrap()
+        .is_none());
 }
 #[tokio::test]
 async fn network_failure_causes_revert_on_queue() {
@@ -85,15 +83,13 @@ async fn network_failure_causes_revert_on_queue() {
     ));
 
     assert_eq!(metadata.id, action_id);
-    assert!(
-        queue
-            .stash()
-            .connection()
-            .ext_get_value(key)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(queue
+        .stash()
+        .connection()
+        .ext_get_value(key)
+        .await
+        .unwrap()
+        .is_none());
 }
 
 #[tokio::test]

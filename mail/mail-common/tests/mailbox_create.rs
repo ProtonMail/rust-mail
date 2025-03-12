@@ -7,8 +7,8 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, ViewMode as ApiViewMode,
 };
-use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 

@@ -1,4 +1,4 @@
-use crate::values::timestamp::{Timestamp, is_timestamp_value};
+use crate::values::timestamp::{is_timestamp_value, Timestamp};
 use chrono::{Datelike, FixedOffset, Timelike};
 
 #[test]

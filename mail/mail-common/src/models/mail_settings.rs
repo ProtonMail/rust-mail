@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 
-use crate::AppError;
 use crate::datatypes::{
     AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
     MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
     SwipeAction, ViewLayout, ViewMode,
 };
-use proton_api_mail::services::proton::ProtonMail;
+use crate::AppError;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;

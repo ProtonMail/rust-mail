@@ -1,7 +1,7 @@
-use crate::ParameterType;
-use crate::properties::xml::{Xml, validate_xml};
+use crate::properties::xml::{validate_xml, Xml};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

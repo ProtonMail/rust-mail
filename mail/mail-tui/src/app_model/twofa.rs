@@ -1,11 +1,11 @@
 use crate::app::Command;
-use crate::app_model::{AppState, AppStateHandler, context_init, login};
+use crate::app_model::{context_init, login, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
-use proton_mail_common::MailContext;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
+use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;

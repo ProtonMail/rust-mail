@@ -1,4 +1,4 @@
-use crate::parameters::geo_localisation::{GeoLocalisation, is_geo_param};
+use crate::parameters::geo_localisation::{is_geo_param, GeoLocalisation};
 
 #[test]
 fn geo_localisation_struct() {

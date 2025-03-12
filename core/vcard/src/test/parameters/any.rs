@@ -1,4 +1,4 @@
-use crate::parameters::any::{Any, is_any_param};
+use crate::parameters::any::{is_any_param, Any};
 
 #[test]
 fn any_struct() {

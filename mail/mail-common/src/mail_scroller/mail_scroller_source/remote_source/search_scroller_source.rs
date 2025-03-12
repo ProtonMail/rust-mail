@@ -5,7 +5,7 @@ use proton_api_core::{
     session::{CoreSession, Session},
 };
 use proton_api_mail::services::proton::{
-    ProtonMail, common::MessageId, prelude::GetMessagesOptions,
+    common::MessageId, prelude::GetMessagesOptions, ProtonMail,
 };
 use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
 use stash::{
@@ -16,10 +16,10 @@ use tokio::sync::Mutex;
 use tracing::debug;
 
 use crate::{
-    MailContextError, MailUserContext,
     datatypes::SearchOptions,
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
+    MailContextError, MailUserContext,
 };
 
 use super::MailPaginatorJoinHandle;

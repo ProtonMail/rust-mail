@@ -11,7 +11,6 @@ use proton_api_mail::services::proton::request_data::{
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
-use proton_mail_common::MailContextError;
 use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
@@ -19,6 +18,7 @@ use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyM
 use proton_mail_common::models::{
     Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message,
 };
+use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
@@ -114,12 +114,10 @@ async fn create_empty_draft() {
         message.metadata.conversation_id
     );
     // Conversation should also have the draft label.
-    assert!(
-        conversation
-            .labels
-            .iter()
-            .any(|l| { l.remote_label_id == LabelId::drafts().into() })
-    );
+    assert!(conversation
+        .labels
+        .iter()
+        .any(|l| { l.remote_label_id == LabelId::drafts().into() }));
 
     // Opening this draft should work;
     Draft::open(user_ctx, draft_message_id).await.unwrap();
@@ -672,20 +670,16 @@ async fn create_draft_reply_impl(
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
     // Sender address should not be repeated in replies or forward.
-    assert!(
-        !draft_message
-            .to_list
-            .value
-            .iter()
-            .any(|v| { v.address == sender_address.email })
-    );
-    assert!(
-        !draft_message
-            .cc_list
-            .value
-            .iter()
-            .any(|v| { v.address == sender_address.email })
-    );
+    assert!(!draft_message
+        .to_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
+    assert!(!draft_message
+        .cc_list
+        .value
+        .iter()
+        .any(|v| { v.address == sender_address.email }));
 
     // Local conversation id match the source message,
     assert_eq!(

@@ -3,14 +3,14 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::muon::serde_to_query;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{GET, POST, PUT};
+use proton_api_core::services::proton::Proton;
 
 use crate::services::proton::prelude::*;
-use crate::services::proton::{MAIL_V4, Package, PostSendRequest};
+use crate::services::proton::{Package, PostSendRequest, MAIL_V4};
 use crate::services::proton::{PostSendMessageResponse, ProtonMail};
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 

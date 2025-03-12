@@ -1,4 +1,4 @@
-use crate::values::iana_token::{IanaToken, is_iana_token_value};
+use crate::values::iana_token::{is_iana_token_value, IanaToken};
 
 #[test]
 fn iana_token_struct() {

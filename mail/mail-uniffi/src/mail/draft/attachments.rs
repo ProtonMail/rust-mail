@@ -3,7 +3,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{DraftAttachmentError, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
-use crate::{AsyncLiveQueryCallback, uniffi_async};
+use crate::{uniffi_async, AsyncLiveQueryCallback};
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::attachments::DraftAttachment as RealDraftAttachment;
 use proton_mail_common::draft::observers::DraftAttachmentObserver;

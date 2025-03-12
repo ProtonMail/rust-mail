@@ -7,11 +7,11 @@ use bytes::Buf;
 use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
 use crate::{
-    ContactError,
     models::{Contact, ContactEmail},
+    ContactError,
 };
 use crate::{CoreContextResult, UserContext};
-use ical::{VcardParser, parser::ParserError};
+use ical::{parser::ParserError, VcardParser};
 pub use manager::*;
 use proton_api_core::services::proton::common::AddressId;
 use proton_api_core::{auth::UserKeySecret, session::CoreSession};
@@ -19,16 +19,16 @@ use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
     errors::CardCryptoError,
     keys::{PinnedPublicKeys, PublicAddressKeys, UnlockedAddressKeys, UnlockedUserKeys},
-    proton_crypto::{CryptoError, crypto::PGPProviderSync},
+    proton_crypto::{crypto::PGPProviderSync, CryptoError},
 };
-use proton_vcard::{VCardError, vcard::VCard};
+use proton_vcard::{vcard::VCard, VCardError};
 use stash::{
     orm::Model,
     params,
     stash::{Bond, StashError, Tether},
 };
 use thiserror::Error;
-use tracing::{Level, debug};
+use tracing::{debug, Level};
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;

@@ -3,8 +3,8 @@ mod common;
 use crate::common::request;
 use reqwest::StatusCode;
 use wiremock::{
-    Mock, MockServer, ResponseTemplate,
     matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
 };
 
 #[cfg(test)]
@@ -44,8 +44,8 @@ mod messages {
 
     use proton_api_core::session::{Config, EnvId};
     use proton_api_core::session::{CoreSession, Session};
+    use proton_api_mail::services::proton::{requests::GetMessagesOptions, ProtonMail};
     use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-    use proton_api_mail::services::proton::{ProtonMail, requests::GetMessagesOptions};
     use proton_core_test_utils::test_context::MockApiEnv;
 
     type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = std::result::Result<T, E>;

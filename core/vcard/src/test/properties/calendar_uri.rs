@@ -1,7 +1,7 @@
-use crate::ParameterType;
-use crate::properties::calendar_uri::{CalendarAddress, validate_caluri};
+use crate::properties::calendar_uri::{validate_caluri, CalendarAddress};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
+use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

@@ -1,7 +1,7 @@
-use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{filter_responses, GenericActionData, MailActionError};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
+use crate::MailUserContext;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use proton_api_mail::services::proton::ProtonMail;

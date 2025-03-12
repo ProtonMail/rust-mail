@@ -23,7 +23,6 @@ use std::hash::BuildHasher;
 use ical::generator::VcardContact;
 use tracing::warn;
 
-use crate::properties::VcardProperty;
 use crate::properties::address::Address;
 use crate::properties::anniversary::Anniversary;
 use crate::properties::birthday::Birthday;
@@ -60,6 +59,7 @@ use crate::properties::uid::VcardUid;
 use crate::properties::url::VcardUrl;
 use crate::properties::xml::Xml;
 use crate::properties::xtended::Xtended;
+use crate::properties::VcardProperty;
 use crate::validation::get_property_kind;
 use crate::{PropertyKind, VCardError, VCardResult};
 

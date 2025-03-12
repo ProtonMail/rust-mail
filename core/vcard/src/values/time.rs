@@ -1,6 +1,6 @@
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
-use crate::values::zone::{ZoneValue, is_zone_value};
+use crate::values::zone::{is_zone_value, ZoneValue};
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug)]
