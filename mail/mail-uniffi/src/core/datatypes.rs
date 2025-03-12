@@ -1594,7 +1594,6 @@ impl From<RealUserSettings> for UserSettings {
     }
 }
 
-use proton_api_core::services::proton::common::Currency as RealCurrency;
 use proton_api_core::services::proton::common::Plan as RealPlan;
 use proton_api_core::services::proton::common::PlanCycle as RealPlanCycle;
 use proton_api_core::services::proton::common::PlanDecoration as RealPlanDecoration;
@@ -1759,7 +1758,7 @@ impl From<PlanCycle> for RealPlanCycle {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct PlanPrice {
     pub id: String,
-    pub currency: Currency,
+    pub currency: String,
     pub current: u64,
 }
 
@@ -1767,36 +1766,8 @@ impl From<RealPlanPrice> for PlanPrice {
     fn from(price: RealPlanPrice) -> Self {
         Self {
             id: price.id,
-            currency: price.currency.into(),
+            currency: price.currency,
             current: price.current,
-        }
-    }
-}
-
-/// A currency.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
-pub enum Currency {
-    EUR,
-    USD,
-    CHF,
-}
-
-impl From<RealCurrency> for Currency {
-    fn from(currency: RealCurrency) -> Self {
-        match currency {
-            RealCurrency::EUR => Self::EUR,
-            RealCurrency::USD => Self::USD,
-            RealCurrency::CHF => Self::CHF,
-        }
-    }
-}
-
-impl From<Currency> for RealCurrency {
-    fn from(currency: Currency) -> Self {
-        match currency {
-            Currency::EUR => Self::EUR,
-            Currency::USD => Self::USD,
-            Currency::CHF => Self::CHF,
         }
     }
 }
@@ -1958,7 +1929,7 @@ pub struct Subscription {
     pub cycle: Option<PlanCycle>,
     pub cycle_description: Option<String>,
 
-    pub currency: Option<Currency>,
+    pub currency: Option<String>,
     pub offer: Option<String>,
 
     pub amount: Option<u64>,
@@ -2000,7 +1971,7 @@ impl From<RealSubscription> for Subscription {
             description: subscription.description,
             cycle: subscription.cycle.map(From::from),
             cycle_description: subscription.cycle_description,
-            currency: subscription.currency.map(From::from),
+            currency: subscription.currency,
             offer: subscription.offer,
             amount: subscription.amount,
             renew_amount: subscription.renew_amount,
@@ -2022,7 +1993,7 @@ impl From<RealSubscription> for Subscription {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct NewSubscription {
     pub cycle: PlanCycle,
-    pub currency: Option<Currency>,
+    pub currency: Option<String>,
     pub currency_id: Option<i32>,
     pub plans: Option<HashMap<String, i32>>,
     pub plan_ids: Option<Vec<i32>>,
@@ -2035,7 +2006,7 @@ impl From<NewSubscription> for RealNewSubscription {
     fn from(subscription: NewSubscription) -> Self {
         Self {
             cycle: subscription.cycle.into(),
-            currency: subscription.currency.map(Into::into),
+            currency: subscription.currency,
             currency_id: subscription.currency_id,
             plans: subscription.plans,
             plan_ids: subscription.plan_ids,

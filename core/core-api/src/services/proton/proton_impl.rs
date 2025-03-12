@@ -290,7 +290,7 @@ impl ProtonCore for Proton {
     async fn post_payments_tokens(
         &self,
         amount: u64,
-        currency: Currency,
+        currency: String,
         payment: PaymentReceipt,
     ) -> ApiServiceResult<PostPaymentsTokensResponse> {
         Ok(POST!("/payments/v5/tokens")

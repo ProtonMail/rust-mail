@@ -91,14 +91,6 @@ pub enum DeviceEnvironment {
     AppleDev = 16,
 }
 
-/// A currency (enum of string, can be EUR, USD or CHF).
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
-pub enum Currency {
-    EUR,
-    USD,
-    CHF,
-}
-
 //  STRUCTS
 //==============================================================================
 
@@ -175,7 +167,7 @@ pub enum PlanCycle {
 pub struct PlanPrice {
     #[serde(rename = "ID")]
     pub id: String,
-    pub currency: Currency,
+    pub currency: String,
     pub current: u64,
 }
 
@@ -256,7 +248,7 @@ pub struct Subscription {
     pub cycle: Option<PlanCycle>,
     pub cycle_description: Option<String>,
 
-    pub currency: Option<Currency>,
+    pub currency: Option<String>,
     pub offer: Option<String>,
 
     pub amount: Option<u64>,

@@ -174,7 +174,7 @@ pub struct GetPaymentsPlansOptions {
 #[serde(rename_all = "PascalCase")]
 pub struct PostPaymentsTokensRequest {
     pub amount: u64,
-    pub currency: Currency,
+    pub currency: String,
     pub payment: PaymentReceipt,
 }
 

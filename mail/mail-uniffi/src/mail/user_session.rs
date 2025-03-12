@@ -4,7 +4,7 @@ mod initialization;
 mod labels;
 
 use crate::core::datatypes::{
-    AccountDetails, ConnectionStatus, Currency, GetPaymentsPlansOptions, Id, NewSubscription,
+    AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
     NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, Subscriptions, User,
 };
 use crate::errors::unexpected::UnexpectedError;
@@ -264,7 +264,7 @@ impl MailUserSession {
     pub async fn post_payments_tokens(
         &self,
         amount: u64,
-        currency: Currency,
+        currency: String,
         payment: PaymentReceipt,
     ) -> Result<PaymentToken, UserSessionError> {
         let ctx = self.ctx()?;
@@ -272,7 +272,7 @@ impl MailUserSession {
         uniffi_async(async move {
             let res = ctx
                 .api()
-                .post_payments_tokens(amount, currency.into(), payment.into())
+                .post_payments_tokens(amount, currency, payment.into())
                 .await?;
 
             Result::<_, RealProtonMailError>::Ok(PaymentToken {

@@ -65,7 +65,7 @@ pub struct AppleRecurringReceiptDetails {
 pub struct NewSubscription {
     pub cycle: PlanCycle,
 
-    pub currency: Option<Currency>,
+    pub currency: Option<String>,
     #[serde(rename = "CurrencyID")]
     pub currency_id: Option<i32>,
 

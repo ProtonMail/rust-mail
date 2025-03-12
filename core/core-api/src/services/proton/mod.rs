@@ -448,7 +448,7 @@ pub trait ProtonCore {
     async fn post_payments_tokens(
         &self,
         amount: u64,
-        currency: Currency,
+        currency: String,
         payment: PaymentReceipt,
     ) -> ApiServiceResult<PostPaymentsTokensResponse>;
 
