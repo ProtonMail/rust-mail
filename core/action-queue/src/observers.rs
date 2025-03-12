@@ -40,7 +40,6 @@ impl<T: Action> ActionFailureObserver<T> {
         loop {
             match self.receiver.recv().await {
                 Ok(msg) => match msg {
-                    BroadcastMessage::Success(_) => continue,
                     BroadcastMessage::Error(err, meta) if meta.action_type == T::TYPE.as_ref() => {
                         return Ok(ActionFailureReason::Error(err, meta));
                     }

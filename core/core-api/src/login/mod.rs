@@ -5,7 +5,6 @@ use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
-use futures::TryFutureExt;
 use muon::client::Tokens;
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use std::fmt::Debug;
@@ -142,7 +141,7 @@ impl Flow {
         tokens: Tokens,
     ) -> Result<(), LoginError> {
         let (client, _) = self.session.to_parts();
-        self.transition(|s| s.migrate(client, user, data, tokens))
+        self.transition(|s: State| s.migrate(client, user, data, tokens))
             .await
             .inspect_err(|_| self.try_recover())?;
 
