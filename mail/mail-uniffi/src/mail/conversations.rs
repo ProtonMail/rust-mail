@@ -34,7 +34,7 @@ use stash::stash::Stash;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::datatypes::{ConversationScroller, MessageBanner};
+use super::datatypes::ConversationScroller;
 use super::messages::WatchedLabelAs;
 
 /// Label the given conversations with the given label id.
@@ -339,9 +339,6 @@ pub struct ConversationAndMessages {
     /// ID of the message that should be displayed first.
     pub message_id_to_open: Id,
 
-    /// The banners to display in the message
-    pub banners: Vec<MessageBanner>,
-
     /// Messages which belong to the conversation.
     pub messages: Vec<Message>,
 }
@@ -352,7 +349,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
             conversation: value.conversation.into(),
             message_id_to_open: value.message_id_to_open.into(),
             messages: value.messages.map_vec(),
-            banners: value.banners.map_vec(),
         }
     }
 }
@@ -717,9 +713,6 @@ pub struct WatchedConversation {
     /// The Id of the message to open.
     pub message_id_to_open: Id,
 
-    /// The banners to display in the message
-    pub banners: Vec<MessageBanner>,
-
     /// The handle to stop watching the conversation and messages;
     pub handle: Arc<WatchHandle>,
 }
@@ -764,7 +757,6 @@ pub async fn watch_conversation(
             conversation: messages.conversation,
             messages: messages.messages,
             message_id_to_open: messages.message_id_to_open,
-            banners: messages.banners.map_vec(),
             handle: watcher,
         }))
     })

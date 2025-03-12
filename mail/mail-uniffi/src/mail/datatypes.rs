@@ -52,7 +52,6 @@ mod attachment;
 mod available_action;
 pub(crate) mod labels;
 mod mail_scroller;
-mod message_banner;
 mod system_folder;
 mod system_label;
 
@@ -62,7 +61,6 @@ pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use mail_scroller::*;
-pub use message_banner::MessageBanner;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
@@ -1541,23 +1539,9 @@ impl From<RealMessage> for Message {
             id: value.local_id.unwrap().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
             address_id: value.local_address_id.into(),
-            attachments_metadata: value
-                .get_attachment_metadata()
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            bcc_list: value
-                .bcc_list
-                .value
-                .into_iter()
-                .map(MessageRecipient::from)
-                .collect(),
-            cc_list: value
-                .cc_list
-                .value
-                .into_iter()
-                .map(MessageRecipient::from)
-                .collect(),
+            attachments_metadata: value.get_attachment_metadata().map_vec(),
+            bcc_list: value.bcc_list.value.map_vec(),
+            cc_list: value.cc_list.value.map_vec(),
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             flags: value.flags.into(),
@@ -1566,23 +1550,13 @@ impl From<RealMessage> for Message {
             is_replied_all: value.is_replied_all,
             num_attachments: value.num_attachments,
             display_order: value.display_order,
-            reply_tos: value
-                .reply_tos
-                .value
-                .into_iter()
-                .map(MessageReplyTo::from)
-                .collect(),
+            reply_tos: value.reply_tos.value.map_vec(),
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time,
             subject: value.subject,
             time: value.time,
-            to_list: value
-                .to_list
-                .value
-                .into_iter()
-                .map(MessageRecipient::from)
-                .collect(),
+            to_list: value.to_list.value.map_vec(),
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
             is_draft,

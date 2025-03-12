@@ -160,7 +160,7 @@ impl TryFrom<&IcalProperty> for CalendarUserAddress {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }
