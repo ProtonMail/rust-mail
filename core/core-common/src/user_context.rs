@@ -152,13 +152,24 @@ impl UserContext {
     /// Returns `CoreContextError` if the account does not exist or if an error occurs
     /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
+        let account = self.core_account().await?;
+        Ok(account.details())
+    }
+
+    /// Retrieves the current user's account.
+    ///
+    /// # Errors
+    ///
+    /// Returns `CoreContextError` if the account does not exist or if an error occurs
+    /// during the database query.
+    pub async fn core_account(&self) -> CoreContextResult<CoreAccount> {
         let tether = self.context.account_stash().connection();
         let user_id = self.user_id();
         let account = CoreAccount::load(user_id.clone(), &tether)
             .await?
             .ok_or_else(|| CoreContextError::AccountMissing(user_id.clone()))?;
 
-        Ok(account.details())
+        Ok(account)
     }
 
     /// Get the session id of this context.

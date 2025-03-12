@@ -1,11 +1,13 @@
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
 use crate::services::proton::prelude::{SessionId, UserId};
+use crate::services::proton::Proton;
 use crate::session::SessionParts;
-use crate::store::{AuthInfo, MbpMode, TfaMode};
+use crate::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
+use muon::client::{Auth, Tokens};
 use tracing::info;
 
 /// Represents the initial state of the login flow;
@@ -33,6 +35,49 @@ impl WantLogin {
         self.try_login(user, pass, info)
             .map_err(|err| (State::LoginRetry, err))
             .await
+    }
+
+    /// Migrate session created by the legacy version of the app
+    ///
+    pub async fn migrate(
+        self,
+        client: Proton,
+        user: UserData,
+        data: LoginFlowData,
+        tokens: Tokens,
+    ) -> Result<State, (State, LoginError)> {
+        self.try_migrate(client, user, data, tokens)
+            .map_err(|err| (State::LoginRetry, err))
+            .await
+    }
+
+    async fn try_migrate(
+        self,
+        client: Proton,
+        user: UserData,
+        data: LoginFlowData,
+        tokens: Tokens,
+    ) -> Result<State, LoginError> {
+        self.parts
+            .store
+            .write()
+            .await
+            .set_name_or_addr(&user.username);
+        let info = get_auth_info(&data, false, false);
+        self.parts
+            .store
+            .write()
+            .await
+            .set_auth(Auth::Internal {
+                user_id: info.user_id.clone().to_string(),
+                uid: info.session_id.clone().to_string(),
+                tok: tokens,
+            })
+            .await?;
+        self.parts.store.write().await.set_auth_info(info).await?;
+        let data = get_state_data(&data, self.parts);
+
+        State::finalize_migration(client, data, user).await
     }
 
     async fn try_login(
