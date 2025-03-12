@@ -2,6 +2,7 @@ use clap::{Args, Parser, Subcommand};
 use futures::TryFutureExt;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
+use proton_api_core::services::proton::muon::util::BoxErrExt;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
@@ -44,7 +45,7 @@ impl Cli {
         info!(?self, "starting");
 
         let dir = Path::new("/tmp");
-        let kch = OnDiskKeyChain::new("/tmp/kch")?;
+        let kch = OnDiskKeyChain::new(dir)?;
         let cfg = build_config(self.app, self.env)?;
         let ctx = new_mail_ctx(dir, kch, cfg).await?;
 
@@ -94,7 +95,7 @@ impl LoginCmd {
             .inspect_err(|err| error!("failed to create user context: {err:?}"))
             .await?;
 
-        MailUserContext::initialize_async(user_ctx, &InitCb)
+        MailUserContext::initialize_async(Arc::clone(&user_ctx), &InitCb)
             .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
             .map_err(|(_, err)| err)
             .await?;
@@ -123,14 +124,12 @@ async fn new_mail_ctx<T: KeyChain + 'static>(
     cfg: Config,
 ) -> Result<Arc<MailContext>> {
     let kch = Arc::new(kch);
-    let session = dir.join("session");
-    let user = dir.join("user");
     let cache_path = dir.join("cache");
     let cache_size = 1 << 20;
 
     Ok(MailContext::new(
-        session,
-        user,
+        dir.join("session"),
+        dir.join("user"),
         cache_path.join("core"),
         cache_path.join("mail"),
         cache_size,
@@ -177,49 +176,41 @@ struct OnDiskKeyChain {
 
 impl OnDiskKeyChain {
     fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref().to_owned();
+        let path = path.as_ref().join("kch");
 
         if fs::exists(&path)? {
-            info!("reusing existing keychain file: {}", path.display());
+            info!("reusing existing keychain directory: {}", path.display());
         } else {
             fs::write(&path, SessionEncryptionKey::random().to_base64())?;
         };
 
         Ok(Self { path })
     }
-
-    fn kind_to_path(&self, kind: KeyChainEntryKind) -> PathBuf {
-        self.path.join(match kind {
-            KeyChainEntryKind::EncryptionKey => "encryption",
-            KeyChainEntryKind::DeviceKey => "device",
-        })
-    }
 }
 
 impl KeyChain for OnDiskKeyChain {
-    fn store_entry(&self, kind: KeyChainEntryKind, key: SecretString) -> Result<(), KeyChainError> {
-        fs::write(self.kind_to_path(kind), key.expose_secret().as_bytes())
-            .map_err(|e| KeyChainError::new(Box::new(e)))?;
+    fn store_entry(&self, _: KeyChainEntryKind, key: SecretString) -> Result<(), KeyChainError> {
+        fs::write(&self.path, key.expose_secret().as_bytes()).box_map_err(KeyChainError::new)?;
 
         Ok(())
     }
 
-    fn delete_entry(&self, kind: KeyChainEntryKind) -> Result<(), KeyChainError> {
-        fs::remove_file(self.kind_to_path(kind)).map_err(|e| KeyChainError::new(Box::new(e)))?;
+    fn delete_entry(&self, _: KeyChainEntryKind) -> Result<(), KeyChainError> {
+        fs::remove_file(&self.path).box_map_err(KeyChainError::new)?;
 
         Ok(())
     }
 
-    fn load_entry(&self, kind: KeyChainEntryKind) -> Result<Option<SecretString>, KeyChainError> {
-        let path = self.kind_to_path(kind);
-        let Ok(true) = fs::exists(&path) else {
+    fn load_entry(&self, _: KeyChainEntryKind) -> Result<Option<SecretString>, KeyChainError> {
+        let Ok(true) = fs::exists(&self.path) else {
             return Ok(None);
         };
 
-        fs::read_to_string(&path)
+        let entry = fs::read_to_string(&self.path)
             .map(SecretString::new)
-            .map(Some)
-            .map_err(|e| KeyChainError::new(Box::new(e)))
+            .box_map_err(KeyChainError::new)?;
+
+        Ok(Some(entry))
     }
 }
 
