@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-2368] Saving registered device is now generating new device token key pair if necessary.
   - [ET-2368] Registering device is now using device key instead of user key.
 
+## [0.55.2] - 2025-03-12
+
+### Fixed
+
+  - [ET-2434] Do not panic on `delete_conversations` action when label id does not have remote id.
+
+
+## [0.55.1] - 2025-03-11
+
 ### Fixed
 
   - [ET-2288] Multiple Stash improvements for database stability and mitigating random crashes
