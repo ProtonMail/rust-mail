@@ -1,11 +1,11 @@
 use velcro::hash_set;
 
+use crate::ParameterType;
 use crate::properties::uid::VcardUid;
-use crate::properties::uid::{validate_uid, UidValue};
+use crate::properties::uid::{UidValue, validate_uid};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
 use crate::values::uri::Uri;
-use crate::ParameterType;
 
 #[test]
 fn uid_struct() {

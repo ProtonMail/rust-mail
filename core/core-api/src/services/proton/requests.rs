@@ -20,10 +20,10 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::prelude::*;
 use crate::MAX_PAGE_ELEMENT_COUNT;
+use crate::services::proton::prelude::*;
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{BoolFromInt, serde_as};
 use smart_default::SmartDefault;
 
 use super::{DeviceEnvironment, LabelType};

@@ -1,5 +1,5 @@
-use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::ParameterType;
+use crate::errors::{VCardParameterError, VCardParameterResult};
 
 /// All kind of values than can be used in vCards
 #[derive(Clone, Copy, Debug, PartialEq)]

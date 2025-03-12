@@ -16,8 +16,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::info;
-use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::LevelFilter;
 
 struct InitCallback;
 

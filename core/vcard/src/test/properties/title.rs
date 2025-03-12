@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::title::{validate_title, Title};
+use crate::ParameterType;
+use crate::properties::title::{Title, validate_title};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
-use crate::ParameterType;
 
 #[test]
 fn title_struct() {

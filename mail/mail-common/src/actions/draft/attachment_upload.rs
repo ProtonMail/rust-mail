@@ -13,9 +13,9 @@ use proton_action_queue::action::{
 };
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::common::AddressId;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::{Deserialize, Serialize};
@@ -124,7 +124,9 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
         };
 
         if let Some(id) = attachment_upload_metadata.action_id {
-            error!("Attempting to create new attachment upload action when existing action ({id}) exists");
+            error!(
+                "Attempting to create new attachment upload action when existing action ({id}) exists"
+            );
             return Err(AttachmentError::ExistingUploadActionExist(id).into());
         }
 

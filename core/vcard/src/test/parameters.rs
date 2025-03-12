@@ -15,8 +15,8 @@ mod type_tel;
 
 use crate::parameters::have_no_param;
 
-use crate::parameters::value::is_value_param;
 use crate::ValueType;
+use crate::parameters::value::is_value_param;
 
 #[test]
 fn value_param() {

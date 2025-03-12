@@ -18,8 +18,8 @@ use proton_mail_test_utils::{
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{
-    matchers::{body_json, method, path, query_param_contains},
     Mock, MockServer, ResponseTemplate,
+    matchers::{body_json, method, path, query_param_contains},
 };
 
 use super::*;

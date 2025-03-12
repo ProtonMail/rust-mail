@@ -33,11 +33,7 @@ impl AvatarInformation {
     where
         I: Into<Self>,
     {
-        if self.is_empty() {
-            value.into()
-        } else {
-            self
-        }
+        if self.is_empty() { value.into() } else { self }
     }
 
     /// Returns a new `AvatarInformation` with the given value if the text is empty.

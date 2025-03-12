@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::product_id::{validate_prodid, ProductId};
+use crate::ParameterType;
+use crate::properties::product_id::{ProductId, validate_prodid};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
-use crate::ParameterType;
 
 #[test]
 fn product_id_struct() {

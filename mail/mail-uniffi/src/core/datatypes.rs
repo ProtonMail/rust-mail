@@ -77,8 +77,8 @@ use proton_core_common::models::{
 };
 use proton_core_common::utils::MapVec as _;
 use proton_crypto_account::contacts::ContactCardType as RealCardType;
-use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use proton_mail_common::AppError;
+use proton_mail_common::datatypes::{LocalAttachmentId, LocalConversationId, LocalMessageId};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;

@@ -1,9 +1,9 @@
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::common::LabelType as ApiLabelType;
 use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
-use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;

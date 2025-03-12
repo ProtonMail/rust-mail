@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 
 use crate::properties::optional_debug;
-use crate::values::date::{is_date_noreduc_value, DateValue};
-use crate::values::time::{is_time_notrunc_value, TimeValue};
+use crate::values::date::{DateValue, is_date_noreduc_value};
+use crate::values::time::{TimeValue, is_time_notrunc_value};
 use crate::values::zone::ZoneValue;
 
 #[allow(clippy::module_name_repetitions)]

@@ -11,7 +11,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::models::{Conversation, DraftMetadata, Message};
 use proton_mail_test_utils::message_body::{
-    message_body_test_message_simple, message_body_test_user_secret, TEST_USER_ID,
+    TEST_USER_ID, message_body_test_message_simple, message_body_test_user_secret,
 };
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 

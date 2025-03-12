@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, LabelAsData, MailActionError};
+use crate::actions::{LabelAsData, MailActionError, filter_responses};
 use crate::datatypes::{ExclusiveLocation, RollbackItemType, SystemLabelId};
 use crate::models::{Conversation, ConversationCounters, ConversationLabel};
 use crate::{AppError, MailUserContext};
@@ -112,7 +112,9 @@ impl Handler {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Conversation::load(conversation_id, bond).await? else {
-            warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
+            warn!(
+                "While reverting locally, could not find conversation with local_id: {conversation_id:?}"
+            );
             return Ok(());
         };
 

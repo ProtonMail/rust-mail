@@ -1,4 +1,4 @@
-use crate::values::x_name::{is_x_name_value, XName};
+use crate::values::x_name::{XName, is_x_name_value};
 
 #[test]
 fn x_name_struct() {

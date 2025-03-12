@@ -1,8 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use proton_api_core::services::proton::prelude::GetEventOptions;
 use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::prelude::GetEventOptions;
 // avoid namespace conflicts
 use crate::Event;
 use proton_api_core::service::ApiServiceError;

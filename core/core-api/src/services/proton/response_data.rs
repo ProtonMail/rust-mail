@@ -35,7 +35,7 @@ use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt, DefaultOnNull, FromInto};
+use serde_with::{BoolFromInt, DefaultOnNull, FromInto, serde_as};
 
 //  ENUMS
 //==============================================================================

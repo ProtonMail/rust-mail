@@ -9,7 +9,7 @@
 #[path = "tests/remote_content.rs"]
 mod tests;
 
-use html5ever::{namespace_url, ns, Namespace};
+use html5ever::{Namespace, namespace_url, ns};
 use kuchikiki::iter::NodeEdge;
 use kuchikiki::{Attribute, ExpandedName, NodeRef};
 use url::Url;

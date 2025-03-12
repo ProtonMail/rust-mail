@@ -21,18 +21,18 @@
 //!
 
 use super::request_data::{NewAttachmentDisposition, Package};
+use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::prelude::{Disposition, NewAttachmentParams};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
-use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature,
 };
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
+use serde_with::{BoolFromInt, DisplayFromStr, serde_as};
 use smart_default::SmartDefault;
 
 /// Parameters to filter/search conversations with a given criteria.

@@ -7,12 +7,12 @@ use proton_core_common::{
 };
 use proton_mail_common::MailUserContext;
 use ratatui::{
+    Frame,
     layout::{Constraint, Flex, Layout, Margin},
     prelude::Rect,
     style::{Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
-    Frame,
 };
 use stash::stash::{Tether, WatcherHandle};
 use std::sync::Arc;
@@ -24,7 +24,7 @@ use crate::{
     widgets::{ScrollableList, ScrollableListState},
 };
 
-use super::{watcher::WatchHandle, AppState, AppStateHandler};
+use super::{AppState, AppStateHandler, watcher::WatchHandle};
 
 const CONTACT_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;

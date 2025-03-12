@@ -1,5 +1,5 @@
 use crate::actions::draft::{
-    local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
+    SEND_ACTION_GROUP, local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
 };
 use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{
@@ -9,13 +9,13 @@ use crate::datatypes::{
 use crate::decrypted_message::StorableMessageBodyRef;
 use crate::draft::compose::sanitize_draft_save;
 use crate::draft::recipients::RecipientList;
-use crate::draft::{compose, Draft, ReplyMode, SaveOrSendError};
+use crate::draft::{Draft, ReplyMode, SaveOrSendError, compose};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
     MetadataId,
 };
-use crate::{draft, AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext, draft};
 use anyhow::anyhow;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::{
@@ -656,9 +656,11 @@ impl Save {
         time: u64,
         display_order: u64,
     ) -> Message {
-        debug_assert!(attachments
-            .iter()
-            .all(|v| v.disposition == Disposition::Attachment));
+        debug_assert!(
+            attachments
+                .iter()
+                .all(|v| v.disposition == Disposition::Attachment)
+        );
         Message {
             local_id: None,
             remote_id: None,
@@ -738,9 +740,11 @@ impl Save {
         total_attachment_count: u64,
         subject: String,
     ) -> Conversation {
-        debug_assert!(attachments
-            .iter()
-            .all(|v| v.disposition == Disposition::Attachment));
+        debug_assert!(
+            attachments
+                .iter()
+                .all(|v| v.disposition == Disposition::Attachment)
+        );
         Conversation {
             local_id: None,
             remote_id: None,

@@ -1,4 +1,4 @@
-use crate::actions::{filter_responses, LabelAsData, MailActionError};
+use crate::actions::{LabelAsData, MailActionError, filter_responses};
 use crate::datatypes::{ExclusiveLocation, LocalMessageId, RollbackItemType, SystemLabelId};
 use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};

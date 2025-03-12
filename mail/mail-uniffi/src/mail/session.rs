@@ -6,11 +6,11 @@ use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
+use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
-    async_runtime, async_runtime_slim, spawn_async, uniffi_async, watch_channel, LiveQueryCallback,
-    WatchHandle,
+    LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, spawn_async, uniffi_async,
+    watch_channel,
 };
-use crate::{watch_channel_async, AsyncLiveQueryCallback};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_api_core::human_verification::ChallengeObserver;
@@ -18,15 +18,15 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
-use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContext, MailUserContext};
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
-use tokio::task::{spawn_blocking, AbortHandle};
+use tokio::task::{AbortHandle, spawn_blocking};
 use tracing::debug;
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -1003,13 +1003,17 @@ impl Drop for BackgroundExecutionHandle {
             spawn_async(ctx, async move {
                 if !sender.is_closed() && !handle.is_finished() {
                     if let Err(e) = sender.send(()).await {
-                        tracing::error!("Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`");
+                        tracing::error!(
+                            "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
+                        );
                         handle.abort();
                     }
                 }
             });
         } else {
-            tracing::warn!("MailContext already dropped, background execution handle should not live that long");
+            tracing::warn!(
+                "MailContext already dropped, background execution handle should not live that long"
+            );
         }
     }
 }
@@ -1071,7 +1075,9 @@ async fn get_all_logged_in_mail_user_contexts(
         let Some(CoreSessionState::Authenticated) =
             ctx.get_session_state(session.remote_id.clone()).await?
         else {
-            tracing::warn!("Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed");
+            tracing::warn!(
+                "Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed"
+            );
             continue;
         };
 

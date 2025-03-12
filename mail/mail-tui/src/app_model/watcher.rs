@@ -1,8 +1,8 @@
 use crate::app::Command;
 use crate::messages::Messages;
 use flume::Sender;
-use futures::future::BoxFuture;
 use futures::FutureExt;
+use futures::future::BoxFuture;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use tracing::error;
 

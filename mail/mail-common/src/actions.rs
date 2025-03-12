@@ -6,9 +6,9 @@ pub mod labels;
 pub mod messages;
 
 pub use self::available_action::*;
+use crate::AppError;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType};
 use crate::models::RollbackItem;
-use crate::AppError;
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::action::WriterGuardError;

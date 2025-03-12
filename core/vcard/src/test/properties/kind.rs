@@ -1,10 +1,10 @@
 use velcro::hash_set;
 
-use crate::properties::kind::{validate_kind, Kind, KindValue};
+use crate::ParameterType;
+use crate::properties::kind::{Kind, KindValue, validate_kind};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::iana_token::IanaToken;
 use crate::values::x_name::XName;
-use crate::ParameterType;
 
 #[test]
 fn kind_struct() {

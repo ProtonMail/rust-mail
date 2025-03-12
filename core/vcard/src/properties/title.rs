@@ -13,10 +13,10 @@ use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    any_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
+    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::text::{is_text_value, Text};
+use crate::values::text::{Text, is_text_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -152,7 +152,7 @@ impl TryFrom<&IcalProperty> for Title {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Title,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }

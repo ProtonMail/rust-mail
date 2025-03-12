@@ -22,7 +22,7 @@ use proton_api_mail::services::proton::responses::{
     PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{BoolFromInt, serde_as};
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};

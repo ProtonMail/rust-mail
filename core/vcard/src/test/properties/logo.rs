@@ -1,7 +1,7 @@
-use crate::properties::logo::{validate_logo, Logo};
+use crate::ParameterType;
+use crate::properties::logo::{Logo, validate_logo};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

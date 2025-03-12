@@ -4,7 +4,7 @@ use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::borrow::Borrow;
 use std::sync::Arc;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{RwLock, watch};
 
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;

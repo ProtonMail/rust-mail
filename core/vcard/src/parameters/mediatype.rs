@@ -3,10 +3,10 @@ use std::fmt::{Debug, Formatter};
 
 use regex_static::static_regex;
 
+use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::values::check_list;
 use crate::vcard::split_list;
-use crate::ParameterType;
 
 /// The MEDIATYPE parameter is used with properties whose value is a URI.
 #[derive(Clone)]

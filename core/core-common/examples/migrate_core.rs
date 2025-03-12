@@ -4,10 +4,10 @@ use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use proton_api_core::session::{Config, CoreSession as _};
 use proton_api_core::store::UserData;
+use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain, KeyChainExt};
-use proton_core_common::Context;
 use tempdir::TempDir;
 use tracing::Level;
 
@@ -86,7 +86,9 @@ async fn main() {
     let labels = Label::all_labels(network_session).await.unwrap();
     tracing::info!("Legacy labels: {labels:?}");
 
-    tracing::info!("Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it");
+    tracing::info!(
+        "Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it"
+    );
     let user_id = ctx.user_id();
     let account = ctx.core_account().await.unwrap();
 

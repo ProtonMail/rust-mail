@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 
-use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::ParameterType;
+use crate::errors::{VCardParameterError, VCardParameterResult};
 
 const MIN_PREF: u32 = 1;
 const MAX_PREF: u32 = 100;

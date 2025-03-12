@@ -7,13 +7,13 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::services::proton::common::UserId;
-use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
+use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError};
 use std::sync::Weak;
-use tracing::{debug, error, warn, Level};
+use tracing::{Level, debug, error, warn};
 
 pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;

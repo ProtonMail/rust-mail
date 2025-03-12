@@ -12,7 +12,7 @@ use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
-use ratatui::{symbols, Frame};
+use ratatui::{Frame, symbols};
 use std::sync::Arc;
 
 use super::LabelAs;

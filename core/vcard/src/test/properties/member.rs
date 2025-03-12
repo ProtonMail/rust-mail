@@ -1,7 +1,7 @@
-use crate::properties::member::{validate_member, Member};
+use crate::ParameterType;
+use crate::properties::member::{Member, validate_member};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

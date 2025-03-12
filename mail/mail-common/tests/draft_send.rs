@@ -20,14 +20,14 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
+use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
-use proton_mail_common::draft::Draft;
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
     MessageBodyMetadata,
 };
-use proton_mail_common::{draft, MailContextError, MailUserContext};
+use proton_mail_common::{MailContextError, MailUserContext, draft};
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;

@@ -1,8 +1,8 @@
 use crate::cache::CacheAttachmentKey;
 use crate::datatypes::attachment::MimeType;
 use crate::datatypes::{
-    attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
-    KeyPackets, LocalAttachmentId, LocalMessageId, MessageSender,
+    AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition, KeyPackets,
+    LocalAttachmentId, LocalMessageId, MessageSender, attachment,
 };
 use crate::models::*;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
@@ -12,12 +12,12 @@ use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::AddressId;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;

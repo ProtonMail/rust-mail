@@ -1,6 +1,7 @@
 //! This module group all higher level validation functions
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
+use crate::properties::PropertyKind;
 use crate::properties::address::validate_adr;
 use crate::properties::anniversary::validate_anniversary;
 use crate::properties::begin::validate_begin;
@@ -39,9 +40,8 @@ use crate::properties::uid::validate_uid;
 use crate::properties::url::validate_url;
 use crate::properties::version::validate_version;
 use crate::properties::xml::validate_xml;
-use crate::properties::PropertyKind;
-use ical::generator::{Property, VcardContact};
 use ical::VcardParser;
+use ical::generator::{Property, VcardContact};
 use regex_static::static_regex;
 use std::collections::HashMap;
 use std::io::BufRead;

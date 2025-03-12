@@ -1,11 +1,11 @@
 use ical::generator::Property;
 use velcro::hash_set;
 
+use crate::ParameterType;
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::value::ValueType;
 use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
-use crate::ParameterType;
 
 /// Validate that the given `property` respect the format for a `VERSION` property
 ///

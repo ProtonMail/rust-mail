@@ -6,8 +6,8 @@ use proton_crypto_account::keys::{
     SignedKeyList,
 };
 use wiremock::{
-    matchers::{method, path, query_param},
     Mock, ResponseTemplate,
+    matchers::{method, path, query_param},
 };
 
 pub const TEST_OTHER_USER_EMAIL: &str = "rust_test2@proton.black";

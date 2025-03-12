@@ -8,9 +8,9 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
+use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabelId};
 use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCounters};
-use proton_mail_common::Mailbox;
 use proton_mail_test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};

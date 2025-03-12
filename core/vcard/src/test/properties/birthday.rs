@@ -1,8 +1,8 @@
-use crate::properties::birthday::{validate_bday, Birthday, BirthdayValue};
+use crate::ParameterType;
+use crate::properties::birthday::{Birthday, BirthdayValue, validate_bday};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::date_and_or_time::DateAndOrTimeValue;
 use crate::values::text::Text;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

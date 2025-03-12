@@ -7,7 +7,7 @@ use proton_core_common::cache::{
 };
 use proton_mail_ids::LocalMessageId;
 use std::ffi::OsString;
-use std::fs::{read_dir, remove_file, DirEntry};
+use std::fs::{DirEntry, read_dir, remove_file};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use tracing::{error, warn};

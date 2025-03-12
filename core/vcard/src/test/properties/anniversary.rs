@@ -1,8 +1,8 @@
-use crate::properties::anniversary::{validate_anniversary, Anniversary, AnniversaryValue};
+use crate::ParameterType;
+use crate::properties::anniversary::{Anniversary, AnniversaryValue, validate_anniversary};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::date_and_or_time::DateAndOrTimeValue;
 use crate::values::text::Text;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

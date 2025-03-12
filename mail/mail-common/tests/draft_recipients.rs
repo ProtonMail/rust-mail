@@ -7,7 +7,7 @@ use proton_mail_common::draft::recipients::{
     ValidatingRecipientList, ValidationState,
 };
 use proton_mail_test_utils::init::Params;
-use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
+use proton_mail_test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_test_utils::test_context::MailTestContext;
 use std::sync::Arc;
 use test_case::test_case;

@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::language::{validate_lang, Language};
+use crate::ParameterType;
+use crate::properties::language::{Language, validate_lang};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::language_tag::LanguageTag;
-use crate::ParameterType;
 
 #[test]
 fn language_struct() {

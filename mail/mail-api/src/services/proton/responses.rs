@@ -35,7 +35,7 @@ use crate::services::proton::response_data::{
 use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
+use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

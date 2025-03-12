@@ -24,8 +24,8 @@ use stash::{
 };
 use std::{collections::BTreeMap, vec};
 use wiremock::{
-    matchers::{method, path, query_param_contains},
     Mock, ResponseTemplate,
+    matchers::{method, path, query_param_contains},
 };
 
 fn test_message(n: usize, order_shift: u64) -> Vec<Message> {
@@ -76,8 +76,8 @@ fn expected_messages(
 }
 
 #[tokio::test]
-async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for_cached_scroll_data(
-) {
+async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for_cached_scroll_data()
+ {
     const REMOTE_LABEL_ID: &str = "rid1";
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;

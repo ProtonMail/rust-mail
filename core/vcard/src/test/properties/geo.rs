@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::geo::{validate_geo, Geo};
+use crate::ParameterType;
+use crate::properties::geo::{Geo, validate_geo};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 
 #[test]
 fn geo_struct() {

@@ -1,5 +1,5 @@
 pub use self::keys::*;
-use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use crate::cache::ProtonCache;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;

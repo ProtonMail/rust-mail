@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
+use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
-use proton_core_common::Context;
 use tempdir::TempDir;
 use tracing::Level;
 

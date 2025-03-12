@@ -5,8 +5,8 @@ use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::services::proton::common::UserId;
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
-use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::UserDatabaseInitializer;
+use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::context::MailUserDatabaseInitializer;
@@ -15,8 +15,8 @@ pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::info;
-use wiremock::matchers::any;
 use wiremock::MockServer;
+use wiremock::matchers::any;
 use wiremock::{Mock, Request};
 
 /// Test context for mail tests.

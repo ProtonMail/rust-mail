@@ -8,7 +8,7 @@ use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, optional_debug, validate_parameters, VcardProperty};
+use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::text::is_text_value;
 use crate::vcard::group_from_name;
@@ -88,7 +88,7 @@ impl TryFrom<&IcalProperty> for Gender {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Gender,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }

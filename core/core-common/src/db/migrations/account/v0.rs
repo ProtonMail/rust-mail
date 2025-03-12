@@ -1,5 +1,5 @@
 use stash::stash::{Bond, StashError};
-use tracing::{debug_span, Instrument};
+use tracing::{Instrument, debug_span};
 
 mod devices;
 

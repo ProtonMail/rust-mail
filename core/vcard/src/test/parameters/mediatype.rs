@@ -1,5 +1,5 @@
-use crate::parameters::mediatype::is_mediatype_param;
 use crate::parameters::mediatype::MediaType;
+use crate::parameters::mediatype::is_mediatype_param;
 
 #[test]
 fn mediatype_struct() {

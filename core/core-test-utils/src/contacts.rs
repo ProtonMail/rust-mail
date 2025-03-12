@@ -10,8 +10,8 @@ use proton_api_core::services::proton::responses::{
     PutDeleteContactsResponse,
 };
 use wiremock::{
-    matchers::{body_json, method, path},
     Mock, ResponseTemplate,
+    matchers::{body_json, method, path},
 };
 
 impl TestContext {

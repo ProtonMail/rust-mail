@@ -1,8 +1,8 @@
 pub use super::*;
-use crate::datatypes::attachment;
 use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
+use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
@@ -48,9 +48,11 @@ async fn reply_all_draft_message_creation() {
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
     assert!(draft.to_list.contains_email(&source_message.sender.address));
-    assert!(draft
-        .cc_list
-        .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address)));
+    assert!(
+        draft
+            .cc_list
+            .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address))
+    );
     assert!(draft.bcc_list.is_empty());
     assert_eq!(attachments, vec![inline_attachment()])
 }

@@ -1,6 +1,6 @@
+use crate::AppError;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
-use crate::AppError;
 use anyhow::anyhow;
 use indoc::formatdoc;
 use proton_api_mail::services::proton::prelude::{ConversationId, MessageId};

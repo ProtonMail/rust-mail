@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::url::{validate_url, VcardUrl};
+use crate::ParameterType;
+use crate::properties::url::{VcardUrl, validate_url};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 
 #[test]
 fn url_struct() {

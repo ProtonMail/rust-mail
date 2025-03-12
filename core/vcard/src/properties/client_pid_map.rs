@@ -5,11 +5,11 @@ use ical::generator::Property as IcalProperty;
 use url::Url;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
-use crate::parameters::any::{is_any_param, Any};
+use crate::parameters::any::{Any, is_any_param};
 use crate::parameters::preference::Preference;
-use crate::properties::{any_debug, optional_debug, VcardProperty};
+use crate::properties::{VcardProperty, any_debug, optional_debug};
 use crate::validation::get_property_kind;
-use crate::values::uri::{is_uri_value, Uri};
+use crate::values::uri::{Uri, is_uri_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -106,7 +106,7 @@ impl TryFrom<&IcalProperty> for ClientPidMap {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::ClientPIDMap,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }

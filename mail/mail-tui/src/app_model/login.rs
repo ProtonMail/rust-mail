@@ -1,12 +1,12 @@
+use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::{context_init, twofa, AppState, AppStateHandler};
+use crate::app_model::{AppState, AppStateHandler, context_init, twofa};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
-use crate::CLI_ARGS;
 use anyhow::anyhow;
+use proton_mail_common::MailContext;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
-use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;

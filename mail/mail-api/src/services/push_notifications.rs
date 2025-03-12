@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{BoolFromInt, serde_as};
 
 use super::proton::common::MessageId;
 

@@ -1,6 +1,6 @@
 use crate::login::state::{HasSessionId, HasUserId, StateData};
-use crate::services::proton::common::{SessionId, UserId};
 use crate::services::proton::Proton;
+use crate::services::proton::common::{SessionId, UserId};
 use crate::session::Session;
 
 /// Represents a completed login flow.

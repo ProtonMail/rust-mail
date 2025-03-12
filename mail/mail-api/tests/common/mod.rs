@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use bytes::Bytes;
-use reqwest::{header::CONTENT_LENGTH, header::CONTENT_TYPE, Client, StatusCode};
+use reqwest::{Client, StatusCode, header::CONTENT_LENGTH, header::CONTENT_TYPE};
 
 /// Send a GET request to the specified URL and return the response.
 ///

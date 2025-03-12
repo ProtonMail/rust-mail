@@ -1,16 +1,16 @@
 use crate::app::Command;
-use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::Message;
+use crate::app_model::mailbox::model::StateHandler;
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::KeyCode;
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::{MailContext, MailUserContext, Mailbox};
+use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::Clear;
-use ratatui::Frame;
 use std::sync::Arc;
 
 use super::messages::MessagesState;
@@ -54,7 +54,7 @@ impl StateHandler for Search {
                 KeyCode::Enter => {
                     return Command::message(
                         Message::SearchSubmit(self.search.value().trim().to_string()).into(),
-                    )
+                    );
                 }
                 _ => self.search.handle_event(&event),
             };

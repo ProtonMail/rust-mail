@@ -42,7 +42,9 @@ pub fn testdata_attachment_metadata_complete(
         size: metadata.size,
         mime_type: metadata.mime_type,
         disposition: metadata.disposition,
-        key_packets: KeyPackets::from("wV4DGS71hsmM2EQSAQdAFwebQBU6CrI3xDOoDnKxPTNV9OiWHh3b+40HFTJckzows6dP/z/dRsZZPKn/Hg4kH7mJTseFFN6yGJlnx22nNzN/+KGYR5Gb+uEaFbpAZFuC"),
+        key_packets: KeyPackets::from(
+            "wV4DGS71hsmM2EQSAQdAFwebQBU6CrI3xDOoDnKxPTNV9OiWHh3b+40HFTJckzows6dP/z/dRsZZPKn/Hg4kH7mJTseFFN6yGJlnx22nNzN/+KGYR5Gb+uEaFbpAZFuC",
+        ),
         signature: None,
         enc_signature: None,
         sender: None,

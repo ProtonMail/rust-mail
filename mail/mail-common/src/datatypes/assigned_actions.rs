@@ -5,7 +5,7 @@ mod tests;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use stash::stash::Tether;
 
-use crate::{models::MailSettings, AppError};
+use crate::{AppError, models::MailSettings};
 
 use super::SwipeAction;
 
@@ -96,7 +96,7 @@ impl AssignedSwipeAction {
             SwipeAction::MarkAsRead => return Ok(Self::ToggleRead),
             SwipeAction::LabelAs => return Ok(Self::LabelAs),
             SwipeAction::MoveTo => {
-                return Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel))
+                return Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel));
             }
             // These actions are just specific hardcoded variants of MoveTo action
             SwipeAction::Trash => SystemLabel::Trash,

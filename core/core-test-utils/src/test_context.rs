@@ -1,4 +1,4 @@
-use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use crate::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
@@ -19,10 +19,10 @@ use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, Contac
 use proton_core_common::models::{ModelExtension, User, UserSettings};
 use proton_core_common::utils::MapVec;
 use proton_core_common::{
-    db::account::SessionEncryptionKey,
-    os::{InMemoryKeyChain, KeyChain, KeyChainExt},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
+    db::account::SessionEncryptionKey,
+    os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
 use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
@@ -33,11 +33,11 @@ use std::sync::Arc;
 use std::sync::Weak;
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
-use tracing::{info, Level};
+use tracing::{Level, info};
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{registry, EnvFilter};
+use tracing_subscriber::{EnvFilter, registry};
 use wiremock::MockServer;
 
 pub trait BaseTestContext {

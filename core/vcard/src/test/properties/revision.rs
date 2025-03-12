@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::revision::{validate_rev, Revision};
+use crate::ParameterType;
+use crate::properties::revision::{Revision, validate_rev};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::timestamp::Timestamp;
-use crate::ParameterType;
 
 #[test]
 fn revision_struct() {

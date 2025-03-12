@@ -12,10 +12,10 @@ use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    any_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
+    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::language_tag::{is_language_tag_value, LanguageTag};
+use crate::values::language_tag::{LanguageTag, is_language_tag_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -141,7 +141,7 @@ impl TryFrom<&IcalProperty> for Language {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Lang,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }

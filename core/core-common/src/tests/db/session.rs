@@ -12,12 +12,12 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashConfiguration, Tether};
 use std::io::stdout;
-use tracing::subscriber::set_global_default;
 use tracing::Level;
+use tracing::subscriber::set_global_default;
 use tracing_subscriber::fmt::layer;
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{registry, EnvFilter};
+use tracing_subscriber::{EnvFilter, registry};
 
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
