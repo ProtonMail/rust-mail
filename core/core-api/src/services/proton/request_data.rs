@@ -63,7 +63,7 @@ pub struct AppleRecurringReceiptDetails {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "PascalCase")]
 pub struct NewSubscription {
-    pub cycle: PlanCycle,
+    pub cycle: u8,
 
     pub currency: Option<String>,
     #[serde(rename = "CurrencyID")]

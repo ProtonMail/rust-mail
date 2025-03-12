@@ -1595,7 +1595,6 @@ impl From<RealUserSettings> for UserSettings {
 }
 
 use proton_api_core::services::proton::common::Plan as RealPlan;
-use proton_api_core::services::proton::common::PlanCycle as RealPlanCycle;
 use proton_api_core::services::proton::common::PlanDecoration as RealPlanDecoration;
 use proton_api_core::services::proton::common::PlanEntitlement as RealPlanEntitlement;
 use proton_api_core::services::proton::common::PlanInstance as RealPlanInstance;
@@ -1698,7 +1697,7 @@ pub type PlanServices = u8;
 /// Represents a plan instance.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct PlanInstance {
-    pub cycle: PlanCycle,
+    pub cycle: u8,
     pub description: String,
     pub period_end: u64,
     pub price: Vec<PlanPrice>,
@@ -1722,34 +1721,6 @@ impl From<RealPlanInstance> for PlanInstance {
 
             price,
             vendors,
-        }
-    }
-}
-
-/// A plan cycle, in months.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
-pub enum PlanCycle {
-    OneMonth = 1,
-    OneYear = 12,
-    TwoYears = 24,
-}
-
-impl From<RealPlanCycle> for PlanCycle {
-    fn from(cycle: RealPlanCycle) -> Self {
-        match cycle {
-            RealPlanCycle::OneMonth => Self::OneMonth,
-            RealPlanCycle::OneYear => Self::OneYear,
-            RealPlanCycle::TwoYears => Self::TwoYears,
-        }
-    }
-}
-
-impl From<PlanCycle> for RealPlanCycle {
-    fn from(cycle: PlanCycle) -> Self {
-        match cycle {
-            PlanCycle::OneMonth => Self::OneMonth,
-            PlanCycle::OneYear => Self::OneYear,
-            PlanCycle::TwoYears => Self::TwoYears,
         }
     }
 }
@@ -1926,7 +1897,7 @@ pub struct Subscription {
     pub title: String,
     pub description: String,
 
-    pub cycle: Option<PlanCycle>,
+    pub cycle: Option<u8>,
     pub cycle_description: Option<String>,
 
     pub currency: Option<String>,
@@ -1992,7 +1963,7 @@ impl From<RealSubscription> for Subscription {
 /// Subscription details
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct NewSubscription {
-    pub cycle: PlanCycle,
+    pub cycle: u8,
     pub currency: Option<String>,
     pub currency_id: Option<i32>,
     pub plans: Option<HashMap<String, i32>>,
@@ -2076,7 +2047,7 @@ pub struct PaymentsPlans {
     pub plans: Vec<Plan>,
 
     /// What cycle to display by default
-    pub default_cycle: PlanCycle,
+    pub default_cycle: u8,
 }
 
 /// A payment token.

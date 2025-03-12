@@ -169,7 +169,7 @@ pub struct GetPaymentsPlansResponse {
     pub plans: Vec<Plan>,
 
     /// What cycle to display by default
-    pub default_cycle: PlanCycle,
+    pub default_cycle: u8,
 }
 
 /// The response containing the current subscription of the user.

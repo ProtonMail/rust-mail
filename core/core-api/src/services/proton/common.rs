@@ -143,20 +143,11 @@ pub type PlanServices = u8;
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PlanInstance {
-    pub cycle: PlanCycle,
+    pub cycle: u8,
     pub description: String,
     pub period_end: u64,
     pub price: Vec<PlanPrice>,
     pub vendors: HashMap<PlanVendorName, PlanVendor>,
-}
-
-/// A plan cycle, in months.
-#[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, Hash, PartialEq)]
-#[repr(u8)]
-pub enum PlanCycle {
-    OneMonth = 1,
-    OneYear = 12,
-    TwoYears = 24,
 }
 
 /// Represents a plan price (object, with currency, current and default price).
@@ -245,7 +236,7 @@ pub struct Subscription {
     pub title: String,
     pub description: String,
 
-    pub cycle: Option<PlanCycle>,
+    pub cycle: Option<u8>,
     pub cycle_description: Option<String>,
 
     pub currency: Option<String>,
