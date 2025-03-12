@@ -14,6 +14,7 @@ use futures::future::try_join;
 use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::common::ContactId;
 use proton_api_core::services::proton::prelude::ContactUID;
@@ -22,7 +23,6 @@ use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
 use proton_api_core::services::proton::{Proton, ProtonCore};
-use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -228,7 +228,7 @@ impl Contact {
     pub async fn sync(
         api: &Proton,
         stash: &Stash,
-    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>>> {
+    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>> + use<>> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.

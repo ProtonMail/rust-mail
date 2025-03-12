@@ -8,7 +8,7 @@ use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::models::{Address, Contact, Label, User};
 use tokio::task::JoinHandle;
-use tracing::{debug, error, warn, Level};
+use tracing::{Level, debug, error, warn};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {

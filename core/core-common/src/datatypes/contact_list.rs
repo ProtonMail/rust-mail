@@ -37,9 +37,11 @@ impl GroupedContacts {
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
     ) -> Vec<Self> {
-        debug_assert!(contact_groups
-            .iter()
-            .all(|group| group.label_type == LabelType::ContactGroup));
+        debug_assert!(
+            contact_groups
+                .iter()
+                .all(|group| group.label_type == LabelType::ContactGroup)
+        );
 
         let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
             .into_iter()
@@ -257,9 +259,11 @@ impl ContactSuggestions {
         contact_groups: Vec<Label>,
         device_contacts: Vec<DeviceContact>,
     ) -> Self {
-        debug_assert!(contact_groups
-            .iter()
-            .all(|group| group.label_type == LabelType::ContactGroup));
+        debug_assert!(
+            contact_groups
+                .iter()
+                .all(|group| group.label_type == LabelType::ContactGroup)
+        );
 
         let label_ids = contacts
             .iter()
@@ -301,7 +305,17 @@ impl ContactSuggestions {
                     .into_iter()
                     .map(move |email| (contact.clone(), email))
             })
-            .sorted_by_key(|(contact, email)| Self::sort_proton_contacts_by_key(contact, email))
+            .sorted_by_key(|(contact, email)| {
+                // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
+                // we ensure it is ordered by first proton mails and then by latest mails
+                // `last_used_time` is u64, to ensure that
+                (
+                    !email.is_proton,
+                    u64::MAX - email.last_used_time,
+                    email.email.unicode_words().collect::<String>(),
+                    contact.name.clone(),
+                )
+            })
             .map(|(contact, email)| {
                 Self::aggregate_emails_to_groups(&mut contact_groups, contact, email)
             })
@@ -366,18 +380,6 @@ impl ContactSuggestions {
             })
             .cloned()
             .collect()
-    }
-
-    fn sort_proton_contacts_by_key(contact: &Contact, email: &ContactEmail) -> impl Ord {
-        // sorted_by_key is using ASC order. By making negative boolean or subtracting the time
-        // we ensure it is ordered by first proton mails and then by latest mails
-        // `last_used_time` is u64, to ensure that
-        (
-            !email.is_proton,
-            u64::MAX - email.last_used_time,
-            email.email.unicode_words().collect::<String>(),
-            contact.name.clone(),
-        )
     }
 
     fn aggregate_emails_to_groups(
