@@ -13,9 +13,8 @@ use muon::env::EnvId;
 use muon::error::ErrorKind as MuonErrorKind;
 use muon::store::{Store as MuonStore, StoreError as MuonStoreError};
 use muon::util::ProtonRequestExt;
-use muon::Result as MuonResult;
 use muon::{serde_to_query, Status, StatusErr};
-use muon::{ProtonRequest, ProtonResponse};
+use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
@@ -27,7 +26,7 @@ use crate::crypto_clock::server_crypto_clock;
 use crate::service::{ApiServiceError, ApiServiceResult};
 use crate::services::proton::prelude::*;
 use crate::services::proton::{Proton, ProtonCore};
-use crate::services::proton::{CORE_V4, CORE_V5};
+use crate::services::proton::{AUTH_V4, CORE_V4, CORE_V5};
 use crate::store::Store;
 
 pub const QUARTER_SECOND_TIMEOUT: u64 = 250;
@@ -36,6 +35,14 @@ pub const HALF_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 30;
 pub const ONE_MINUTE_TIMEOUT: u64 = ONE_SECOND_TIMEOUT * 60;
 
 impl ProtonCore for Proton {
+    async fn get_sessions_uuid(&self) -> ApiServiceResult<GetSessionsUuidResponse> {
+        Ok(GET!("{AUTH_V4}/sessions/uuid")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
         Ok(GET!("{CORE_V4}/addresses")
             .send_with(self)
@@ -261,6 +268,61 @@ impl ProtonCore for Proton {
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()> {
         POST!("{CORE_V4}/devices")
             .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
+
+    async fn get_payments_plans(
+        &self,
+        options: GetPaymentsPlansOptions,
+    ) -> ApiServiceResult<GetPaymentsPlansResponse> {
+        Ok(GET!("/payments/v5/plans")
+            .query(serde_to_query(options)?)
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn post_payments_tokens(
+        &self,
+        amount: u64,
+        currency: String,
+        payment: PaymentReceipt,
+    ) -> ApiServiceResult<PostPaymentsTokensResponse> {
+        Ok(POST!("/payments/v5/tokens")
+            .body_json(PostPaymentsTokensRequest {
+                amount,
+                currency,
+                payment,
+            })?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_payments_subscription(&self) -> ApiServiceResult<GetPaymentsSubscriptionResponse> {
+        Ok(GET!("/payments/v5/subscription")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn post_payments_subscription(
+        &self,
+        subscription: NewSubscription,
+        new_values: NewSubscriptionValues,
+    ) -> ApiServiceResult<()> {
+        POST!("/payments/v5/subscription")
+            .body_json(PostPaymentsSubscriptionRequest {
+                subscription,
+                new_values,
+            })?
             .send_with(self)
             .await?
             .ok()?;

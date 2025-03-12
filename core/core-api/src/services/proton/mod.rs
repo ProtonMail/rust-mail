@@ -90,6 +90,9 @@ pub use self::proton_impl::{
 
 mod proton_impl;
 
+/// The Proton Auth API base path (v4).
+pub const AUTH_V4: &str = "/auth/v4";
+
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";
 
@@ -140,6 +143,9 @@ pub fn build<S: Store>(
 
 #[allow(async_fn_in_trait)]
 pub trait ProtonCore {
+    /// GET the user's session UUID.
+    async fn get_sessions_uuid(&self) -> ApiServiceResult<GetSessionsUuidResponse>;
+
     /// GETs a list of addresses.
     ///
     /// # Errors
@@ -423,4 +429,44 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()>;
+
+    /// Get the payment plans available to the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_plans(
+        &self,
+        options: GetPaymentsPlansOptions,
+    ) -> ApiServiceResult<GetPaymentsPlansResponse>;
+
+    /// Create a payment token.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn post_payments_tokens(
+        &self,
+        amount: u64,
+        currency: String,
+        payment: PaymentReceipt,
+    ) -> ApiServiceResult<PostPaymentsTokensResponse>;
+
+    /// Get the current active subscription of the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_subscription(&self) -> ApiServiceResult<GetPaymentsSubscriptionResponse>;
+
+    /// Create a payment subscription.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn post_payments_subscription(
+        &self,
+        subscription: NewSubscription,
+        new_values: NewSubscriptionValues,
+    ) -> ApiServiceResult<()>;
 }

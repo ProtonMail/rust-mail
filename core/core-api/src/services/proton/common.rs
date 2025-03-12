@@ -9,9 +9,13 @@
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_with::serde_as;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::ops::Deref;
 
 //  ENUMS
 //==============================================================================
@@ -90,6 +94,176 @@ pub enum DeviceEnvironment {
 //  STRUCTS
 //==============================================================================
 
+/// Represents a single payment plan from the Proton API.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Plan {
+    #[serde(rename = "ID")]
+    pub id: PlanId,
+    pub description: String,
+    pub name: Option<String>,
+    pub title: String,
+    pub state: PlanState,
+    pub r#type: PlanType,
+    pub features: PlanFeatures,
+    pub services: PlanServices,
+    pub offers: Vec<JsonValue>,
+    pub layout: String,
+    pub instances: Vec<PlanInstance>,
+    pub entitlements: Vec<PlanEntitlement>,
+    pub decorations: Vec<PlanDecoration>,
+}
+
+/// A plan state.
+pub type PlanState = u8;
+
+/// A plan type.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum PlanType {
+    /// A sub-plan (add-on).
+    SubPlan = 0,
+
+    /// A primary plan.
+    PrimaryPlan = 1,
+}
+
+/// A plan features bitmask.
+pub type PlanFeatures = u8;
+
+/// A plan services bitmask.
+pub type PlanServices = u8;
+
+/// Represents a plan instance.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PlanInstance {
+    pub cycle: u8,
+    pub description: String,
+    pub period_end: u64,
+    pub price: Vec<PlanPrice>,
+    pub vendors: HashMap<PlanVendorName, PlanVendor>,
+}
+
+/// Represents a plan price (object, with currency, current and default price).
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PlanPrice {
+    #[serde(rename = "ID")]
+    pub id: String,
+    pub currency: String,
+    pub current: u64,
+}
+
+/// Represents a plan vendor's name.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+pub enum PlanVendorName {
+    Google,
+    Apple,
+}
+
+/// Represents data for a plan vendor.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PlanVendor {
+    #[serde(rename = "ProductID")]
+    pub product_id: ProductId,
+
+    #[serde(rename = "CustomerID")]
+    pub customer_id: Option<CustomerId>,
+}
+
+/// Represents a plan entitlement.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(tag = "Type")]
+pub enum PlanEntitlement {
+    #[serde(rename_all = "PascalCase", rename = "description")]
+    Description {
+        text: String,
+        icon_name: String,
+        hint: Option<String>,
+    },
+
+    #[serde(rename_all = "PascalCase", rename = "progress")]
+    Progress {
+        text: String,
+        min: u64,
+        max: u64,
+        current: u64,
+        icon_name: String,
+    },
+}
+
+/// Represents a plan decoration.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(tag = "Type")]
+pub enum PlanDecoration {
+    #[serde(rename_all = "PascalCase", rename = "starred")]
+    Starred { icon_name: String },
+
+    #[serde(rename_all = "PascalCase", rename = "badge")]
+    Badge {
+        text: String,
+        anchor: String,
+
+        #[serde(rename = "PlanID")]
+        plan_id: PlanId,
+    },
+}
+
+/// Represents an active subscription.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Subscription {
+    #[serde(rename = "ID")]
+    pub id: SubscriptionId,
+    pub name: Option<String>,
+
+    pub title: String,
+    pub description: String,
+
+    pub cycle: Option<u8>,
+    pub cycle_description: Option<String>,
+
+    pub currency: Option<String>,
+    pub offer: Option<String>,
+
+    pub amount: Option<u64>,
+    pub renew_amount: Option<u64>,
+
+    pub discount: Option<i64>,
+    pub renew_discount: Option<i64>,
+
+    pub period_start: Option<u64>,
+    pub period_end: Option<u64>,
+    pub create_time: Option<u64>,
+    pub coupon_code: Option<String>,
+
+    pub renew: Option<u8>,
+    pub external: Option<u8>,
+    pub billing_platform: Option<u8>,
+
+    pub entitlements: Vec<PlanEntitlement>,
+    pub decorations: Vec<PlanDecoration>,
+}
+
+//  TRAITS
+//==============================================================================
+
 /// If the `sql` feature is enabled this marker will contain extra trait boundaries.
 #[cfg(feature = "sql")]
 pub trait ProtonIdSqlMarker: ::stash::exports::ToSql + ::stash::exports::FromSql {}
@@ -100,7 +274,7 @@ pub trait ProtonIdSqlMarker {}
 
 /// Marker trait assigned to each id that was declared with [`declare_proton_id`].
 pub trait ProtonIdMarker:
-    std::ops::Deref<Target = str>
+    Deref<Target = str>
     + Clone
     + Debug
     + DeserializeOwned
@@ -113,6 +287,9 @@ pub trait ProtonIdMarker:
     + Send
 {
 }
+
+//  MACROS
+//==============================================================================
 
 /// Declare a new unique type for a Proton String Identifier.
 ///
@@ -252,4 +429,39 @@ declare_proton_id! {
 declare_proton_id! {
     /// Represents the Id of a crypto salt.
     pub SaltId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a plan.
+    pub PlanId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a product.
+    pub ProductId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a customer.
+    pub CustomerId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a bundle.
+    pub BundleId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a payment transaction.
+    pub TransactionId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a payment method.
+    pub PaymentMethodId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a subscription.
+    pub SubscriptionId
 }

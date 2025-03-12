@@ -3,16 +3,17 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::core::datatypes::ConnectionStatus;
+use crate::core::datatypes::{
+    AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
+    NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, Subscriptions, User,
+};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
-use crate::{async_runtime, spawn_async, LiveQueryCallback, MapIntoResult};
-use crate::{
-    core::datatypes::{AccountDetails, Id, User},
-    uniffi_async,
-};
+use crate::{async_runtime, spawn_async, MapIntoResult};
+use crate::{uniffi_async, LiveQueryCallback};
 use futures::TryFutureExt;
+use proton_api_core::services::proton::ProtonCore;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
@@ -92,6 +93,24 @@ impl MailUserSession {
 
 #[uniffi_export]
 impl MailUserSession {
+    /// Get the session UUID of the active user session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`UserSessionError`] possibilities could be returned if
+    /// there is a problem with the HTTP request.
+    pub async fn session_uuid(&self) -> Result<String, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_sessions_uuid().await?;
+
+            Result::<_, RealProtonMailError>::Ok(res.uuid)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
     /// Fork the current session.
     ///
     /// This call has to be made from a parent session, and forks the current
@@ -220,6 +239,88 @@ impl MailUserSession {
             let callback = move || callback.on_update();
             _ = async_runtime().spawn_blocking(callback).await;
         });
+    }
+
+    /// Get the payment plans available for the current user.
+    pub async fn get_payments_plans(
+        &self,
+        options: GetPaymentsPlansOptions,
+    ) -> Result<PaymentsPlans, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_payments_plans(options.into()).await?;
+
+            Result::<_, RealProtonMailError>::Ok(PaymentsPlans {
+                plans: res.plans.into_iter().map(Into::into).collect(),
+                default_cycle: res.default_cycle.into(),
+            })
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Post a payment token to the server.
+    pub async fn post_payments_tokens(
+        &self,
+        amount: u64,
+        currency: String,
+        payment: PaymentReceipt,
+    ) -> Result<PaymentToken, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx
+                .api()
+                .post_payments_tokens(amount, currency, payment.into())
+                .await?;
+
+            Result::<_, RealProtonMailError>::Ok(PaymentToken {
+                token: res.token,
+                status: res.status,
+            })
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Get the current subscription of the user.
+    pub async fn get_payments_subscription(&self) -> Result<Subscriptions, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_payments_subscription().await?;
+            let current = res.subscriptions.into_iter().map(Into::into);
+            let upcoming = res.upcoming_subscriptions.into_iter().map(Into::into);
+
+            let subscriptions = Subscriptions {
+                current: current.collect(),
+                upcoming: upcoming.collect(),
+            };
+
+            Result::<_, RealProtonMailError>::Ok(subscriptions)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Post a payment subscription to the server.
+    pub async fn post_payments_subscription(
+        &self,
+        subscription: NewSubscription,
+        new_values: NewSubscriptionValues,
+    ) -> Result<(), UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            ctx.api()
+                .post_payments_subscription(subscription.into(), new_values.into())
+                .await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 }
 
