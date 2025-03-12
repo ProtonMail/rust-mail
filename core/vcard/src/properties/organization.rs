@@ -176,7 +176,7 @@ impl TryFrom<&IcalProperty> for Organization {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

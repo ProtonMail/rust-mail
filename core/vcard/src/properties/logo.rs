@@ -169,7 +169,7 @@ impl TryFrom<&IcalProperty> for Logo {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

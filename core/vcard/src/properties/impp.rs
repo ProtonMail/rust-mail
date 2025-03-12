@@ -158,7 +158,7 @@ impl TryFrom<&IcalProperty> for Impp {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

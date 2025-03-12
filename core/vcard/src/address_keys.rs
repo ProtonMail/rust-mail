@@ -170,7 +170,10 @@ fn parse_and_import_pgp_key<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     value: &str,
 ) -> Result<Option<<Provider>::PublicKey>, PGPKeyImportError> {
-    let base64_encoded_key = value.split(',').last().ok_or(PGPKeyImportError::NoData)?;
+    let base64_encoded_key = value
+        .split(',')
+        .next_back()
+        .ok_or(PGPKeyImportError::NoData)?;
     let binary_key = BASE_64.decode(base64_encoded_key)?;
     Ok(Some(
         pgp_provider.public_key_import(binary_key, DataEncoding::Bytes)?,

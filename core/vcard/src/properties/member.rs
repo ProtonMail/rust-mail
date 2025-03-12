@@ -145,7 +145,7 @@ impl TryFrom<&IcalProperty> for Member {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

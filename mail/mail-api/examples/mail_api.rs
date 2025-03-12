@@ -48,7 +48,7 @@ async fn main() {
                 if line_reader.read_line(&mut line).is_err() {
                     eprintln!("Failed to read totp");
                     return;
-                };
+                }
 
                 let totp = line.trim_end_matches('\n');
 

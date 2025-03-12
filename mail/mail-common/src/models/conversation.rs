@@ -619,7 +619,7 @@ impl Conversation {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///
@@ -2621,10 +2621,10 @@ impl Conversation {
     ///
     /// * `local_label_id`         - Local label id of the [`Label`].
     /// * `local_conversation_id`  - Local conversation id to which the label
-    ///                              should be applied.
+    ///   should be applied.
     /// * `local_message_ids`      - Local ids of the messages which belong to
-    ///                              `local_conversation_id` where the label
-    ///                              should be applied.
+    ///   `local_conversation_id` where the label
+    ///   should be applied.
     pub async fn label_impl(
         local_label_id: LocalLabelId,
         local_conversation_id: LocalConversationId,

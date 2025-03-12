@@ -92,7 +92,7 @@ impl TryFrom<&IcalProperty> for Gender {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }
@@ -168,7 +168,7 @@ pub fn validate_gender(property: &IcalProperty) -> VcardValidationResult<()> {
             return Err(VcardValidationError::InvalidPropertyValue(
                 get_property_kind(&property.name)?,
             ));
-        };
+        }
     } else { // only property ok with no value
     }
     Ok(())

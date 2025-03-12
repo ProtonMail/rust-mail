@@ -396,7 +396,7 @@ impl Stash {
     /// # Parameters
     ///
     /// * `path` - The path to the SQLite database file. If `None`, an in-memory
-    ///            database is created.
+    ///   database is created.
     ///
     /// # Errors
     ///
@@ -948,12 +948,12 @@ impl Tether {
     /// # Parameters
     ///
     /// * `conn_handle` - The handle of the connection to use for the queries. A
-    ///                   connection-specific worker in its own dedicated thread
-    ///                   will be created and associated, storing this weak
-    ///                   reference internally.
+    ///   connection-specific worker in its own dedicated thread
+    ///   will be created and associated, storing this weak
+    ///   reference internally.
     /// * `pool`        - The SQLite connection pool to use for the queries.
     /// * `queue`       - The main operations queue, shared with the main
-    ///                   worker and other tethered workers.
+    ///   worker and other tethered workers.
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn new(stash: &Stash) -> Self {
@@ -1299,11 +1299,11 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     ///
     /// * `operation`   - The database operation to handle.
     /// * `connection`  - The database connection to use for the operation. This
-    ///                   is used to run queries when there is no transaction
-    ///                   currently active.
+    ///   is used to run queries when there is no transaction
+    ///   currently active.
     /// * `transaction` - The active transaction, if any. Notably, ownership is
-    ///                   taken and returned, to avoid borrowing issues in the
-    ///                   main loop that calls this function.
+    ///   taken and returned, to avoid borrowing issues in the
+    ///   main loop that calls this function.
     /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `queue`       - The main operations queue for the central worker.
     ///
@@ -1510,9 +1510,9 @@ fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
 /// # Parameters
 ///
 /// * `rows`  - The rows of data returned by the query. These will be converted
-///             to the type specified by `T`.
+///   to the type specified by `T`.
 /// * `stash` - The associated [`Stash`] instance from which the rows were
-///             obtained.
+///   obtained.
 ///
 /// # Errors
 ///

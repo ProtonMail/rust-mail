@@ -94,7 +94,7 @@ impl TryFrom<&IcalProperty> for Kind {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

@@ -154,7 +154,7 @@ impl TryFrom<&IcalProperty> for Category {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

@@ -155,7 +155,7 @@ impl TryFrom<&IcalProperty> for FormattedName {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }
@@ -194,6 +194,6 @@ pub fn validate_fn(property: &IcalProperty) -> VcardValidationResult<()> {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,
         ));
-    };
+    }
     Ok(())
 }

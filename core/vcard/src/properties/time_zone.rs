@@ -153,7 +153,7 @@ impl TryFrom<&IcalProperty> for TimeZone {
                     }
                 }
             }
-        };
+        }
         let real_value_type = if let Some(value_type) = value_type {
             value_type
         } else if is_uri_value(value) {

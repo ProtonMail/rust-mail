@@ -170,7 +170,7 @@ impl TryFrom<&IcalProperty> for Sound {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

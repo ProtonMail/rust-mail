@@ -16,7 +16,7 @@ pub mod system_labels;
 ///
 /// * `label`    - The [`Label`]
 /// * `inteface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///                use for finding the records.
+///   use for finding the records.
 ///
 /// # Panics
 /// If label provided does not have Local ID
@@ -44,7 +44,7 @@ pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64
 ///
 /// * `value`     - The [`Label`]
 /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///                 use for finding the records.
+///   use for finding the records.
 ///
 /// # Panics
 ///

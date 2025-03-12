@@ -144,7 +144,7 @@ impl TryFrom<&IcalProperty> for Email {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

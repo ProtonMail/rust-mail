@@ -71,10 +71,10 @@
 //! Broadly, the structure is as follows:
 //!
 //!   - [`core`]: Core functionality that is common to all Proton applications.
-//!               Here you will find the login and session management.
+//!     Here you will find the login and session management.
 //!   - [`mail`]: The Proton Mail application's specific functionality, with
-//!               everything needed to manage mailboxes, conversations,
-//!               messages, and labels.
+//!     everything needed to manage mailboxes, conversations,
+//!     messages, and labels.
 //!
 //! In addition to particular features, there are also concepts that are
 //! established in core and then extended in the product, such as actions,

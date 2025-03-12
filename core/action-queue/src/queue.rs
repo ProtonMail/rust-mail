@@ -1029,8 +1029,7 @@ impl QueueAutoExecutorPool {
         count: NonZeroUsize,
         wait_for_online: &impl WaitForOnlineSubscribtion,
     ) -> Self {
-        let executors = std::iter::repeat(())
-            .take(count.get())
+        let executors = std::iter::repeat_n((), count.get())
             .map(|()| {
                 let wait_for_online = wait_for_online.subscribe();
                 queue

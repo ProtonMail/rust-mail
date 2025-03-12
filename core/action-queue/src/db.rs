@@ -235,7 +235,7 @@ impl StoredAction {
                     return Err(e);
                 }
             }
-        };
+        }
 
         Ok(())
     }

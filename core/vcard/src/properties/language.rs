@@ -145,7 +145,7 @@ impl TryFrom<&IcalProperty> for Language {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

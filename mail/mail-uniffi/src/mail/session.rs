@@ -294,7 +294,7 @@ impl MailSession {
             for account in ctx.get_accounts().await? {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(accounts)
@@ -323,7 +323,7 @@ impl MailSession {
             for account in initial {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
@@ -354,7 +354,7 @@ impl MailSession {
             for account in initial {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
@@ -380,7 +380,7 @@ impl MailSession {
             for session in ctx.get_sessions().await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(sessions)
@@ -409,7 +409,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
@@ -440,7 +440,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(
@@ -471,7 +471,7 @@ impl MailSession {
             for session in ctx.get_account_sessions(account.remote_id.clone()).await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(sessions)
@@ -501,7 +501,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(

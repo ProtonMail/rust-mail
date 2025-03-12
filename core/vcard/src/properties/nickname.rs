@@ -157,7 +157,7 @@ impl TryFrom<&IcalProperty> for Nickname {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

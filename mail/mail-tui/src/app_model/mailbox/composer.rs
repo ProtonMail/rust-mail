@@ -185,7 +185,7 @@ impl Composer {
                 Some("Invalid recipient".to_owned()),
                 err.into(),
             ));
-        };
+        }
         match self.draft.to_send_action() {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
@@ -603,7 +603,7 @@ impl StateHandler for Composer {
                             self.selected_input = SelectedInput::To;
                             self.to_input_state.set_selected(true);
                         }
-                    };
+                    }
                     return Command::none();
                 }
                 KeyCode::Char('s') => {
@@ -631,7 +631,7 @@ impl StateHandler for Composer {
                     }
                 }
                 _ => {}
-            };
+            }
         }
         match self.selected_input {
             SelectedInput::To => {

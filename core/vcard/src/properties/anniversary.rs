@@ -110,7 +110,7 @@ impl TryFrom<&IcalProperty> for Anniversary {
                     }
                 }
             }
-        };
+        }
 
         let real_value_type = if let Some(value_type) = value_type {
             value_type
@@ -230,7 +230,7 @@ pub fn validate_anniversary(property: &IcalProperty) -> VcardValidationResult<()
                 return Err(VcardValidationError::InvalidPropertyValue(
                     get_property_kind(&property.name)?,
                 ));
-            };
+            }
             value_type
         } else if is_date_and_or_time_value(value) {
             ValueType::DateAndOrTime

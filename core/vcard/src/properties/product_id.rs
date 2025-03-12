@@ -96,7 +96,7 @@ impl TryFrom<&IcalProperty> for ProductId {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

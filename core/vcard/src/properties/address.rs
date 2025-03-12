@@ -239,7 +239,7 @@ impl TryFrom<&IcalProperty> for Address {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

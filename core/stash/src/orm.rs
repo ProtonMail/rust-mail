@@ -283,20 +283,20 @@ where
     /// # Parameters
     ///
     /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
+    ///   should be a string that represents the conditions,
+    ///   ordering, offset, and limit for the query, as may be
+    ///   required. It can be empty. Note that each part of the
+    ///   logic is optional — so if conditions are passed, for
+    ///   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
+    ///   the order they are expected in the query logic, and
+    ///   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     /// * `queue`       - An optional queue to send changes to. If this is
-    ///                   provided, the function will listen for changes to the
-    ///                   result set and send them to the queue. This is useful
-    ///                   for live updates.
+    ///   provided, the function will listen for changes to the
+    ///   result set and send them to the queue. This is useful
+    ///   for live updates.
     ///
     /// # Errors
     ///
@@ -339,16 +339,16 @@ where
     /// # Parameters
     ///
     /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
+    ///   should be a string that represents the conditions,
+    ///   ordering, offset, and limit for the query, as may be
+    ///   required. It can be empty. Note that each part of the
+    ///   logic is optional — so if conditions are passed, for
+    ///   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
+    ///   the order they are expected in the query logic, and
+    ///   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -467,8 +467,8 @@ where
     ///
     /// * `id`        - The ID of the record to load.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for loading the record. It is necessary to provide
-    ///                 this in order to know where to load the record from.
+    ///   use for loading the record. It is necessary to provide
+    ///   this in order to know where to load the record from.
     ///
     /// # Errors
     ///
@@ -566,7 +566,7 @@ where
     /// # Parameters
     ///
     /// * `id` - The row id to set for the record. If the ID is wrapped in an
-    ///          [`Option`], the [`Option`] should be included.
+    ///   [`Option`], the [`Option`] should be included.
     ///
     /// # See also
     ///
@@ -579,7 +579,7 @@ where
     /// # Parameters
     ///
     /// * `id` - The row id to set for the record, as a bare type without being
-    ///          wrapped in an [`Option`].
+    ///   wrapped in an [`Option`].
     ///
     /// # See also
     ///
@@ -603,16 +603,16 @@ where
     /// # Parameters
     ///
     /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
+    ///   should be a string that represents the conditions,
+    ///   ordering, offset, and limit for the query, as may be
+    ///   required. It can be empty. Note that each part of the
+    ///   logic is optional — so if conditions are passed, for
+    ///   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
+    ///   the order they are expected in the query logic, and
+    ///   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -732,19 +732,19 @@ pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionEr
 /// # Parameters
 ///
 /// * `query_logic` - The query logic to use for finding the records. This
-///                   should be a string that represents the conditions,
-///                   ordering, offset, and limit for the query, as may be
-///                   required. It can be empty. Note that each part of the
-///                   logic is optional — so if conditions are passed, for
-///                   instance, the `WHERE` keyword needs to be included.
+///   should be a string that represents the conditions,
+///   ordering, offset, and limit for the query, as may be
+///   required. It can be empty. Note that each part of the
+///   logic is optional — so if conditions are passed, for
+///   instance, the `WHERE` keyword needs to be included.
 /// * `params`      - The parameters to use in the query. These should be in the
-///                   order they are expected in the query logic, and match with
-///                   any expectations set in the query logic.
+///   order they are expected in the query logic, and match with
+///   any expectations set in the query logic.
 /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-///                   to use for finding the records.
+///   to use for finding the records.
 /// * `queue`       - An optional queue to send changes to. If this is provided,
-///                   the function will listen for changes to the result set and
-///                   send them to the queue. This is useful for live updates.
+///   the function will listen for changes to the result set and
+///   send them to the queue. This is useful for live updates.
 ///
 /// # Errors
 ///
@@ -798,7 +798,7 @@ where
 ///
 /// * `id`        - The ID of the record to load.
 /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///                 use for loading the record.
+///   use for loading the record.
 ///
 /// # Errors
 ///
@@ -851,7 +851,7 @@ where
 ///
 /// * `model`     - The [`Model`] instance.
 /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to use
-///                 for saving the record.
+///   for saving the record.
 ///
 /// # Errors
 ///

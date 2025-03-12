@@ -91,7 +91,7 @@ impl TryFrom<&IcalProperty> for Revision {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

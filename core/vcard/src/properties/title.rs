@@ -156,7 +156,7 @@ impl TryFrom<&IcalProperty> for Title {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

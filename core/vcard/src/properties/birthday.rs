@@ -122,7 +122,7 @@ impl TryFrom<&IcalProperty> for Birthday {
                     }
                 }
             }
-        };
+        }
 
         let real_value_type = if let Some(value_type) = value_type {
             value_type

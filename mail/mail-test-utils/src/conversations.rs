@@ -213,7 +213,7 @@ impl MailTestContext {
 ///
 /// * `ids`    - The list of conversation IDs to build responses for.
 /// * `failed` - The list of conversation IDs for which we want to simulate
-///              failure.
+///   failure.
 ///
 fn build_conv_responses<T: ProtonIdMarker>(ids: &[T], failed: Vec<T>) -> Vec<OperationResult<T>> {
     //TODO: ET-151

@@ -159,7 +159,7 @@ impl TryFrom<&IcalProperty> for Photo {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

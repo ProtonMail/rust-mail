@@ -110,7 +110,7 @@ impl TryFrom<&IcalProperty> for ClientPidMap {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

@@ -181,7 +181,7 @@ impl TryFrom<&IcalProperty> for Name {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

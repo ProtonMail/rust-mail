@@ -100,7 +100,7 @@ impl TryFrom<&IcalProperty> for Xml {
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }
