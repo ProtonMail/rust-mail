@@ -4,9 +4,10 @@ use crate::login::state::State;
 use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
 use crate::session::Session;
-use crate::store::StoreError;
+use crate::store::{StoreError, UserData};
 use futures::{TryFuture, TryFutureExt};
-use muon::client::flow::LoginExtraInfo;
+use muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use muon::client::Tokens;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -127,6 +128,25 @@ impl Flow {
         let state = State::new_from_mbp(client, parts, user_id, session_id);
 
         Self { session, state }
+    }
+
+    /// # WARNING
+    ///
+    /// This method is provided **only** to migrate existing sessions from legacy
+    /// app into ET app.
+    ///
+    pub async fn migrate(
+        &mut self,
+        user: UserData,
+        data: LoginFlowData,
+        tokens: Tokens,
+    ) -> Result<(), LoginError> {
+        let (client, _) = self.session.to_parts();
+        self.transition(|s| s.migrate(client, user, data, tokens))
+            .await
+            .inspect_err(|_| self.try_recover())?;
+
+        Ok(())
     }
 
     /// Start login with credentials while passing additional `info`.

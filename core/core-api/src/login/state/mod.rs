@@ -11,7 +11,8 @@ use crate::session::{Session, SessionParts};
 use crate::store::UserData;
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
-use muon::client::flow::{AuthFlow, LoginExtraInfo};
+use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlowData};
+use muon::client::Tokens;
 use proton_crypto_account::keys::{LockedKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::salts::{Salt, Salts};
@@ -76,6 +77,22 @@ impl State {
         } else {
             Err((self, LoginError::InvalidState))
         }
+    }
+
+    /// Attempt to migrate existing alive session from
+    /// the Legacy version of the application.
+    pub async fn migrate(
+        self,
+        client: Proton,
+        user: UserData,
+        data: LoginFlowData,
+        tokens: Tokens,
+    ) -> Result<Self, (Self, LoginError)> {
+        let Self::WantLogin(state) = self else {
+            return Err((self, LoginError::InvalidState));
+        };
+
+        state.migrate(client, user, data, tokens).await
     }
 
     /// Attempt to submit a TOTP code.
@@ -198,6 +215,22 @@ impl State {
     /// Create a `WantMbp` state.
     fn want_mbp(client: Proton, data: StateData) -> Self {
         WantMbp::new(client, data).into()
+    }
+
+    /// Finalize login flow for the migration.
+    async fn finalize_migration(
+        client: Proton,
+        data: StateData,
+        user_data: UserData,
+    ) -> Result<Self, LoginError> {
+        data.parts
+            .store
+            .write()
+            .await
+            .set_user_data(user_data)
+            .await?;
+
+        Ok(Complete::new(client, data).into())
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
