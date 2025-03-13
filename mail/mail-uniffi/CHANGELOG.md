@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
   - [ET-2001] Account avatar not showing initials when display_name is an empty string.
+  - Fixed the pgp attachment crash.
 
 ## [0.56.0] - 2025-03-11
 

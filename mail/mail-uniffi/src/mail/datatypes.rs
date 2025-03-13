@@ -832,7 +832,8 @@ pub struct AttachmentMetadata {
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
-            id: value.local_id.unwrap().into(),
+            // FIXME: This will exist after the cache MR is merged
+            id: value.local_id.unwrap_or(u64::MAX.into()).into(),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
             name: value.filename,
