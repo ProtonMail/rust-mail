@@ -7,12 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.57.0] - 2025-03-13
+
 ### Changed
 
   - Rename `auth_id` to `session_id` in `EncryptedPushNotification` type.
   - Move the banners from the conversation to the decrypted body.
 
 ### Fixed
+
   - [ET-2001] Account avatar not showing initials when display_name is an empty string.
   - Fixed the pgp attachment crash.
 
