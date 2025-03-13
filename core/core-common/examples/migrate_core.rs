@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use proton_api_core::auth::{Tokens, UserKeySecret};
+use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use proton_api_core::session::{Config, CoreSession as _};
 use proton_api_core::store::UserData;
@@ -8,6 +8,7 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain, KeyChainExt};
 use proton_core_common::Context;
+use secrecy::SecretString;
 use tempdir::TempDir;
 use tracing::Level;
 
@@ -100,19 +101,14 @@ async fn main() {
         .decrypt(&*legacy_session.key_secret.clone().unwrap())
         .unwrap();
 
-    let decrypted_access_token = String::from_utf8(
-        legacy_encryption_key
-            .decrypt(&*legacy_session.access_token)
-            .unwrap(),
-    )
-    .unwrap();
-    let decrypted_refresh_token = String::from_utf8(
-        legacy_encryption_key
-            .decrypt(&*legacy_session.refresh_token)
-            .unwrap(),
-    )
-    .unwrap();
-    let auth_scopes = legacy_session.auth_scopes.clone();
+    let decrypted_refresh_token = SecretString::new(
+        String::from_utf8(
+            legacy_encryption_key
+                .decrypt(&*legacy_session.refresh_token)
+                .unwrap(),
+        )
+        .unwrap(),
+    );
 
     let password_mode = into_api_password_mode(account.password_mode.unwrap());
 
@@ -127,11 +123,6 @@ async fn main() {
         primary_addr: account.primary_addr.unwrap(),
         key_secret: UserKeySecret::from(decrypted_key_secret),
     };
-    let tokens = Tokens::access::<String>(
-        decrypted_access_token,
-        decrypted_refresh_token,
-        auth_scopes.into_inner(),
-    );
 
     drop(ctx);
     drop(flow);
@@ -141,7 +132,7 @@ async fn main() {
     let et_dir = TempDir::new("core-common-et").unwrap();
     let (et_context, _et_key_chain) = prepare_context(&et_dir).await;
     let mut flow = et_context.new_login_flow(None).unwrap();
-    flow.migrate(user_data, login_flow_data, tokens)
+    flow.migrate(user_data, login_flow_data, decrypted_refresh_token)
         .await
         .unwrap();
 

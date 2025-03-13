@@ -4200,6 +4200,7 @@ dependencies = [
  "muon",
  "parking_lot",
  "proton-crypto-account",
+ "secrecy",
  "serde",
  "serde-aux",
  "serde_json",

@@ -22,6 +22,7 @@ serde_repr = { workspace = true }
 serde_qs = { workspace = true }
 serde_with = { workspace = true }
 smart-default = { workspace = true }
+secrecy = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
