@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.55.3] - 2025-03-13
+
+### Fixed
+
+  - `watch_conversations` now correctly observes changes in the message's labels
+
+
 ## [0.55.2] - 2025-03-12
 
 ### Fixed
