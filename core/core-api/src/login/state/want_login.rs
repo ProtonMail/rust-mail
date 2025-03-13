@@ -74,6 +74,7 @@ impl WantLogin {
                 uid: info.session_id.clone().to_string(),
                 // By providing an empty access token with an empty scopes list we ensure, that the next time
                 // we use the API, we will refresh the token
+                // TODO (ET-2454) - use Tokens::refresh() after CoreSession accepts having only refresh token
                 tok: Tokens::access("", refresh_token.expose_secret(), Vec::<String>::new()),
             })
             .await?;
