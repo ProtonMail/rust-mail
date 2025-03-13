@@ -137,14 +137,8 @@ async fn sanitize_draft_reply_html() {
 
     let sanitized = draft.body.clone();
 
-    // Saving the draft will revert the proxying of images
-    let to_save = sanitize_draft_save(draft.mime_type(), draft.body());
-    assert_snapshot!(to_save);
-    draft.body = to_save;
-
-    // On open should re-instate the proxy of images.
-    let session_id = SessionId::from("auth-id");
-    sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
+    draft.sanitize_body();
+    assert_snapshot!(draft.body());
 
     // This should be identical before the save.
     assert_eq!(sanitized, draft.body);
@@ -166,16 +160,8 @@ async fn sanitize_draft_reply_plain_text() {
 
     let sanitized = draft.body.clone();
 
-    // Saving the draft - nothing should change
-    let to_save = sanitize_draft_save(draft.mime_type(), draft.body());
-    assert_eq!(to_save, sanitized);
-
-    // On open should also be a noo-oop;
-    let session_id = SessionId::from("auth-id");
-    sanitize_draft_open(&session_id, draft.mime_type(), draft.body_mut());
-
-    // This should be identical before the save.
-    assert_eq!(sanitized, draft.body);
+    draft.sanitize_body();
+    assert_eq!(draft.body(), sanitized);
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
@@ -255,8 +241,6 @@ async fn create_reply_with_mime_and_body(
         in_flight: Default::default(),
     };
 
-    let session_id = SessionId::from("auth-id");
-
     let resolver = NullContactGroupResolver {};
     let (draft, attachments) = Draft::new_draft_reply(
         &resolver,
@@ -267,7 +251,6 @@ async fn create_reply_with_mime_and_body(
         &source_message,
         source_body,
         true,
-        &session_id,
     )
     .await;
     (draft, source_message, attachments)

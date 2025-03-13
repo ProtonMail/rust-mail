@@ -10,7 +10,7 @@ use proton_mail_html_transformer::{
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");
 static AMOS_LANDING: &str = include_str!("./amos_landing.html");
-static IMGS: &str = include_str!("./100_imgs.html");
+static _IMGS: &str = include_str!("./100_imgs.html");
 static LINKS: &str = include_str!("./100_links.html");
 
 // This is for new features we're currently benchmarking so that we don't have to run every bench
@@ -52,17 +52,10 @@ pub fn parse(c: &mut Criterion) {
             })
         });
 
-        c.bench_function("disable remote content", |b| {
+        c.bench_function("disable content", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                remote_content::disable_remote_content(&tr.document());
-            })
-        });
-
-        c.bench_function("enable remote content", |b| {
-            b.iter(|| {
-                let tr = tr.clone();
-                remote_content::undo_disable_remote_content(&tr.document());
+                remote_content::disable_content(&tr.document(), true, true);
             })
         });
 
@@ -94,13 +87,6 @@ pub fn parse(c: &mut Criterion) {
             })
         });
 
-        c.bench_function("proxy images", |b| {
-            b.iter(|| {
-                let tr = tr.clone();
-                remote_content::proxy_images(tr.document(), "THISISATOKEN")
-            })
-        });
-
         c.bench_function("locate blockquote", |b| {
             b.iter(|| {
                 let tr = tr.clone();
@@ -118,14 +104,6 @@ pub fn parse(c: &mut Criterion) {
         })
     });
 
-    let tr = Transformer::new(black_box(IMGS));
-    c.bench_function("proxy 100 images", |b| {
-        b.iter(|| {
-            let tr = tr.clone();
-            remote_content::proxy_images(tr.document(), "THISISATOKEN")
-        })
-    });
-
     parse_inner(c, AMOS_LANDING);
     parse_inner(c, AMOS_HTTP);
 }
@@ -136,11 +114,10 @@ pub fn all_transforms(c: &mut Criterion) {
             b.iter(|| {
                 let mut t = Transformer::new(html);
                 t.strip_utm();
-                t.disable_remote_content();
+                t.disable_content(true, true);
                 t.inject_ios_content_size();
                 _ = t.strip_whitelist();
                 t.inject_style();
-                t.proxy_images("THIS_IS_A_TOKEN");
                 _ = t.strip_blockquote();
                 let tok = t.add_noreferrer();
                 t.insert_links(tok);
