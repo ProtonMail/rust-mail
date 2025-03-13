@@ -1,3 +1,4 @@
+use crate::core::datatypes::MigrationData;
 use crate::errors::{LoginError, VoidLoginResult};
 use crate::mail::state::MailUserContextMap;
 use crate::mail::MailUserSession;
@@ -76,6 +77,27 @@ impl LoginFlow {
         })
         .await
         .map_err(LoginError::from)
+        .into()
+    }
+
+    /// # Warning
+    ///
+    /// Should be used **only** to migrate existing sessions from legacy (pre-ET) version
+    /// of the app. Used to prevent users from being logged-out after the update
+    ///
+    pub async fn migrate(&self, data: MigrationData) -> Result<(), LoginError> {
+        let flow = self.flow.clone();
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            let mut guard = flow.lock().await;
+            let (user, data, refresh_token) = data.into_parts();
+            guard
+                .migrate(user, data, refresh_token)
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(From::from)
         .into()
     }
 
