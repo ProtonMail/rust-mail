@@ -13,7 +13,7 @@ use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, spawn_async, MapIntoResult};
 use crate::{uniffi_async, LiveQueryCallback};
 use futures::TryFutureExt;
-use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;

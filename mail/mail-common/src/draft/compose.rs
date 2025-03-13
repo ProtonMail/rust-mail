@@ -4,7 +4,7 @@ use crate::draft::{Draft, ReplyMode, SaveOrSendError};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
-use proton_api_core::services::proton::common::{AddressId, SessionId};
+use proton_api_core::services::proton::{AddressId, SessionId};
 use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};

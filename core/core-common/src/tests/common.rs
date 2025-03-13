@@ -13,7 +13,7 @@ macro_rules! lid {
 #[macro_export]
 macro_rules! cid {
     ($id:expr) => {{
-        use proton_api_core::services::proton::common::ContactId;
+        use proton_api_core::services::proton::ContactId;
         Some(ContactId::from($id))
     }};
 }
@@ -21,7 +21,7 @@ macro_rules! cid {
 #[macro_export]
 macro_rules! ceid {
     ($id:expr) => {{
-        use proton_api_core::services::proton::common::ContactEmailId;
+        use proton_api_core::services::proton::ContactEmailId;
         Some(ContactEmailId::from($id))
     }};
 }
@@ -61,7 +61,7 @@ macro_rules! label {
 #[macro_export]
 macro_rules! label_id {
     ($id:expr) => {{
-        proton_api_core::services::proton::common::LabelId::from($id)
+        proton_api_core::services::proton::LabelId::from($id)
     }};
 }
 

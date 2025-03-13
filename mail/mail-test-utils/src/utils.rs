@@ -1,6 +1,6 @@
 use crate::search::MY_ADDRESS_ID;
 use futures::{FutureExt as _, StreamExt};
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,

@@ -7,7 +7,7 @@ use crate::mail::datatypes::ViewMode;
 use crate::mail::state::MailUserContextPtr;
 use crate::mail::MailUserSession;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
-use proton_api_core::services::proton::common::LabelId as RealLabelId;
+use proton_api_core::services::proton::LabelId as RealLabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session;
 use proton_mail_common::datatypes::SystemLabelId;

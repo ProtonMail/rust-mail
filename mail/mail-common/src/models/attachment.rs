@@ -11,7 +11,7 @@ use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,

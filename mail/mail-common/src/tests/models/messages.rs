@@ -14,7 +14,7 @@ use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBody
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::{

@@ -1,6 +1,6 @@
 use crate::datatypes::LocalContactId;
-use proton_api_core::services::proton::common::ContactId;
-use proton_api_core::services::proton::response_data::ContactCard as ApiContactCard;
+use proton_api_core::services::proton::ContactCard as ApiContactCard;
+use proton_api_core::services::proton::ContactId;
 use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
 use stash::macros::Model;
 

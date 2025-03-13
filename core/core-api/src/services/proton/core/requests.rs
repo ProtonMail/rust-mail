@@ -1,4 +1,4 @@
-//! Request structures for the Proton API.
+//! Request structures for the Proton Core API.
 //!
 //! This module provides structures that are used to make requests to the Proton
 //! API. These structures are used to define the request bodies and URL
@@ -156,37 +156,6 @@ pub struct PutDeleteContacts {
     #[serde(rename = "IDs")]
     /// The list of contact IDs to delete.
     pub ids: Vec<ContactId>,
-}
-
-/// Parameters for getting payment plans.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, SmartDefault)]
-#[serde(rename_all = "PascalCase")]
-pub struct GetPaymentsPlansOptions {
-    pub currency: Option<String>,
-    pub vendor: Option<String>,
-    pub state: Option<u8>,
-    pub timestamp: Option<u64>,
-    pub fallback: Option<bool>,
-}
-
-/// Parameters required to create a payment token.
-#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostPaymentsTokensRequest {
-    pub amount: u64,
-    pub currency: String,
-    pub payment: PaymentReceipt,
-}
-
-/// Parameters required to create a payment subscription.
-#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostPaymentsSubscriptionRequest {
-    #[serde(flatten)]
-    pub subscription: NewSubscription,
-
-    #[serde(flatten)]
-    pub new_values: NewSubscriptionValues,
 }
 
 /// TODO: Document this struct.

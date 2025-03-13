@@ -1654,20 +1654,20 @@ impl From<RealUserSettings> for UserSettings {
     }
 }
 
-use proton_api_core::services::proton::common::Plan as RealPlan;
-use proton_api_core::services::proton::common::PlanDecoration as RealPlanDecoration;
-use proton_api_core::services::proton::common::PlanEntitlement as RealPlanEntitlement;
-use proton_api_core::services::proton::common::PlanInstance as RealPlanInstance;
-use proton_api_core::services::proton::common::PlanPrice as RealPlanPrice;
-use proton_api_core::services::proton::common::PlanType as RealPlanType;
-use proton_api_core::services::proton::common::PlanVendor as RealPlanVendor;
-use proton_api_core::services::proton::common::PlanVendorName as RealPlanVendorName;
-use proton_api_core::services::proton::common::Subscription as RealSubscription;
-use proton_api_core::services::proton::request_data::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
-use proton_api_core::services::proton::request_data::NewSubscription as RealNewSubscription;
-use proton_api_core::services::proton::request_data::NewSubscriptionValues as RealNewSubscriptionValues;
-use proton_api_core::services::proton::request_data::PaymentReceipt as RealPaymentReceipt;
-use proton_api_core::services::proton::requests::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
+use proton_api_core::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
+use proton_api_core::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
+use proton_api_core::services::proton::NewSubscription as RealNewSubscription;
+use proton_api_core::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
+use proton_api_core::services::proton::PaymentReceipt as RealPaymentReceipt;
+use proton_api_core::services::proton::Plan as RealPlan;
+use proton_api_core::services::proton::PlanDecoration as RealPlanDecoration;
+use proton_api_core::services::proton::PlanEntitlement as RealPlanEntitlement;
+use proton_api_core::services::proton::PlanInstance as RealPlanInstance;
+use proton_api_core::services::proton::PlanPrice as RealPlanPrice;
+use proton_api_core::services::proton::PlanType as RealPlanType;
+use proton_api_core::services::proton::PlanVendor as RealPlanVendor;
+use proton_api_core::services::proton::PlanVendorName as RealPlanVendorName;
+use proton_api_core::services::proton::Subscription as RealSubscription;
 
 /// Represents a single payment plan from the Proton API.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]

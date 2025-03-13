@@ -15,7 +15,7 @@
 
 use bytes::Bytes;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;

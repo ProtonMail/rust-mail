@@ -1,12 +1,13 @@
 use chrono::Utc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::consts::CoreBundle;
-use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::GetKeysAllResponse;
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, ApiErrorInfo,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_core::services::proton::responses::GetKeysAllResponse;
+use proton_api_core::services::proton::{AddressId, LabelId, UserId};
 use proton_api_mail::services::proton::request_data::{
     DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };

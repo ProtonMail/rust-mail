@@ -10,7 +10,7 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_api_core::services::proton::common::SessionId;
+use proton_api_core::services::proton::SessionId;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{self, ProcessedAttachment};
 use proton_mail_html_transformer::Transformer;

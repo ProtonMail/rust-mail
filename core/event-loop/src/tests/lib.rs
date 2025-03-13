@@ -11,7 +11,7 @@ use crate::{Event, EventLoopError, SubscriberError};
 use anyhow::anyhow;
 use mockall::Sequence;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::responses::GetEventResponse;
+use proton_api_core::services::proton::GetEventResponse;
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::spawn;

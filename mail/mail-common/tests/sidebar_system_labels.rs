@@ -1,6 +1,6 @@
-use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::LabelType;
-use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::Label as ApiLabel;
+use proton_api_core::services::proton::LabelId;
+use proton_api_core::services::proton::LabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, MailSettings as ApiMailSettings, MessageCount as ApiMessageCount, ShowMoved,
 };

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::auth::{Auth, UserKeySecret};
-use crate::services::proton::common::{SessionId, UserId};
+use crate::services::proton::{SessionId, UserId};
 
 /// A shared store.
 pub type BoxStore = Box<dyn Store>;

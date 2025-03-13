@@ -1,4 +1,4 @@
-//! Response child data structures for the Proton API.
+//! Response child data structures for the Proton Core API.
 //!
 //! This module provides child data types that are used by the response
 //! structures when receiving requests from the Proton API.
@@ -24,7 +24,6 @@
 //!
 
 use crate::services::proton::prelude::*;
-use derive_more::Display;
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
@@ -394,38 +393,6 @@ pub struct AddressEvent {
 }
 
 impl GetEventResponse for AddressEvent {}
-
-/// Additional information about an API service error.
-///
-/// If a response is received with an HTTP status code that indicates a protocol
-/// error, then it may be accompanied by additional information about the error.
-/// This struct provides a way to access that information.
-///
-#[derive(Clone, Debug, Display, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[display("{code}: {error:?} ({details:?})")]
-#[serde(rename_all = "PascalCase")]
-pub struct ApiErrorInfo {
-    /// Internal API code.
-    pub code: u32,
-
-    /// Optional error message that may be present.
-    pub error: Option<String>,
-
-    /// Optional JSON type with error details.
-    pub details: Option<JsonValue>,
-}
-
-impl ApiErrorInfo {
-    /// Parse the error from json data.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the format is not valid or expected json.
-    pub fn from_json(json: impl AsRef<str>) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json.as_ref())
-    }
-}
 
 /// Represents partial contact information returned by the API.
 ///

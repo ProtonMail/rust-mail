@@ -1,6 +1,4 @@
-#![allow(clippy::module_name_repetitions)]
-
-use crate::services::proton::prelude::*;
+use crate::services::proton::common::ApiErrorInfo;
 use crate::store::StoreError;
 use muon::Status;
 use serde_qs::Error as QueryStringError;

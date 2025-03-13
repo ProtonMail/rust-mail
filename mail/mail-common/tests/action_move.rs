@@ -6,8 +6,8 @@
 //! self-contradictory.
 
 /*
-use proton_api_core::services::proton::common::{AddressId, LabelId, LabelType as ApiLabelType};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{AddressId, LabelId, LabelType as ApiLabelType};
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
     Label as ApiLabel,
 };

@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 use derive_more::Debug;
 use muon::client::flow::ForkFlowResult;
 use std::borrow::Borrow;

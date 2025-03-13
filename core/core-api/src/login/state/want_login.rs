@@ -1,7 +1,7 @@
 use crate::login::state::StateData;
 use crate::login::{state::State, LoginError};
-use crate::services::proton::prelude::{SessionId, UserId};
 use crate::services::proton::Proton;
+use crate::services::proton::{SessionId, UserId};
 use crate::session::SessionParts;
 use crate::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use futures::TryFutureExt;

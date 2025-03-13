@@ -3,10 +3,9 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::muon::serde_to_query;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
-use proton_api_core::services::proton::muon::{GET, POST, PUT};
+use proton_api_core::services::proton::muon::{serde_to_query, GET, POST, PUT};
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
 
 use crate::services::proton::prelude::*;

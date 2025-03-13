@@ -1,8 +1,6 @@
-#![allow(clippy::module_name_repetitions)]
-
 use crate::login::state::State;
 use crate::service::{ApiServiceError, ServiceError};
-use crate::services::proton::prelude::*;
+use crate::services::proton::{HumanVerificationChallenge, SessionId, UserId};
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};

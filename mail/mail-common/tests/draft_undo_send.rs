@@ -1,7 +1,7 @@
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::common::{LabelId, UserId};
-use proton_api_core::services::proton::prelude::ApiErrorInfo;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::{LabelId, UserId};
 use proton_api_mail::services::proton::prelude::{MessageFlags, PostCancelSendResponse};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::actions::draft::UndoSend;

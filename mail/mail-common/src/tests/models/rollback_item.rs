@@ -1,6 +1,6 @@
 use crate as proton_mail_common;
-use proton_api_core::services::proton::requests::GetLabelsByIdsOptions;
-use proton_api_core::services::proton::responses::GetLabelsResponse;
+use proton_api_core::services::proton::GetLabelsByIdsOptions;
+use proton_api_core::services::proton::GetLabelsResponse;
 use proton_api_core::session::{Config, CoreSession, EnvId, Session};
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;

@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::{LabelId, UserId};
+use proton_api_core::services::proton::{LabelId, UserId};
 use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::StorableMessageBody;

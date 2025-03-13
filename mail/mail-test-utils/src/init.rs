@@ -1,9 +1,6 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::{
-    AddressId, EventId, LabelId, LabelType as ApiLabelType, UserId,
-};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
     ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, Density as ApiDensity,
@@ -14,7 +11,10 @@ use proton_api_core::services::proton::response_data::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
     UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
-use proton_api_core::services::proton::responses::{
+use proton_api_core::services::proton::{
+    AddressId, EventId, LabelId, LabelType as ApiLabelType, UserId,
+};
+use proton_api_core::services::proton::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
     GetKeysAllResponse, GetLabelsResponse, GetSettingsResponse as GetCoreSettingsResponse,
     GetUsersResponse,

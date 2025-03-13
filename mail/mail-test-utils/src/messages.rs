@@ -1,7 +1,7 @@
 use crate::test_context::MailTestContext;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{PostCancelSendResponse, PostSendRequest};
 use proton_api_mail::services::proton::request_data::{

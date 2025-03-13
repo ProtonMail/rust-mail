@@ -22,7 +22,7 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::services::proton::common::{AddressId, LabelId};
+use proton_api_core::services::proton::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_ids::LocalConversationId;
