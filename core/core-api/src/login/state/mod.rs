@@ -12,10 +12,10 @@ use crate::store::UserData;
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlowData};
-use muon::client::Tokens;
 use proton_crypto_account::keys::{LockedKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::salts::{Salt, Salts};
+use secrecy::SecretString;
 
 mod complete;
 mod want_login;
@@ -86,13 +86,13 @@ impl State {
         client: Proton,
         user: UserData,
         data: LoginFlowData,
-        tokens: Tokens,
+        refresh_token: SecretString,
     ) -> Result<Self, (Self, LoginError)> {
         let Self::WantLogin(state) = self else {
             return Err((self, LoginError::InvalidState));
         };
 
-        state.migrate(client, user, data, tokens).await
+        state.migrate(client, user, data, refresh_token).await
     }
 
     /// Attempt to submit a TOTP code.

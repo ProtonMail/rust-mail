@@ -8,6 +8,7 @@ use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
 use muon::client::{Auth, Tokens};
+use secrecy::{ExposeSecret, SecretString};
 use tracing::info;
 
 /// Represents the initial state of the login flow;
@@ -44,9 +45,9 @@ impl WantLogin {
         client: Proton,
         user: UserData,
         data: LoginFlowData,
-        tokens: Tokens,
+        refresh_token: SecretString,
     ) -> Result<State, (State, LoginError)> {
-        self.try_migrate(client, user, data, tokens)
+        self.try_migrate(client, user, data, refresh_token)
             .map_err(|err| (State::LoginRetry, err))
             .await
     }
@@ -56,7 +57,7 @@ impl WantLogin {
         client: Proton,
         user: UserData,
         data: LoginFlowData,
-        tokens: Tokens,
+        refresh_token: SecretString,
     ) -> Result<State, LoginError> {
         self.parts
             .store
@@ -71,7 +72,9 @@ impl WantLogin {
             .set_auth(Auth::Internal {
                 user_id: info.user_id.clone().to_string(),
                 uid: info.session_id.clone().to_string(),
-                tok: tokens,
+                // By providing an empty access token with an empty scopes list we ensure, that the next time
+                // we use the API, we will refresh the token
+                tok: Tokens::access("", refresh_token.expose_secret(), Vec::<String>::new()),
             })
             .await?;
         self.parts.store.write().await.set_auth_info(info).await?;

@@ -6,7 +6,7 @@ use crate::services::proton::prelude::*;
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
-use muon::client::Tokens;
+use secrecy::SecretString;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -138,10 +138,10 @@ impl Flow {
         &mut self,
         user: UserData,
         data: LoginFlowData,
-        tokens: Tokens,
+        refresh_token: SecretString,
     ) -> Result<(), LoginError> {
         let (client, _) = self.session.to_parts();
-        self.transition(|s: State| s.migrate(client, user, data, tokens))
+        self.transition(|s: State| s.migrate(client, user, data, refresh_token))
             .await
             .inspect_err(|_| self.try_recover())?;
 
