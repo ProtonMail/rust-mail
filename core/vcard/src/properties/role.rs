@@ -153,11 +153,11 @@ impl TryFrom<&IcalProperty> for Role {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Role,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

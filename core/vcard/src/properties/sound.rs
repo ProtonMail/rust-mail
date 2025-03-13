@@ -166,11 +166,11 @@ impl TryFrom<&IcalProperty> for Sound {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Sound,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

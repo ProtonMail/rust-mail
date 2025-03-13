@@ -165,11 +165,11 @@ impl TryFrom<&IcalProperty> for Logo {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Logo,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

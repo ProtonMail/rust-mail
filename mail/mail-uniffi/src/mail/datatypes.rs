@@ -971,7 +971,7 @@ impl ConversationCount {
     ///
     /// * `value`     - The [`RealConversationCount`] to convert.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     pub async fn try_from_real(
         value: RealConversationCount,
@@ -1069,8 +1069,8 @@ impl ConversationSearchOptions {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
-    ///                 or [`Tether`](tether::tether::Tether) to use for finding
-    ///                 the records.
+    ///   or [`Tether`](tether::tether::Tether) to use for finding
+    ///   the records.
     ///
     /// # Errors
     ///
@@ -1697,7 +1697,7 @@ impl MessageCount {
     ///
     /// * `value`     - The [`RealMessageCount`] to convert.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
@@ -1822,8 +1822,8 @@ impl MessageSearchOptions {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
-    ///                 or [`Tether`](tether::tether::Tether) to use for finding
-    ///                 the records.
+    ///   or [`Tether`](tether::tether::Tether) to use for finding
+    ///   the records.
     ///
     /// # Errors
     ///

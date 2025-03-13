@@ -69,7 +69,7 @@ pub use sql_using_serde;
 /// # Parameters
 ///
 /// * `value` - The value to convert to a SQLite value by serialising it to
-///             JSON.
+///   JSON.
 ///
 /// # Errors
 ///
@@ -90,7 +90,7 @@ pub fn to_sql_using_serialize<T: Serialize>(value: &T) -> Result<ToSqlOutput<'_>
 /// # Parameters
 ///
 /// * `value` - The SQLite value to convert to a value by deserialising it from
-///             JSON.
+///   JSON.
 ///
 /// # Errors
 ///

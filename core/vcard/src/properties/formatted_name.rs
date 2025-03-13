@@ -151,11 +151,11 @@ impl TryFrom<&IcalProperty> for FormattedName {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Fn,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }
@@ -194,6 +194,6 @@ pub fn validate_fn(property: &IcalProperty) -> VcardValidationResult<()> {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,
         ));
-    };
+    }
     Ok(())
 }

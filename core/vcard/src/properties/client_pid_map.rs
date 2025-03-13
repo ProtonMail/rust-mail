@@ -106,11 +106,11 @@ impl TryFrom<&IcalProperty> for ClientPidMap {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::ClientPIDMap,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

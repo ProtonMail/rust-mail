@@ -92,11 +92,11 @@ impl TryFrom<&IcalProperty> for ProductId {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::ProdId,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

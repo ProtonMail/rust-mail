@@ -135,9 +135,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// actions are:
 ///
 ///   - `on_load`: This action is called when the model is loaded from the
-///                database, and triggered by "load" and "find" operations.
+///     database, and triggered by "load" and "find" operations.
 ///   - `on_save`: This action is called when the model is saved to the
-///                database. It is triggered by "save" operations.
+///     database. It is triggered by "save" operations.
 ///
 /// In both cases the custom action occurs after the normal operation has
 /// been carried out.
@@ -443,7 +443,7 @@ impl ToTokens for ViaIntermediary {
 /// # Parameters
 ///
 /// * `fields`           - The fields of the struct. Specifically, *all* the
-///                        fields that the struct has.
+///   fields that the struct has.
 /// * `include_id_field` - Allow an `IdField` in addition to `DbField`s.
 ///
 fn extract_db_fields(fields: &[&Field], include_id_field: bool) -> Vec<Ident> {
@@ -503,7 +503,7 @@ fn extract_fields<'a>(input: &'a DeriveInput, macro_name: &'a str) -> Vec<&'a Fi
 /// # Parameters
 ///
 /// * `fields` - The fields of the struct. Specifically, *all* the fields that
-///              the struct has.
+///   the struct has.
 ///
 /// # Panics
 ///
@@ -637,7 +637,7 @@ fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
 /// # Parameters
 ///
 /// * `fields` - The fields of the struct. Specifically, *all* the fields that
-///              the struct has.
+///   the struct has.
 ///
 /// # Panics
 ///
@@ -698,11 +698,11 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
 /// # Parameters
 ///
 /// * `fields`           - The fields of the struct. Specifically, *all* the
-///                        fields that the struct has.
+///   fields that the struct has.
 /// * `include_id_field` - Allow an `IdField` in addition to `DbField`s. Note
-///                        that if this is `true`, then the entry will be
-///                        present but always [`None`], as the `via` argument
-///                        does not apply to `IdField`s.
+///   that if this is `true`, then the entry will be
+///   present but always [`None`], as the `via` argument
+///   does not apply to `IdField`s.
 ///
 /// # Panics
 ///
@@ -764,9 +764,9 @@ fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<Vi
 /// # Parameters
 ///
 /// * `db_fields` - The list of database fields for which values should be
-///                 generated.
+///   generated.
 /// * `via_attrs` - The `via` attributes for the fields. If specified for a
-///                 field, that field will be wrapped in the intermediary type.
+///   field, that field will be wrapped in the intermediary type.
 ///
 fn generate_db_field_values_impl(
     db_fields: &[Ident],
@@ -806,7 +806,7 @@ fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
 /// # Parameters
 ///
 /// * `db_field_values_impl` - The code implementation for the database field
-///                            values.
+///   values.
 ///
 fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> TokenStream2 {
     quote! {
@@ -823,13 +823,13 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 /// * `db_fields`            - The list of database fields.
 /// * `default_fields`       - The list of default fields.
 /// * `internal_fields`      - Internal-used fields for `Model`s: firstly the
-///                            field that contains the internal row ID, and then
-///                            the field that contains the associated `Stash`.
-///                            If [`None`], then these will be excluded from the
-///                            generated code.
+///   field that contains the internal row ID, and then
+///   the field that contains the associated `Stash`.
+///   If [`None`], then these will be excluded from the
+///   generated code.
 /// * `from_row_values_impl` - The code implementation to convert the values
-///                            from the database row to the appropriate struct
-///                            field types.
+///   from the database row to the appropriate struct
+///   field types.
 ///
 fn generate_fn_from_row_impl(
     db_fields: &[Ident],
@@ -927,9 +927,9 @@ fn generate_fn_set_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenSt
 ///
 /// * `db_fields` - The list of database fields.
 /// * `via_attrs` - The `via` attributes for the fields. If specified for a
-///                 field, that field will be converted from a SQL field type to
-///                 the intermediary type before converting to the struct field
-///                 type.
+///   field, that field will be converted from a SQL field type to
+///   the intermediary type before converting to the struct field
+///   type.
 ///
 /// # Panics
 ///

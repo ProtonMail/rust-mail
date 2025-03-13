@@ -224,7 +224,7 @@ impl CoreAccount {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///

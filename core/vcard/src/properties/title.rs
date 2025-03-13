@@ -152,11 +152,11 @@ impl TryFrom<&IcalProperty> for Title {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Title,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

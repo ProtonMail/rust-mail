@@ -153,11 +153,11 @@ impl TryFrom<&IcalProperty> for FbUrl {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::FbUrl,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

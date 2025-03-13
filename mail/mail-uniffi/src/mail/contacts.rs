@@ -142,7 +142,7 @@ pub fn contacts_callback(
     user_ctx: &MailUserContext,
     session: Arc<MailUserSession>,
     callback: Box<dyn ContactsLiveQueryCallback>,
-) -> impl Fn() + Clone {
+) -> impl Fn() + Clone + use<> {
     let must_update = Arc::new(AtomicBool::new(false));
     let must_update_weak = Arc::downgrade(&must_update);
 

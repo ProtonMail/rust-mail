@@ -155,7 +155,7 @@ impl InboxSessionKey {
                 }
             }
             SessionKeyAlgorithm::Unknown => (),
-        };
+        }
 
         Ok(InboxSessionKey {
             session_key_bytes,

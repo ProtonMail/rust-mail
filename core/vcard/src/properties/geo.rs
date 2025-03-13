@@ -153,11 +153,11 @@ impl TryFrom<&IcalProperty> for Geo {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Geo,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

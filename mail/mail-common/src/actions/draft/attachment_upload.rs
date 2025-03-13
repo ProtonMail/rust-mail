@@ -124,7 +124,9 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
         };
 
         if let Some(id) = attachment_upload_metadata.action_id {
-            error!("Attempting to create new attachment upload action when existing action ({id}) exists");
+            error!(
+                "Attempting to create new attachment upload action when existing action ({id}) exists"
+            );
             return Err(AttachmentError::ExistingUploadActionExist(id).into());
         }
 

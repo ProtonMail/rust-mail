@@ -54,7 +54,7 @@ impl StateHandler for Search {
                 KeyCode::Enter => {
                     return Command::message(
                         Message::SearchSubmit(self.search.value().trim().to_string()).into(),
-                    )
+                    );
                 }
                 _ => self.search.handle_event(&event),
             };

@@ -255,7 +255,7 @@ fn process_signatures(parsed_message: &Message<'_>) -> Vec<MimeSignatureVerifier
                 |signature_content_type| signature_content_type.to_lowercase() != "pgp-signature",
             ) {
                 return None;
-            };
+            }
             // Extract the signature.
             let signature = signature_part.text_contents()?;
 

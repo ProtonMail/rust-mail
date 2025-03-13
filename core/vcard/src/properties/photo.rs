@@ -155,11 +155,11 @@ impl TryFrom<&IcalProperty> for Photo {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Photo,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

@@ -63,7 +63,6 @@ async fn main() {
                     }
                     Err(e) => {
                         eprintln!("Failed to submit totp: {e}");
-                        continue;
                     }
                 }
             }
@@ -94,7 +93,6 @@ async fn main() {
                     }
                     Err(e) => {
                         eprintln!("Failed to submit maibix password: {e}");
-                        continue;
                     }
                 }
             }

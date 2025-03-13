@@ -250,7 +250,7 @@ impl DecryptedMessageBody {
                         mime: at.mime_type.clone(),
                         height: None,
                         width: None,
-                    })
+                    });
                 }
                 None => {
                     return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());

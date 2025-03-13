@@ -23,13 +23,13 @@ impl UserContext {
     /// * `address`       - Email address of the sender.
     /// * `bimi_selector` - BIMI protocol selector.
     /// * `format`        - Desired image format, if none is specified the default format of the
-    ///                     image will be used.
+    ///   image will be used.
     /// * `mode`          - Can be used to select if the "light" or "dark" mode of the image is
-    ///                     desired (default is light).
+    ///   desired (default is light).
     /// * `size`          - Is used to give the x*x size of the returned image (will default to 32
-    ///                     if none provided).
+    ///   if none provided).
     /// * `interface`     - The database interface, i.e. [`Stash`] or [`Tether`], to use for finding
-    ///                     the records.
+    ///   the records.
     ///
     /// # Errors
     /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an

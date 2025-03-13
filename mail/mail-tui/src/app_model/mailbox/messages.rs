@@ -402,7 +402,7 @@ impl StateHandler for MessagesState {
                     }
                 }
                 _ => {}
-            };
+            }
         }
 
         match key.code {

@@ -641,13 +641,13 @@ impl Popup for YesNoPopup {
                     return Command::batch([
                         Command::message(Messages::DismissPopup),
                         self.reject_command.take().unwrap_or_default(),
-                    ])
+                    ]);
                 }
                 KeyCode::Char('y' | 'Y') => {
                     return Command::batch([
                         Command::message(Messages::DismissPopup),
                         self.accept_command.take().unwrap_or_default(),
-                    ])
+                    ]);
                 }
                 _ => {}
             }

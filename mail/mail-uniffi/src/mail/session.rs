@@ -294,7 +294,7 @@ impl MailSession {
             for account in ctx.get_accounts().await? {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(accounts)
@@ -323,7 +323,7 @@ impl MailSession {
             for account in initial {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_sync(
@@ -354,7 +354,7 @@ impl MailSession {
             for account in initial {
                 if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
                     accounts.push(StoredAccount::new(account, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedAccounts::new_async(
@@ -380,7 +380,7 @@ impl MailSession {
             for session in ctx.get_sessions().await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(sessions)
@@ -409,7 +409,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
@@ -440,7 +440,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_async(
@@ -471,7 +471,7 @@ impl MailSession {
             for session in ctx.get_account_sessions(account.remote_id.clone()).await? {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(sessions)
@@ -501,7 +501,7 @@ impl MailSession {
             for session in initial {
                 if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
                     sessions.push(StoredSession::new(session, state));
-                };
+                }
             }
 
             Result::<_, RealProtonMailError>::Ok(WatchedSessions::new_sync(
@@ -1003,13 +1003,17 @@ impl Drop for BackgroundExecutionHandle {
             spawn_async(ctx, async move {
                 if !sender.is_closed() && !handle.is_finished() {
                     if let Err(e) = sender.send(()).await {
-                        tracing::error!("Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`");
+                        tracing::error!(
+                            "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
+                        );
                         handle.abort();
                     }
                 }
             });
         } else {
-            tracing::warn!("MailContext already dropped, background execution handle should not live that long");
+            tracing::warn!(
+                "MailContext already dropped, background execution handle should not live that long"
+            );
         }
     }
 }
@@ -1071,7 +1075,9 @@ async fn get_all_logged_in_mail_user_contexts(
         let Some(CoreSessionState::Authenticated) =
             ctx.get_session_state(session.remote_id.clone()).await?
         else {
-            tracing::warn!("Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed");
+            tracing::warn!(
+                "Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed"
+            );
             continue;
         };
 

@@ -280,7 +280,7 @@ where
     /// # Params:
     /// * `path_buf` - Path to the root of the cache
     /// * `size`     - Allocated space for cache
-    ///                (Warning, don't take in account padding from FS blocks)
+    ///   (Warning, don't take in account padding from FS blocks)
     ///
     /// # Errors
     /// * Can't create in memory cache
@@ -321,7 +321,7 @@ where
     /// # Params:
     /// * `path_buf` - Path to the root of the cache.
     /// * `size`     - Allocated space for cache, maximum size.
-    ///                (Warning, don't take in account padding from FS blocks)
+    ///   (Warning, don't take in account padding from FS blocks)
     /// * `existing` - List of item expected to be present.
     ///
     /// # Errors

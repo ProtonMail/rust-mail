@@ -96,11 +96,11 @@ impl TryFrom<&IcalProperty> for Xml {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Xml,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

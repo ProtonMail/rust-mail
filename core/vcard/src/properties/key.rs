@@ -175,11 +175,11 @@ impl TryFrom<&IcalProperty> for Key {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Key,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         let real_value_type = if let Some(value_type) = value_type {
             value_type
         } else if is_uri_value(value) {
@@ -205,7 +205,7 @@ impl TryFrom<&IcalProperty> for Key {
                 return Err(VCardError::InvalidValue(
                     PropertyKind::Key,
                     value.to_owned(),
-                ))
+                ));
             }
         };
         Ok(Self {

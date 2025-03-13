@@ -60,8 +60,8 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     /// * filter - determin the read/unread/all status of items to paginate over
     /// * limit - limit the number of items to load
     /// * require_remote_id - if the remote_id is required for the item
-    ///     this parameter ensures that remote_id is defined in database
-    ///     so the item can be used to request more pages
+    ///   this parameter ensures that remote_id is defined in database
+    ///   so the item can be used to request more pages
     /// * offset - offset of the items to load, it is used for loading cached partial pages
     ///
     fn query(

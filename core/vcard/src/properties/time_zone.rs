@@ -149,11 +149,11 @@ impl TryFrom<&IcalProperty> for TimeZone {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Tz,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         let real_value_type = if let Some(value_type) = value_type {
             value_type
         } else if is_uri_value(value) {

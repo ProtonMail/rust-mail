@@ -38,9 +38,9 @@ const CONCURRENT_REQUEST_LIMIT: usize = 5;
 /// * `$stash` - The local database instance to use for syncing.
 /// * `$batch` - The number of items to sync in a single batch.
 /// * `$api_request` - The API request to make to get the items. It is expected to be a clousure
-///     that takes a `RemoteId` and returns a Future of API response.
+///   that takes a `RemoteId` and returns a Future of API response.
 /// * `$from_api_to_local` - The function to convert the API response to local items. It is expected to be a closure
-///     that takes the API response and returns a Future of IntoIterator over models.
+///   that takes the API response and returns a Future of IntoIterator over models.
 ///
 /// ## Errors
 ///

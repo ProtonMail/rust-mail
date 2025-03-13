@@ -172,11 +172,11 @@ impl TryFrom<&IcalProperty> for Organization {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Org,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

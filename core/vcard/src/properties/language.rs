@@ -141,11 +141,11 @@ impl TryFrom<&IcalProperty> for Language {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Lang,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

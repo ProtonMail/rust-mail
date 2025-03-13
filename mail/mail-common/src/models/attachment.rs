@@ -57,26 +57,26 @@ use uuid::Uuid;
 /// 1. If the user has conversation view mode enabled, the first pieces
 ///    of metadata ([`AttachmentMetadata`]) arrive through the
 ///    [`Conversation`] type. If the view mode is message, go to 3.
-///     1.1. The metadata is stored using [`Conversation::on_save()`]
-///          method which ensures that it does not override a fully synchronized
-///          [`Attachment`] and only updates the conversation local and remote id.
-///     1.2. If no record for this attachment exists one is created.
+///    1.1. The metadata is stored using [`Conversation::on_save()`]
+///    method which ensures that it does not override a fully synchronized
+///    [`Attachment`] and only updates the conversation local and remote id.
+///    1.2. If no record for this attachment exists one is created.
 /// 2. The user now opens the conversation, which sync the respective
 ///    [`Message`]s.
 /// 3. [`Messages`] also contains [`AttachmentMetadata`] as well as the address
 ///    id for the key this attachment was encrypted with.
-///     3.1 This is now stored with [`Message::on_save()`], which also
-///         ensures it does not override a fully synced attachment and updates
-///         the message ids and the address id.
-///     3.2 If no attachment record exists, one is created.
+///    3.1 This is now stored with [`Message::on_save()`], which also
+///    ensures it does not override a fully synced attachment and updates
+///    the message ids and the address id.
+///    3.2 If no attachment record exists, one is created.
 /// 4. From 1 or 2, we can receive a request to fetch the full attachment.
 ///    At this stage we either have partial data from [`AttachmentMetadata`] or
 ///    a fully synchronized attachment.
-///     4.1. We check witch is situation we are in with
-///          [`has_complete_metadata()`].
-///     4.2. If this returns false we need to sync the full attachment with
-///          [`sync_complete_metadata()`].
-///     4.3. If the check returns true, the attachment is ready for use.
+///    4.1. We check witch is situation we are in with
+///    [`has_complete_metadata()`].
+///    4.2. If this returns false we need to sync the full attachment with
+///    [`sync_complete_metadata()`].
+///    4.3. If the check returns true, the attachment is ready for use.
 /// 5. Finally, when fetching the message body ([`MessageBodyMetadata`]) we
 ///    receive the final bits of data regarding some headers and other metadata
 ///    used to display the attachment in web views.
@@ -250,7 +250,7 @@ impl Attachment {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///

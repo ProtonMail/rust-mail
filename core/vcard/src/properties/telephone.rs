@@ -149,11 +149,11 @@ impl TryFrom<&IcalProperty> for Telephone {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Tel,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         let real_value_type = if let Some(value_type) = value_type {
             value_type
         } else if is_uri_value(value) {
@@ -179,7 +179,7 @@ impl TryFrom<&IcalProperty> for Telephone {
                 return Err(VCardError::InvalidValue(
                     PropertyKind::Tel,
                     value.to_owned(),
-                ))
+                ));
             }
         };
         Ok(Self {
@@ -299,7 +299,7 @@ pub fn validate_tel(property: &IcalProperty) -> VcardValidationResult<()> {
             _ => {
                 return Err(VcardValidationError::InvalidPropertyValue(
                     get_property_kind(&property.name)?,
-                ))
+                ));
             }
         };
 

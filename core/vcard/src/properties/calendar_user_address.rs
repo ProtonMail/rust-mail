@@ -156,7 +156,7 @@ impl TryFrom<&IcalProperty> for CalendarUserAddress {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::CalAdrURI,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }

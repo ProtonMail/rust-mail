@@ -96,7 +96,7 @@ impl AssignedSwipeAction {
             SwipeAction::MarkAsRead => return Ok(Self::ToggleRead),
             SwipeAction::LabelAs => return Ok(Self::LabelAs),
             SwipeAction::MoveTo => {
-                return Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel))
+                return Ok(Self::MoveTo(SwipeActionMoveToTarget::MoveToUnknownLabel));
             }
             // These actions are just specific hardcoded variants of MoveTo action
             SwipeAction::Trash => SystemLabel::Trash,

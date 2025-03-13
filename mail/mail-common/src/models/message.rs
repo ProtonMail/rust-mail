@@ -864,7 +864,7 @@ impl Message {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///
@@ -903,7 +903,7 @@ impl Message {
     ///
     /// * `metadata`  - The message metadata returned from the API
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for accessing the database.
+    ///   use for accessing the database.
     ///
     /// # Errors
     ///
@@ -931,7 +931,7 @@ impl Message {
     ///
     /// * `metadata`  - The message metadata returned from the API
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for accessing the database.
+    ///   use for accessing the database.
     ///
     /// # Errors
     ///
@@ -1974,7 +1974,7 @@ impl Message {
     ///
     /// * `value`     - The [`ApiMessage`] to convert.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     pub async fn from_api_data(
         value: ApiMessage,
@@ -2000,7 +2000,7 @@ impl Message {
     ///
     /// * `value`     - The [`ApiMessage`] to convert.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     pub async fn from_api_metadata(
         value: ApiMessageMetadata,
@@ -2289,7 +2289,7 @@ impl Message {
     /// # Params
     ///
     /// * `local_conversation_id` - Conversation id to which the messages belong
-    ///                             to.
+    ///   to.
     /// * `interface`             - Connection to the database.
     /// * `queue`                 - Optional subscriber for changes.
     ///
@@ -2841,7 +2841,7 @@ impl MessageBodyMetadata {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///

@@ -87,11 +87,11 @@ impl TryFrom<&IcalProperty> for Revision {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Rev,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

@@ -88,8 +88,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
     println!("PRIMARY_ID= {}", executor_id());
     println!("STARTING CHILD PROCESS COUNT={process_count}");
     // create n processes
-    let child_handles = std::iter::repeat(())
-        .take(process_count)
+    let child_handles = std::iter::repeat_n((), process_count)
         .map(|()| {
             let tmp_dir = tmp_dir.path().to_path_buf();
             spawn_process(tmp_dir, if consume { Some(action_count) } else { None })

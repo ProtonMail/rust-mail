@@ -140,11 +140,11 @@ impl TryFrom<&IcalProperty> for Email {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Email,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

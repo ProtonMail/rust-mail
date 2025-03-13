@@ -356,7 +356,7 @@ pub trait ProtonMail {
     ///
     ///  * `message`                 - Draft message details
     ///  * `attachments`             - Map of attachment id to attachment to base64 encoded
-    ///                                key packet.
+    ///    key packet.
     ///  * `reply_or_forward_params` - Required parameters when replying of forwarding a message.
     ///
     /// # Errors
@@ -376,7 +376,7 @@ pub trait ProtonMail {
     ///  * `message_id`  - message id to update
     ///  * `message`     - Draft message details
     ///  * `attachments` - Map of attachment id to attachment to base64 encoded
-    ///                    key packet.
+    ///    key packet.
     ///
     /// # Errors
     ///

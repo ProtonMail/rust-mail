@@ -125,10 +125,7 @@ impl<T: ScrollData> MailScrollerState<T> {
         tether: &Tether,
     ) -> Result<(), StashError> {
         match self {
-            MailScrollerState::Online(ref mut ordered)
-            | MailScrollerState::Offline {
-                ref mut ordered, ..
-            } => {
+            MailScrollerState::Online(ordered) | MailScrollerState::Offline { ordered, .. } => {
                 if !ordered.has_more_than_a_page(tether).await? {
                     ordered.update(tether).await?;
                 }

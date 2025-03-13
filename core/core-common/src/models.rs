@@ -77,11 +77,11 @@ pub trait ModelExtension: Model {
     /// # Parameters
     ///
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     /// * `queue`       - An optional queue to send changes to. If this is
-    ///                   provided, the function will listen for changes to the
-    ///                   result set and send them to the queue. This is useful
-    ///                   for live updates.
+    ///   provided, the function will listen for changes to the
+    ///   result set and send them to the queue. This is useful
+    ///   for live updates.
     ///
     /// # Errors
     ///
@@ -117,7 +117,7 @@ pub trait ModelExtension: Model {
     ///
     /// * `id`        - The ID of the record to find.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the record.
+    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -144,7 +144,7 @@ pub trait ModelExtension: Model {
     ///
     /// * `ids`         - The IDs of the records to find
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the record.
+    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -221,16 +221,16 @@ pub trait ModelExtension: Model {
     /// # Parameters
     ///
     /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
+    ///   should be a string that represents the conditions,
+    ///   ordering, offset, and limit for the query, as may be
+    ///   required. It can be empty. Note that each part of the
+    ///   logic is optional — so if conditions are passed, for
+    ///   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
+    ///   the order they are expected in the query logic, and
+    ///   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -358,7 +358,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     ///
     /// * `id`        - The ID of the record to find.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the record.
+    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -387,7 +387,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     ///
     /// * `ids`         - The IDs of the records to find
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the record.
+    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -622,16 +622,16 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// # Parameters
     ///
     /// * `query_logic` - The query logic to use for finding the records. This
-    ///                   should be a string that represents the conditions,
-    ///                   ordering, offset, and limit for the query, as may be
-    ///                   required. It can be empty. Note that each part of the
-    ///                   logic is optional — so if conditions are passed, for
-    ///                   instance, the `WHERE` keyword needs to be included.
+    ///   should be a string that represents the conditions,
+    ///   ordering, offset, and limit for the query, as may be
+    ///   required. It can be empty. Note that each part of the
+    ///   logic is optional — so if conditions are passed, for
+    ///   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
-    ///                   the order they are expected in the query logic, and
-    ///                   match with any expectations set in the query logic.
+    ///   the order they are expected in the query logic, and
+    ///   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records.
+    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -768,7 +768,7 @@ impl Address {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///
@@ -823,7 +823,7 @@ impl Address {
     ///
     /// * `email`     - The e-mail address to search for.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     /// # Errors
     ///
     /// Returns a [`StashError`] if the database access fails.
@@ -1004,7 +1004,7 @@ impl User {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///
@@ -1163,7 +1163,7 @@ impl UserSettings {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///

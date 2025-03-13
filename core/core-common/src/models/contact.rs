@@ -113,7 +113,7 @@ impl Contact {
     /// # Parameters
     ///
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
+    ///   use for finding the records.
     ///
     /// # Errors
     ///
@@ -228,7 +228,7 @@ impl Contact {
     pub async fn sync(
         api: &Proton,
         stash: &Stash,
-    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>>> {
+    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>> + use<>> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.

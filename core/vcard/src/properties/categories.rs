@@ -150,11 +150,11 @@ impl TryFrom<&IcalProperty> for Category {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Categories,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

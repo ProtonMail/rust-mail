@@ -86,7 +86,9 @@ async fn main() {
     let labels = Label::all_labels(network_session).await.unwrap();
     tracing::info!("Legacy labels: {labels:?}");
 
-    tracing::info!("Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it");
+    tracing::info!(
+        "Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it"
+    );
     let user_id = ctx.user_id();
     let account = ctx.core_account().await.unwrap();
 

@@ -204,7 +204,7 @@ impl SenderImage {
             _ => {
                 return Err(StashError::Critical(anyhow!(
                     "Custom Unique constraint for SenderImage failed"
-                )))
+                )));
             }
         }
 

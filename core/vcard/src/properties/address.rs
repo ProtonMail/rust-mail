@@ -235,11 +235,11 @@ impl TryFrom<&IcalProperty> for Address {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Adr,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

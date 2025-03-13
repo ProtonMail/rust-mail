@@ -277,7 +277,7 @@ impl Model {
     fn open_move_item_popup(&mut self, item: Item) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
-        };
+        }
 
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {
@@ -295,7 +295,7 @@ impl Model {
     fn open_label_popup(&mut self, item: Item) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
-        };
+        }
 
         let ctx = Arc::clone(&self.ctx);
         Command::task(async move {

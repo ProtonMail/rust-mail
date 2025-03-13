@@ -112,7 +112,9 @@ impl Handler {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         let Some(mut conversation) = Conversation::load(conversation_id, bond).await? else {
-            warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
+            warn!(
+                "While reverting locally, could not find conversation with local_id: {conversation_id:?}"
+            );
             return Ok(());
         };
 

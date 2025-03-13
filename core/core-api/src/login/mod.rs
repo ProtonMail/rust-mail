@@ -5,7 +5,6 @@ use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::prelude::*;
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
-use futures::{TryFuture, TryFutureExt};
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use muon::client::Tokens;
 use std::fmt::Debug;
@@ -142,7 +141,7 @@ impl Flow {
         tokens: Tokens,
     ) -> Result<(), LoginError> {
         let (client, _) = self.session.to_parts();
-        self.transition(|s| s.migrate(client, user, data, tokens))
+        self.transition(|s: State| s.migrate(client, user, data, tokens))
             .await
             .inspect_err(|_| self.try_recover())?;
 
@@ -160,7 +159,7 @@ impl Flow {
         pass: String,
         info: LoginExtraInfo,
     ) -> Result<(), LoginError> {
-        self.transition(|s| s.login(user, pass, info))
+        self.transition(|s: State| s.login(user, pass, info))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -171,7 +170,7 @@ impl Flow {
     ///
     /// Returns error if the request failed.
     pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_totp(code))
+        self.transition(|s: State| s.submit_totp(code))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -184,7 +183,7 @@ impl Flow {
     ///
     /// Once implemented, this function will return an error if the request failed.
     pub async fn submit_fido(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_fido(code))
+        self.transition(|s: State| s.submit_fido(code))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -196,7 +195,7 @@ impl Flow {
     /// Returns error if the request failed.
     /// If the password fails to decrypt the user key it returns a [`LoginError::WrongMailboxPassword`].
     pub async fn submit_mailbox_password(&mut self, pass: String) -> Result<(), LoginError> {
-        self.transition(|s| s.submit_mbp(pass))
+        self.transition(|s: State| s.submit_mbp(pass))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -255,11 +254,11 @@ impl Flow {
     }
 
     /// Try to transition the flow to the next state.
-    async fn transition<F>(&mut self, f: impl FnOnce(State) -> F) -> Result<(), LoginError>
-    where
-        F: TryFuture<Ok = State, Error = (State, LoginError)>,
-    {
-        match f(self.take_state()).into_future().await {
+    async fn transition(
+        &mut self,
+        f: impl AsyncFnOnce(State) -> Result<State, (State, LoginError)>,
+    ) -> Result<(), LoginError> {
+        match f(self.take_state()).await {
             Ok(state) => {
                 self.state = state;
                 Ok(())

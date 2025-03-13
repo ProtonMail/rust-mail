@@ -90,11 +90,11 @@ impl TryFrom<&IcalProperty> for Kind {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Kind,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

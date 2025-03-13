@@ -141,11 +141,11 @@ impl TryFrom<&IcalProperty> for Member {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::Member,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
         Ok(result)
     }
 }

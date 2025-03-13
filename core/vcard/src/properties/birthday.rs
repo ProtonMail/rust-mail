@@ -118,11 +118,11 @@ impl TryFrom<&IcalProperty> for Birthday {
                         return Err(VCardError::UnexpectedParameter(
                             PropertyKind::BDay,
                             parameter_type,
-                        ))
+                        ));
                     }
                 }
             }
-        };
+        }
 
         let real_value_type = if let Some(value_type) = value_type {
             value_type
@@ -146,7 +146,7 @@ impl TryFrom<&IcalProperty> for Birthday {
                 return Err(VCardError::InvalidValue(
                     PropertyKind::BDay,
                     value.to_owned(),
-                ))
+                ));
             }
         };
         Ok(Self {
