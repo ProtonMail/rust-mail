@@ -5,7 +5,7 @@ use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
 };
-use crate::models::{Conversation, ConversationLabel, Message};
+use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use crate::AppError;
 use futures::try_join;
 use itertools::Itertools;
@@ -378,6 +378,7 @@ impl TableObserver for ContextualConversationWatcher {
             Conversation::table_name().to_string(),
             ConversationLabel::table_name().to_string(),
             Message::table_name().to_string(),
+            MessageLabel::table_name().to_string(),
             Label::table_name().to_string(),
         ]
     }
