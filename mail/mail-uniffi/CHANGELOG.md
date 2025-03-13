@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## Added
+
+  - [ET-2450] `LoginFlow` has a new method `migrate` for migrating from legacy application.
+
 ## [0.57.0] - 2025-03-13
 
 ### Changed
