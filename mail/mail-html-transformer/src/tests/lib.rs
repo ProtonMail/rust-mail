@@ -7,11 +7,10 @@ fn pathologic_nested() {
     let doc = include_str!("../../tests/htmls/nested.html");
     let mut t = Transformer::new(doc);
     t.strip_utm();
-    t.disable_remote_content();
+    t.disable_content(true, true);
     t.inject_ios_content_size();
     _ = t.strip_whitelist();
     t.inject_style();
-    t.proxy_images("THIS_IS_A_TOKEN");
     _ = t.strip_blockquote();
     let tok = t.add_noreferrer();
     t.insert_links(tok);

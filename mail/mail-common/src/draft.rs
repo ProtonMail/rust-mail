@@ -1,3 +1,4 @@
+use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::{
     crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply, sanitize_draft_open, sanitize_draft_reply,
+    prepare_html_reply, prepare_plain_text_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -17,13 +18,14 @@ use crate::models::{
     MessageBodyMetadata, MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use compose::maybe_sanitize;
 use derive_more::derive::TryFrom;
 use futures::future::join3;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::{AddressId, SessionId};
+use proton_api_core::services::proton::AddressId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
@@ -422,7 +424,7 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         };
 
-        let mut decrypted = match decrypted {
+        let decrypted = match decrypted {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
@@ -452,28 +454,21 @@ impl Draft {
         )
         .await;
 
-        // Transform body.
-        sanitize_draft_open(
-            context.session_id(),
-            decrypted.metadata.mime_type,
-            &mut decrypted.body,
-        );
+        let mut draft = Self {
+            metadata_id: metadata.id.unwrap(),
+            sender: message.sender.address,
+            to_list,
+            cc_list,
+            bcc_list,
+            address_id: message.remote_address_id,
+            subject: message.subject,
+            send_result,
+            body: decrypted.body,
+            mime_type: decrypted.metadata.mime_type,
+        };
+        draft.sanitize_body();
 
-        Ok((
-            Self {
-                metadata_id: metadata.id.unwrap(),
-                sender: message.sender.address,
-                to_list,
-                cc_list,
-                bcc_list,
-                address_id: message.remote_address_id,
-                subject: message.subject,
-                send_result,
-                body: decrypted.body,
-                mime_type: decrypted.metadata.mime_type,
-            },
-            sync_status,
-        ))
+        Ok((draft, sync_status))
     }
 
     /// Create a new empty draft.
@@ -614,7 +609,6 @@ impl Draft {
             &source_message,
             source_message_body,
             use_utc,
-            context.session_id(),
         )
         .await;
 
@@ -654,7 +648,6 @@ impl Draft {
         source_message: &Message,
         source_message_body: DecryptedMessageBody,
         use_utc: bool,
-        session_id: &SessionId,
     ) -> (Self, Vec<Attachment>) {
         let mut body = get_signature(address, mail_settings);
 
@@ -711,7 +704,7 @@ impl Draft {
         )
         .await;
 
-        sanitize_draft_reply(session_id, draft.mime_type(), &mut draft.body);
+        draft.sanitize_body();
 
         (draft, attachments)
     }
@@ -1167,6 +1160,10 @@ impl Draft {
 
     pub fn set_mime_type(&mut self, mime_type: MimeType) {
         self.mime_type = mime_type;
+    }
+
+    pub fn sanitize_body(&mut self) {
+        self.body = maybe_sanitize(self.mime_type(), mem::take(&mut self.body));
     }
 }
 

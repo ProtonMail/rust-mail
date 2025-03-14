@@ -66,9 +66,7 @@ impl DecryptedMessage {
         async_runtime()
             .spawn(async move {
                 let tether = self.ctx.user_stash().connection();
-                self.body
-                    .transformed(opts, self.ctx.session_id(), &tether)
-                    .await
+                self.body.transformed(opts, &tether).await
             })
             .await
             .expect("Transformed is infailable.")

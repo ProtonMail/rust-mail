@@ -272,14 +272,13 @@ impl MessagesState {
                 let stash = ctx.user_stash();
                 let tether = stash.connection();
                 let local_id = metadata.local_id.unwrap();
-                let session_id = ctx.session_id().to_owned();
 
                 let decrypted = MailMessage::message_body(ctx, local_id)
                     .await
                     .context("Failed to get message body")?;
 
                 let html = decrypted
-                    .transformed(TransformOpts::default(), &session_id, &tether)
+                    .transformed(TransformOpts::default(), &tether)
                     .await;
 
                 if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {

@@ -130,26 +130,6 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     Some(node_ref_from_str(&rep, "div"))
 }
 
-/// Disable embedded images
-#[allow(clippy::missing_panics_doc)] // the select is well formed.
-pub fn disable_embedded_images(document: NodeRef) -> u64 {
-    let elements = document.select("img").unwrap();
-
-    let mut count = 0;
-    for element in elements {
-        let mut attrs = element.attributes.borrow_mut();
-
-        attrs.entry("src").and_modify(|src| {
-            // We should not proxy cid images
-            if !src.value.starts_with("cid:") {
-                src.value = String::new();
-                count += 1;
-            }
-        });
-    }
-    count
-}
-
 #[must_use]
 /// Replaces consecutive ' ' for `&nbsp;` and '\n' for `<br>`
 pub fn keep_spaces(text: &str) -> String {

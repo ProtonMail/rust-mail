@@ -7,7 +7,7 @@ use crate::datatypes::{
     SystemLabelId,
 };
 use crate::decrypted_message::StorableMessageBodyRef;
-use crate::draft::compose::sanitize_draft_save;
+use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, ReplyMode, SaveOrSendError};
 use crate::models::{
@@ -75,7 +75,7 @@ impl Save {
     /// Create a new empty draft.
     pub fn new(draft: &Draft, save_origin: DraftSendResultOrigin) -> Self {
         // Undo all transformations to the body
-        let transformed = sanitize_draft_save(draft.mime_type(), draft.body());
+        let transformed = maybe_sanitize(draft.mime_type(), draft.body().to_owned());
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
