@@ -1,6 +1,6 @@
 //! Migrations for the data model.
-use crate::db::migrations::v0::MigrationV0;
-use proton_sqlite3::{Migrator, MigratorError};
+use crate::db::migrations::v0::V0;
+use proton_sqlite3::{Migration, Migrator, MigratorError};
 use stash::stash::Stash;
 
 mod v0;
@@ -8,11 +8,11 @@ mod v0;
 const VERSION_TABLE_NAME: &str = "proton_mail_db_version";
 
 pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
-    let migrations = vec![MigrationV0 {}];
+    let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(V0)];
     let mut tether = stash.connection();
     let migrator = Migrator::new();
     migrator
-        .migrate(&mut tether, VERSION_TABLE_NAME, &migrations)
+        .migrate(&mut tether, VERSION_TABLE_NAME, &mut migrations)
         .await
 }
 

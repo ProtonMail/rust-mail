@@ -1,0 +1,1 @@
+CREATE TABLE filetest1 (ID INTEGER);
