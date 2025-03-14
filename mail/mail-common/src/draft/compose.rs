@@ -4,7 +4,7 @@ use crate::draft::{Draft, ReplyMode, SaveOrSendError};
 use crate::models::{MailSettings, Message, MessageBodyMetadata};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
-use proton_api_core::services::proton::common::{AddressId, SessionId};
+use proton_api_core::services::proton::common::AddressId;
 use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
@@ -256,63 +256,18 @@ pub fn html_to_text(input: impl AsRef<str>) -> String {
     }
 }
 
-/// Sanitize a draft reply message content.
-///
-/// When creating a new reply the content of the original message is not sanitized and has
-/// never been processed before so we need to preform more operations.
-///
 /// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_reply(session_id: &SessionId, mime_type: MimeType, body: &mut String) {
-    // This is functionality equivalent to `sanitize_draft_open` today, but
-    // this can potentially change in the future with different behaviors.
-    if let Some(mut transformer) = new_html_transformer(mime_type, body) {
-        transformer.proxy_images(session_id);
-        *body = transformer.to_string();
-    }
-}
-
-/// Sanitize an existing draft.
-///
-/// For existing drafts we only need basic html sanitization and we should proxy all image content.
-///
-/// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_open(
-    session_id: &SessionId,
-    mime_type: MimeType,
-    decrypted_message: &mut String,
-) {
-    if let Some(mut transformer) = new_html_transformer(mime_type, decrypted_message) {
-        transformer.proxy_images(session_id);
-        *decrypted_message = transformer.to_string();
-    }
-}
-
-/// Sanitize draft content when saved.
-///
-/// When saving a draft we need to undo the proxy image pass so we can send it with
-/// the original content to the recipients.
-///
-/// Only html content is sanitized, plain text is ignored.
-pub fn sanitize_draft_save(mime_type: MimeType, body: &str) -> String {
-    if let Some(mut transformer) = new_html_transformer(mime_type, body) {
-        transformer.undo_proxy_images();
-        transformer.to_string()
-    } else {
-        body.to_owned()
-    }
-}
-
-fn new_html_transformer(mime_type: MimeType, body: &str) -> Option<Transformer> {
+pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
     // There is no point in sanitizing content that is not HTML.
     if mime_type != MimeType::TextHtml {
-        return None;
+        return body;
     }
-    let mut transformer = Transformer::new(body);
+    let mut transformer = Transformer::new(&body);
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
 
-    Some(transformer)
+    transformer.to_string()
 }
 
 /// Generates a reply similar to:
