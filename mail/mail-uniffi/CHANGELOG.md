@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
-## Added
+
+## [0.58.1] - 2025-03-14
+
+### Fixed
+
+  - Bumped `html2text` to 0.14.2 to fix compile errors
+
+
+## [0.58.0] - 2025-03-14
+
+### Added
 
   - [ET-2450] `LoginFlow` has a new method `migrate` for migrating from legacy application.
+
 
 ## [0.57.0] - 2025-03-13
 
@@ -22,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-2001] Account avatar not showing initials when display_name is an empty string.
   - Fixed the pgp attachment crash.
+
 
 ## [0.56.0] - 2025-03-11
 
@@ -38,6 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      - get -> load method rename
   - [ET-2368] Saving registered device is now generating new device token key pair if necessary.
   - [ET-2368] Registering device is now using device key instead of user key.
+
+
+## [0.55.3] - 2025-03-13
+
+### Fixed
+
+  - `watch_conversations` now correctly observes changes in the message's labels
+
 
 ## [0.55.2] - 2025-03-12
 

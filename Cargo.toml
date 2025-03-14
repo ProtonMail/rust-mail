@@ -57,7 +57,7 @@ indoc = "2.0.5"
 insta = { version = "1.42.0", features = ["toml"] }
 indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
-html2text = "0.13.6"
+html2text = "0.14.2"
 file-format = { version = "0.26.0", features = ["reader"] }
 lazy_static = "1"
 mime = "0.3.17"
