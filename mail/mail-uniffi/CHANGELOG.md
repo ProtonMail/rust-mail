@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased] - 2025-03-xx
 
 
+## [0.58.1] - 2025-03-14
+
+### Fixed
+
+  - Bumped `html2text` to 0.14.2 to fix compile errors
+
+
 ## [0.58.0] - 2025-03-14
 
 ### Added

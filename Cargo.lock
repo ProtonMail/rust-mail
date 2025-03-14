@@ -2263,13 +2263,11 @@ dependencies = [
 
 [[package]]
 name = "html2text"
-version = "0.13.6"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bf7722c2ffdd62628b6e13065b6ab6cf154a236bd476c6e89af1352d745b83e"
+checksum = "3c4d4b50c6aa923c578098bdde75d40c614b23226da84b437943f94bc580b225"
 dependencies = [
  "html5ever 0.29.2",
- "markup5ever 0.14.1",
- "nom",
  "tendril",
  "thiserror 2.0.12",
  "unicode-width 0.2.0",
@@ -3017,20 +3015,6 @@ dependencies = [
  "log",
  "phf 0.10.1",
  "phf_codegen 0.10.0",
- "string_cache",
- "string_cache_codegen",
- "tendril",
-]
-
-[[package]]
-name = "markup5ever"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7a7213d12e1864c0f002f52c2923d4556935a43dec5e71355c2760e0f6e7a18"
-dependencies = [
- "log",
- "phf 0.11.3",
- "phf_codegen 0.11.3",
  "string_cache",
  "string_cache_codegen",
  "tendril",

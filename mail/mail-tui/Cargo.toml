@@ -21,7 +21,7 @@ dirs = "5"
 flume = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
-html2text = { version = "0.13.6" }
+html2text = { workspace = true }
 log = "0.4.25"
 ratatui = { version = "0.28.1", features = ["all-widgets"] }
 itertools = { workspace = true }
