@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+
+ - [ET-2131] Fix key packets missing error when sending messages.
+
 
 ## [0.58.1] - 2025-03-14
 

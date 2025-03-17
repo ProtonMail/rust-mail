@@ -3,7 +3,7 @@ use crate::datatypes::{Disposition, MimeType};
 use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::ValidationState;
 use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
-use crate::models::{Attachment, Message, MessageBodyMetadata};
+use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_mail::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
@@ -23,27 +23,6 @@ use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use stash::stash::Bond;
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, error};
-
-/// Loads the email address of each recipient of the message.
-pub fn load_all_recipients(message_metadata: &Message) -> Vec<String> {
-    let mut recipient_emails = HashSet::with_capacity(
-        message_metadata.to_list.value.len()
-            + message_metadata.bcc_list.value.len()
-            + message_metadata.cc_list.value.len(),
-    );
-
-    recipient_emails.extend(
-        message_metadata
-            .to_list
-            .value
-            .iter()
-            .chain(&message_metadata.cc_list.value)
-            .chain(&message_metadata.bcc_list.value)
-            .map(|value| value.address.clone()),
-    );
-
-    recipient_emails.into_iter().collect()
-}
 
 /// Loads the send preferences for each recipient of the message.
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
@@ -108,7 +87,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_keys: &UnlockedAddressKeys<Provider>,
     send_preferences: HashMap<String, SendPreferences<Provider::PublicKey>>,
-    message_body_metadata: &MessageBodyMetadata,
+    mime_type: MimeType,
     stored_message_body: &StorableMessageBody,
     attachments: &[Attachment],
 ) -> Result<Vec<Package>, PackageError> {
@@ -125,16 +104,13 @@ pub async fn build_packages<Provider: PGPProviderSync>(
     for demanded_package in demanded_packages {
         // The options for encrypted content are text, html, or multipart mixed.
         let encrypted_package = match demanded_package {
-            PackageMimeType::Html => generate_html_encrypted_package_body(
-                pgp_provider,
-                &primary,
-                message_body_metadata,
-                stored_message_body,
-            )?,
+            PackageMimeType::Html => {
+                generate_html_encrypted_package_body(pgp_provider, &primary, stored_message_body)?
+            }
             PackageMimeType::Text => generate_text_encrypted_package_body(
                 pgp_provider,
                 &primary,
-                message_body_metadata,
+                mime_type,
                 stored_message_body,
             )?,
             PackageMimeType::Multipart => {
@@ -142,7 +118,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
                     context,
                     pgp_provider,
                     &primary,
-                    message_body_metadata,
+                    mime_type,
                     stored_message_body,
                     attachments,
                 )
@@ -188,7 +164,6 @@ pub async fn build_packages<Provider: PGPProviderSync>(
 pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    _body_metadata: &MessageBodyMetadata,
     body: &StorableMessageBody,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for html");
@@ -208,12 +183,12 @@ pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
 pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    body_metadata: &MessageBodyMetadata,
+    mime_type: MimeType,
     body: &StorableMessageBody,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for text");
     let text_body: String;
-    let body_data = if body_metadata.mime_type == MimeType::TextPlain {
+    let body_data = if mime_type == MimeType::TextPlain {
         &body.body
     } else {
         text_body = html_to_text(&body.body);
@@ -233,7 +208,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     context: &MailUserContext,
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    body_metadata: &MessageBodyMetadata,
+    mime_type: MimeType,
     body: &StorableMessageBody,
     attachments: &[Attachment],
 ) -> Result<EncryptedPackageBody, PackageError> {
@@ -243,7 +218,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
 
     // Generate the multipart/mime message body.
     let text_body: String;
-    if body_metadata.mime_type == MimeType::TextHtml {
+    if mime_type == MimeType::TextHtml {
         text_body = html_to_text(&body.body);
         builder = builder
             .html_body(body.body.as_bytes())
