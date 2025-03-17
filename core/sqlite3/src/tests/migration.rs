@@ -60,7 +60,7 @@ fn test_migrations_ordering() {
 
 #[tokio::test]
 async fn test_file_migrations() {
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/migrations");
+    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/tests/migrations");
     const TEST_TABLE_NAME: &str = "test_table_version";
     let mut migrations = embedded_migrations(&DIR);
 
@@ -78,7 +78,7 @@ async fn test_file_migrations() {
 
 #[tokio::test]
 async fn test_mixing_code_and_file_migrations() {
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/migrations");
+    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/tests/migrations");
     const TEST_TABLE_NAME: &str = "test_table_version";
     let mut migrations = embedded_migrations(&DIR);
     migrations.push(Box::new(M1));
