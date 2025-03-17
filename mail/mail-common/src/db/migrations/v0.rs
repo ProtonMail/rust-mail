@@ -12,11 +12,12 @@ mod settings;
 use stash::stash::{Bond, StashError};
 use tracing::{debug_span, Instrument};
 
-pub struct MigrationV0 {}
+pub struct V0;
 
-impl proton_sqlite3::Migration for MigrationV0 {
+#[async_trait::async_trait]
+impl proton_sqlite3::Migration for V0 {
     fn name(&self) -> &str {
-        "proton_mail_db_v0"
+        "001_proton_mail_db_v0"
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {

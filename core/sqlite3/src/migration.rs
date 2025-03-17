@@ -4,8 +4,11 @@
 #[path = "tests/migration.rs"]
 mod tests;
 
+pub mod file;
+
 #[allow(unused_imports)]
 use futures::executor::block_on;
+use itertools::Itertools;
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
@@ -13,10 +16,27 @@ use thiserror::Error;
 use tracing::debug;
 
 /// Migration Unit.
-#[allow(async_fn_in_trait)]
-pub trait Migration {
+#[async_trait::async_trait]
+pub trait Migration: Send + Sync + 'static {
     /// Migration name.
     fn name(&self) -> &str;
+
+    /// Migration order string. A part of the name.
+    /// Used to determine order of migrations.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the migration name does not contain `_`.
+    ///
+    fn order_number(&self) -> &str {
+        let Some((order, _)) = self.name().split_once('_') else {
+            panic!(
+                "Expected migration name separated by `_`. Found `{}`",
+                self.name()
+            );
+        };
+        order
+    }
 
     /// Perform the migration of from the previous version to the current version.
     ///
@@ -26,7 +46,7 @@ pub trait Migration {
     /// # Errors
     ///
     /// Returns error if the migration failed to run.
-    async fn migrate(&self, tx: &Bond) -> Result<(), StashError>;
+    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError>;
 }
 
 /// Possible errors that may occur during a migration.
@@ -79,12 +99,14 @@ impl Migrator {
     ///
     /// Return error if the migration fails.
     ///
-    pub async fn migrate<M: Migration>(
+    pub async fn migrate(
         &self,
         tether: &mut Tether,
         version_table_name: &str,
-        migrations: &[M],
+        migrations: &mut [Box<dyn Migration>],
     ) -> Result<usize, MigratorError> {
+        sort_migrations_and_check_for_conflicts(migrations);
+
         let tx = tether.transaction().await?;
         let expected_version = version_from_migration_list(migrations);
         // Check if version table exists, if not we are at version 0.
@@ -111,7 +133,7 @@ impl Migrator {
     }
 }
 
-fn version_from_migration_list<M: Migration>(m: &[M]) -> usize {
+fn version_from_migration_list(m: &[Box<dyn Migration>]) -> usize {
     m.len()
 }
 async fn get_current_table_version(
@@ -180,11 +202,11 @@ ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION
     Ok(())
 }
 
-async fn run_migrations<M: Migration>(
+async fn run_migrations(
     tx: &Bond<'_>,
     table_name: &str,
     current_version: usize,
-    migrations: &[M],
+    migrations: &[Box<dyn Migration>],
 ) -> Result<(), StashError> {
     for (i, m) in migrations.iter().enumerate().skip(current_version) {
         let span = tracing::debug_span!("migration", version = i, name = m.name());
@@ -200,4 +222,30 @@ async fn run_migrations<M: Migration>(
     }
 
     Ok(())
+}
+
+/// Since migrations might be implemented by many developers in parallel, it is crucial to ensure, that the ordering of those migrations is stable
+/// and predictable.
+///
+/// We are using `0001_migration_name.sql` scheme, where a string before `_` is the order number.
+///
+/// This function sorts by the order number and panics, if there are `0001_a.sql` and `0001_b.sql`. Such a conflict indicates, that the
+/// ordering is undecidable and it's developer's responsibility to rename one of the files.
+///
+/// # Panics
+///
+/// This function will panic if migrations do not have unique migration order number.
+///
+pub fn sort_migrations_and_check_for_conflicts(migrations: &mut [Box<dyn Migration>]) {
+    migrations.sort_by_key(|m| m.order_number().to_string());
+
+    for (a, b) in migrations.iter().tuple_windows() {
+        assert_ne!(
+            a.order_number(),
+            b.order_number(),
+            "Two migrations share the same order number: `{}` and `{}`. Please resolve the conflict by renaming one of them.",
+            a.name(),
+            b.name()
+        );
+    }
 }

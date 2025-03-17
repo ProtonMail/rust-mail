@@ -9,11 +9,12 @@ mod sender_image_cache;
 mod user;
 mod user_settings;
 
-pub struct V0 {}
+pub struct V0;
 
+#[async_trait::async_trait]
 impl Migration for V0 {
     fn name(&self) -> &'static str {
-        "proton_core_v0"
+        "001_proton_core_v0"
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {

@@ -6,6 +6,7 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = { workspace = true }
 fixedbitset = "0.5"
 flume = { workspace = true }
 futures = { workspace = true }
@@ -29,6 +30,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 sqlite-watcher = { workspace = true }
+include_dir = { version = "0.7", features = ["glob"] }
+itertools = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }

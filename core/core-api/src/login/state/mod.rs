@@ -4,6 +4,7 @@ use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
 use crate::login::LoginError;
+use crate::services::observability::{metrics, ApiServiceObservabilityResponse};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::services::proton::{SessionId, UserId};
@@ -243,6 +244,13 @@ impl State {
         let user = client
             .get_users()
             .map_ok(|res| res.user)
+            .inspect_err(|err| {
+                data.parts
+                    .observability
+                    .record(metrics::SignInSubmitMailBoxPwTotal::new(
+                        metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
+                    ));
+            })
             .map_err(LoginError::UserFetch)
             .await?;
 
@@ -250,6 +258,13 @@ impl State {
         let salts = client
             .get_keys_salts()
             .map_ok(|res| res.key_salts)
+            .inspect_err(|err| {
+                data.parts
+                    .observability
+                    .record(metrics::SignInSubmitMailBoxPwTotal::new(
+                        metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
+                    ));
+            })
             .map_err(LoginError::KeySecretSaltFetch)
             .await?;
 
@@ -262,6 +277,13 @@ impl State {
         // Derive the key secret to unlock the user keys.
         let secret = if let Some(key) = user.keys.primary() {
             (salts.salt_for_key(&srp, &key.id, pass.as_bytes()))
+                .inspect_err(|_| {
+                    data.parts
+                        .observability
+                        .record(metrics::SignInSubmitMailBoxPwTotal::new(
+                            metrics::MailboxPasswordMetricStatus::KeyDerivationFailed,
+                        ));
+                })
                 .map_err(LoginError::KeySecretDerivation)?
         } else {
             return Err(LoginError::MissingPrimaryKey);
@@ -269,6 +291,11 @@ impl State {
 
         // Check if the key secret can unlock the user keys.
         let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
+            data.parts
+                .observability
+                .record(metrics::SignInSubmitMailBoxPwTotal::new(
+                    metrics::MailboxPasswordMetricStatus::KeyUnlockFailed,
+                ));
             return Err(LoginError::KeySecretDecryption);
         } else {
             UserKeySecret(secret)
@@ -284,6 +311,13 @@ impl State {
             })
             .await?;
 
+        data.parts
+            .observability
+            .record(metrics::SignInSubmitMailBoxPwTotal::new(
+                metrics::MailboxPasswordMetricStatus::ApiService(
+                    ApiServiceObservabilityResponse::Success,
+                ),
+            ));
         Ok(Complete::new(client, data).into())
     }
 }

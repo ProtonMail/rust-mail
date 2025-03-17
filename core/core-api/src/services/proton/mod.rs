@@ -81,6 +81,9 @@ export! {
     /// Defines and implements the `ProtonCore` trait.
     mod core (as pub);
 
+    /// Defines and implements the `ProtonData` trait.
+    mod data (as pub);
+
     /// Defines and implements the `ProtonPayments` trait.
     mod payments (as pub);
 }
