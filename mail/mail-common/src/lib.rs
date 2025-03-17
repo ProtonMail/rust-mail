@@ -28,7 +28,7 @@ pub use user_context::{
 // re-exports
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 pub use proton_api_mail;
 pub use proton_core_common;
 use proton_core_common::cache::CacheError;

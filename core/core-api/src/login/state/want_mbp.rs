@@ -3,8 +3,8 @@ use tracing::info;
 
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{state::State, LoginError};
-use crate::services::proton::common::{SessionId, UserId};
 use crate::services::proton::Proton;
+use crate::services::proton::{SessionId, UserId};
 
 /// Represents the login flow state where the user must provide their mailbox password.
 pub struct WantMbp {

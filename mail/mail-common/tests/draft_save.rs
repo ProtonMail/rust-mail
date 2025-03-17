@@ -2,8 +2,8 @@ mod drafts_common;
 use drafts_common::*;
 use itertools::Itertools;
 use proton_api_core::consts::{CoreBundle, Mail};
-use proton_api_core::services::proton::common::{LabelId, UserId};
-use proton_api_core::services::proton::prelude::ApiErrorInfo;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::{LabelId, UserId};
 use proton_api_mail::services::proton::prelude::AttachmentId;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,

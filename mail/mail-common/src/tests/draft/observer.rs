@@ -2,7 +2,7 @@ use crate::draft::observers::DraftSendResultWatcher;
 use crate::models::{
     Conversation, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message,
 };
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_core_common::datatypes::{AddressStatus, AddressType};
 use proton_core_common::models::Address;

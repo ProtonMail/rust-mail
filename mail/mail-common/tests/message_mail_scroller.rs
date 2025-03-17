@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use maplit::btreemap;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,

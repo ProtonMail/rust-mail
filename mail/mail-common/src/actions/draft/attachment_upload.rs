@@ -12,7 +12,7 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
 use proton_api_mail::services::proton::ProtonMail;

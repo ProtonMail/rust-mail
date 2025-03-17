@@ -8,7 +8,7 @@ use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::services::proton::common::{SessionId, UserId};
+use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;

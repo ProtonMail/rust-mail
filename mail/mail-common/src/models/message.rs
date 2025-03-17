@@ -43,7 +43,7 @@ use crate::{AppError, MailUserContext};
 use anyhow::{anyhow, Context};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::{AddressId, LabelId};
+use proton_api_core::services::proton::{AddressId, LabelId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::common::{ConversationId, ExternalId, MessageId};

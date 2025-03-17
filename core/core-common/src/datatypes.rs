@@ -52,11 +52,11 @@ pub use self::system_label::*;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use num_enum::IntoPrimitive;
-use proton_api_core::services::proton::common::{
+use proton_api_core::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
 };
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
     DateFormat as ApiDateFormat, Density as ApiDensity, EarlyAccess as ApiEarlyAccess,

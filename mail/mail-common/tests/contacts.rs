@@ -1,5 +1,5 @@
-use proton_api_core::services::proton::common::ContactId;
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::ContactId;
+use proton_api_core::services::proton::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactSendingPreferences,
 };
 use proton_core_common::datatypes::{

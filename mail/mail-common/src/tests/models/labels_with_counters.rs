@@ -2,9 +2,9 @@
 #![allow(non_snake_case)]
 
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::common::LabelType as ApiLabelType;
-use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::Label as ApiLabel;
+use proton_api_core::services::proton::LabelId;
+use proton_api_core::services::proton::LabelType as ApiLabelType;
 use proton_core_common::models::Label;
 use proton_mail_test_utils::db::new_test_connection;
 

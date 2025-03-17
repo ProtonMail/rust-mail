@@ -12,7 +12,7 @@ mod contact_list {
         tests::common::new_core_test_connection,
     };
     use pretty_assertions::assert_eq;
-    use proton_api_core::services::proton::common::LabelId;
+    use proton_api_core::services::proton::LabelId;
     use test_case::test_case;
 
     #[test_case(vec![], vec![], vec![]; "TEST 0 Empty")]

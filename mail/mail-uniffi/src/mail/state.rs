@@ -1,5 +1,5 @@
 use parking_lot::RwLock;
-use proton_api_core::services::proton::common::UserId;
+use proton_api_core::services::proton::UserId;
 use proton_mail_common::MailUserContext;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};

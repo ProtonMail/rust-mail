@@ -1,9 +1,9 @@
 #![allow(dead_code)]
-use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
+use proton_api_core::services::proton::{AddressId, LabelId};
 use proton_api_mail::services::proton::prelude::MailSettings;
 use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
 use proton_api_mail::services::proton::response_data::AttachmentMetadata;

@@ -1,7 +1,7 @@
 use std::{cmp, sync::Arc};
 
 use proton_api_core::{
-    services::proton::common::LabelId,
+    services::proton::LabelId,
     session::{CoreSession, Session},
 };
 use proton_api_mail::services::proton::{

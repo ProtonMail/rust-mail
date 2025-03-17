@@ -5,9 +5,9 @@ use crate::models::Address;
 use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
-use proton_api_core::services::proton::common::{AddressId, UserId};
-use proton_api_core::services::proton::requests::GetKeysAllOptions;
+use proton_api_core::services::proton::GetKeysAllOptions;
 use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::{AddressId, UserId};
 use proton_api_core::session::CoreSession;
 use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{

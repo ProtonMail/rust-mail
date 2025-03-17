@@ -2,7 +2,7 @@ use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::human_verification::ChallengeObserver;
-use proton_api_core::services::proton::common::UserId;
+use proton_api_core::services::proton::UserId;
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::db::account::{CoreAccount, CoreSession};

@@ -1,6 +1,6 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::HumanVerificationType as RealHumanVerificationType;
-use proton_api_core::services::proton::response_data::HumanVerificationChallenge as RealHumanVerificationChallenge;
+use proton_api_core::services::proton::HumanVerificationChallenge as RealHumanVerificationChallenge;
+use proton_api_core::services::proton::HumanVerificationType as RealHumanVerificationType;
 use tracing::error;
 
 /// Information for the human verification challenge.

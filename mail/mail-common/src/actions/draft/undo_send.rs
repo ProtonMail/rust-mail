@@ -9,7 +9,7 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;

@@ -26,7 +26,7 @@ use proton_mail_common::models::{
     ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
     MessageCounters,
 };
-use proton_mail_common::proton_api_mail::proton_api_core::services::proton::common::LabelId;
+use proton_mail_common::proton_api_mail::proton_api_core::services::proton::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
 };

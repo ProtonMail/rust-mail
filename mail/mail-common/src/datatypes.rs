@@ -66,7 +66,7 @@ use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailUserContext};
 use core::fmt;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,

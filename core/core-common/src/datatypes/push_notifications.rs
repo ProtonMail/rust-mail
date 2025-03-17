@@ -1,5 +1,5 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
-use proton_api_core::services::proton::common::SessionId;
+use proton_api_core::services::proton::SessionId;
 use proton_crypto_account::{keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync};
 use proton_crypto_notifications::{
     DecryptableNotification, NotificationError, PGPEncryptedNotification,

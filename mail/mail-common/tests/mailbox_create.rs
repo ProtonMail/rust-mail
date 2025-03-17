@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use proton_api_core::services::proton::common::{LabelId, LabelType as ApiLabelType};
-use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::Label as ApiLabel;
+use proton_api_core::services::proton::{LabelId, LabelType as ApiLabelType};
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, MessageFlags as ApiMessageFlags,

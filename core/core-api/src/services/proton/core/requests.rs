@@ -1,4 +1,4 @@
-//! Request structures for the Proton API.
+//! Request structures for the Proton Core API.
 //!
 //! This module provides structures that are used to make requests to the Proton
 //! API. These structures are used to define the request bodies and URL
@@ -22,7 +22,7 @@
 
 use crate::services::proton::prelude::*;
 use crate::MAX_PAGE_ELEMENT_COUNT;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 use smart_default::SmartDefault;
 
@@ -158,37 +158,6 @@ pub struct PutDeleteContacts {
     pub ids: Vec<ContactId>,
 }
 
-/// Parameters for getting payment plans.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, SmartDefault)]
-#[serde(rename_all = "PascalCase")]
-pub struct GetPaymentsPlansOptions {
-    pub currency: Option<String>,
-    pub vendor: Option<String>,
-    pub state: Option<u8>,
-    pub timestamp: Option<u64>,
-    pub fallback: Option<bool>,
-}
-
-/// Parameters required to create a payment token.
-#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostPaymentsTokensRequest {
-    pub amount: u64,
-    pub currency: String,
-    pub payment: PaymentReceipt,
-}
-
-/// Parameters required to create a payment subscription.
-#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostPaymentsSubscriptionRequest {
-    #[serde(flatten)]
-    pub subscription: NewSubscription,
-
-    #[serde(flatten)]
-    pub new_values: NewSubscriptionValues,
-}
-
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -274,26 +243,4 @@ pub struct RegisterDeviceRequest {
     pub ping_notification_status: Option<i32>,
     /// TODO: Document this field
     pub push_notification_status: Option<i32>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostMetricsRequest {
-    pub metrics: Vec<PostMetricsRequestElement>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostMetricsRequestElement {
-    pub name: String,
-    pub version: u64,
-    pub timestamp: i64,
-    pub data: PostMetricsRequestData,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "PascalCase")]
-pub struct PostMetricsRequestData {
-    pub labels: serde_json::Value,
-    pub value: u64,
 }

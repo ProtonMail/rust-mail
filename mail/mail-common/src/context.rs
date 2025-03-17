@@ -6,8 +6,8 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::{SessionId, UserId};
 use proton_api_core::services::proton::BuildError;
+use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_core_common::action_queue::{

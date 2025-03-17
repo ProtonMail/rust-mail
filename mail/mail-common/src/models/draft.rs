@@ -14,7 +14,7 @@ use derive_more::derive::TryFrom;
 use indoc::formatdoc;
 use proton_action_queue::action::ActionId;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
@@ -956,8 +956,8 @@ impl DraftAttachmentMetadata {
             .collect::<Vec<_>>();
 
         bond.execute(
-            formatdoc! {"DELETE FROM {} WHERE metadata_id = ?", Self::table_name()},
-            params![metadata_id],
+            formatdoc! {"DELETE FROM {} WHERE metadata_id = ? AND state NOT IN (?,?)", Self::table_name()},
+            params![metadata_id, DraftAttachmentUploadState::Error, DraftAttachmentUploadState::Offline],
         )
         .await
         .inspect_err(|e| error!("Failed to delete existing draft metadata records: {e:?}"))?;

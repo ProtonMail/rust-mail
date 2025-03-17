@@ -2,7 +2,7 @@ use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{state::State, LoginError};
 use crate::service::ApiServiceError;
 use crate::services::observability::metrics::{self};
-use crate::services::proton::common::{SessionId, UserId};
+use crate::services::proton::{SessionId, UserId};
 use derive_more::From;
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};

@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 use muon::client::flow::LoginExtraInfo;
 use proton_api_core::login::Flow;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::services::proton::ProtonMail;

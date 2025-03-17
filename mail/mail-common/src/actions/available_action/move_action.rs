@@ -4,7 +4,7 @@ use crate::{
     datatypes::labels::hierarchy::{self, Hierarchy},
     AppError,
 };
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelIdExtension};
 use stash::orm::Model;

@@ -1,7 +1,7 @@
 use proton_api_core::consts::CoreBundle;
-use proton_api_core::services::proton::common::UserId;
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
-use proton_api_core::services::proton::responses::GetKeysAllResponse;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::GetKeysAllResponse;
+use proton_api_core::services::proton::UserId;
 use proton_mail_common::draft::recipients::{
     ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
     ValidatingRecipientList, ValidationState,

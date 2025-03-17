@@ -9,7 +9,7 @@ use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use crate::AppError;
 use futures::try_join;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::session::Session;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_core_common::datatypes::LocalLabelId;

@@ -31,11 +31,11 @@
 //!
 
 use crate::models::{Address, Contact, ContactEmail};
-use proton_api_core::services::proton::common::{AddressId, ContactEmailId, ContactId};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
 };
+use proton_api_core::services::proton::{AddressId, ContactEmailId, ContactId};
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

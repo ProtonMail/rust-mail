@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use maplit::hashmap;
-use proton_api_core::{service::ApiServiceError, services::proton::common::LabelId};
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,

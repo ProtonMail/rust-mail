@@ -52,12 +52,12 @@ use crate::datatypes::{
 use crate::CoreContextResult;
 use indoc::formatdoc;
 use itertools::Itertools as _;
-use proton_api_core::services::proton::common::{AddressId, ProtonIdMarker, UserId};
-use proton_api_core::services::proton::response_data::{
-    Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
-};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::{
+    Address as ApiAddress, User as ApiUser, UserSettings as ApiUserSettings,
+};
+use proton_api_core::services::proton::{AddressId, ProtonIdMarker, UserId};
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;

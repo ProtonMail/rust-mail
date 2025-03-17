@@ -2,7 +2,7 @@ use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
-use proton_api_core::services::proton::common::ContactId;
+use proton_api_core::services::proton::ContactId;
 use proton_api_core::session::CoreSession;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;

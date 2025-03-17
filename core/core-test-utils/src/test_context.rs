@@ -3,13 +3,13 @@ use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::human_verification::ChallengeObserver;
-use proton_api_core::services::proton::common::{EventId, SessionId, UserId};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::GetEventResponse;
+use proton_api_core::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
     UserSettings as ApiUserSettings,
 };
-use proton_api_core::services::proton::responses::GetEventResponse;
+use proton_api_core::services::proton::{EventId, SessionId, UserId};
 use proton_api_core::session::{Config, Endpoint, EnvId};
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;

@@ -6,7 +6,7 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};

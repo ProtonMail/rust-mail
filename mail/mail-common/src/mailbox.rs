@@ -10,7 +10,7 @@ use crate::{AppError, MailContextError};
 pub use attachments::DecryptedAttachment;
 use futures::TryFutureExt;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LocalLabelId;

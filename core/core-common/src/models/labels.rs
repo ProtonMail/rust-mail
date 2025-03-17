@@ -10,12 +10,10 @@ use crate::datatypes::{LabelColor, LabelType, LocalLabelId, ALL_LABEL_TYPES};
 use crate::models::ModelIdExtension;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::LabelId;
-use proton_api_core::services::proton::requests::{
-    PatchLabelRequest, PostLabelsRequest, PutLabelRequest,
-};
-use proton_api_core::services::proton::response_data::Label as ApiLabel;
+use proton_api_core::services::proton::Label as ApiLabel;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::{PatchLabelRequest, PostLabelsRequest, PutLabelRequest};
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;

@@ -5,7 +5,7 @@ use crate::{
     datatypes::LabelType::{self, *},
     datatypes::SystemLabelId,
 };
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_core_common::models::Label;
 use test_case::test_case;
 
