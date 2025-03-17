@@ -1,9 +1,7 @@
 //! Migrations for core data types.
-use crate::db::migrations::core::v0::V0;
-use proton_sqlite3::{Migration, Migrator, MigratorError};
+use include_dir::{include_dir, Dir};
+use proton_sqlite3::{file::embedded_migrations, Migration, Migrator, MigratorError};
 use stash::stash::Stash;
-
-pub mod v0;
 
 /// Migrate the core database.
 ///
@@ -11,7 +9,8 @@ pub mod v0;
 /// Returns error if the migration failed.
 pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     const VERSION_TABLE_NAME: &str = "proton_core_version";
-    let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(V0)];
+    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/core");
+    let mut migrations: Vec<Box<dyn Migration>> = embedded_migrations(&DIR);
 
     let mut tether = stash.connection();
     let migrator = Migrator::new();

@@ -19,6 +19,7 @@ in
 {
   packages = [
     pkgs.bashInteractive
+    pkgs.sql-formatter
   ] ++ lib.optionals pkgs.stdenv.isDarwin (
     with pkgs; [
       libiconv
