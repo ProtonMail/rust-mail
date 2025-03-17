@@ -326,7 +326,17 @@ impl ProtonCore for Proton {
             .send_with(self)
             .await?
             .ok()?;
+        Ok(())
+    }
 
+    async fn post_metrics(&self, metrics: Vec<PostMetricsRequestElement>) -> ApiServiceResult<()> {
+        POST!("/data/v1/metrics")
+            .body_json(PostMetricsRequest { metrics })?
+            .header(("Priority", "u=6"))
+            .service_type(ServiceType::Background, true)
+            .send_with(self)
+            .await?
+            .ok()?;
         Ok(())
     }
 }

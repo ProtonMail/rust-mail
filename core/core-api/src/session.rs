@@ -11,6 +11,7 @@ use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
+use crate::services::observability::{ObservabilityManager, ObservabilityMetric};
 use crate::services::proton::{self, BuildError, Proton};
 use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
@@ -164,6 +165,7 @@ impl Builder {
         let client = proton::build(&config, &store, status.observer(), challenge.clone())?;
 
         status.initialize(client.clone());
+        let observability = ObservabilityManager::new(client.clone());
 
         Ok(Session {
             client,
@@ -171,6 +173,7 @@ impl Builder {
             store,
             status,
             challenge,
+            observability,
         })
     }
 }
@@ -184,6 +187,7 @@ pub struct Session {
     store: DynStore,
     status: StatusWatcher,
     challenge: ChallengeObserver,
+    observability: ObservabilityManager,
 }
 
 impl Session {
@@ -290,6 +294,10 @@ impl Session {
     pub async fn wait_for_online(&self) {
         self.status_changes().wait_for_online().await;
     }
+
+    pub fn record_metric(&self, metric: impl ObservabilityMetric + 'static) {
+        self.observability.record(metric);
+    }
 }
 
 /// The parts of a session.
@@ -298,6 +306,7 @@ pub(crate) struct SessionParts {
     pub(crate) store: DynStore,
     pub(crate) status: StatusWatcher,
     pub(crate) challenge: ChallengeObserver,
+    pub(crate) observability: ObservabilityManager,
 }
 
 impl Session {
@@ -311,6 +320,7 @@ impl Session {
             store: self.store,
             status: self.status,
             challenge: self.challenge,
+            observability: self.observability,
         };
 
         (self.client, parts)
@@ -323,6 +333,7 @@ impl Session {
             store: parts.store,
             status: parts.status,
             challenge: parts.challenge,
+            observability: parts.observability,
         }
     }
 }

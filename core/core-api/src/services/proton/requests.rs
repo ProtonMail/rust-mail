@@ -22,7 +22,7 @@
 
 use crate::services::proton::prelude::*;
 use crate::MAX_PAGE_ELEMENT_COUNT;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, BoolFromInt};
 use smart_default::SmartDefault;
 
@@ -274,4 +274,26 @@ pub struct RegisterDeviceRequest {
     pub ping_notification_status: Option<i32>,
     /// TODO: Document this field
     pub push_notification_status: Option<i32>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostMetricsRequest {
+    pub metrics: Vec<PostMetricsRequestElement>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostMetricsRequestElement {
+    pub name: String,
+    pub version: u64,
+    pub timestamp: i64,
+    pub data: PostMetricsRequestData,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostMetricsRequestData {
+    pub labels: serde_json::Value,
+    pub value: u64,
 }
