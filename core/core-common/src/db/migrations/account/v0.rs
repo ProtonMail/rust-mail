@@ -3,11 +3,12 @@ use tracing::{debug_span, Instrument};
 
 mod devices;
 
-pub struct V0 {}
+pub struct V0;
 
+#[async_trait::async_trait]
 impl proton_sqlite3::Migration for V0 {
     fn name(&self) -> &'static str {
-        "proton_core_db_v0"
+        "001_proton_core_db_v0"
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {

@@ -612,21 +612,22 @@ pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
     let span = tracing::debug_span!("Action Table Setup");
     let _enter = span.enter();
     let migrator = proton_sqlite3::Migrator::new();
-    let migrations = vec![MigrationV1 {}];
+    let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(V0)];
 
     let version = migrator
-        .migrate(conn, ACTION_VERSION_TABLE_NAME, &migrations)
+        .migrate(conn, ACTION_VERSION_TABLE_NAME, &mut migrations)
         .await?;
     debug!("Current version={version}");
     Ok(())
 }
 
 const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
-struct MigrationV1 {}
+struct V0;
 
-impl Migration for MigrationV1 {
+#[async_trait::async_trait]
+impl Migration for V0 {
     fn name(&self) -> &'static str {
-        "action_queue_v1"
+        "001_action_queue_v1"
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
