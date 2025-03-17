@@ -962,7 +962,7 @@ impl Draft {
             return Err(SaveOrSendError::NoRecipients.into());
         }
         let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
-        let send_action = draft::Send::new(self.metadata_id);
+        let send_action = draft::Send::new(self);
         let metadata_id = self.metadata_id;
         Ok(DraftSendActionQueuer::new(
             metadata_id,
