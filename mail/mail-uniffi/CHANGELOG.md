@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
  - [ET-2131] Fix key packets missing error when sending messages.
+ - [ET-2494] Preserve failed attachment uploads in drafts.
 
 
 ## [0.58.1] - 2025-03-14

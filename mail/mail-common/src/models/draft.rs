@@ -956,8 +956,8 @@ impl DraftAttachmentMetadata {
             .collect::<Vec<_>>();
 
         bond.execute(
-            formatdoc! {"DELETE FROM {} WHERE metadata_id = ?", Self::table_name()},
-            params![metadata_id],
+            formatdoc! {"DELETE FROM {} WHERE metadata_id = ? AND state NOT IN (?,?)", Self::table_name()},
+            params![metadata_id, DraftAttachmentUploadState::Error, DraftAttachmentUploadState::Offline],
         )
         .await
         .inspect_err(|e| error!("Failed to delete existing draft metadata records: {e:?}"))?;
