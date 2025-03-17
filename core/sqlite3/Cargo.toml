@@ -30,7 +30,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 sqlite-watcher = { workspace = true }
-include_dir = { version = "0.7", features = ["glob"] }
+include_dir = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]
