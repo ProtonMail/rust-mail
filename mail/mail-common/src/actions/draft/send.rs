@@ -2,14 +2,12 @@ use crate::actions::draft::{
     local_all_draft_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
     SEND_ACTION_GROUP,
 };
-use crate::datatypes::{LocalMessageId, MessageFlags};
-use crate::draft::send::{
-    build_packages, load_all_recipients, load_send_preferences_for_recipients,
-};
-use crate::draft::{ReplyMode, SaveOrSendError};
+use crate::datatypes::{LocalMessageId, MessageFlags, MimeType};
+use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
+use crate::draft::{Draft, ReplyMode, SaveOrSendError};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MessageBodyMetadata, MetadataId,
+    DraftSendResultOrigin, MailSettings, Message, MetadataId,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -17,6 +15,7 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_api_core::consts::Mail;
+use proton_api_core::services::proton::prelude::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
@@ -24,21 +23,43 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
+use std::collections::HashSet;
 use std::time::Duration;
 use tracing::error;
 
 #[derive(Serialize, Deserialize)]
 pub struct Send {
     metadata_id: MetadataId,
+    address_id: AddressId,
     local_message_id: Option<LocalMessageId>,
+    recipients: Vec<String>,
+    mime_type: MimeType,
 }
 
 impl Send {
-    pub fn new(metadata_id: MetadataId) -> Self {
+    pub fn new(draft: &Draft) -> Self {
         Self {
-            metadata_id,
+            metadata_id: draft.metadata_id,
             local_message_id: None,
+            address_id: draft.address_id.clone(),
+            recipients: Self::combine_recipients(draft),
+            mime_type: draft.mime_type(),
         }
+    }
+
+    fn combine_recipients(draft: &Draft) -> Vec<String> {
+        let to_list = draft.to_list.to_message_recipients();
+        let cc_list = draft.cc_list.to_message_recipients();
+        let bcc_list = draft.bcc_list.to_message_recipients();
+        let recipient_emails: HashSet<String> = HashSet::from_iter(
+            to_list
+                .into_iter()
+                .chain(cc_list)
+                .chain(bcc_list)
+                .map(|value| value.address),
+        );
+
+        recipient_emails.into_iter().collect::<Vec<_>>()
     }
 }
 
@@ -71,6 +92,12 @@ impl proton_action_queue::action::Handler for SendHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        // Get recipient emails.
+        if action.recipients.is_empty() {
+            error!("No recipients associated with the current draft");
+            return Err(SaveOrSendError::NoRecipients.into());
+        }
+
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
@@ -215,16 +242,6 @@ impl Send {
             return Err(AppError::MessageHasNoRemoteId(local_message_id).into());
         };
 
-        let Some(message_body_metadata) =
-            MessageBodyMetadata::for_message(local_message_id, guard.tether())
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to load message body metadata for {local_message_id:?}: {e:?}")
-                })?
-        else {
-            return Err(AppError::MessageBodyMetadataMissing(local_message_id).into());
-        };
-
         // Load the mail settings of the sending user.
         let mail_settings = MailSettings::get(guard.tether())
             .await
@@ -240,13 +257,6 @@ impl Send {
             return Err(AppError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
         };
 
-        // Get recipient emails.
-        let recipient_emails = load_all_recipients(&message_metadata);
-        if recipient_emails.is_empty() {
-            error!("No recipients associated with the current draft");
-            return Err(SaveOrSendError::NoRecipients.into());
-        }
-
         let pgp_provider = new_pgp_provider();
 
         let tx = guard.transaction().await?;
@@ -255,7 +265,7 @@ impl Send {
             context,
             &pgp_provider,
             &tx,
-            &recipient_emails,
+            &action.recipients,
             mail_settings.crypto_mail_settings(),
         )
         .await
@@ -269,17 +279,22 @@ impl Send {
 
         tx.commit().await?;
 
+        let attachments =
+            DraftAttachmentMetadata::attachment_for_draft(action.metadata_id, guard.tether())
+                .await
+                .inspect_err(|e| error!("Failed to load draft attachments : {e:?}"))?;
+
         // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
             &pgp_provider,
             &address_keys,
             send_preferences,
-            &message_body_metadata,
+            action.mime_type,
             &stored_message_body,
             // Even though we are already passing in the message body metadata we
             // leave this parameter here for when we handle the PGP embedded case.
-            &message_body_metadata.attachments,
+            &attachments,
         )
         .await
         .map_err(SaveOrSendError::SendMessage)
