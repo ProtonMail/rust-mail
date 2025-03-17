@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
- - [ET-2131] Fix key packets missing error when sending messages.
  - MailScroller & Prefetcher now stores only non existent data. 
+
+## [0.59.0] - 2025-03-17
+
+### Fixed
+
  - [ET-2494] Preserve failed attachment uploads in drafts.
 
 
@@ -56,6 +60,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
      - get -> load method rename
   - [ET-2368] Saving registered device is now generating new device token key pair if necessary.
   - [ET-2368] Registering device is now using device key instead of user key.
+
+
+## [0.55.5] - 2025-03-17
+
+### Fixed
+
+  - Only persist encrypted password when not using separate mailbox password
+
+
+## [0.55.4] - 2025-03-17
+
+### Fixed
+
+ - [ET-2131] Fix key packets missing error when sending messages.
 
 
 ## [0.55.3] - 2025-03-13
