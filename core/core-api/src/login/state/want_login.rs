@@ -116,9 +116,14 @@ impl WantLogin {
                     ApiServiceObservabilityResponse::Success,
                 ));
 
+                if let One = flow_data.password_mode {
+                    self.parts.store.write().await.set_temp_pass(&pass).await?;
+                } else {
+                    info!("Not caching password (user has separate mailbox password)");
+                }
+
                 let info = get_auth_info(&flow_data, flow.has_totp(), flow.has_fido());
                 self.parts.store.write().await.set_auth_info(info).await?;
-                self.parts.store.write().await.set_temp_pass(&pass).await?;
                 let data = get_state_data(&flow_data, self.parts);
 
                 match flow_data.password_mode {
