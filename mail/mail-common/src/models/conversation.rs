@@ -643,6 +643,8 @@ impl Conversation {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
+    /// Method also gives back existing conversation if it was not saved.
+    ///
     /// # Parameters
     ///
     /// * `bond` - The database transaction, used for writing changes to storage
@@ -655,8 +657,12 @@ impl Conversation {
     pub async fn save_not_existing(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
+                *self = existing;
+
+                tracing::debug!(
+                    remote_id = ?self.remote_id,
+                    "Skipping saving conversation, we already have it in the local DB"
+                );
 
                 return Ok(());
             }

@@ -911,6 +911,8 @@ impl Message {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
+    /// Method also gives back existing message if it was not saved.
+    ///
     /// # Parameters
     ///
     /// * `bond` - The database transaction, used for writing changes to storage
@@ -920,16 +922,16 @@ impl Message {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_not_exising(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn save_not_existing(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
+                *self = existing;
 
                 tracing::debug!(
                     remote_id = ?self.remote_id,
                     "Skipping saving message, we already have it in the local DB"
                 );
+
                 return Ok(());
             }
         }

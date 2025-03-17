@@ -293,7 +293,7 @@ impl RemoteMessageScrollerSource {
 
         // Save all messages.
         for message in messages.iter_mut() {
-            message.save_not_exising(&tx).await?
+            message.save_not_existing(&tx).await?
         }
 
         let last = messages.last().unwrap();
