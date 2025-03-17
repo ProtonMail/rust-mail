@@ -5,7 +5,7 @@ use crate::MailUserContext;
 use futures::future::try_join_all;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use serde::{Deserialize, Serialize};
