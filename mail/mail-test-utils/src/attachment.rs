@@ -1,11 +1,15 @@
 use crate::test_context::MailTestContext;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
+use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition,
 };
-use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
+use proton_api_mail::services::proton::responses::{
+    GetAttachmentMetadataResponse, PostAttachmentResponse,
+};
 use proton_core_test_utils::account::TEST_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_common::datatypes::attachment;
@@ -145,5 +149,74 @@ impl MailTestContext {
             .named(function_name!())
             .mount(self.mock_server())
             .await;
+    }
+
+    /// Generate new mock for creating a new attachment.
+    ///
+    /// Note that encrypted parts of the data are not checked as they are prone to change
+    /// on every run. We only validate that the corresponding part is there.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_id`      - The attachment id the content should correspond to.
+    /// * `attachment_content` - The attachment content the mock replies with.
+    ///
+    #[function_name::named]
+    pub async fn mock_create_attachment(
+        &self,
+        params: NewAttachmentParams,
+        result: Result<PostAttachmentResponse, (u16, ApiErrorInfo)>,
+    ) {
+        use wiremock_multipart::matchers::ContainsPart;
+        let path_for_attachment = "api/mail/v4/attachments";
+        let mut mock = Mock::given(method("POST"))
+            .and(path(path_for_attachment))
+            .and(
+                ContainsPart::new()
+                    .with_name("Filename")
+                    .with_body(params.filename.into_bytes()),
+            )
+            .and(
+                ContainsPart::new()
+                    .with_name("MessageID")
+                    .with_body(params.message_id.into_inner().into_bytes()),
+            )
+            .and(
+                ContainsPart::new()
+                    .with_name("MIMEType")
+                    .with_body(params.mime_type.into_bytes()),
+            )
+            .and(ContainsPart::new().with_name("DataPacket"))
+            .and(ContainsPart::new().with_name("KeyPackets"))
+            .and(ContainsPart::new().with_name("Disposition").with_body(
+                match &params.disposition {
+                    NewAttachmentDisposition::Attachment => "attachment".as_bytes(),
+                    NewAttachmentDisposition::Inline(_) => "inline".as_bytes(),
+                },
+            ));
+        if let NewAttachmentDisposition::Inline(cid) = params.disposition {
+            mock = mock.and(
+                ContainsPart::new()
+                    .with_name("ContentID")
+                    .with_body(cid.into_bytes()),
+            );
+        }
+        if params.signature.is_some() {
+            mock = mock.and(ContainsPart::new().with_name("Signature"));
+        }
+        if params.enc_signature.is_some() {
+            mock = mock.and(ContainsPart::new().with_name("EncSignature"));
+        }
+
+        match result {
+            Ok(response) => mock.respond_with(ResponseTemplate::new(200).set_body_json(response)),
+            Err((code, error)) => {
+                mock.respond_with(ResponseTemplate::new(code).set_body_json(error))
+            }
+        }
+        .up_to_n_times(1)
+        .named(function_name!())
+        .mount(self.mock_server())
+        .await;
     }
 }
