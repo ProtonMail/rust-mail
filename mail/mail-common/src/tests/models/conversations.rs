@@ -10,7 +10,7 @@ use crate::models::{Attachment, Conversation, ConversationLabel, MailSettings, M
 use futures::StreamExt;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,

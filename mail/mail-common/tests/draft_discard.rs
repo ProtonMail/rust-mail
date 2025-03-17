@@ -1,8 +1,8 @@
 mod drafts_common;
 use drafts_common::*;
 use proton_api_core::consts::{General, Mail};
-use proton_api_core::services::proton::common::{LabelId, UserId};
-use proton_api_core::services::proton::prelude::ApiErrorInfo;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::{LabelId, UserId};
 use proton_api_mail::services::proton::prelude::{
     DraftAttachmentKeyPackets, MessageFlags, OperationResult, PutMessagesDeleteResponse,
 };

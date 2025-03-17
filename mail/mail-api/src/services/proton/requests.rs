@@ -27,7 +27,7 @@ use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_core::services::proton::common::{AddressId, LabelId};
+use proton_api_core::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature,
 };

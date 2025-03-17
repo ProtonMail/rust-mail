@@ -1,5 +1,5 @@
-use proton_api_core::services::proton::common::AddressId;
-use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
+use proton_api_core::services::proton::AddressId;
+use proton_api_core::services::proton::HumanVerificationChallenge;
 
 /// Specific Reason for error occurrence
 ///

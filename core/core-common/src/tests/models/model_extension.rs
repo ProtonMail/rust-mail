@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::prelude::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::{orm::Model, params};
 

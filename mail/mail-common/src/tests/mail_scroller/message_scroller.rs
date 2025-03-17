@@ -5,7 +5,7 @@ use crate::datatypes::ReadFilter;
 use crate::models::{CachedScrollData, MessageScrollData, ScrollCursor};
 use crate::models::{Message, ScrollData};
 use maplit::btreemap;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};

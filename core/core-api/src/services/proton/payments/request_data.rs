@@ -1,4 +1,4 @@
-//! Request child data structures for the Proton API.
+//! Request child data structures for the Proton Payments API.
 //!
 //! This module provides child data types that are used by the request
 //! structures when sending requests to the Proton API.
@@ -23,16 +23,6 @@ use std::collections::HashMap;
 
 //  STRUCTS
 //==============================================================================
-
-/// Human verification data required for login.
-#[derive(Clone, Debug)]
-pub struct HumanVerificationData {
-    /// Type of human verification where the code originated from.
-    pub hv_type: HumanVerificationType,
-
-    /// Result of the human verification request.
-    pub token: String,
-}
 
 /// Payment receipt for creating a payment token.
 #[derive(Clone, Debug, Serialize, Eq, PartialEq)]

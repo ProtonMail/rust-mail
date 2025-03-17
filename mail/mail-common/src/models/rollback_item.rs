@@ -7,7 +7,7 @@ use crate::models::{Conversation, Message, MessageBodyMetadata};
 use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
@@ -238,7 +238,7 @@ impl RollbackItem {
         I: Into<Option<usize>>,
         API: ProtonCore,
     {
-        use proton_api_core::services::proton::responses::GetLabelsResponse;
+        use proton_api_core::services::proton::GetLabelsResponse;
 
         sync_any!(Label, Label, tether, stash, batch => |remote_id| async {
             api.get_labels_by_ids(vec![LabelId::from(remote_id)]).await

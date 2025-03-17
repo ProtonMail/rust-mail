@@ -1,15 +1,11 @@
+use super::proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement};
+use crate::{service::ApiServiceError, services::proton::ProtonData};
 use chrono::Utc;
 use muon::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, Instrument, Span};
 
 pub mod metrics;
-
-use super::proton::{
-    prelude::{PostMetricsRequestData, PostMetricsRequestElement},
-    ProtonCore,
-};
-use crate::service::ApiServiceError;
 
 pub trait ObservabilityMetric: Serialize + Send {
     const NAME: &str;

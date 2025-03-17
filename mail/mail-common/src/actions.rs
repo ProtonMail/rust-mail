@@ -15,7 +15,7 @@ use proton_action_queue::action::WriterGuardError;
 use proton_action_queue::queue::Queue;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::{LabelId, ProtonIdMarker};
+use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::action_queue::CoreActionError;
 use proton_core_common::datatypes::LocalLabelId;

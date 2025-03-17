@@ -1,11 +1,9 @@
-use proton_api_core::services::proton::common::{
-    AddressId, LabelId, LabelType as ApiLabelType, UserId,
-};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     Address as ApiAddress, Flags as ApiFlags, Label as ApiLabel,
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
+use proton_api_core::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,

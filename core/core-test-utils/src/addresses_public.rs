@@ -1,6 +1,6 @@
 use crate::test_context::TestContext;
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
-use proton_api_core::services::proton::responses::GetKeysAllResponse;
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::GetKeysAllResponse;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, KeyFlag, SKLDataJson, SKLSignature,
     SignedKeyList,

@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use stash::params;
 use stash::stash::{Bond, StashError};
 

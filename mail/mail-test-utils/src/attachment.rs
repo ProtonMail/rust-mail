@@ -1,5 +1,5 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,

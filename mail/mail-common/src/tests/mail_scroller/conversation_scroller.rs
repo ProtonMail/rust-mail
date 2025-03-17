@@ -5,7 +5,7 @@ use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{CachedScrollData, ConversationScrollData, ScrollData};
 use crate::models::{Conversation, ScrollCursor};
 use maplit::btreemap;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};

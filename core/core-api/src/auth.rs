@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 /// Re-export the key secret type.
 pub use proton_crypto_account::salts::KeySecret;
 

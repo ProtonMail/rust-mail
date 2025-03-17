@@ -14,7 +14,7 @@ use derive_more::derive::TryFrom;
 use indoc::formatdoc;
 use proton_action_queue::action::ActionId;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};

@@ -1,13 +1,13 @@
 //! Message body related state and test data
 use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::common::{AddressId, LabelId, UserId};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, Flags as ApiFlags,
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
+use proton_api_core::services::proton::{AddressId, LabelId, UserId};
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,

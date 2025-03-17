@@ -25,7 +25,7 @@ use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::AddressId;
+use proton_api_core::services::proton::AddressId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};

@@ -3,7 +3,7 @@
 mod labels_with_counters;
 
 use indoc::formatdoc;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::Label;
 use sqlite_watcher::watcher::TableObserver;

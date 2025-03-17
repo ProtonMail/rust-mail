@@ -6,7 +6,7 @@ use crate::models::{User, UserSettings};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use proton_api_core::services::proton::common::UserId;
+use proton_api_core::services::proton::UserId;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;

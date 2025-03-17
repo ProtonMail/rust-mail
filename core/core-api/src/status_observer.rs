@@ -1,25 +1,16 @@
-use std::{
-    ops::Deref,
-    sync::{Arc, LazyLock},
-    time::{Duration, Instant},
-};
-
+use crate::services::proton::common::Timeouts;
+use crate::services::proton::ProtonCore;
+use crate::{connection_status::ConnectionStatus, services::proton::Proton};
 use derive_more::Deref;
-use muon::{
-    common::{BoxFut, RetryPolicy, Sender, SenderLayer},
-    error::ErrorKind,
-    Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult,
-};
-use tokio::{
-    sync::{watch, RwLock},
-    task::JoinHandle,
-};
+use muon::common::{BoxFut, RetryPolicy, Sender, SenderLayer};
+use muon::error::ErrorKind;
+use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
+use std::ops::Deref;
+use std::sync::{Arc, LazyLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{watch, RwLock};
+use tokio::task::JoinHandle;
 use tracing::trace;
-
-use crate::{
-    connection_status::ConnectionStatus,
-    services::proton::{Proton, ProtonCore, HALF_MINUTE_TIMEOUT, ONE_SECOND_TIMEOUT},
-};
 
 type StatusJoinHandle = JoinHandle<()>;
 
@@ -91,9 +82,9 @@ impl StatusObserverConfig {
         Self {
             up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
             fg_retry: RetryPolicy::default().max_count(0),
-            fg_timeout: Duration::from_millis(ONE_SECOND_TIMEOUT),
+            fg_timeout: Timeouts::ONE_SECOND,
             bg_retry: RetryPolicy::default(),
-            bg_timeout: Duration::from_millis(HALF_MINUTE_TIMEOUT),
+            bg_timeout: Timeouts::HALF_MINUTE,
         }
     }
 
@@ -101,8 +92,8 @@ impl StatusObserverConfig {
     fn test() -> Self {
         // Make single requests
         let test_retry_policy = RetryPolicy::default().max_count(0);
-        let fg_timeout = Duration::from_millis(ONE_SECOND_TIMEOUT);
-        let bg_timeout = Duration::from_millis(ONE_SECOND_TIMEOUT * 2);
+        let fg_timeout = Timeouts::ONE_SECOND;
+        let bg_timeout = Timeouts::ONE_SECOND * 2;
         let up_to_date = Duration::from_secs(2);
 
         Self {

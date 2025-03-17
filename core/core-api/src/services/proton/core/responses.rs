@@ -1,4 +1,4 @@
-//! Response structures for the Proton API.
+//! Response structures for the Proton Core API.
 //!
 //! This module provides structures that are used to receive responses from the
 //! Proton API. These structures are used to define the response bodies that are
@@ -26,7 +26,6 @@
 //! are used by both requests and responses.
 //!
 
-use crate::services::proton::prelude::*;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup as PublicAddressKeyGroup,
     APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup,
@@ -37,15 +36,8 @@ use serde_with::{serde_as, BoolFromInt};
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
 
-use super::response_data::ApiErrorInfo;
-
-/// The response containing the user's session UUID.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-pub struct GetSessionsUuidResponse {
-    #[serde(rename = "UUID")]
-    pub uuid: String,
-}
+use crate::services::proton::common::ApiErrorInfo;
+use crate::services::proton::prelude::*;
 
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -158,36 +150,6 @@ pub struct GetKeysSaltsResponse {
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
     pub user_settings: UserSettings,
-}
-
-/// The response containing plans available to the user.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct GetPaymentsPlansResponse {
-    /// The list of plans available to the user.
-    pub plans: Vec<Plan>,
-
-    /// What cycle to display by default
-    pub default_cycle: u8,
-}
-
-/// The response containing the current subscription of the user.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct GetPaymentsSubscriptionResponse {
-    pub subscriptions: Vec<Subscription>,
-    pub upcoming_subscriptions: Vec<Subscription>,
-}
-
-/// The response containing the created payment token.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PostPaymentsTokensResponse {
-    pub token: String,
-    pub status: u64,
 }
 
 /// TODO: Document this struct.

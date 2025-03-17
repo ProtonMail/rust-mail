@@ -4,7 +4,7 @@ use email_address::{EmailAddress, Options};
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::prelude::GetKeysAllOptions;
+use proton_api_core::services::proton::GetKeysAllOptions;
 use proton_api_core::session::CoreSession;
 use proton_api_core::{consts::CoreBundle, services::proton::ProtonCore};
 use proton_core_common::models::ContactEmail;

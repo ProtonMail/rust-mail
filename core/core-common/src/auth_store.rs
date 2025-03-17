@@ -7,7 +7,7 @@ use anyhow::{bail, Context};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
-use proton_api_core::services::proton::common::{SessionId, UserId};
+use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::store::{AuthInfo, Store, StoreError, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;

@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::common::LabelId;
+use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
 use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;

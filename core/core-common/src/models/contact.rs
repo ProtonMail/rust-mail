@@ -15,12 +15,12 @@ use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_api_core::consts::General;
-use proton_api_core::services::proton::common::ContactId;
-use proton_api_core::services::proton::prelude::ContactUID;
-use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::ContactId;
+use proton_api_core::services::proton::ContactUID;
+use proton_api_core::services::proton::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
+use proton_api_core::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use sqlite_watcher::watcher::TableObserver;

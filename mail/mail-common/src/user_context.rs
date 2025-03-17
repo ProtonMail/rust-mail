@@ -17,7 +17,7 @@ use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
-use proton_api_core::services::proton::common::{AddressId, SessionId, UserId};
+use proton_api_core::services::proton::{AddressId, SessionId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;

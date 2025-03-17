@@ -1,11 +1,11 @@
 use crate::test_context::TestContext;
-use proton_api_core::services::proton::common::ContactId;
-use proton_api_core::services::proton::requests::PutDeleteContacts;
-use proton_api_core::services::proton::response_data::{
-    ApiErrorInfo, ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail,
-    ContactFull as ApiContactFull,
+use proton_api_core::services::proton::common::ApiErrorInfo;
+use proton_api_core::services::proton::ContactId;
+use proton_api_core::services::proton::PutDeleteContacts;
+use proton_api_core::services::proton::{
+    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
 };
-use proton_api_core::services::proton::responses::{
+use proton_api_core::services::proton::{
     GetContactResponse, GetContactsEmailsResponse, GetContactsResponse, PutDeleteContactResponse,
     PutDeleteContactsResponse,
 };

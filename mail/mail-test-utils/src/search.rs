@@ -1,11 +1,11 @@
 use crate::test_context::MailTestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::common::{AddressId, LabelId};
-use proton_api_core::services::proton::response_data::AddressSignedKeyList as ApiAddressSignedKeyList;
-use proton_api_core::services::proton::response_data::{
+use proton_api_core::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
+use proton_api_core::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
     Label as ApiLabel,
 };
+use proton_api_core::services::proton::{AddressId, LabelId};
 use proton_api_mail::services::proton::common::{AttachmentId, ConversationId};
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
@@ -38,7 +38,7 @@ macro_rules! conv_id {
 #[macro_export]
 macro_rules! lbl_id {
     ($id:expr) => {{
-        use proton_api_core::services::proton::common::LabelId;
+        use proton_api_core::services::proton::LabelId;
         Some(LabelId::from($id.to_string()).into())
     }};
 }
@@ -66,7 +66,7 @@ macro_rules! label {
 #[macro_export]
 macro_rules! api_label {
     ($($field:tt)*) => {{
-        use proton_api_core::services::proton::response_data::{Label as ApiLabel};
+        use proton_api_core::services::proton::{Label as ApiLabel};
 
         ApiLabel {
             $($field)*,

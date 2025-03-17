@@ -1,12 +1,12 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use proton_api_core::services::proton::prelude::GetEventOptions;
+use proton_api_core::services::proton::GetEventOptions;
 use proton_api_core::services::proton::ProtonCore;
 // avoid namespace conflicts
 use crate::Event;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::common::EventId;
+use proton_api_core::services::proton::EventId;
 use proton_api_core::session::{CoreSession, Session};
 
 /// This trait allows abstraction over how to request the next event from the API.
