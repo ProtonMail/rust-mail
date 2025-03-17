@@ -884,8 +884,7 @@ impl Message {
     ///
     /// # Parameters
     ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
+    /// * `bond` - The database transaction, used for writing changes to storage
     ///
     /// # Errors
     ///
@@ -900,6 +899,49 @@ impl Message {
             }
         }
 
+        self.set_coversation_before_save(bond).await?;
+
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Save a non existing message to the database.
+    ///
+    /// This method is complementary way to store message. It only will proceed
+    /// with messages that are not yet present in database. This functionality
+    /// is required due to multiprocess nature of mail application and the possibility to
+    /// view mailboxes without interfering with processes triggered by the user.
+    ///
+    /// # Parameters
+    ///
+    /// * `bond` - The database transaction, used for writing changes to storage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save_not_exising(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+                self.local_id = existing.local_id;
+                self.row_id = existing.row_id;
+
+                tracing::debug!(
+                    remote_id = ?self.remote_id,
+                    "Skipping saving message, we already have it in the local DB"
+                );
+                return Ok(());
+            }
+        }
+
+        self.set_coversation_before_save(bond).await?;
+
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Set convarsation ids before saving
+    ///
+    async fn set_coversation_before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 if let Some(conversation) =
@@ -915,7 +957,7 @@ impl Message {
             }
         }
 
-        <Self as Model>::save(self, bond).await
+        Ok(())
     }
 
     /// Given a vec of message metadatas tries to create them in the database

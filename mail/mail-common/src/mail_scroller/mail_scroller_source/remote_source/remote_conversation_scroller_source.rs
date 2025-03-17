@@ -355,7 +355,7 @@ impl RemoteConversationScrollerSource {
 
         // Save all conversations.
         for conversation in conversations.iter_mut() {
-            conversation.save(&tx).await?
+            conversation.save_not_existing(&tx).await?
         }
 
         let Some((last, label)) = conversations
