@@ -101,6 +101,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     queue.register::<messages::delete::Delete>().expect(ERR_MSG);
     queue.register::<messages::read::Read>().expect(ERR_MSG);
     queue.register::<messages::unread::Unread>().expect(ERR_MSG);
+    queue.register::<messages::ham::Ham>().expect(ERR_MSG);
     queue.register::<draft::Save>().expect(ERR_MSG);
     queue.register::<draft::Send>().expect(ERR_MSG);
     queue.register::<labels::Expand>().expect(ERR_MSG);

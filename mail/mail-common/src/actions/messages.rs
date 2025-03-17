@@ -1,4 +1,5 @@
 pub mod delete;
+pub mod ham;
 pub mod label;
 pub mod label_as;
 pub mod r#move;

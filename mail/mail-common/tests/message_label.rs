@@ -14,7 +14,7 @@ use proton_api_mail::services::proton::response_data::{
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::SystemLabel;
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, ModelIdExtension};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_common::datatypes::SystemLabelId;
@@ -314,6 +314,83 @@ async fn message_action_delete() {
         .unwrap()
         .expect("failed to load message");
     assert!(message.deleted);
+}
+
+#[tokio::test]
+async fn message_action_ham() {
+    let ctx = MailTestContext::new().await;
+    let user_context = ctx.mail_user_context().await;
+    let tether = user_context.user_stash().connection();
+
+    let label_id = LabelId::spam();
+    let label = test_label(&label_id);
+    let mut message = test_message();
+    message.metadata.label_ids = vec![LabelId::spam()];
+
+    let params = test_init_params_label(label);
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    // ctx.mock_messages_ok().await;
+    ctx.mock_put_message_ham(&message.metadata.id).await;
+    ctx.catch_all().await;
+
+    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    let spam = LabelId::spam();
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(&user_context.user_stash().connection(), spam.clone())
+        .await
+        .unwrap();
+    mailbox
+        .sync(
+            &mut user_context.user_stash().connection(),
+            user_context.api(),
+            10,
+        )
+        .await
+        .unwrap();
+
+    {
+        // First: No messages in inbox
+        let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let messages = Message::in_label(local_inbox, &tether).await.unwrap();
+        assert_eq!(messages.len(), 0);
+
+        // Only message is in spam
+        let local_spam = Label::remote_id_counterpart(spam, &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let messages = Message::in_label(local_spam, &tether).await.unwrap();
+        assert_eq!(messages.len(), 1);
+        let message = &messages[0];
+
+        // Mark it as ham
+        Message::action_ham(user_context.action_queue(), vec![message.local_id.unwrap()])
+            .await
+            .unwrap();
+    }
+
+    user_context.execute_all_actions().await.unwrap();
+
+    {
+        let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let messages = Message::in_label(local_inbox, &tether).await.unwrap();
+        assert_eq!(messages.len(), 1);
+    }
 }
 
 fn test_init_params_label(label: ApiLabel) -> TestParams {

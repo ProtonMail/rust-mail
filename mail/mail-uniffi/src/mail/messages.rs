@@ -920,6 +920,35 @@ pub async fn delete_messages(
     .into()
 }
 
+/// Mark multiple messages as ham (not spam) AKA as legitimate
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `ids`      - The local IDs of the messages to delete.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn mark_messages_ham(
+    session: Arc<MailUserSession>,
+    message_ids: Vec<Id>,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+    uniffi_async(async move {
+        RealMessage::action_ham(ctx.action_queue(), message_ids.map_vec())
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}
+
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
 #[derive(Clone, uniffi::Record)]
 pub struct EmbeddedAttachmentInfo {

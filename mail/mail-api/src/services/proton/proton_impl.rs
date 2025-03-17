@@ -306,6 +306,15 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
+    /// Mark message as not spam
+    async fn put_message_ham(&self, id: &MessageId) -> ApiServiceResult<PutMessageHamResponse> {
+        Ok(PUT!("{MAIL_V4}/messages/{id}/mark/ham")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn relabel_message(
         &self,
         message_id: MessageId,

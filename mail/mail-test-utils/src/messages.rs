@@ -3,7 +3,9 @@ use itertools::Itertools;
 use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::{PostCancelSendResponse, PostSendRequest};
+use proton_api_mail::services::proton::prelude::{
+    PostCancelSendResponse, PostSendRequest, PutMessageHamResponse,
+};
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -190,6 +192,19 @@ impl MailTestContext {
                 ResponseTemplate::new(200)
                     .set_body_json(PutMessagesUnreadResponse { responses: vec![] }),
             )
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_put_message_ham(&self, id: &MessageId) {
+        Mock::given(method("PUT"))
+            .and(path(format!("/api/mail/v4/messages/{id}/mark/ham")))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(PutMessageHamResponse::default()),
+            )
+            .expect(1)
             .named(function_name!())
             .mount(self.mock_server())
             .await;
