@@ -101,6 +101,10 @@ enum OperationExec {
     /// not enforced.
     Instruct(Instruction),
 
+    /// A batch of queries to be executed, where no results are expected. This is
+    /// usually migration commands, mutating the database schema.
+    Batch(Batch),
+
     /// A query to be executed, where results are expected. This is typically a
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
@@ -237,6 +241,34 @@ impl Instruction {
             trace!("Query: {query}");
         }
         Ok(affected)
+    }
+}
+
+/// A batch operation to be executed by worker. Similarly to [`Instruction`] it does
+/// not return any data.
+///
+/// It is used for batch operations not requiring returned results, such as migrating
+/// database schema.
+///
+#[derive(Derivative)]
+#[derivative(Debug)]
+struct Batch {
+    /// The communication channel used to send the result of the operation back
+    /// to the caller.
+    #[derivative(Debug = "ignore")]
+    sender: OneshotSender<Result<(), StashError>>,
+
+    /// The queries to execute separated by `;`.
+    /// It takes no parameter substitutions.
+    queries: String,
+}
+
+impl Batch {
+    /// Executes a query
+    fn run(&self, connection: &Connection) -> Result<(), StashError> {
+        connection
+            .execute_batch(&self.queries)
+            .map_err(StashError::ExecutionError)
     }
 }
 
@@ -637,6 +669,41 @@ impl Tether {
             .expect("Tether closed its channel with handles still open")
     }
 
+    /// Runs batch of queries separated by `;`. It does not return any result.
+    ///
+    /// It is designed for situations such as schema migrations where there are multiple commands
+    /// without the need for any result.
+    ///
+    /// # Parameters
+    ///
+    /// * `query` - The batch of queries separated by `;`.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    pub async fn batch<Q: Into<String>>(&self, queries: Q) -> Result<(), StashError> {
+        let (sender, receiver) = oneshot::channel();
+        let operation = Operation::Execution(OperationExec::Batch(Batch {
+            sender,
+            queries: queries.into(),
+        }));
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        receiver
+            .await
+            .expect("Tether closed its channel with handles still open")
+    }
+
     /// Loads a record from the database by ID.
     ///
     /// This function retrieves a single record from the database by its unique
@@ -992,6 +1059,12 @@ impl Tether {
                             _ = ch.send(Err(e));
                         }
                         Operation::Execution(OperationExec::Instruct(x)) => {
+                            if x.sender.send(Err(e)).is_err() {
+                                // This means that the receiver has dropped.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            };
+                        }
+                        Operation::Execution(OperationExec::Batch(x)) => {
                             if x.sender.send(Err(e)).is_err() {
                                 // This means that the receiver has dropped.
                                 error!("Oneshot error: Failed sending result back to caller");
@@ -1440,6 +1513,13 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(connection);
                 if instruction.sender.send(res).is_err() {
+                    // This means that the receiver has dropped.
+                    error!("Oneshot error: Failed sending result back to caller");
+                }
+            }
+            OperationExec::Batch(batch) => {
+                let res = batch.run(connection);
+                if batch.sender.send(res).is_err() {
                     // This means that the receiver has dropped.
                     error!("Oneshot error: Failed sending result back to caller");
                 }
