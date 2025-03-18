@@ -67,8 +67,6 @@ use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use std::num::NonZeroU32;
-use std::path::PathBuf;
 use tracing::{debug, error, info, trace, warn};
 
 //TODO(ET-2277): Revert Serialize/Deserialize

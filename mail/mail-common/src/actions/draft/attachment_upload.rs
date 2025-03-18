@@ -1,10 +1,10 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
-use crate::cache::CacheAttachmentKey;
 use crate::datatypes::Disposition;
 use crate::draft::AttachmentError;
 use crate::models::{
-    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState,
-    DraftMetadata, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MetadataId,
+    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadError,
+    DraftAttachmentUploadState, DraftMetadata, DraftSendFailure, DraftSendResult,
+    DraftSendResultOrigin, Message, MetadataId,
 };
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -295,20 +295,20 @@ async fn encrypt_and_upload_attachment(
     };
 
     debug!("Retrieving from cache");
-    let cache_key = CacheAttachmentKey::new(attachment.local_id.unwrap(), &attachment.filename);
-    let Some(path) = ctx.attachements_cache().get_item_path(&cache_key) else {
-        return Err(AttachmentError::AttachmentDataMissing(attachment.local_id.unwrap()).into());
+    let data = match ctx.get_attachment_content_data(&attachment).await {
+        Ok(data) => data,
+        Err(err) => {
+            error!("{err}");
+            return Err(
+                AttachmentError::AttachmentDataMissing(attachment.local_id.unwrap()).into(),
+            );
+        }
     };
 
     debug!("Encrypting");
-    let encrypted_attachment = Attachment::encrypt_from_path(
-        ctx,
-        address_id,
-        path,
-        Some(attachment.size.try_into().unwrap_or(0)),
-    )
-    .await
-    .inspect_err(|e| error!("Failed to encrypt attachment: {e:?}"))?;
+    let encrypted_attachment = Attachment::encrypt(ctx, address_id, &data)
+        .await
+        .inspect_err(|e| error!("Failed to encrypt attachment: {e:?}"))?;
 
     debug!("Uploading");
     let new_attachment_params = NewAttachmentParams {
@@ -342,7 +342,7 @@ async fn encrypt_and_upload_attachment(
         })?;
 
     // Update attachment with data returned from the server.
-    attachment.remote_id = Some(response.attachment.id);
+    attachment.attachment_type = AttachmentType::Remote(Some(response.attachment.id));
     attachment.signature = response.attachment.signature.map(Into::into);
     attachment.enc_signature = response.attachment.enc_signature.map(Into::into);
     attachment.key_packets = Some(response.attachment.key_packets.into());

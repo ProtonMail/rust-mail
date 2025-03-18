@@ -3,7 +3,7 @@ use crate::models::Attachment;
 use crate::{
     AppError, MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult,
 };
-use anyhow::{anyhow, Context as _};
+use anyhow::Context as _;
 use indoc::indoc;
 use proton_core_common::os::safe_write_async;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
@@ -225,7 +225,7 @@ impl MailUserContext {
         // The reason for this scheme is twofold:
         // - The clients require that the name of the attachment be the name
         // - Two different attachments might share the same name.
-        let mut path = self.mail_context().attachment_cache_path();
+        let mut path = self.mail_context().attachments_cache_path();
         path.push(format!("{id}"));
         std::fs::create_dir_all(&path)?;
         path.push(name);
@@ -233,7 +233,7 @@ impl MailUserContext {
             .into_os_string()
             .into_string()
             // This is infailable since all pieces exist as a string at some point.
-            .map_err(|e| anyhow!("Invalid utf8 somewhere in the path: {e:?}"))?;
+            .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
 
         let data_len = data.len();
         safe_write_async(&path, data).await?;

@@ -7,7 +7,6 @@ use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
-use crate::user_context::action_queue::new_action_queue;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
@@ -59,7 +58,6 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        let cache_path = mail_context.mail_cache_path(user_context.user_id());
         register_mail_actions(user_context.queue());
 
         let wait_for_online = WFO::create(user_context.session().status_watcher());

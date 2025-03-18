@@ -22,7 +22,7 @@ pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError,
 use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::{
-    cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
+    MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
 };
 
 // re-exports

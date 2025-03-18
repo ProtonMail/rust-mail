@@ -194,7 +194,8 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
             MailContextError::AttachmentEncryption(_) => Self::Unexpected(Unexpected::Crypto),
             MailContextError::CalledFetchedAttachmentOnPgp
-            | MailContextError::CalledFetchedAttachmentLocalAttachment => {
+            | MailContextError::CalledFetchedAttachmentLocalAttachment
+            | MailContextError::InvalidUtf8AttachmentPath(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }
         }

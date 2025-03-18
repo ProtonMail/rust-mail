@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
 //! Everything related to processing a decrypted message.
+use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
-use crate::models::{AttachmentType, EmbeddedAttachmentInfo, MailSettings, MessageBodyMetadata};
+use crate::models::{
+    AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
+};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_api_core::services::proton::common::AuthId;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_mail_html_transformer::Transformer;
 use serde_json::Value;
@@ -26,39 +28,30 @@ pub struct TransformOpts {
     pub show_block_quote: bool,
     pub hide_remote_images: Option<bool>,
     pub hide_embedded_images: Option<bool>,
-    pub image_proxy: Option<bool>,
 }
 
 /// This is created after calling [`TransformOpts::fill_defaults`]
 // It exists for type safety purposes.
 #[derive(Debug, Clone, Copy)]
-pub struct TransformOptsResolved<'a> {
+pub struct TransformOptsResolved {
     pub show_block_quote: bool,
     pub hide_remote_images: bool,
     pub hide_embedded_images: bool,
-    pub image_proxy: Option<&'a AuthId>,
 }
 
 impl TransformOpts {
     /// Loads the relevant opts from the setttings.
     /// If all are set, the db query will be elided.
     #[must_use]
-    pub async fn resolve<'a>(
-        self,
-        tether: &'_ Tether,
-        auth_id: &'a AuthId,
-    ) -> TransformOptsResolved<'a> {
+    pub async fn resolve(self, tether: &Tether) -> TransformOptsResolved {
         let show_block_quote = self.show_block_quote;
-        if let (Some(hide_embedded_images), Some(hide_remote_images), Some(image_proxy)) = (
-            self.hide_embedded_images,
-            self.hide_remote_images,
-            self.image_proxy,
-        ) {
+        if let (Some(hide_embedded_images), Some(hide_remote_images)) =
+            (self.hide_embedded_images, self.hide_remote_images)
+        {
             return TransformOptsResolved {
                 show_block_quote,
                 hide_remote_images,
                 hide_embedded_images,
-                image_proxy: image_proxy.then_some(auth_id),
             };
         }
 
@@ -66,7 +59,6 @@ impl TransformOpts {
         let MailSettings {
             hide_remote_images,
             hide_embedded_images,
-            image_proxy,
             ..
         } = mail_settings;
 
@@ -74,43 +66,16 @@ impl TransformOpts {
             show_block_quote,
             hide_remote_images: self.hide_remote_images.unwrap_or(hide_remote_images),
             hide_embedded_images: self.hide_embedded_images.unwrap_or(hide_embedded_images),
-            image_proxy: self
-                .image_proxy
-                .unwrap_or(image_proxy | 2 == 2)
-                .then_some(auth_id),
         }
     }
 }
 
-/// Which banners related to the body the client should show.
-#[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct BodyBanners {
-    /// Whether to show the "enable remote images" banner
-    pub enable_show_remote_images: bool,
-    /// Whether to show the "enable embedded images" banner
-    pub enable_show_embedded_images: bool,
-    /// Whether to show the "show blockquote" banner
-    pub enable_show_blockquote: bool,
-}
-
-impl BodyBanners {
-    fn new(opts: TransformOptsResolved<'_>, stripped_blockquote: bool) -> Self {
-        Self {
-            enable_show_remote_images: opts.hide_remote_images,
-            enable_show_embedded_images: opts.hide_embedded_images,
-            enable_show_blockquote: stripped_blockquote,
-        }
-    }
-}
-
-impl From<TransformOptsResolved<'_>> for TransformOpts {
-    fn from(val: TransformOptsResolved<'_>) -> Self {
+impl From<TransformOptsResolved> for TransformOpts {
+    fn from(val: TransformOptsResolved) -> Self {
         TransformOpts {
             show_block_quote: val.show_block_quote,
             hide_remote_images: Some(val.hide_remote_images),
             hide_embedded_images: Some(val.hide_embedded_images),
-            image_proxy: Some(val.image_proxy.is_some()),
         }
     }
 }
@@ -307,74 +272,27 @@ impl DecryptedMessageBody {
     ///
     /// * `opts`           - Transform Options.
     /// * `tether`         - database connection.
-    /// * `session_id`     - Current session id.
     ///
     /// # Errors
     ///
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn transformed(
-        &self,
-        opts: TransformOpts,
-        session_id: &AuthId,
-        tether: &Tether,
-    ) -> BodyOutput {
-        // FIXME: We enable all views since there is no way yet in the clients to change the
-        // settings. Remove me when we can.
-        // https://protonag.atlassian.net/browse/ET-1926
-        let opts = TransformOpts {
-            hide_remote_images: Some(false),
-            hide_embedded_images: Some(false),
-            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
-            image_proxy: Some(false),
-            ..opts
+    pub async fn transformed(&self, opts: TransformOpts, tether: &Tether) -> BodyOutput {
+        // FIXME:(perf) settings get loaded twice.
+        let resolved = opts.resolve(tether).await;
+
+        let banners = if let Some(id) = self.metadata.local_message_id {
+            if let Ok(Some(message)) = Message::load(id, tether).await {
+                message.get_banners(&MailSettings::get_or_default(tether).await)
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
         };
 
-        let resolved = opts.resolve(tether, session_id).await;
-        transform_html(&self.body, resolved, self.metadata.mime_type, true)
-    }
-
-    pub async fn transform_draft_reply(
-        &self,
-        opts: TransformOpts,
-        session_id: &AuthId,
-        tether: &Tether,
-    ) -> BodyOutput {
-        // FIXME: We enable all views since there is no way yet in the clients to change the
-        // settings. Remove me when we can.
-        // https://protonag.atlassian.net/browse/ET-1926
-        let opts = TransformOpts {
-            hide_remote_images: Some(false),
-            hide_embedded_images: Some(false),
-            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
-            image_proxy: Some(false),
-            ..opts
-        };
-
-        let resolved = opts.resolve(tether, session_id).await;
-        transform_html(&self.body, resolved, self.metadata.mime_type, true)
-    }
-
-    pub async fn transform_draft_open(
-        &self,
-        opts: TransformOpts,
-        session_id: &AuthId,
-        tether: &Tether,
-    ) -> BodyOutput {
-        // FIXME: We enable all views since there is no way yet in the clients to change the
-        // settings. Remove me when we can.
-        // https://protonag.atlassian.net/browse/ET-1926
-        let opts = TransformOpts {
-            hide_remote_images: Some(false),
-            hide_embedded_images: Some(false),
-            // FIXME: https://protonmail.slack.com/archives/C02EQ2TDNQM/p1736178345208839
-            image_proxy: Some(false),
-            ..opts
-        };
-
-        let resolved = opts.resolve(tether, session_id).await;
-        transform_html(&self.body, resolved, self.metadata.mime_type, true)
+        transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, true, banners)
     }
 
     /// Get Disposition::Attachment attachments.
@@ -416,22 +334,29 @@ pub struct BodyOutput {
     /// How many embedded images it has disabled.
     pub embedded_images_disabled: u64,
 
-    /// How many images it has proxied.
-    pub images_proxied: u64,
-
     /// The transform opts that were used. All fields are actually Some.
     pub transform_opts: TransformOpts,
 
     /// This instructs the client on what banners they should show.
-    pub body_banners: BodyBanners,
+    pub body_banners: Vec<MessageBanner>,
+}
+
+pub fn transform_html(
+    html: &str,
+    opts: TransformOptsResolved,
+    mime_type: MimeType,
+    inject_style: bool,
+) -> BodyOutput {
+    transform_html_with_banners(html, opts, mime_type, inject_style, vec![])
 }
 
 #[tracing::instrument(skip_all)]
-pub fn transform_html(
+pub fn transform_html_with_banners(
     html: &str,
-    opts: TransformOptsResolved<'_>,
+    opts: TransformOptsResolved,
     mime_type: MimeType,
     inject_style: bool,
+    mut prev_banners: Vec<MessageBanner>,
 ) -> BodyOutput {
     trace!(
         "\
@@ -446,7 +371,6 @@ mime_type: {mime_type:?}"
         show_block_quote,
         hide_remote_images,
         hide_embedded_images,
-        image_proxy,
     } = opts;
     // If the message is text/plain we need to apply some extra transforms to it like
     // preserving whitespaces and adding links.
@@ -463,20 +387,8 @@ mime_type: {mime_type:?}"
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
-    let embedded_images_disabled = if hide_embedded_images {
-        transformer.disable_embedded_images()
-    } else {
-        0
-    };
-
-    let mut remote_images_disabled = 0;
-    let mut images_proxied = 0;
-    if hide_remote_images {
-        remote_images_disabled = transformer.disable_remote_content();
-    } else if let Some(auth_id) = image_proxy {
-        // Doesn't make sense to proxy images if they have been disabled ;)
-        images_proxied = transformer.proxy_images(auth_id.as_ref());
-    }
+    let (remote_images_disabled, embedded_images_disabled) =
+        transformer.disable_content(hide_remote_images, hide_embedded_images);
 
     let had_blockquote = if !show_block_quote {
         transformer.strip_blockquote()
@@ -492,6 +404,16 @@ mime_type: {mime_type:?}"
         transformer.inject_style();
     }
 
+    if opts.hide_remote_images {
+        prev_banners.push(MessageBanner::RemoteContent);
+    }
+
+    if opts.hide_embedded_images {
+        prev_banners.push(MessageBanner::EmbeddedImages);
+    }
+
+    prev_banners.sort_unstable();
+
     let output = BodyOutput {
         body: transformer.to_string(),
         had_blockquote,
@@ -499,9 +421,8 @@ mime_type: {mime_type:?}"
         utm_stripped,
         remote_images_disabled,
         embedded_images_disabled,
-        images_proxied,
         transform_opts: opts.into(),
-        body_banners: BodyBanners::new(opts, had_blockquote),
+        body_banners: prev_banners,
     };
     debug!("HTML Transform done");
     trace!("BodyOutput: {output:#?}");

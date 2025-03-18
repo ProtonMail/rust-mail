@@ -232,7 +232,6 @@ pub struct Context {
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
-    cache_size: u64,
     api_config: ApiConfig,
     cancellation_token: CancellationToken,
 }
@@ -251,7 +250,6 @@ impl Context {
     /// * `client`: Instance of the http client.
     /// * `network_callback`: Callback to be notified of network status changes.
     /// * `cache_path`: Cache path for cached data.
-    /// * `sender_image_cache_size`: Maximum size of the sender image cache.
     /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
     ///
     /// # Errors
@@ -266,7 +264,6 @@ impl Context {
         api_config: ApiConfig,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
-        sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
@@ -292,7 +289,6 @@ impl Context {
             cache_path: cache_path.into(),
             api_config,
             cancellation_token: CancellationToken::new(),
-            cache_size: sender_image_cache_size,
         }))
     }
 

@@ -94,7 +94,6 @@ impl UserContext {
         this.queue().register_execution_context(this_weak);
 
         fs::create_dir_all(this.sender_images_cache_path())?;
-        fs::create_dir_all(this.attachment_cache_path())?;
 
         Ok(this)
     }
