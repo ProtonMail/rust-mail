@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `rust_sdk_version`: Get the rust sdk version string.
   - `rust_sdk_version_[major|minor|patch]`: Get individual version components of for the rust
      sdk version.
-
+  - `is_valid_email_address`: Validate whether an email address is correctly formatted.
 
 ### Fixed
 
