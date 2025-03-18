@@ -5,9 +5,11 @@ mod tests;
 use crate::action;
 use crate::action::{Action, ActionId, Metadata, Priority, Resources};
 use chrono::{DateTime, Utc};
+use include_dir::{include_dir, Dir};
 use indoc::indoc;
+use proton_sqlite3::file::embedded_migrations;
 use proton_sqlite3::rusqlite::ToSql;
-use proton_sqlite3::{Migration, MigratorError};
+use proton_sqlite3::MigratorError;
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -609,10 +611,11 @@ impl ExecutionGuard {
 ///
 /// Returns errors if the query or migration failed.
 pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
+    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
     let span = tracing::debug_span!("Action Table Setup");
     let _enter = span.enter();
     let migrator = proton_sqlite3::Migrator::new();
-    let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(V0)];
+    let mut migrations = embedded_migrations(&DIR);
 
     let version = migrator
         .migrate(conn, ACTION_VERSION_TABLE_NAME, &mut migrations)
@@ -622,93 +625,3 @@ pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
 }
 
 const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
-struct V0;
-
-#[async_trait::async_trait]
-impl Migration for V0 {
-    fn name(&self) -> &'static str {
-        "001_action_queue_v1"
-    }
-
-    async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError> {
-        // create actions table
-        let query = indoc! {"
-            CREATE TABLE action_queue (
-                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                `action_type` TEXT NOT NULL,
-                version INTEGER NOT NULL,
-                priority INTEGER NOT NULL,
-                created INTEGER DEFAULT (datetime('now')),
-                scheduled INTEGER DEFAULT (datetime('now')),
-                state BLOB NOT NULL,
-                debug_string TEXT DEFAULT NULL,
-                action_group TEXT NOT NULL
-            )
-        "};
-
-        tx.execute(query, vec![]).await?;
-
-        // Create index on Priority & Date
-        let query = "CREATE INDEX action_queue_idx_prio ON action_queue (priority)";
-        tx.execute(query, vec![]).await?;
-
-        let query = "CREATE INDEX action_queue_idx_date ON action_queue (created)";
-        tx.execute(query, vec![]).await?;
-
-        let query = "CREATE INDEX action_queue_idx_delay ON action_queue (scheduled)";
-        tx.execute(query, vec![]).await?;
-
-        // Create dependencies table
-        let query = indoc! {"
-            CREATE TABLE action_queue_dependencies (
-                action_id INTEGER NOT NULL,
-                dependency_id INTEGER NOT NULL,
-                PRIMARY KEY(action_id, dependency_id),
-
-                CONSTRAINT action_queue_dep_action_id
-                    FOREIGN KEY (action_id)
-                    REFERENCES action_queue(id)
-                    ON DELETE CASCADE,
-
-                CONSTRAINT action_queue_dep_dep_id
-                    FOREIGN KEY (dependency_id)
-                    REFERENCES action_queue(id)
-                    ON DELETE CASCADE
-            )
-        "};
-        tx.execute(query, vec![]).await?;
-
-        // Create resource tables
-        let query = indoc! {"
-            CREATE TABLE action_queue_resources (
-                action_id INTEGER PRIMARY KEY,
-                resource BLOB NOT NULL,
-
-                CONSTRAINT action_queue_res_action_id
-                    FOREIGN KEY (action_id)
-                    REFERENCES action_queue(id)
-                    ON DELETE CASCADE
-            )
-        "};
-        tx.execute(query, vec![]).await?;
-
-        // Create execution Lock Table - This is kept separate from the action
-        // to prevent accidental overrides via the Model::save methods
-        let query = indoc! {"
-            CREATE TABLE action_queue_lock(
-                action_id INTEGER PRIMARY KEY,
-                executor_id TEXT UNIQUE DEFAULT NULL,
-                acquired_at INTEGER NOT NULL DEFAULT 0,
-                permit_id INTEGER NOT NULL DEFAULT 0,
-
-                CONSTRAINT action_queue_lock_action_id
-                    FOREIGN KEY (action_id)
-                    REFERENCES action_queue(id)
-                    ON DELETE CASCADE
-            )
-        "};
-        tx.execute(query, vec![]).await?;
-
-        Ok(())
-    }
-}

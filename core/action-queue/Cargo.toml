@@ -11,6 +11,7 @@ async-trait = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
 indoc = { workspace = true }
+include_dir = { workspace = true }
 parking_lot = { workspace = true }
 proton-sqlite3 = { workspace = true }
 rmp = { workspace = true }

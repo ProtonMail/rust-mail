@@ -4222,6 +4222,7 @@ dependencies = [
  "clap",
  "derive_more 2.0.1",
  "futures",
+ "include_dir",
  "indoc",
  "parking_lot",
  "pretty_assertions",
