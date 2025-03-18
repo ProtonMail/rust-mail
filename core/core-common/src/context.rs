@@ -679,9 +679,10 @@ impl Context {
     pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
         self.cancel_user_tasks(&user_id).await;
 
-        if let Some(path) = self.find_user_db(&user_id) {
+        for path in self.find_user_db(&user_id) {
             tokio::fs::remove_file(&path)
-                .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
+                .map_err(|e| anyhow!("Failed to erase user database file: {e}"))
+                .map_err(CoreContextError::Other)
                 .inspect_err(|e| error!("{e:?}"))
                 .await?;
         }
@@ -774,15 +775,15 @@ impl Context {
         &self.account_stash
     }
 
-    /// Find the user's database file.
-    fn find_user_db(&self, user_id: &UserId) -> Option<PathBuf> {
-        let path = get_user_db_path(&self.user_db_path, user_id);
+    /// Find the user's database file(s), returning an iterator over the paths that exist.
+    fn find_user_db(&self, user_id: &UserId) -> impl Iterator<Item = PathBuf> {
+        let db = get_user_db_path(&self.user_db_path, user_id);
+        let shm = db.with_extension("db-shm");
+        let wal = db.with_extension("db-wal");
 
-        if let Ok(true) = path.try_exists() {
-            Some(path)
-        } else {
-            None
-        }
+        [db, shm, wal]
+            .into_iter()
+            .filter(|path| matches!(path.try_exists(), Ok(true)))
     }
 
     /// Create a new instance of a use context.
