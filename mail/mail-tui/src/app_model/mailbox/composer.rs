@@ -7,15 +7,13 @@ use crate::widgets::{TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
-use proton_mail_common::draft::attachments::DraftAttachment;
+use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
     recipients, Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode,
 };
-use proton_mail_common::models::{
-    Attachment, DraftAttachmentUploadState, MailSettings, MetadataId,
-};
+use proton_mail_common::models::{Attachment, MailSettings, MetadataId};
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
@@ -407,7 +405,7 @@ impl Composer {
 struct AttachmentInfo {
     disposition: Disposition,
     filename: String,
-    state: DraftAttachmentUploadState,
+    state: DraftAttachmentState,
 }
 
 impl From<DraftAttachment> for AttachmentInfo {
@@ -524,10 +522,10 @@ impl StateHandler for Composer {
             List::new(self.attachment_infos.iter().map(|a| {
                 Line::from(vec![
                     match a.state {
-                        DraftAttachmentUploadState::Uploading => Span::from("U:"),
-                        DraftAttachmentUploadState::Uploaded => Span::from("D:"),
-                        DraftAttachmentUploadState::Error => Span::from("E:").fg(Color::Red),
-                        DraftAttachmentUploadState::Offline => Span::from("O:"),
+                        DraftAttachmentState::Uploading => Span::from("U:"),
+                        DraftAttachmentState::Uploaded => Span::from("D:"),
+                        DraftAttachmentState::Error(_) => Span::from("E:").fg(Color::Red),
+                        DraftAttachmentState::Offline => Span::from("O:"),
                     }
                     .bold(),
                     Span::from(if a.disposition == Disposition::Inline {

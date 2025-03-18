@@ -13,9 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `rust_sdk_version_[major|minor|patch]`: Get individual version components of for the rust
      sdk version.
 
+
 ### Fixed
 
  - MailScroller & Prefetcher now stores only non existent data.
+ - DratAttachmentState now has the error reason.
 
 ## [0.59.0] - 2025-03-17
 
