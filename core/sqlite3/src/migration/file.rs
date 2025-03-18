@@ -31,15 +31,9 @@ impl Migration for EmbeddedFileMigration {
     }
 
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), stash::stash::StashError> {
-        let statements = self
-            .migration_content
-            .split(';')
-            .map(str::trim)
-            .filter(|statement| !statement.is_empty());
+        let statements = self.migration_content.trim();
 
-        for statement in statements {
-            tx.execute(statement, vec![]).await?;
-        }
+        tx.batch(statements).await?;
 
         Ok(())
     }
