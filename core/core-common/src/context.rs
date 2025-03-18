@@ -678,14 +678,7 @@ impl Context {
     /// Returns an error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
         self.cancel_user_tasks(&user_id).await;
-
-        for path in self.find_user_db(&user_id) {
-            tokio::fs::remove_file(&path)
-                .map_err(|e| anyhow!("Failed to erase user database file: {e}"))
-                .map_err(CoreContextError::Other)
-                .inspect_err(|e| error!("{e:?}"))
-                .await?;
-        }
+        self.delete_user_db(&user_id);
 
         // TODO(ET-231): User cache paths.
 
@@ -775,15 +768,24 @@ impl Context {
         &self.account_stash
     }
 
-    /// Find the user's database file(s), returning an iterator over the paths that exist.
-    fn find_user_db(&self, user_id: &UserId) -> impl Iterator<Item = PathBuf> {
+    /// Delete the user's database files.
+    ///
+    /// This method just makes a best-effort attempt to delete the files it can find.
+    /// Any errors are logged but not returned.
+    fn delete_user_db(&self, user_id: &UserId) {
         let db = get_user_db_path(&self.user_db_path, user_id);
         let shm = db.with_extension("db-shm");
         let wal = db.with_extension("db-wal");
 
-        [db, shm, wal]
-            .into_iter()
-            .filter(|path| matches!(path.try_exists(), Ok(true)))
+        for path in [db, shm, wal] {
+            let Ok(true) = path.try_exists() else {
+                continue;
+            };
+
+            if let Err(err) = std::fs::remove_file(&path) {
+                error!(?err, "failed to erase user database file");
+            }
+        }
     }
 
     /// Create a new instance of a use context.
