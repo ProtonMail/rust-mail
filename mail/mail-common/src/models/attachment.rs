@@ -207,7 +207,6 @@ impl Default for AttachmentType {
 
 sql_using_serde!(AttachmentType);
 
-#[cfg(any(test, debug_assertions))]
 impl ModelIdExtension for Attachment {
     type RemoteId = AttachmentId;
 

@@ -118,6 +118,11 @@ impl proton_action_queue::action::Error for MailContextError {
     }
 
     fn is_writer_guard_expired(&self) -> bool {
+        if let Self::IntoTransactionError(err) = self {
+            if let Some(WriterGuardError::Expired) = err.downcast_ref() {
+                return true;
+            }
+        }
         matches!(self, Self::QueueWriterGuardExpired)
     }
 }
