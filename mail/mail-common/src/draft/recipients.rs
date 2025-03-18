@@ -1,6 +1,5 @@
 use crate::datatypes::MessageRecipient;
 use crate::MailUserContext;
-use email_address::{EmailAddress, Options};
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_api_core::service::ApiServiceError;
@@ -11,7 +10,6 @@ use proton_core_common::models::ContactEmail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use std::future::Future;
-use std::str::FromStr;
 use std::sync::Arc;
 use tracing::error;
 
@@ -255,17 +253,10 @@ impl RecipientList {
             return Err(RecipientError::DuplicateAddress(entry.email));
         }
 
-        let state = if EmailAddress::parse_with_options(
-            &entry.email,
-            Options::default()
-                .without_display_text()
-                .with_required_tld(),
-        )
-        .is_err()
-        {
-            ValidationState::InvalidEmail
-        } else {
+        let state = if proton_core_common::validation::is_valid_email_address(&entry.email) {
             state
+        } else {
+            ValidationState::InvalidEmail
         };
 
         self.recipients.push(Recipient::Single(SingleRecipient {
@@ -336,10 +327,11 @@ impl RecipientList {
                 continue;
             }
 
-            let state = if EmailAddress::from_str(&recipient.email).is_err() {
-                ValidationState::InvalidEmail
-            } else {
+            let state = if proton_core_common::validation::is_valid_email_address(&recipient.email)
+            {
                 state
+            } else {
+                ValidationState::InvalidEmail
             };
 
             recipients.push(SingleRecipient {

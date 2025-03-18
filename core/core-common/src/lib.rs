@@ -18,6 +18,7 @@ pub mod watch_handle;
 pub mod async_task;
 #[cfg(test)]
 mod tests;
+pub mod validation;
 
 pub use context::*;
 pub use event_subscriber::*;
