@@ -16,8 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
- - MailScroller & Prefetcher now stores only non existent data.
- - DratAttachmentState now has the error reason.
+  - MailScroller & Prefetcher now stores only non existent data.
+  - DratAttachmentState now has the error reason.
+  - Subscription ID is optional
+
 
 ## [0.59.0] - 2025-03-17
 

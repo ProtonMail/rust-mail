@@ -1668,6 +1668,7 @@ use proton_api_core::services::proton::PlanType as RealPlanType;
 use proton_api_core::services::proton::PlanVendor as RealPlanVendor;
 use proton_api_core::services::proton::PlanVendorName as RealPlanVendorName;
 use proton_api_core::services::proton::Subscription as RealSubscription;
+use proton_api_core::services::proton::SubscriptionId;
 
 /// Represents a single payment plan from the Proton API.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
@@ -1951,7 +1952,7 @@ impl From<AppleRecurringReceiptDetails> for RealAppleRecurringReceiptDetails {
 
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Subscription {
-    pub id: String,
+    pub id: Option<String>,
     pub name: Option<String>,
 
     pub title: String,
@@ -1983,6 +1984,8 @@ pub struct Subscription {
 
 impl From<RealSubscription> for Subscription {
     fn from(subscription: RealSubscription) -> Self {
+        let id = subscription.id.map(SubscriptionId::into_inner);
+
         let entitlements = subscription
             .entitlements
             .into_iter()
@@ -1996,7 +1999,7 @@ impl From<RealSubscription> for Subscription {
             .collect();
 
         Self {
-            id: subscription.id.into_inner(),
+            id,
             name: subscription.name,
             title: subscription.title,
             description: subscription.description,

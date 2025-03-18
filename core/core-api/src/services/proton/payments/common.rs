@@ -156,7 +156,7 @@ pub enum PlanDecoration {
 #[serde(rename_all = "PascalCase")]
 pub struct Subscription {
     #[serde(rename = "ID")]
-    pub id: SubscriptionId,
+    pub id: Option<SubscriptionId>,
     pub name: Option<String>,
 
     pub title: String,
