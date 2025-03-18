@@ -38,13 +38,10 @@ async fn test_attachment_create_without_metadata() {
     expected.row_id = attachment.row_id;
     expected.local_message_id = Some(1.into());
     expected.local_conversation_id = Some(1.into());
-    let mut db_attachment = Attachment::load(local_id.unwrap(), &conn)
+    let db_attachment = Attachment::load(local_id.unwrap(), &conn)
         .await
         .unwrap()
         .unwrap();
-    // The remote_id hasn't been filled (it gets filled on the `on_save`)
-    // TODO: remove this hack
-    db_attachment.remote_id = None;
     assert_eq!(expected, db_attachment);
 }
 

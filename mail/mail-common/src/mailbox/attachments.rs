@@ -49,9 +49,12 @@ impl MailUserContext {
     pub async fn get_attachment_content_path(
         &self,
         attachment: &Attachment,
+        into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<String> {
-        let mut tether = self.user_stash().connection();
-        let tx = tether.transaction().await?;
+        let tx = into_transaction
+            .transaction()
+            .await
+            .map_err(MailContextError::IntoTransactionError)?;
         if let Some(path) =
             Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
         {
@@ -65,7 +68,10 @@ impl MailUserContext {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        let tx = tether.transaction().await?;
+        let tx = into_transaction
+            .transaction()
+            .await
+            .map_err(MailContextError::IntoTransactionError)?;
         if let Some(path) =
             Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
         {
@@ -164,7 +170,10 @@ impl MailUserContext {
         attachment_id: LocalAttachmentId,
     ) -> MailboxResult<DecryptedAttachment> {
         let attachment = self.sync_attachment(attachment_id).await?;
-        let data_path = self.get_attachment_content_path(&attachment).await?;
+        let mut tether = self.user_stash().connection();
+        let data_path = self
+            .get_attachment_content_path(&attachment, &mut tether)
+            .await?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -218,13 +227,13 @@ impl MailUserContext {
 
     /// Creates the attachment in the attachment_cache table and stores it in the disk
     /// Returns the path as a String.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, data, tether))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, data, bond))]
     pub async fn store_attachment_in_cache(
         &self,
         name: &str,
         id: LocalAttachmentId,
         data: Vec<u8>,
-        tether: &Bond<'_>,
+        bond: &Bond<'_>,
     ) -> MailContextResult<String> {
         // We will write the attachment to
         // {CACHE_PATH}/attachments/{id}/{name}
@@ -243,15 +252,14 @@ impl MailUserContext {
 
         let data_len = data.len();
         safe_write_async(&path, data).await?;
-        tether
-            .execute(
-                indoc! {
-                "INSERT INTO attachment_cache (attachment_id, path, size)
-                    VALUES (?, ?, ?)",
-                        },
-                params![id, path.clone(), data_len],
-            )
-            .await?;
+        bond.execute(
+            indoc! {
+            "INSERT INTO attachment_cache (attachment_id, path, size)
+                VALUES (?, ?, ?)",
+                    },
+            params![id, path.clone(), data_len],
+        )
+        .await?;
         Ok(path)
     }
 

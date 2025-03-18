@@ -287,30 +287,15 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_id.is_none() {
-            if let Some(remote_id) = self.remote_id() {
-                if let Some(existing) =
-                    Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
-                {
-                    self.local_id = existing.local_id;
-                    self.row_id = existing.row_id;
-                }
-            }
-        }
-
-        if self.local_id.is_some()
-            && (self.remote_id().is_none()
-                || self.key_packets.is_none()
-                || self.enc_signature.is_none()
-                || self.signature.is_none())
-        {
+        // If we already exist in the db
+        if let Some(local_id) = self.local_id {
             // There is currently a race because we try to write too much data at the same time
             // rather than what really changed. It's highly unlikely that we ever want to remove
             // the remote id of an attachment that already has one. This happens in the
             // context of drafts, where a local change to the message body metadata can
             // accidentally reset the attachment remote id to nothing, causing the send
             // to fail.
-            if let Some(existing) = Attachment::find_by_id(self.local_id.unwrap(), bond).await? {
+            if let Some(existing) = Attachment::find_by_id(local_id, bond).await? {
                 if existing.remote_id().is_some() {
                     self.attachment_type = existing.attachment_type;
                 }
@@ -323,6 +308,16 @@ impl Attachment {
                 if self.signature.is_none() {
                     self.signature = existing.signature;
                 }
+            } else {
+                error!("local_id exists but attachment does not exist in database?!");
+            }
+            // If another remote attachment exists in the db
+        } else if let Some(remote_id) = self.remote_id() {
+            if let Some(existing) =
+                Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
+            {
+                self.local_id = existing.local_id;
+                self.row_id = existing.row_id;
             }
         }
 
@@ -348,6 +343,29 @@ impl Attachment {
         }
 
         <Self as Model>::save(self, bond).await
+    }
+
+    /// Extends [`Model::save()`] to set the remote id
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = self.remote_id() {
+            bond.execute(
+                "UPDATE attachments SET remote_id = ? WHERE local_id = ?",
+                params![remote_id, self.local_id.unwrap()],
+            )
+            .await?;
+        } else {
+            bond.execute(
+                "UPDATE attachments SET remote_id = NULL WHERE local_id = ?",
+                params![self.local_id.unwrap()],
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     /// Fetch attachment content from the API.
@@ -741,33 +759,24 @@ impl Attachment {
         debug!("Saving new attachment record");
         let tx = tether.transaction().await?;
         attachment.save(&tx).await?;
-        tx.commit().await?;
 
         debug!("Storing attachment in cache");
-        ctx.get_attachment_content_data(&attachment, tether).await?;
+
+        let data = tokio::fs::read(path).await?;
+        ctx.store_attachment_in_cache(
+            &attachment.filename,
+            attachment.local_id.unwrap(),
+            data,
+            &tx,
+        )
+        .await?;
+        tx.commit().await?;
 
         info!(
             "Attachment created with id {}",
             attachment.local_id.unwrap()
         );
         Ok(attachment)
-    }
-
-    /// Extends [`Model::save()`] to set the remote id
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(id) = self.remote_id() {
-            bond.execute("UPDATE attachments SET remote_id = ?", params![id])
-                .await?;
-        } else {
-            bond.execute("UPDATE attachments SET remote_id = NULL", vec![])
-                .await?;
-        }
-        Ok(())
     }
 }
 

@@ -1,10 +1,8 @@
 use proton_api_core::services::proton::{LabelId, UserId};
-use proton_mail_common::cache::CacheMessageKey;
 use std::str::FromStr;
 
 use indoc::formatdoc;
 use itertools::Itertools;
-use proton_api_core::services::proton::common::{LabelId, UserId};
 use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
@@ -161,7 +159,7 @@ async fn mailbox_message_body_mime() {
     assert_eq!(pgp_attachments[0].mime_type, MimeType::text_plain());
 
     let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[0])
+        .get_attachment_content_data(&pgp_attachments[0], &mut tether)
         .await
         .unwrap();
     assert_eq!(data, b"attachment1");
@@ -169,7 +167,7 @@ async fn mailbox_message_body_mime() {
     assert_eq!(pgp_attachments[1].filename, "attachment2.txt");
     assert_eq!(pgp_attachments[1].mime_type, MimeType::text_plain());
     let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[1])
+        .get_attachment_content_data(&pgp_attachments[1], &mut tether)
         .await
         .unwrap();
     assert_eq!(data, b"attachment2");
@@ -183,7 +181,7 @@ async fn mailbox_message_body_mime() {
         MimeType::from_str("application/pgp-keys").unwrap()
     );
     let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[2])
+        .get_attachment_content_data(&pgp_attachments[2], &mut tether)
         .await
         .unwrap();
     assert_eq!(data, TEST_MESSAGE_BODY_MIME_SIGNATURE.as_bytes());

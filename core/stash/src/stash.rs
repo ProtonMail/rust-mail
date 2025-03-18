@@ -1359,7 +1359,11 @@ impl IntoTransaction for Tether {
     }
 }
 
+/// This trait should only be used in functions that have to create and commit several
+/// transactions.
+/// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
 pub trait IntoTransaction {
+    /// Creates a transaction. The error is boxed.
     fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send;
 }
 

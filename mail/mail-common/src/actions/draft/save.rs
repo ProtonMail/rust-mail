@@ -494,8 +494,6 @@ impl Save {
                 message_body_metadata.attachments.len()
             );
 
-            let mut att_tether = ctx.user_stash().connection();
-
             for (index, original_attachment) in message_body_metadata
                 .attachments
                 .iter()
@@ -566,12 +564,20 @@ impl Save {
                     // Ensure the newly created attachment has a data copy. This is required
                     // for sending to external (non-proton) addresses.
 
-                    let og_data = ctx
-                        .get_attachment_content_data(&original_attachment, &mut att_tether)
-                        .await?;
+                    let original_attachment_id = original_attachment.local_id.unwrap();
+                    let Some(og_path) =
+                        MailUserContext::get_attachment_from_cache(original_attachment_id, &bond)
+                            .await?
+                    else {
+                        error!("Attachment could not be found in cache");
+                        return Err(AppError::AttachmentMissing(original_attachment_id).into());
+                    };
+
+                    let og_data = tokio::fs::read(og_path).await?;
+
                     // This could be faster:
                     // - Hard-link to avoid the copy altogether
-                    // - Use io::copy which uses faster syscalls on linux (copy_file_range, sendfile...)
+                    // - Use fs::copy which uses faster syscalls on linux (copy_file_range, sendfile...)
                     //
                     // But we just userspace copy for now.
                     ctx.store_attachment_in_cache(

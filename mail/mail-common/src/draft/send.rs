@@ -220,7 +220,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
         text_body = html_to_text(body);
         builder = builder.html_body(body.as_bytes()).text_body(&text_body);
     } else {
-        builder = builder.text_body(&body);
+        builder = builder.text_body(body);
     }
 
     let mut tether = context.user_stash().connection();

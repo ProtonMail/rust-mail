@@ -1,10 +1,6 @@
 use futures::future::try_join_all;
-use proton_api_core::services::proton::common::LabelId;
 use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::{DecryptedAttachment, Mailbox};
 use proton_mail_test_utils::attachment::{
@@ -200,7 +196,7 @@ async fn load_attachment_content_first_time() {
     // Action:
     //   * Get attachment
     let data_path = user_ctx
-        .get_attachment_content_path(&attachment)
+        .get_attachment_content_path(&attachment, &mut tether)
         .await
         .unwrap();
 
