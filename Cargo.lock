@@ -4518,6 +4518,7 @@ dependencies = [
  "function_name",
  "futures",
  "html2text",
+ "include_dir",
  "indoc",
  "insta",
  "itertools 0.13.0",
