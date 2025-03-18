@@ -196,7 +196,6 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::AttachmentEncryption(_) => Self::Unexpected(Unexpected::Crypto),
             MailContextError::CalledFetchedAttachmentOnPgp
             | MailContextError::CalledFetchedAttachmentLocalAttachment
-            | MailContextError::PgpAttachment(_)
             | MailContextError::InvalidUtf8AttachmentPath(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }

@@ -1038,14 +1038,9 @@ impl EncryptedMessageBody {
                 let mut tether = ctx.user_stash().connection();
                 let tx = tether.transaction().await?;
                 for (mut att, data) in model_attachments {
-                    att.save(&tx)
-                        .await
-                        .context("Error saving pgp attachment as an Attachment model to the DB")
-                        .map_err(MailContextError::PgpAttachment)?;
+                    att.save(&tx).await?;
                     ctx.store_attachment_in_cache(&att.filename, att.local_id.unwrap(), data, &tx)
-                        .await
-                        .context("Error storing pgp attachment to disk")
-                        .map_err(MailContextError::PgpAttachment)?;
+                        .await?;
                     self.metadata.attachments.push(att);
                 }
                 self.metadata.save(&tx).await?;
