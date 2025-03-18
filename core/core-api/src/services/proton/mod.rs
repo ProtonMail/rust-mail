@@ -74,6 +74,9 @@ pub mod prelude;
 /// Common types used by the Proton API.
 pub mod common;
 
+/// Defines helper traits.
+pub mod traits;
+
 export! {
     /// Defines and implements the `ProtonAuth` trait.
     mod auth (as pub);
