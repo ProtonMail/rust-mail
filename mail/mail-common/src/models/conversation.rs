@@ -654,7 +654,7 @@ impl Conversation {
     /// Returns an error if the local conversation id is not set or the query
     /// failed.
     ///
-    pub async fn save_not_existing(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 *self = existing;
