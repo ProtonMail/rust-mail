@@ -90,6 +90,7 @@ use uuid::Uuid;
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize, Default)]
 #[TableName("attachments")]
+#[ModelActions(on_save)]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -750,6 +751,23 @@ impl Attachment {
             attachment.local_id.unwrap()
         );
         Ok(attachment)
+    }
+
+    /// Extends [`Model::save()`] to set the remote id
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(id) = self.remote_id() {
+            bond.execute("UPDATE attachments SET remote_id = ?", params![id])
+                .await?;
+        } else {
+            bond.execute("UPDATE attachments SET remote_id = NULL", vec![])
+                .await?;
+        }
+        Ok(())
     }
 }
 
