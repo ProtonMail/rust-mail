@@ -296,6 +296,7 @@ impl Send {
             // Even though we are already passing in the message body metadata we
             // leave this parameter here for when we handle the PGP embedded case.
             &attachments,
+            guard,
         )
         .await
         .map_err(SaveOrSendError::SendMessage)

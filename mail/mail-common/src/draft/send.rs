@@ -3,6 +3,7 @@ use crate::draft::recipients::ValidationState;
 use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
+use proton_action_queue::action::WriterGuard;
 use proton_api_mail::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
@@ -79,6 +80,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
     Ok(send_preferences)
 }
 
+#[allow(clippy::too_many_arguments)]
 /// Builds the email packages for all recipients.
 pub async fn build_packages<Provider: PGPProviderSync>(
     context: &MailUserContext,
@@ -88,6 +90,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
     mime_type: MimeType,
     stored_message_body: &str,
     attachments: &[Attachment],
+    guard: &mut WriterGuard<'_>,
 ) -> Result<Vec<Package>, PackageError> {
     // Which packages do we have to generate?
     let demanded_packages: HashSet<_> = send_preferences
@@ -119,6 +122,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
                     mime_type,
                     stored_message_body,
                     attachments,
+                    guard,
                 )
                 .await?
             }
@@ -209,6 +213,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     mime_type: MimeType,
     body: &str,
     attachments: &[Attachment],
+    guard: &mut WriterGuard<'_>,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for mime");
     let mut content = Vec::with_capacity(body.len());
@@ -222,8 +227,6 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     } else {
         builder = builder.text_body(body);
     }
-
-    let mut tether = context.user_stash().connection();
 
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
@@ -239,7 +242,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
         }
 
         let loaded_data = context
-            .get_attachment_content_data(attachment, &mut tether)
+            .get_attachment_content_data(attachment, guard)
             .await
             .map_err(|e| {
                 error!("Failed to read attachment file: {e:?}");
