@@ -167,6 +167,7 @@ pub mod mail;
 
 #[cfg(target_os = "android")]
 pub mod tls;
+pub mod version;
 
 uniffi::setup_scaffolding!("proton_mail_uniffi");
 

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 fn main() {
+    gen_package_version_info();
     setup_x86_64_android_workaround();
 }
 
@@ -60,4 +61,25 @@ fn setup_x86_64_android_workaround() {
         );
         println!("cargo:rustc-link-lib=static=clang_rt.builtins-x86_64-android");
     }
+}
+
+// Generate package version info that can be accessed at runtime.
+fn gen_package_version_info() {
+    let major = std::env::var("CARGO_PKG_VERSION_MAJOR").expect("CARGO_PKG_VERSION_MAJOR not set");
+    let minor = std::env::var("CARGO_PKG_VERSION_MINOR").expect("CARGO_PKG_VERSION_MINOR not set");
+    let patch = std::env::var("CARGO_PKG_VERSION_PATCH").expect("CARGO_PKG_VERSION_PATCH not set");
+
+    let output_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR not set"))
+        .join("package_version.rs");
+
+    let data = format!(
+        r#"
+pub const VERSION_MAJOR:u32 = {major};
+pub const VERSION_MINOR:u32 = {minor};
+pub const VERSION_PATCH:u32 = {patch};
+pub const VERSION_STRING:&str = "{major}.{minor}.{patch}";
+    "#
+    );
+
+    std::fs::write(&output_dir, data).expect("Could not write to version file");
 }

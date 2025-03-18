@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Added
+
+  - `rust_sdk_version`: Get the rust sdk version string.
+  - `rust_sdk_version_[major|minor|patch]`: Get individual version components of for the rust
+     sdk version.
+
 ### Fixed
 
- - MailScroller & Prefetcher now stores only non existent data. 
+ - MailScroller & Prefetcher now stores only non existent data.
 
 ## [0.59.0] - 2025-03-17
 
