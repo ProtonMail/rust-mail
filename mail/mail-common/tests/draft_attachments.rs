@@ -8,8 +8,9 @@ use proton_api_mail::services::proton::prelude::{
 };
 use proton_api_mail::services::proton::request_data::NewAttachmentParams;
 use proton_mail_common::datatypes::Disposition;
+use proton_mail_common::draft::attachments::DraftAttachmentState;
 use proton_mail_common::draft::{Draft, DraftSyncStatus};
-use proton_mail_common::models::{Attachment, DraftAttachmentUploadState};
+use proton_mail_common::models::Attachment;
 use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use std::path::Path;
@@ -98,10 +99,10 @@ async fn attachment_not_removed_on_error() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
     let draft_attachments = draft.attachments(&tether).await.unwrap();
     assert_eq!(draft_attachments.len(), 1);
-    assert_eq!(
+    assert!(matches!(
         draft_attachments[0].state,
-        DraftAttachmentUploadState::Error
-    );
+        DraftAttachmentState::Error(_)
+    ));
     assert_eq!(
         draft_attachments[0].metadata,
         local_attachment.clone().into()
@@ -113,10 +114,10 @@ async fn attachment_not_removed_on_error() {
     let draft_attachments = draft.attachments(&tether).await.unwrap();
     assert!(matches!(sync_status, DraftSyncStatus::Synced));
     assert_eq!(draft_attachments.len(), 1);
-    assert_eq!(
+    assert!(matches!(
         draft_attachments[0].state,
-        DraftAttachmentUploadState::Error
-    );
+        DraftAttachmentState::Error(_)
+    ));
     assert_eq!(draft_attachments[0].metadata, local_attachment.into());
 }
 

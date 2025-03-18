@@ -1,5 +1,7 @@
 use crate::datatypes::AttachmentMetadata;
-use crate::models::{DraftAttachmentMetadata, DraftAttachmentUploadState, MetadataId};
+use crate::models::{
+    DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState, MetadataId,
+};
 use proton_mail_ids::LocalAttachmentId;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
@@ -9,9 +11,38 @@ pub struct DraftAttachment {
     /// Metadata of the attachment.
     pub metadata: AttachmentMetadata,
     /// Upload status.
-    pub state: DraftAttachmentUploadState,
+    pub state: DraftAttachmentState,
     /// Timestamp of the state update. It will be 0 for attachment that already exist.
     pub state_modified_timestamp: i64,
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentState {
+    /// Attachment has not been uploaded.
+    Uploading,
+    /// Attachment has been uploaded to the server
+    Uploaded,
+    /// Attachment failed to upload or encrypt.
+    Error(DraftAttachmentUploadError),
+    /// Could not upload due to lack of network,
+    Offline,
+}
+
+impl DraftAttachmentState {
+    pub fn from_draft_attachment_metadata(metadata: &DraftAttachmentMetadata) -> Self {
+        match metadata.state() {
+            DraftAttachmentUploadState::Uploading => Self::Uploading,
+            DraftAttachmentUploadState::Uploaded => Self::Uploaded,
+            DraftAttachmentUploadState::Error => {
+                let error = metadata
+                    .error
+                    .clone()
+                    .unwrap_or(DraftAttachmentUploadError::Unexpected);
+                Self::Error(error)
+            }
+            DraftAttachmentUploadState::Offline => Self::Offline,
+        }
+    }
 }
 
 impl DraftAttachment {
@@ -37,16 +68,19 @@ impl DraftAttachment {
         Ok(attachments
             .into_iter()
             .map(|attachment| {
-                let (status, timestamp) =
+                let (state, timestamp) =
                     if let Some(metadata) = metadata_map.get(&attachment.local_id.unwrap()) {
-                        (metadata.state(), metadata.state_timestamp())
+                        (
+                            DraftAttachmentState::from_draft_attachment_metadata(metadata),
+                            metadata.state_timestamp(),
+                        )
                     } else {
                         // If there is no metadata entry, it means there are no changes for this attachment
                         // or it was inherited from a reply/forward.
-                        (DraftAttachmentUploadState::Uploaded, 0)
+                        (DraftAttachmentState::Uploaded, 0)
                     };
                 DraftAttachment {
-                    state: status,
+                    state,
                     metadata: AttachmentMetadata::from(attachment),
                     state_modified_timestamp: timestamp,
                 }

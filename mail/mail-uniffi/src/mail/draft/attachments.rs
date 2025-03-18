@@ -1,15 +1,17 @@
 use crate::core::datatypes::Id;
+use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{DraftAttachmentError, ProtonError};
+use crate::errors::{DraftAttachmentError, DraftAttachmentErrorReason, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
 use crate::{uniffi_async, AsyncLiveQueryCallback};
 use proton_mail_common::datatypes::Disposition;
-use proton_mail_common::draft::attachments::DraftAttachment as RealDraftAttachment;
+use proton_mail_common::draft::attachments::{
+    DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
+};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::Attachment as RealAttachment;
-use proton_mail_common::models::DraftAttachmentUploadState as RealDraftAttachmentUploadStatus;
+use proton_mail_common::models::{Attachment as RealAttachment, DraftAttachmentUploadError};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use tokio::task::AbortHandle;
@@ -25,16 +27,42 @@ pub enum DraftAttachmentState {
     /// Attachment has failed uploading
     Uploaded,
     /// An error occurred during upload.
-    Error,
+    Error(DraftAttachmentError),
 }
 
-impl From<RealDraftAttachmentUploadStatus> for DraftAttachmentState {
-    fn from(value: RealDraftAttachmentUploadStatus) -> Self {
+impl From<RealDraftAttachmentState> for DraftAttachmentState {
+    fn from(value: RealDraftAttachmentState) -> Self {
         match value {
-            RealDraftAttachmentUploadStatus::Uploading => Self::Uploading,
-            RealDraftAttachmentUploadStatus::Uploaded => Self::Uploaded,
-            RealDraftAttachmentUploadStatus::Error => Self::Error,
-            RealDraftAttachmentUploadStatus::Offline => Self::Offline,
+            RealDraftAttachmentState::Uploading => Self::Uploading,
+            RealDraftAttachmentState::Uploaded => Self::Uploaded,
+            RealDraftAttachmentState::Error(e) => Self::Error(e.into()),
+            RealDraftAttachmentState::Offline => Self::Offline,
+        }
+    }
+}
+
+impl From<DraftAttachmentUploadError> for DraftAttachmentError {
+    fn from(value: DraftAttachmentUploadError) -> Self {
+        match value {
+            DraftAttachmentUploadError::Crypto(_) => {
+                Self::Reason(DraftAttachmentErrorReason::Crypto)
+            }
+            DraftAttachmentUploadError::TooManyAttachments => {
+                Self::Reason(DraftAttachmentErrorReason::TooManyAttachments)
+            }
+            DraftAttachmentUploadError::MessageAlreadySent => {
+                Self::Reason(DraftAttachmentErrorReason::MessageAlreadySent)
+            }
+            DraftAttachmentUploadError::Server(e) => {
+                // There is no good conversion here, however it should be very rare as all
+                // the important cases are intercepted.
+                Self::Other(ProtonError::ServerError(
+                    UserApiServiceError::OtherHttpError(0, e),
+                ))
+            }
+            DraftAttachmentUploadError::Unexpected => {
+                Self::Other(ProtonError::Unexpected(UnexpectedError::Draft))
+            }
         }
     }
 }
