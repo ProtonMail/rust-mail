@@ -14,7 +14,7 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use stash::exports::SqliteError;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, StashError};
+use stash::stash::{Bond, IntoTransaction, StashError};
 use std::io::Read;
 use std::path::PathBuf;
 use tokio::fs;
@@ -95,9 +95,12 @@ impl MailUserContext {
     pub async fn get_attachment_content_data(
         &self,
         attachment: &Attachment,
+        into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<Vec<u8>> {
-        let mut tether = self.user_stash().connection();
-        let tx = tether.transaction().await?;
+        let tx = into_transaction
+            .transaction()
+            .await
+            .map_err(MailContextError::IntoTransactionError)?;
         if let Some(path) =
             Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
         {
@@ -111,7 +114,10 @@ impl MailUserContext {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        let tx = tether.transaction().await?;
+        let tx = into_transaction
+            .transaction()
+            .await
+            .map_err(MailContextError::IntoTransactionError)?;
         if let Some(path) =
             Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
         {

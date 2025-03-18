@@ -1016,15 +1016,16 @@ impl Draft {
         ctx: &MailUserContext,
         cid: &str,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
-        let tether = ctx.user_stash().connection();
+        let mut tether = ctx.user_stash().connection();
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
-        drop(tether);
         if let Some(attachment) = attachments
             .iter()
             .find(|a| a.content_id.as_deref() == Some(cid))
         {
-            let data = ctx.get_attachment_content_data(attachment).await?;
+            let data = ctx
+                .get_attachment_content_data(attachment, &mut tether)
+                .await?;
             Ok(EmbeddedAttachmentInfo {
                 data,
                 mime: attachment.mime_type.to_string(),

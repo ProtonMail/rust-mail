@@ -493,6 +493,9 @@ impl Save {
                 new_message_body_metadata.attachments.len(),
                 message_body_metadata.attachments.len()
             );
+
+            let mut att_tether = ctx.user_stash().connection();
+
             for (index, original_attachment) in message_body_metadata
                 .attachments
                 .iter()
@@ -564,7 +567,7 @@ impl Save {
                     // for sending to external (non-proton) addresses.
 
                     let og_data = ctx
-                        .get_attachment_content_data(&original_attachment)
+                        .get_attachment_content_data(&original_attachment, &mut att_tether)
                         .await?;
                     // This could be faster:
                     // - Hard-link to avoid the copy altogether

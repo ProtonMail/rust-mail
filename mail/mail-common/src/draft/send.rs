@@ -189,7 +189,7 @@ pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
     let body_data = if mime_type == MimeType::TextPlain {
         body
     } else {
-        text_body = html_to_text(&body);
+        text_body = html_to_text(body);
         &text_body
     };
     let package_body = package_body_encrypt(
@@ -223,6 +223,8 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
         builder = builder.text_body(&body);
     }
 
+    let mut tether = context.user_stash().connection();
+
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
     for attachment in attachments {
@@ -237,7 +239,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
         }
 
         let loaded_data = context
-            .get_attachment_content_data(&attachment)
+            .get_attachment_content_data(&attachment, &mut tether)
             .await
             .map_err(|e| {
                 error!("Failed to read attachment file: {e:?}");

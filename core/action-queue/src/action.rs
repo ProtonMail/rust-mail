@@ -1,5 +1,6 @@
 use crate::db::{ExecutionGuard, ExecutionGuardError, StoredAction};
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
+use anyhow::Context;
 use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
-use stash::stash::{Bond, StashError, Tether};
+use stash::stash::{Bond, IntoTransaction, StashError, Tether};
 use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -271,6 +272,17 @@ impl<'t> WriterGuard<'t> {
     #[must_use]
     pub fn tether(&self) -> &Tether {
         self.tether
+    }
+}
+
+impl IntoTransaction for WriterGuard<'_> {
+    #[allow(clippy::manual_async_fn)]
+    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send {
+        async {
+            self.transaction()
+                .await
+                .context("Could not create transaction for writerguard")
+        }
     }
 }
 

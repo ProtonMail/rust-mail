@@ -134,8 +134,10 @@ impl DecryptedMessageBody {
             .map(|att| {
                 let id = att.id().unwrap();
                 let ctx_clone = ctx.clone();
-                let fut =
-                    ctx.spawn(async move { ctx_clone.get_attachment_content_data(&att).await });
+                let fut = ctx.spawn(async move {
+                    let tether = &mut ctx_clone.user_stash().connection();
+                    ctx_clone.get_attachment_content_data(&att, tether).await
+                });
                 (id, fut)
             })
             .collect();
@@ -225,7 +227,10 @@ impl DecryptedMessageBody {
                     AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
                     AsyncTaskResult::Completed(e @ Err(_)) => e?,
                 },
-                None => ctx.get_attachment_content_data(att).await?,
+                None => {
+                    let tether = &mut ctx.user_stash().connection();
+                    ctx.get_attachment_content_data(att, tether).await?
+                }
             }
         };
         Ok(EmbeddedAttachmentInfo {

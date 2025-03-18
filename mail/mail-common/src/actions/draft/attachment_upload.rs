@@ -295,7 +295,10 @@ async fn encrypt_and_upload_attachment(
     };
 
     debug!("Retrieving from cache");
-    let data = match ctx.get_attachment_content_data(&attachment).await {
+    let data = match ctx
+        .get_attachment_content_data(attachment, writer_guard)
+        .await
+    {
         Ok(data) => data,
         Err(err) => {
             error!("{err}");

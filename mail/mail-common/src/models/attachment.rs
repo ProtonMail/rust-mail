@@ -743,7 +743,7 @@ impl Attachment {
         tx.commit().await?;
 
         debug!("Storing attachment in cache");
-        ctx.get_attachment_content_data(&attachment).await?;
+        ctx.get_attachment_content_data(&attachment, tether).await?;
 
         info!(
             "Attachment created with id {}",
