@@ -11,7 +11,7 @@ use tracing::debug;
 
 use crate::{
     datatypes::ReadFilter,
-    models::{DraftMetadata, Message, MessageScrollData},
+    models::{Message, MessageScrollData},
     MailContextError, MailUserContext,
 };
 
@@ -291,20 +291,9 @@ impl RemoteMessageScrollerSource {
             return Ok(());
         }
 
-        // Save all conversations.
+        // Save all messages.
         for message in messages.iter_mut() {
-            // We want to prevent a case, where we decided to undo sending the draft, and then the draft is
-            // overwritten by the outdated state from the Backend
-            if DraftMetadata::exists_for_message_with_remote_id(
-                message.remote_id.clone().expect("Remote id"),
-                &tx,
-            )
-            .await?
-            {
-                tracing::warn!(remote_id = ?message.remote_id, "Skipping draft, we already have it in the local DB");
-                continue;
-            }
-            message.save(&tx).await?
+            message.create_or_get_local(&tx).await?
         }
 
         let last = messages.last().unwrap();

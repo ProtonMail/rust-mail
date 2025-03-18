@@ -611,15 +611,14 @@ impl Conversation {
         }
     }
 
-    /// Save a message to the database.
+    /// Save a conversation to the database.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
     /// # Parameters
     ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
+    /// * `bond` - The database transaction, used for writing changes to storage
     ///
     /// # Errors
     ///
@@ -631,6 +630,41 @@ impl Conversation {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
+            }
+        }
+
+        <Self as Model>::save(self, bond).await
+    }
+
+    /// Save a non existing conversation to the database.
+    ///
+    /// This method is complementary way to store conversation. It only will proceed
+    /// with conversations that are not yet present in database. This functionality
+    /// is required due to multiprocess nature of mail application and the possibility to
+    /// view mailboxes without interfering with processes triggered by the user.
+    ///
+    /// Method also gives back existing conversation if it was not saved.
+    ///
+    /// # Parameters
+    ///
+    /// * `bond` - The database transaction, used for writing changes to storage
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+                *self = existing;
+
+                tracing::debug!(
+                    remote_id = ?self.remote_id,
+                    "Skipping saving conversation, we already have it in the local DB"
+                );
+
+                return Ok(());
             }
         }
 
