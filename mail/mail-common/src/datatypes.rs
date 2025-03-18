@@ -1041,11 +1041,11 @@ impl EncryptedMessageBody {
                     att.save(&tx)
                         .await
                         .context("Error saving pgp attachment as an Attachment model to the DB")
-                        .map_err(MailContextError::Other)?;
+                        .map_err(MailContextError::PgpAttachment)?;
                     ctx.store_attachment_in_cache(&att.filename, att.local_id.unwrap(), data, &tx)
                         .await
                         .context("Error storing pgp attachment to disk")
-                        .map_err(MailContextError::Other)?;
+                        .map_err(MailContextError::PgpAttachment)?;
                     self.metadata.attachments.push(att);
                 }
                 self.metadata.save(&tx).await?;

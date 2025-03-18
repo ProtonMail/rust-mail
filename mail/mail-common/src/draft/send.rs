@@ -239,7 +239,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
         }
 
         let loaded_data = context
-            .get_attachment_content_data(&attachment, &mut tether)
+            .get_attachment_content_data(attachment, &mut tether)
             .await
             .map_err(|e| {
                 error!("Failed to read attachment file: {e:?}");

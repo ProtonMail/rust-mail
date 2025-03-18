@@ -98,6 +98,9 @@ pub enum MailContextError {
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
 
+    #[error("Unrrecoverable error regarding pgp attachments: {0}")]
+    PgpAttachment(anyhow::Error),
+
     #[error("{0}")]
     Other(anyhow::Error),
 }

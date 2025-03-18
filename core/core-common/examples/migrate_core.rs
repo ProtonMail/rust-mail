@@ -30,7 +30,6 @@ async fn prepare_context(dir: &TempDir) -> (Arc<Context>, Arc<dyn KeyChain>) {
         [],
         config,
         cache_dir,
-        1024 * 1024,
         None,
     )
     .await
