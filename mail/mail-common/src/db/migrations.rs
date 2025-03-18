@@ -1,14 +1,26 @@
 //! Migrations for the data model.
-use crate::db::migrations::v0::V0;
-use proton_sqlite3::{Migration, Migrator, MigratorError};
+use include_dir::{include_dir, Dir};
+use proton_sqlite3::{file::embedded_migrations, Migrator, MigratorError};
 use stash::stash::Stash;
 
-mod v0;
+mod v001_proton_mail_default_labels;
+mod v005_proton_mail_conversation_counters;
+mod v007_proton_mail_message_counters;
 
 const VERSION_TABLE_NAME: &str = "proton_mail_db_version";
 
 pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
-    let mut migrations: Vec<Box<dyn Migration>> = vec![Box::new(V0)];
+    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
+    let mut migrations = embedded_migrations(&DIR);
+    migrations.push(Box::new(
+        v001_proton_mail_default_labels::DefaultLabelsMigration,
+    ));
+    migrations.push(Box::new(
+        v005_proton_mail_conversation_counters::ConversationCountersMigration,
+    ));
+    migrations.push(Box::new(
+        v007_proton_mail_message_counters::MessageCountersMigration,
+    ));
     let mut tether = stash.connection();
     let migrator = Migrator::new();
     migrator

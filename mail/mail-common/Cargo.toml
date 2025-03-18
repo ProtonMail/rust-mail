@@ -16,6 +16,7 @@ file-format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
+include_dir = { workspace = true }
 itertools = { workspace = true }
 html2text = { workspace = true }
 lazy_static = { workspace = true }

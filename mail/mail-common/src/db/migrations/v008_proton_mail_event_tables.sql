@@ -1,0 +1,1 @@
+CREATE TABLE event_id_store (id TEXT PRIMARY KEY, value TEXT NOT NULL)
