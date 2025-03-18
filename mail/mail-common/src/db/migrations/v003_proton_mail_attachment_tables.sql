@@ -19,15 +19,12 @@ CREATE TABLE attachments (
   transfer_encoding TEXT DEFAULT NULL,
   image_width TEXT DEFAULT NULL,
   image_height TEXT DEFAULT NULL,
-  remote_id TEXT UNIQUE DEFAULT NULL, -- Internal use only
   attachment_type TEXT NOT NULL, -- JSON
 
   CONSTRAINT attachments_address_id FOREIGN KEY (local_address_id) REFERENCES addresses (local_id),
   CONSTRAINT attachments_conversation_id FOREIGN KEY (local_conversation_id) REFERENCES conversations (local_id) ON DELETE CASCADE,
   CONSTRAINT attachments_message_id FOREIGN KEY (local_message_id) REFERENCES messages (local_id) ON DELETE CASCADE
 );
-
-CREATE UNIQUE INDEX index_attachments_rid ON attachments (remote_id)
 
 CREATE TABLE attachment_cache (
     attachment_id INTEGER PRIMARY KEY,

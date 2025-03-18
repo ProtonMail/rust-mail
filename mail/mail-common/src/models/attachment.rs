@@ -5,7 +5,7 @@ use crate::datatypes::{
 };
 use crate::models::*;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -28,7 +28,7 @@ use proton_crypto_inbox::attachment::{
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::exports::ToSql;
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
@@ -90,7 +90,6 @@ use uuid::Uuid;
 ///
 #[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize, Default)]
 #[TableName("attachments")]
-#[ModelActions(on_save)]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -218,6 +217,50 @@ impl ModelIdExtension for Attachment {
             _ => None,
         }
     }
+
+    /// Return the local id counterpart for a given `remote_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn remote_id_counterpart(
+        remote_id: Self::RemoteId,
+        tether: &Tether,
+    ) -> Result<Option<Self::IdType>, StashError> {
+        let json = serde_json::to_string(&AttachmentType::Remote(Some(remote_id)))
+            .context("error serializing attachment_type")
+            .map_err(StashError::Custom)?;
+
+        match tether
+            .query_value::<_, Self::IdType>(
+                indoc!(
+                    "
+                    SELECT
+                        local_id AS value
+                    FROM
+                        attachments
+                    WHERE
+                        attachment_type = ?
+                    LIMIT 1
+                    ",
+                ),
+                params![json],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
+    }
 }
 
 impl Attachment {
@@ -311,11 +354,14 @@ impl Attachment {
             } else {
                 error!("local_id exists but attachment does not exist in database?!");
             }
-            // If another remote attachment exists in the db
-        } else if let Some(remote_id) = self.remote_id() {
-            if let Some(existing) =
-                Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
-            {
+        // If another remote attachment exists in the db
+        } else if self.remote_id().is_some() {
+            let json = serde_json::to_string(&self.attachment_type)
+                .context("error serializing attachment_type")
+                .map_err(StashError::Custom)?;
+            let att =
+                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?;
+            if let Some(existing) = att {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
@@ -343,29 +389,6 @@ impl Attachment {
         }
 
         <Self as Model>::save(self, bond).await
-    }
-
-    /// Extends [`Model::save()`] to set the remote id
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id() {
-            bond.execute(
-                "UPDATE attachments SET remote_id = ? WHERE local_id = ?",
-                params![remote_id, self.local_id.unwrap()],
-            )
-            .await?;
-        } else {
-            bond.execute(
-                "UPDATE attachments SET remote_id = NULL WHERE local_id = ?",
-                params![self.local_id.unwrap()],
-            )
-            .await?;
-        }
-        Ok(())
     }
 
     /// Fetch attachment content from the API.
@@ -497,9 +520,11 @@ impl Attachment {
             // Handle case where we have local not uploaded attachments.
             let existing_attachment = if let Some(local_id) = metadata.local_id {
                 Attachment::find_by_id(local_id, bond).await?
-            } else if let AttachmentType::Remote(Some(remote_id)) = &metadata.attachment_type {
-                Attachment::find_first("WHERE remote_id = ?", params![remote_id.clone()], bond)
-                    .await?
+            } else if metadata.remote_id().is_some() {
+                let json = serde_json::to_string(&metadata.attachment_type)
+                    .context("error serializing attachment_type")
+                    .map_err(StashError::Custom)?;
+                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?
             } else {
                 None
             };
@@ -558,9 +583,11 @@ impl Attachment {
             // Handle case where we have local not uploaded attachments.
             let existing_attachment = if let Some(local_id) = metadata.local_id {
                 Attachment::find_by_id(local_id, bond).await?
-            } else if let AttachmentType::Remote(Some(remote_id)) = &metadata.attachment_type {
-                Attachment::find_first("WHERE remote_id = ?", params![remote_id.clone()], bond)
-                    .await?
+            } else if metadata.remote_id().is_some() {
+                let json = serde_json::to_string(&metadata.attachment_type)
+                    .context("error serializing attachment_type")
+                    .map_err(StashError::Custom)?;
+                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?
             } else {
                 None
             };
