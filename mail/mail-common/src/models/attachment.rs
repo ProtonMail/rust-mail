@@ -205,6 +205,14 @@ impl Default for AttachmentType {
     }
 }
 
+impl AttachmentType {
+    pub fn to_json(&self) -> Result<String, StashError> {
+        serde_json::to_string(self)
+            .context("error serializing attachment_type")
+            .map_err(StashError::Custom)
+    }
+}
+
 sql_using_serde!(AttachmentType);
 
 impl ModelIdExtension for Attachment {
@@ -226,9 +234,7 @@ impl ModelIdExtension for Attachment {
         remote_id: Self::RemoteId,
         tether: &Tether,
     ) -> Result<Option<Self::IdType>, StashError> {
-        let json = serde_json::to_string(&AttachmentType::Remote(Some(remote_id)))
-            .context("error serializing attachment_type")
-            .map_err(StashError::Custom)?;
+        let json = AttachmentType::Remote(Some(remote_id)).to_json()?;
 
         match tether
             .query_value::<_, Self::IdType>(
@@ -354,16 +360,11 @@ impl Attachment {
                 error!("local_id exists but attachment does not exist in database?!");
             }
         // If another remote attachment exists in the db
-        } else if self.remote_id().is_some() {
-            let json = serde_json::to_string(&self.attachment_type)
-                .context("error serializing attachment_type")
-                .map_err(StashError::Custom)?;
-            let att =
-                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?;
-            if let Some(existing) = att {
-                self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
-            }
+        } else if let Some(existing) =
+            Attachment::find_by_remote_id(&self.attachment_type, bond).await?
+        {
+            self.local_id = existing.local_id;
+            self.row_id = existing.row_id;
         }
 
         if self.local_address_id.is_none() {
@@ -517,18 +518,13 @@ impl Attachment {
         let mut result = Vec::with_capacity(message.attachments_metadata.len());
         for metadata in &mut message.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
-            let existing_attachment = if let Some(local_id) = metadata.local_id {
+            let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
                 Attachment::find_by_id(local_id, bond).await?
-            } else if metadata.remote_id().is_some() {
-                let json = serde_json::to_string(&metadata.attachment_type)
-                    .context("error serializing attachment_type")
-                    .map_err(StashError::Custom)?;
-                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?
             } else {
-                None
+                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = existing_attachment {
+            if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -580,18 +576,13 @@ impl Attachment {
         let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
         for metadata in &mut conversation.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
-            let existing_attachment = if let Some(local_id) = metadata.local_id {
+            let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
                 Attachment::find_by_id(local_id, bond).await?
-            } else if metadata.remote_id().is_some() {
-                let json = serde_json::to_string(&metadata.attachment_type)
-                    .context("error serializing attachment_type")
-                    .map_err(StashError::Custom)?;
-                Attachment::find_first("WHERE attachment_type = ?", params![json], bond).await?
             } else {
-                None
+                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = existing_attachment {
+            if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -803,6 +794,20 @@ impl Attachment {
             attachment.local_id.unwrap()
         );
         Ok(attachment)
+    }
+
+    /// Tries to find an attachment by remote id.
+    /// This only returns Some if AttachmentType::Remote(Some(_)) and it finds such a record.
+    pub async fn find_by_remote_id(
+        attachment_type: &AttachmentType,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        if let AttachmentType::Remote(Some(_)) = attachment_type {
+            let json = attachment_type.to_json()?;
+            Attachment::find_first("WHERE attachment_type = ?", params![json], tether).await
+        } else {
+            Ok(None)
+        }
     }
 }
 
