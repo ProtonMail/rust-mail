@@ -147,7 +147,7 @@ pub async fn open_draft(
 ) -> Result<OpenDraft, DraftOpenError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let (draft, status) = RealDraft::open(ctx.clone(), message_id.into()).await?;
+        let (draft, status) = RealDraft::open(ctx.as_weak(), message_id.into()).await?;
         Ok::<_, RealProtonMailError>(OpenDraft {
             draft: Draft::new_impl(ctx, draft),
             sync_status: status.into(),

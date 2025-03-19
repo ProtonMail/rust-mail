@@ -1,6 +1,6 @@
 use std::mem;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::Weak;
 
 use crate::actions::draft;
 use crate::actions::draft::{AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend};
@@ -333,9 +333,13 @@ impl Draft {
     /// or the message is not a draft.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn open(
-        context: Arc<MailUserContext>,
+        context: Weak<MailUserContext>,
         message_id: LocalMessageId,
     ) -> Result<(Self, DraftSyncStatus), MailContextError> {
+        let context = context
+            .upgrade()
+            .ok_or_else(|| MailContextError::MissingContext)?;
+
         let tether = &mut context.user_stash().connection();
 
         let Some(mut message) = Message::find_by_id(message_id, tether).await? else {
