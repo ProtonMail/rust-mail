@@ -91,8 +91,6 @@ pub enum ComposerMode {
 pub enum Disposition {
     /// TODO: Document this variant.
     Attachment,
-
-    /// TODO: Document this variant.
     Inline,
 }
 

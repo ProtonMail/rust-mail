@@ -3,7 +3,6 @@
 use crate::action_queue::CoreActionError;
 use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use crate::auth_store::{AuthStore, DecryptExt};
-use crate::cache::CacheError;
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -71,8 +70,6 @@ pub enum CoreContextError {
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
-    #[error("Cache error: {0}")]
-    CacheError(#[from] CacheError),
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
     #[error("Attempting to create more than one context for the user with id {0}")]
@@ -80,7 +77,7 @@ pub enum CoreContextError {
     #[error("Queue Writer Guard Expired")]
     QueueWriterGuardExpired,
     #[error("{0}")]
-    Other(AnyhowError),
+    Other(#[from] AnyhowError),
 }
 
 impl<T: Action<Error: Into<CoreContextError>>> From<QueueActionError<T>> for CoreContextError {
@@ -235,7 +232,6 @@ pub struct Context {
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
-    sender_image_cache_size: u64,
     api_config: ApiConfig,
     cancellation_token: CancellationToken,
 }
@@ -254,7 +250,6 @@ impl Context {
     /// * `client`: Instance of the http client.
     /// * `network_callback`: Callback to be notified of network status changes.
     /// * `cache_path`: Cache path for cached data.
-    /// * `sender_image_cache_size`: Maximum size of the sender image cache.
     /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
     ///
     /// # Errors
@@ -268,7 +263,6 @@ impl Context {
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
         cache_path: impl Into<PathBuf>,
-        sender_image_cache_size: u64,
         connection_pool_size: Option<u32>,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -293,7 +287,6 @@ impl Context {
             user_db_initializers: initializers,
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
-            sender_image_cache_size,
             api_config,
             cancellation_token: CancellationToken::new(),
         }))
@@ -842,7 +835,6 @@ impl Context {
             user_id.clone(),
             session_id,
             cache_path,
-            self.sender_image_cache_size,
         )
         .await?;
 

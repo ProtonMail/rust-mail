@@ -1,5 +1,4 @@
 mod action_queue;
-pub mod cache;
 mod events;
 mod images;
 mod initialization;
@@ -8,7 +7,6 @@ use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
-use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 pub use initialization::*;
@@ -22,7 +20,6 @@ use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
-use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
@@ -47,7 +44,6 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    cache: Cache,
     event_loop: EventLoop,
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
@@ -62,9 +58,6 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        let cache_path = mail_context.mail_cache_path(user_context.user_id());
-        let cache = Cache::new(cache_path, mail_context.mail_cache_size).await?;
-
         register_mail_actions(user_context.queue());
 
         let wait_for_online = WFO::create(user_context.session().status_watcher());
@@ -82,7 +75,6 @@ impl MailUserContext {
             this: Weak::clone(this),
             mail_context,
             user_context,
-            cache,
             event_loop: EventLoop::new(),
             prefetch: OnceLock::new(),
             default_queue_executor,
@@ -130,16 +122,6 @@ impl MailUserContext {
                 interval.tick().await;
             }
         });
-    }
-
-    /// Return a reference on the attachments cache
-    pub fn attachements_cache(&self) -> &ProtonCache<CacheAttachmentConfig> {
-        &self.cache.attachments_cache
-    }
-
-    /// Return a reference on the message body cache
-    pub fn messages_cache(&self) -> &ProtonCache<CacheMessageConfig> {
-        &self.cache.messages_cache
     }
 
     pub fn session(&self) -> &Session {
@@ -365,11 +347,6 @@ impl MailUserContext {
         .inspect_err(|err| error!("send preferences: {err:?}"))?;
 
         Ok(send_preferences)
-    }
-
-    /// Returns the cache path for mail related resource.
-    pub fn mail_cache_path(&self) -> PathBuf {
-        self.mail_context.mail_cache_path(self.user_id())
     }
 
     /// Logs this user out.

@@ -2,7 +2,6 @@ use proton_action_queue::action::FactoryError;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
 use proton_api_core::login::SaltError;
 use proton_api_core::store::StoreError;
-use proton_core_common::cache::CacheError;
 use proton_core_common::models::RegisteredDeviceError;
 use proton_core_common::os::KeyChainError;
 use proton_core_common::KeyHandlingError;
@@ -105,18 +104,6 @@ impl From<IOError> for Unexpected {
 impl From<StashError> for Unexpected {
     fn from(_value: StashError) -> Self {
         Self::Database
-    }
-}
-impl From<CacheError> for Unexpected {
-    fn from(error: CacheError) -> Self {
-        match error {
-            CacheError::IO(io_error) => Self::from(io_error),
-            CacheError::QuickCache(anyhow) => Self::from(anyhow),
-            CacheError::Callback(anyhow) => Self::from(anyhow),
-            CacheError::InsertFailed(_)
-            | CacheError::KeyDontExist
-            | CacheError::NeedExtraMetadata => Self::Internal,
-        }
     }
 }
 

@@ -249,10 +249,11 @@ impl Send {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let Some(stored_message_body) = Message::load_decrypted_message_body_from_cache(
-            context,
+        let Some(stored_message_body) = Message::load_decrypted_message_body(
             message_metadata.local_id.unwrap(),
-        )?
+            guard.tether(),
+        )
+        .await?
         else {
             return Err(AppError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
         };
@@ -295,6 +296,7 @@ impl Send {
             // Even though we are already passing in the message body metadata we
             // leave this parameter here for when we handle the PGP embedded case.
             &attachments,
+            guard,
         )
         .await
         .map_err(SaveOrSendError::SendMessage)

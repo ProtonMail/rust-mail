@@ -36,23 +36,17 @@ impl MailUserSession {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
-            if let Some(path) = ctx
-                .image_for_sender(
+            Ok::<_, RealProtonMailError>(
+                ctx.image_for_sender(
                     address,
-                    bimi_selector.as_deref(),
+                    bimi_selector,
                     display_sender_image,
                     size,
                     mode,
                     format,
                 )
-                .await?
-            {
-                Result::<_, RealProtonMailError>::Ok(Some(
-                    path.to_str().ok_or(Unexpected::Unknown)?.to_owned(),
-                ))
-            } else {
-                Ok(None)
-            }
+                .await?,
+            )
         })
         .await
         .map_err(UserSessionError::from)

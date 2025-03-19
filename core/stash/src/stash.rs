@@ -1348,6 +1348,25 @@ impl Drop for Bond<'_> {
     }
 }
 
+impl IntoTransaction for Tether {
+    #[allow(clippy::manual_async_fn)]
+    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send {
+        async {
+            self.transaction()
+                .await
+                .context("Could not start transaction for tether")
+        }
+    }
+}
+
+/// This trait should only be used in functions that have to create and commit several
+/// transactions.
+/// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
+pub trait IntoTransaction {
+    /// Creates a transaction. The error is boxed.
+    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send;
+}
+
 /// This encapsulates the logic of handling [`TetherOperation`]s.
 /// An actor owning a queue in `Tether` should create this. This should be cleaned up when that
 /// `Tether` gets dropped.

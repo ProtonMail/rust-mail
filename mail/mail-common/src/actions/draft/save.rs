@@ -1,12 +1,12 @@
+use std::mem;
+
 use crate::actions::draft::{
     local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
 };
-use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalMessageId, MessageSender, MessageSenders, MimeType,
     SystemLabelId,
 };
-use crate::decrypted_message::StorableMessageBodyRef;
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{compose, Draft, ReplyMode, SaveOrSendError};
@@ -16,7 +16,6 @@ use crate::models::{
     MetadataId,
 };
 use crate::{draft, AppError, MailContextError, MailUserContext};
-use anyhow::anyhow;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
@@ -126,15 +125,15 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn apply_local(
         &self,
         action_id: ActionId,
-        ctx: &MailUserContext,
+        _: &MailUserContext,
         action: &mut Self::Action,
-        tether: &Bond<'_>,
+        bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        let local_draft_id = local_draft_label_id(tether).await?;
-        let local_all_draft_id = local_all_draft_label_id(tether).await?;
-        let local_all_mail_id = local_all_mail_label_id(tether).await?;
+        let local_draft_id = local_draft_label_id(bond).await?;
+        let local_all_draft_id = local_all_draft_label_id(bond).await?;
+        let local_all_mail_id = local_all_mail_label_id(bond).await?;
 
-        let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tether)
+        let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to load draft metadata: {e:?}");
@@ -145,7 +144,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let body_len = action.body.len() as u64;
-        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), tether)
+        let Some(address) = Address::find_by_remote_id(action.address_id.clone(), bond)
             .await
             .inspect_err(|e| error!("Failed to load address: {e:?}"))?
         else {
@@ -154,7 +153,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let attachments = action
-            .attachments(tether)
+            .attachments(bond)
             .await
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
         debug!("Draft has {} attachments", attachments.len());
@@ -164,7 +163,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             id
         } else {
             debug!("Conversation does not exist, creating");
-            let display_order = Conversation::next_display_order(tether)
+            let display_order = Conversation::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
             let mut conversation = action.create_new_conversation(
@@ -176,7 +175,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 action.subject.clone(),
             );
             conversation
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e:?}"))?;
             metadata.local_conversation_id = Some(conversation.local_id.unwrap());
@@ -186,7 +185,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let time = draft::compose::create_timestamp();
         let (message, body_metadata) = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
-            let Some(mut message) = Message::find_by_id(message_id, tether)
+            let Some(mut message) = Message::find_by_id(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message: {e:?}"))?
             else {
@@ -210,11 +209,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 time,
             );
 
-            message.save(tether).await.inspect_err(|e| {
+            message.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft message: {e:?}");
             })?;
 
-            let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, tether)
+            let Some(mut body_metadata) = MessageBodyMetadata::for_message(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message metadata: {e:?}"))?
             else {
@@ -224,14 +223,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
             body_metadata.attachments = attachments;
             body_metadata.mime_type = action.mime_type;
 
-            body_metadata.save(tether).await.inspect_err(|e| {
+            body_metadata.save(bond).await.inspect_err(|e| {
                 error!("Failed to update draft body metadata: {e:?}");
             })?;
 
             (message, body_metadata)
         } else {
             debug!("Local message id is not set, creating new draft");
-            let display_order = Message::next_display_order(tether)
+            let display_order = Message::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
             let mut message = action.create_new_message(
@@ -244,7 +243,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             );
             message.local_conversation_id = Some(conversation_id);
             message
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to save message: {e:?}"))?;
 
@@ -259,14 +258,14 @@ impl proton_action_queue::action::Handler for SaveHandler {
             };
 
             message_body_metadata
-                .save(tether)
+                .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e:?}"))?;
 
             Message::apply_label(
                 local_draft_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -276,7 +275,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             Message::apply_label(
                 local_all_draft_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -286,7 +285,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             Message::apply_label(
                 local_all_mail_id,
                 std::iter::once(message.local_id.unwrap()),
-                tether,
+                bond,
             )
             .await
             .inspect_err(|e| {
@@ -296,21 +295,16 @@ impl proton_action_queue::action::Handler for SaveHandler {
             (message, message_body_metadata)
         };
 
-        // Store body in cache.
-        let raw_body = StorableMessageBodyRef {
-            body: &action.body,
-            ..Default::default()
-        };
-
-        Message::store_raw_message_in_cache(ctx, message.local_id.unwrap(), raw_body).inspect_err(
-            |e| {
+        let body = mem::take(&mut action.body);
+        Message::store_decrypted_message_body(message.local_id.unwrap(), body, bond)
+            .await
+            .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
-            },
-        )?;
+            })?;
 
         metadata.local_message_id = Some(message.local_id.unwrap());
         metadata.save_action_id = Some(action_id);
-        metadata.save(tether).await.inspect_err(|e| {
+        metadata.save(bond).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e:?}");
         })?;
 
@@ -423,7 +417,7 @@ impl Save {
 
         // Reload attachments if they don't have remote id or key packets.
         for attachment in &mut message_body_metadata.attachments {
-            if attachment.remote_id.is_none() || attachment.key_packets.is_none() {
+            if attachment.remote_id().is_none() || attachment.key_packets.is_none() {
                 debug!(
                     "Reloading attachment from db: {}",
                     attachment.local_id.unwrap()
@@ -499,13 +493,14 @@ impl Save {
                 new_message_body_metadata.attachments.len(),
                 message_body_metadata.attachments.len()
             );
+
             for (index, original_attachment) in message_body_metadata
                 .attachments
                 .iter()
                 .enumerate()
                 .filter(|(_, a)| a.remote_id().is_some())
             {
-                let Some(remote_id) = original_attachment.remote_id.as_ref() else {
+                let Some(remote_id) = &original_attachment.remote_id() else {
                     // We can't do this if the attachment has no remote id.
                     continue;
                 };
@@ -529,14 +524,14 @@ impl Save {
                     debug_assert_eq!(original_attachment.content_id, new_attachment.content_id);
                     // Safe to unwrap, server responses always have remote id.
                     debug_assert_ne!(
-                        original_attachment.remote_id.as_ref().unwrap(),
-                        new_attachment.remote_id.as_ref().unwrap()
+                        original_attachment.remote_id().as_ref().unwrap(),
+                        new_attachment.remote_id().as_ref().unwrap()
                     );
                     //Inherited attachment will be removed and replaced by a new id.
                     debug!(
                         "Removing inherited attachment {}: {}",
                         original_attachment.local_id.unwrap(),
-                        remote_id,
+                        &remote_id,
                     );
                     // Unlink previous attachment.
                     bond.execute(indoc! {
@@ -568,47 +563,30 @@ impl Save {
 
                     // Ensure the newly created attachment has a data copy. This is required
                     // for sending to external (non-proton) addresses.
-                    let ctx_arc = ctx.as_arc();
+
                     let original_attachment_id = original_attachment.local_id.unwrap();
-                    let original_file_size = original_attachment.size;
-                    let original_attachment_key = CacheAttachmentKey::from(original_attachment);
-                    let new_attachment_key =
-                        CacheAttachmentKey::from(new_attachment as &Attachment);
-                    tokio::task::spawn_blocking(move || {
-                        // TODO(post cache rfc): Optimized copy
-                        let Some(mut reader) = ctx_arc
-                            .attachements_cache()
-                            .get_item(&original_attachment_key)
-                            .inspect_err(|e| {
-                                error!("Failed to get attachment from cache: {e:?}")
-                            })?
-                        else {
-                            error!("Attachment could not be found in cache");
-                            return Err(AppError::AttachmentMissing(original_attachment_id).into());
-                        };
+                    let Some(og_path) =
+                        MailUserContext::get_attachment_from_cache(original_attachment_id, &bond)
+                            .await?
+                    else {
+                        error!("Attachment could not be found in cache");
+                        return Err(AppError::AttachmentMissing(original_attachment_id).into());
+                    };
 
-                        let mut data =
-                            Vec::with_capacity(original_file_size.try_into().unwrap_or(0));
+                    let og_data = tokio::fs::read(og_path).await?;
 
-                        std::io::copy(&mut reader, &mut data).inspect_err(|e| {
-                            error!("Failed to load original attachment data: {e:?}")
-                        })?;
-
-                        ctx_arc
-                            .attachements_cache()
-                            .add_item(new_attachment_key, &data)
-                            .inspect_err(|e| {
-                                error!("Failed to write attachment into the cache: {e:?}")
-                            })?;
-
-                        Ok::<_, MailContextError>(())
-                    })
-                    .await
-                    .map_err(|e| {
-                        let e = anyhow!("Failed to join blocking task: {e:?}");
-                        error!("{e:?}");
-                        MailContextError::Other(e)
-                    })??;
+                    // This could be faster:
+                    // - Hard-link to avoid the copy altogether
+                    // - Use fs::copy which uses faster syscalls on linux (copy_file_range, sendfile...)
+                    //
+                    // But we just userspace copy for now.
+                    ctx.store_attachment_in_cache(
+                        &new_attachment.filename,
+                        new_attachment.local_id.unwrap(),
+                        og_data,
+                        &bond,
+                    )
+                    .await?;
                 }
             }
         }

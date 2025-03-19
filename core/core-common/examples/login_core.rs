@@ -33,7 +33,6 @@ async fn main() {
         [],
         config,
         cache_dir,
-        1024 * 1024,
         None,
     )
     .await

@@ -1,11 +1,10 @@
 pub use self::keys::*;
 use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
-use crate::cache::ProtonCache;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::models::sender_image_cache::SenderImage;
 use crate::{Context, CoreContextError, CoreContextResult};
+use anyhow::Context as _;
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
@@ -14,6 +13,7 @@ use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
+use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -51,8 +51,8 @@ pub struct UserContext {
     user_id: UserId,
     session_id: SessionId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
-    pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
     cancellation_token: CancellationToken,
+    pub cache_path: PathBuf,
 }
 
 impl Debug for UserContext {
@@ -71,15 +71,8 @@ impl UserContext {
         user_id: UserId,
         session_id: SessionId,
         cache_path: PathBuf,
-        sender_image_cache_size: u64,
     ) -> CoreContextResult<Arc<Self>> {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
-        let images_logo_cache = Self::init_sender_image_cache(
-            cache_path.join("sender_images"),
-            sender_image_cache_size,
-            &user_stash,
-        )
-        .await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let this = Arc::new(Self {
@@ -90,29 +83,19 @@ impl UserContext {
             user_id,
             session_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
-            images_logo_cache,
+            cache_path,
             cancellation_token,
         });
         let this_weak = Arc::downgrade(&this);
 
+        fs::create_dir_all(this.sender_images_cache_path())
+            .context("Error creating sender image cache path")?;
+
         this.queue().register_execution_context(this_weak);
 
+        fs::create_dir_all(this.sender_images_cache_path())?;
+
         Ok(this)
-    }
-
-    async fn init_sender_image_cache(
-        cache_path: PathBuf,
-        cache_size: u64,
-        user_stash: &Stash,
-    ) -> CoreContextResult<Arc<ProtonCache<SenderImage>>> {
-        let cache = ProtonCache::new(
-            cache_path.join("images_logo_cache"),
-            cache_size,
-            user_stash.to_owned(),
-        )
-        .await?;
-
-        Ok(Arc::new(cache))
     }
 
     /// Get the network session.
@@ -231,5 +214,10 @@ impl UserContext {
     /// Cancel all tasks which are bound to this context.
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
+    }
+
+    #[must_use]
+    pub fn sender_images_cache_path(&self) -> PathBuf {
+        self.cache_path.join("sender_images")
     }
 }

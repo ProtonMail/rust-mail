@@ -1,10 +1,9 @@
-use crate::cache::CacheAttachmentKey;
 use crate::datatypes::{Disposition, MimeType};
-use crate::decrypted_message::StorableMessageBody;
 use crate::draft::recipients::ValidationState;
 use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
+use proton_action_queue::action::WriterGuard;
 use proton_api_mail::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
@@ -81,6 +80,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
     Ok(send_preferences)
 }
 
+#[allow(clippy::too_many_arguments)]
 /// Builds the email packages for all recipients.
 pub async fn build_packages<Provider: PGPProviderSync>(
     context: &MailUserContext,
@@ -88,8 +88,9 @@ pub async fn build_packages<Provider: PGPProviderSync>(
     address_keys: &UnlockedAddressKeys<Provider>,
     send_preferences: HashMap<String, SendPreferences<Provider::PublicKey>>,
     mime_type: MimeType,
-    stored_message_body: &StorableMessageBody,
+    stored_message_body: &str,
     attachments: &[Attachment],
+    guard: &mut WriterGuard<'_>,
 ) -> Result<Vec<Package>, PackageError> {
     // Which packages do we have to generate?
     let demanded_packages: HashSet<_> = send_preferences
@@ -121,6 +122,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
                     mime_type,
                     stored_message_body,
                     attachments,
+                    guard,
                 )
                 .await?
             }
@@ -164,7 +166,7 @@ pub async fn build_packages<Provider: PGPProviderSync>(
 pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    body: &StorableMessageBody,
+    body: &str,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for html");
     // No up-convert text is fine
@@ -172,7 +174,7 @@ pub fn generate_html_encrypted_package_body<Provider: PGPProviderSync>(
         pgp_provider,
         address_key,
         PackageMimeType::Html,
-        body.body.as_bytes(),
+        body.as_bytes(),
     )?;
     Ok(package_body)
 }
@@ -184,14 +186,14 @@ pub fn generate_text_encrypted_package_body<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     mime_type: MimeType,
-    body: &StorableMessageBody,
+    body: &str,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for text");
     let text_body: String;
     let body_data = if mime_type == MimeType::TextPlain {
-        &body.body
+        body
     } else {
-        text_body = html_to_text(&body.body);
+        text_body = html_to_text(body);
         &text_body
     };
     let package_body = package_body_encrypt(
@@ -209,39 +211,44 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
     mime_type: MimeType,
-    body: &StorableMessageBody,
+    body: &str,
     attachments: &[Attachment],
+    guard: &mut WriterGuard<'_>,
 ) -> Result<EncryptedPackageBody, PackageError> {
     debug!("Encrypt package for mime");
-    let mut content = Vec::with_capacity(body.body.len());
+    let mut content = Vec::with_capacity(body.len());
     let mut builder = InboxMimeBuilder::new();
 
     // Generate the multipart/mime message body.
     let text_body: String;
     if mime_type == MimeType::TextHtml {
-        text_body = html_to_text(&body.body);
-        builder = builder
-            .html_body(body.body.as_bytes())
-            .text_body(&text_body);
+        text_body = html_to_text(body);
+        builder = builder.html_body(body.as_bytes()).text_body(&text_body);
     } else {
-        builder = builder.text_body(&body.body);
+        builder = builder.text_body(body);
     }
 
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
     for attachment in attachments {
-        if attachment.remote_id.is_none() {
-            return Err(PackageError::AttachmentNoRemoteId);
-        };
+        match attachment.attachment_type {
+            crate::models::AttachmentType::Remote(Some(_)) => (),
+            crate::models::AttachmentType::Remote(None) => {
+                return Err(PackageError::AttachmentNoRemoteId);
+            }
+            crate::models::AttachmentType::Pgp => {
+                continue;
+            }
+        }
 
-        let key = CacheAttachmentKey::from(attachment);
-        let Some(attachment_path) = context.attachements_cache().get_item_path(&key) else {
-            return Err(PackageError::AttachmentDataMissing);
-        };
-        let loaded_data = tokio::fs::read(&attachment_path).await.map_err(|e| {
-            error!("Failed to read attachment file: {e:?}");
-            PackageError::AttachmentLoad(e)
-        })?;
+        let loaded_data = context
+            .get_attachment_content_data(attachment, guard)
+            .await
+            .map_err(|e| {
+                error!("Failed to read attachment file: {e:?}");
+                PackageError::AttachmentLoad(Box::new(e))
+            })?;
+
         let mime_type = attachment.mime_type.to_string();
 
         match attachment.disposition {
@@ -402,8 +409,17 @@ pub fn process_attachment_cleartext<Provider: PGPProviderSync>(
     // Reveal session keys of the attachments to the server.
     let mut attachment_keys = HashMap::new();
     for attachment in attachments {
-        //TODO(ET-1407): Correctly handle this error.
-        let remote_attachment_id = attachment.remote_id.as_ref().expect("Should be set");
+        let remote_attachment_id = match &attachment.attachment_type {
+            crate::models::AttachmentType::Remote(Some(id)) => id,
+            crate::models::AttachmentType::Remote(None) => {
+                //TODO(ET-1407): Correctly handle this error.
+                return Err(PackageError::AttachmentNoRemoteId);
+            }
+            crate::models::AttachmentType::Pgp => {
+                continue;
+            }
+        };
+
         let attachment_info = attachment.decrypt_attachment_info(pgp_provider, sender_keys)?;
         attachment_keys.insert(
             remote_attachment_id.to_string(),
@@ -432,8 +448,14 @@ fn process_attachments<Provider: PGPProviderSync>(
 
     // Encrypt the attachment towards the recipient.
     for attachment in attachments {
-        let Some(remote_attachment_id) = attachment.remote_id.clone() else {
-            return Err(PackageError::AttachmentNoRemoteId);
+        let remote_attachment_id = match &attachment.attachment_type {
+            crate::models::AttachmentType::Remote(Some(id)) => id,
+            crate::models::AttachmentType::Remote(None) => {
+                return Err(PackageError::AttachmentNoRemoteId);
+            }
+            crate::models::AttachmentType::Pgp => {
+                continue;
+            }
         };
 
         if attachment.signature.is_none() && attachment.enc_signature.is_none() {

@@ -212,7 +212,7 @@ pub enum PackageError {
     #[error("Attachment Data Missing")]
     AttachmentDataMissing,
     #[error("Attachment failed to load: {0}")]
-    AttachmentLoad(std::io::Error),
+    AttachmentLoad(Box<MailContextError>),
     #[error("Failed to get attachment remote id")]
     AttachmentNoRemoteId,
     #[error("Failed to write mime body to buffer: {0}")]
@@ -428,13 +428,12 @@ impl Draft {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
-                let Some(d) = Message::load_decrypted_message_from_cache(
-                    Arc::clone(&context),
-                    message.local_id.unwrap(),
-                    tether,
-                )
-                .await
-                .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
+                let Some(d) =
+                    Message::load_decrypted_message_from_cache(message.local_id.unwrap(), tether)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to load decrypted data from cache: {e:?}")
+                        })?
                 else {
                     return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };
@@ -574,11 +573,9 @@ impl Draft {
 
         // Message body must be present to create a reply.
         let Some(source_message_body) =
-            Message::load_decrypted_message_from_cache_without_attachment_preload(
-                context, message_id, &tether,
-            )
-            .await
-            .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
+            Message::load_decrypted_message_from_cache(message_id, &tether)
+                .await
+                .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
         else {
             return Err(OpenError::MessageBodyMissing(message_id).into());
         };
@@ -669,17 +666,9 @@ impl Draft {
         }
 
         let mut attachments = source_message_body.metadata.attachments;
-        // TODO(ET-2348): PGP mime attachment support
-        let mut pgp_attachments = source_message_body.pgp_attachments;
 
         if reply_mode != ReplyMode::Forward {
             attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
-            if let Some(pgp_attachments) = &mut pgp_attachments {
-                pgp_attachments.retain(|v| {
-                    v.disposition
-                        == proton_crypto_inbox::proton_crypto_inbox_mime::Disposition::Inline
-                })
-            }
         };
 
         let mut draft = Self {
@@ -743,7 +732,7 @@ impl Draft {
             message_body_metadata.attachments.len()
         );
         for attachment in &message_body_metadata.attachments {
-            let Some(remote_id) = attachment.remote_id.clone() else {
+            let Some(remote_id) = attachment.remote_id().clone() else {
                 // When adding new attachment to a draft, we reflect the state correctly offline
                 // but we can not attach an attachment until it has a remote id. We skip attachments
                 // that still does not have a remote id. Since we always save before send and send
@@ -807,7 +796,7 @@ impl Draft {
             message_body_metadata.attachments.len()
         );
         for attachment in &message_body_metadata.attachments {
-            let Some(remote_id) = attachment.remote_id.clone() else {
+            let Some(remote_id) = attachment.remote_id().clone() else {
                 // When adding new attachment to a draft, we reflect the state correctly offline
                 // but we can not attach an attachment until it has a remote id. We skip attachments
                 // that still does not have a remote id. Since we always save before send and send
@@ -1027,18 +1016,15 @@ impl Draft {
         ctx: &MailUserContext,
         cid: &str,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
-        let tether = ctx.user_stash().connection();
+        let mut tether = ctx.user_stash().connection();
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
-        drop(tether);
         if let Some(attachment) = attachments
             .iter()
             .find(|a| a.content_id.as_deref() == Some(cid))
         {
             let data = ctx
-                .get_attachment_content_data(attachment)
-                .await?
-                .load()
+                .get_attachment_content_data(attachment, &mut tether)
                 .await?;
             Ok(EmbeddedAttachmentInfo {
                 data,

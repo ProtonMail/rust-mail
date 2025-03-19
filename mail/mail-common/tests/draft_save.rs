@@ -11,7 +11,6 @@ use proton_api_mail::services::proton::request_data::{
 use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
-use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -508,8 +507,8 @@ async fn create_draft_forward_inherits_all_attachments() {
 
     compare_inline_attachment(attachment_1, inline_attachment);
     assert_ne!(
-        attachment_2.remote_id.clone().unwrap(),
-        normal_attachment.id
+        attachment_2.remote_id().unwrap().as_str(),
+        normal_attachment.id.as_str()
     );
     assert_eq!(
         attachment_2.disposition,
@@ -520,7 +519,11 @@ async fn create_draft_forward_inherits_all_attachments() {
 }
 
 fn compare_inline_attachment(attachment: &Attachment, inline_attachment: MessageAttachment) {
-    assert_ne!(attachment.remote_id.clone().unwrap(), inline_attachment.id);
+    assert_ne!(
+        attachment.remote_id().unwrap().as_str(),
+        inline_attachment.id.as_str(),
+        "Expected the same remote id"
+    );
     assert_eq!(attachment.disposition, inline_attachment.disposition.into());
     assert_eq!(attachment.filename, inline_attachment.name);
     assert_eq!(attachment.size, inline_attachment.size);
@@ -622,18 +625,24 @@ async fn create_draft_reply_impl(
     .await
     .unwrap();
 
+    let tx = tether.transaction().await.unwrap();
     // Insert attachment data into the cache.
     for attachment in &remote_existing_message.body.attachments {
-        let local_attachment_id = Attachment::remote_id_counterpart(attachment.id.clone(), &tether)
+        let local_attachment_id = Attachment::remote_id_counterpart(attachment.id.clone(), &tx)
             .await
             .unwrap()
             .unwrap();
-        let attachment_cache_key = CacheAttachmentKey::new(local_attachment_id, &attachment.name);
         user_ctx
-            .attachements_cache()
-            .add_item(attachment_cache_key, attachment.name.as_bytes())
+            .store_attachment_in_cache(
+                &attachment.name,
+                local_attachment_id,
+                attachment.name.as_bytes().to_vec(),
+                &tx,
+            )
+            .await
             .unwrap();
     }
+    tx.commit().await.unwrap();
 
     // Create draft.
     let mut draft = Draft::reply(

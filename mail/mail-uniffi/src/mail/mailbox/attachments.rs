@@ -33,8 +33,8 @@ impl Mailbox {
         uniffi_async(async move {
             ctx.get_attachment(local_attachment_id.into())
                 .await
+                .map(DecryptedAttachment::try_from)?
                 .map_err(RealProtonMailError::from)
-                .map(Into::into)
         })
         .await
         .map_err(ActionError::from)

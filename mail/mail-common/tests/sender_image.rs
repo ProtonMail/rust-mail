@@ -59,7 +59,7 @@ async fn get_sender_image() {
     let image_path = user_ctx
         .image_for_sender(
             sender.address.clone(),
-            sender.bimi_selector.as_deref(),
+            sender.bimi_selector.clone(),
             sender.display_sender_image,
             None,
             None,

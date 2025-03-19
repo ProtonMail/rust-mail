@@ -9,7 +9,7 @@ use proton_core_common::models::Label;
 use proton_mail_common::datatypes::{
     attachment, AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _,
 };
-use proton_mail_common::models::{Conversation, ConversationLabel, Message};
+use proton_mail_common::models::{AttachmentType, Conversation, ConversationLabel, Message};
 
 // ------- TEST DATA -------
 
@@ -20,7 +20,7 @@ lazy_static! {
 
 static TEXT_ATTACHMENT: LazyLock<AttachmentMetadata> = LazyLock::new(|| AttachmentMetadata {
     local_id: None,
-    remote_id: Some(AttachmentId::from("MyAttachId")),
+    attachment_type: AttachmentType::Remote(Some(AttachmentId::from("MyAttachId"))),
     size: 1024,
     filename: "text.text".to_owned(),
     mime_type: attachment::MimeType::text_plain(),

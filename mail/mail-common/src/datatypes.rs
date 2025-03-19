@@ -49,6 +49,7 @@ mod rollback_item_type;
 mod search_options;
 mod system_folder;
 
+use anyhow::Context;
 pub use assigned_actions::*;
 pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
@@ -63,8 +64,8 @@ pub use system_folder::MovableSystemFolder;
 
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
-use crate::models::{MailSettings, MessageBodyMetadata};
-use crate::{AppError, MailUserContext};
+use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadata};
+use crate::{AppError, MailContextError, MailUserContext};
 use core::fmt;
 use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
@@ -93,9 +94,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
-use proton_crypto_inbox::message::{
-    DecryptableMessage, DecryptedBody, GettablePGPMessage, MessageError,
-};
+use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody, GettablePGPMessage};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{
     Disposition as CryptoDisposition, ProcessedMessage,
@@ -219,15 +218,16 @@ impl ToSql for ComposerMode {
     }
 }
 
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom)]
+/// Whether this is an embedded attachment.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, TryFrom, Default)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum Disposition {
-    /// TODO: Document this variant.
+    #[default]
+    /// This is meant to be shown as a regular attachment
     Attachment = 1,
 
-    /// TODO: Document this variant.
+    /// This is meant to be shown as an image inside of the message.
     Inline = 2,
 }
 
@@ -825,8 +825,11 @@ pub struct AttachmentMetadata {
     /// Local attachment id.
     pub local_id: Option<LocalAttachmentId>,
 
-    /// Attachment Id on the server.
-    pub remote_id: Option<AttachmentId>,
+    /// The attachment type of this attachment.
+    /// It can be a pgp attachment (local only, kept around for caching purposes)
+    /// Or a remote attachment, a real attachment, that has a RemoteId.
+    /// If you're looking for the AttachmentId, look here.
+    pub attachment_type: AttachmentType,
 
     /// Whether attachment is inlined or not.
     pub disposition: Disposition,
@@ -841,11 +844,20 @@ pub struct AttachmentMetadata {
     pub size: u64,
 }
 
+impl AttachmentMetadata {
+    pub fn remote_id(&self) -> Option<AttachmentId> {
+        match &self.attachment_type {
+            AttachmentType::Remote(id) => id.clone(),
+            _ => None,
+        }
+    }
+}
+
 impl From<ApiAttachmentMetadata> for AttachmentMetadata {
     fn from(value: ApiAttachmentMetadata) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id),
+            attachment_type: AttachmentType::Remote(Some(value.id)),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.parse().unwrap_or_default(),
             filename: value.name,
@@ -974,48 +986,81 @@ pub struct EncryptedMessageBody {
 impl EncryptedMessageBody {
     /// Decrypt and convert the encrypted message into a [`DecryptedMessageBody`].
     ///
+    /// It also stores the pgp attachments into the database.
+    ///
     /// # Errors
     ///
     /// Return error if the decryption failed.
-    pub fn into_decrypted_message<P: PGPProviderSync>(
-        self,
+    pub async fn into_decrypted_message<P: PGPProviderSync>(
+        mut self,
         ctx: Arc<MailUserContext>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         with_attachment_prefetch: bool,
-    ) -> Result<DecryptedMessageBody, MessageError> {
+    ) -> Result<DecryptedMessageBody, MailContextError> {
         // TODO: Verify signature.
         let (decrypted_body, _) = self
             .decrypt(&pgp_provider, &address_keys)
-            .inspect_err(|e| error!("Failed to decrypt message body: {e:?}"))?;
+            .context("Failed to decrypt message body")
+            .map_err(MailContextError::Other)?;
 
         match decrypted_body {
             DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
-                DecryptedMessageBody::new(body, self.metadata, None, None, ctx)
+                DecryptedMessageBody::new_prefetching(body, self.metadata, None, ctx)
             } else {
-                DecryptedMessageBody::without_prefetch(body, self.metadata, None, None)
+                DecryptedMessageBody::new_without_prefetching(body, self.metadata, None)
             }),
             DecryptedBody::Mime(ProcessedMessage {
                 body,
-                attachments,
+                // We store the pgp attachments as normal attachments
+                attachments: pgp_attachments,
                 encrypted_subject,
                 ..
-            }) => Ok(if with_attachment_prefetch {
-                DecryptedMessageBody::new(
-                    body,
-                    self.metadata,
-                    Some(attachments),
-                    encrypted_subject,
-                    ctx,
-                )
-            } else {
-                DecryptedMessageBody::without_prefetch(
-                    body,
-                    self.metadata,
-                    Some(attachments),
-                    encrypted_subject,
-                )
-            }),
+            }) => {
+                // We create the models first to keep the tx open for less time.
+                let mut model_attachments = vec![];
+                for att in pgp_attachments {
+                    let model_att = Attachment {
+                        attachment_type: AttachmentType::Pgp,
+                        content_id: Some(att.content_id),
+                        disposition: att.disposition.into(),
+                        filename: att.name,
+                        size: att.size as u64,
+                        mime_type: attachment::MimeType::from_str(&att.mime_type)
+                            .unwrap_or_default(),
+                        local_message_id: self.metadata.local_message_id,
+                        remote_message_id: self.metadata.remote_message_id.clone(),
+                        ..Default::default()
+                    };
+                    model_attachments.push((model_att, att.data));
+                }
+
+                let mut tether = ctx.user_stash().connection();
+                let tx = tether.transaction().await?;
+                for (mut att, data) in model_attachments {
+                    att.save(&tx).await?;
+                    ctx.store_attachment_in_cache(&att.filename, att.local_id.unwrap(), data, &tx)
+                        .await?;
+                    self.metadata.attachments.push(att);
+                }
+                self.metadata.save(&tx).await?;
+                tx.commit().await?;
+
+                Ok(if with_attachment_prefetch {
+                    DecryptedMessageBody::new_prefetching(
+                        body,
+                        self.metadata,
+                        encrypted_subject,
+                        ctx,
+                    )
+                } else {
+                    DecryptedMessageBody::new_without_prefetching(
+                        body,
+                        self.metadata,
+                        encrypted_subject,
+                    )
+                })
+            }
         }
     }
 }

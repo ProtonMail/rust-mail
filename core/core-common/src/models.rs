@@ -36,7 +36,6 @@ pub mod contact_card;
 pub mod contact_email;
 pub mod device;
 pub mod labels;
-pub mod sender_image_cache;
 
 pub use self::contact::*;
 pub use self::contact_card::*;

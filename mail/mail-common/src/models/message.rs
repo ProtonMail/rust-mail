@@ -35,9 +35,7 @@ use crate::datatypes::{
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
     MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
 };
-use crate::decrypted_message::{StorableMessageBody, StorableMessageBodyRef};
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
-use crate::user_context::cache::CacheMessageKey;
 use crate::MailContextResult;
 use crate::{AppError, MailUserContext};
 use anyhow::{anyhow, Context};
@@ -69,7 +67,6 @@ use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use std::path::PathBuf;
 use tracing::{debug, error, info, trace, warn};
 
 //TODO(ET-2277): Revert Serialize/Deserialize
@@ -1813,12 +1810,8 @@ impl Message {
         ctx: Arc<MailUserContext>,
         tether: &mut Tether,
     ) -> Result<DecryptedMessageBody, MailContextError> {
-        if let Some(decrypted) = Self::load_decrypted_message_from_cache(
-            Arc::clone(&ctx),
-            self.local_id.unwrap(),
-            tether,
-        )
-        .await?
+        if let Some(decrypted) =
+            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), tether).await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1849,7 +1842,10 @@ impl Message {
         .await?;
         trace!("Message successfully decrypted. Caching...");
 
-        Self::store_decrypted_message_body(&ctx, self.local_id.unwrap(), &decrypted)?;
+        let tx = tether.transaction().await?;
+        Self::store_decrypted_message_body(self.local_id.unwrap(), decrypted.body.clone(), &tx)
+            .await?;
+        tx.commit().await?;
 
         debug!("Message successfully synced.");
         Ok(decrypted)
@@ -2480,11 +2476,11 @@ impl Message {
         )
         .await?;
 
-        tokio::task::spawn_blocking(move || {
-            Self::store_decrypted_message_body(&ctx, message.local_id.unwrap(), &decrypted)?;
-            Ok((message, decrypted))
-        })
-        .await?
+        let tx = tether.transaction().await?;
+        Self::store_decrypted_message_body(message.local_id.unwrap(), decrypted.body.clone(), &tx)
+            .await?;
+        tx.commit().await?;
+        Ok((message, decrypted))
     }
 
     /// Sync message and body for mesasge with `message_id`.
@@ -2548,68 +2544,23 @@ impl Message {
             .await?;
         encrypted_message_body
             .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
+            .await
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e:?}");
                 MailContextError::Crypto
             })
     }
 
-    /// Store decrypted message body for message with `local_id` into cache.
+    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the database.
     ///
     /// # Errors
     ///
     /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, decrypted_message_body))]
-    pub(crate) fn store_decrypted_message_body(
-        ctx: &MailUserContext,
-        local_id: LocalMessageId,
-        decrypted_message_body: &DecryptedMessageBody,
-    ) -> Result<PathBuf, MailContextError> {
-        let storable_message =
-            StorableMessageBodyRef::from_decrypted_message_body(decrypted_message_body);
-        Self::store_raw_message_in_cache(ctx, local_id, storable_message)
-    }
-
-    /// Store raw data for message with `local_id` into cache.
-    ///
-    /// It's recommend the data be constructed from a [`DecryptedMessageBody`].
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, message))]
-    pub(crate) fn store_raw_message_in_cache(
-        ctx: &MailUserContext,
-        local_id: LocalMessageId,
-        message: StorableMessageBodyRef,
-    ) -> Result<PathBuf, MailContextError> {
-        let storable_message = &message
-            .serialize()
-            .inspect_err(|e| error!("Failed to serialize decrypted message body: {e:?}"))?;
-
-        let cache_key = CacheMessageKey::from(local_id);
-
-        Ok(ctx
-            .messages_cache()
-            .add_item(cache_key, storable_message)
-            .inspect_err(|e| {
-                error!("Failed to store message body in cache: {e:?}");
-            })?)
-    }
-
-    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the cache.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
-        ctx: Arc<MailUserContext>,
         local_id: LocalMessageId,
         tether: &Tether,
     ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
-        let cache_key = CacheMessageKey::from(local_id);
-
         let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
             .await
             .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e:?}"))?
@@ -2617,44 +2568,12 @@ impl Message {
             return Ok(None);
         };
 
-        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
+        let Some(body) = Self::load_decrypted_message_body(local_id, tether).await? else {
             return Ok(None);
         };
 
-        let message = StorableMessageBody::from_reader(reader)?;
-        Ok(Some(DecryptedMessageBody::from_storable(
-            message, metadata, ctx,
-        )))
-    }
-
-    /// Load a [`DecryptedMessageBody`] for message with `local_id` from the cache without
-    /// pre-loading all the attachments.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
-    pub(crate) async fn load_decrypted_message_from_cache_without_attachment_preload(
-        ctx: &MailUserContext,
-        local_id: LocalMessageId,
-        tether: &Tether,
-    ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
-        let cache_key = CacheMessageKey::from(local_id);
-
-        let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
-            .await
-            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e:?}"))?
-        else {
-            return Ok(None);
-        };
-
-        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
-            return Ok(None);
-        };
-
-        let message = StorableMessageBody::from_reader(reader)?;
-        Ok(Some(DecryptedMessageBody::from_storable_without_preload(
-            message, metadata,
+        Ok(Some(DecryptedMessageBody::new_without_prefetching(
+            body, metadata, None,
         )))
     }
 
@@ -2663,18 +2582,32 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the message failed to load.
-    pub(crate) fn load_decrypted_message_body_from_cache(
-        ctx: &MailUserContext,
+    pub(crate) async fn load_decrypted_message_body(
         local_id: LocalMessageId,
-    ) -> Result<Option<StorableMessageBody>, MailContextError> {
-        let cache_key = CacheMessageKey::from(local_id);
+        tether: &Tether,
+    ) -> Result<Option<String>, StashError> {
+        tether
+            .query_value::<_, Option<String>>(
+                indoc! {
+                    "SELECT body as value FROM message_body
+                        WHERE message_id = ?"
+                },
+                params![local_id],
+            )
+            .await
+    }
 
-        let Some(reader) = ctx.messages_cache().get_item(&cache_key)? else {
-            return Ok(None);
-        };
-
-        let message = StorableMessageBody::from_reader(reader)?;
-        Ok(Some(message))
+    pub(crate) async fn store_decrypted_message_body(
+        local_id: LocalMessageId,
+        message: String,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            "INSERT OR REPLACE INTO message_body (message_id, body) VALUES (?,?)",
+            params![local_id, message],
+        )
+        .await?;
+        Ok(())
     }
 
     /// Whether this message is a draft.
@@ -2844,8 +2777,6 @@ impl Default for Message {
 
 /// Metadata associated with the Body of a message.
 ///
-/// Message bodies are not stored in the database.
-///
 /// Note that this information does not come directly from the API, and so there
 /// is no equivalent API struct to convert from. Rather, the metadata is
 /// obtained from [`DecryptedMessageBody`].
@@ -2988,6 +2919,7 @@ impl MessageBodyMetadata {
             params![self.local_message_id],
         )
         .await?;
+
         for attachment in &mut self.attachments {
             attachment.save(bond).await?;
             bond

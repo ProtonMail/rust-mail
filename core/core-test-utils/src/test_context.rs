@@ -198,7 +198,6 @@ impl TestContext {
             all_initializers,
             api_config.clone(),
             tmp_dir.path().join("core-cache"),
-            4 * 1024 * 1024,
             None,
         )
         .await

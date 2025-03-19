@@ -1858,7 +1858,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
     assert_eq!(db_message.num_attachments, 2);
     assert_eq!(db_message.attachments_metadata.len(), 1);
     assert_eq!(
-        db_message.attachments_metadata[0].remote_id,
+        db_message.attachments_metadata[0].remote_id(),
         Some(attachment_id.clone())
     );
     assert_eq!(

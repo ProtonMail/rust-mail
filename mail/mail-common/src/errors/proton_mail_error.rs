@@ -116,7 +116,6 @@ impl From<AppError> for ProtonMailError {
             AppError::RemoteLabelDoesNotExist(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::RemoteLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::LocalLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::Cache(cache_error) => Self::from(cache_error),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
             AppError::Label(label_error) => Self::from(label_error),
@@ -162,6 +161,7 @@ impl From<MailContextError> for ProtonMailError {
     fn from(error: MailContextError) -> Self {
         match error {
             MailContextError::AccountMissing(_user_id) => Self::Unexpected(Unexpected::Database),
+            MailContextError::IntoTransactionError(_) => Self::Unexpected(Unexpected::Database),
             MailContextError::SessionMissing(_session_id) => Self::Unexpected(Unexpected::Database),
             MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
                 Self::Unexpected(Unexpected::Crypto)
@@ -178,7 +178,6 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::App(app_error) => Self::from(app_error),
             MailContextError::Stash(stash_error) => Self::from(stash_error),
             MailContextError::Api(api_service_error) => Self::from(api_service_error),
-            MailContextError::CacheError(cache_error) => Self::from(cache_error),
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
             MailContextError::Draft(draft_error) => Self::from(draft_error),
@@ -195,6 +194,11 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
             MailContextError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
             MailContextError::AttachmentEncryption(_) => Self::Unexpected(Unexpected::Crypto),
+            MailContextError::CalledFetchedAttachmentOnPgp
+            | MailContextError::CalledFetchedAttachmentLocalAttachment
+            | MailContextError::InvalidUtf8AttachmentPath(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
         }
     }
 }
@@ -481,7 +485,6 @@ impl From<MailboxError> for ProtonMailError {
             MailboxError::InvalidAction(anyhow) => Self::from(anyhow),
             MailboxError::Stash(stash_error) => Self::from(stash_error),
             MailboxError::MessageDecryption(message_error) => Self::from(message_error),
-            MailboxError::Cache(cache_error) => Self::from(cache_error),
             MailboxError::IO(io_error) => Self::from(io_error),
         }
     }

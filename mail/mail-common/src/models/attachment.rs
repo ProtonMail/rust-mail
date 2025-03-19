@@ -1,4 +1,3 @@
-use crate::cache::CacheAttachmentKey;
 use crate::datatypes::attachment::MimeType;
 use crate::datatypes::{
     attachment, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition,
@@ -6,7 +5,7 @@ use crate::datatypes::{
 };
 use crate::models::*;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
-use anyhow::anyhow;
+use anyhow::{anyhow, Context as _};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -29,13 +28,13 @@ use proton_crypto_inbox::attachment::{
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
-use stash::exports::ToSql;
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use stash::{params, sql_using_serde};
 use std::os::unix::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use tracing::{debug, error, info};
 use uuid::Uuid;
@@ -89,7 +88,7 @@ use uuid::Uuid;
 /// *ALWAYS* use [`Attachment::save()`].
 ///
 ///
-#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize, Default)]
 #[TableName("attachments")]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -100,9 +99,12 @@ pub struct Attachment {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAttachmentId>,
 
-    /// API Attachment id.
+    /// The attachment type of this attachment.
+    /// It can be a pgp attachment (local only, kept around for caching purposes)
+    /// Or a remote attachment, a real attachment, that has a RemoteId.
+    /// If you're looking for the AttachmentId, look here.
     #[DbField]
-    pub remote_id: Option<AttachmentId>,
+    pub attachment_type: AttachmentType,
 
     /// Address with which this attachment was encrypted.
     #[DbField]
@@ -190,15 +192,91 @@ pub struct Attachment {
     pub row_id: Option<u64>,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum AttachmentType {
+    /// Some if it exists in the server and None if it's local
+    Remote(Option<AttachmentId>),
+    Pgp,
+}
+
+impl Default for AttachmentType {
+    fn default() -> Self {
+        Self::Remote(None)
+    }
+}
+
+impl AttachmentType {
+    pub fn to_json(&self) -> Result<String, StashError> {
+        serde_json::to_string(self)
+            .context("error serializing attachment_type")
+            .map_err(StashError::Custom)
+    }
+}
+
+sql_using_serde!(AttachmentType);
+
 impl ModelIdExtension for Attachment {
     type RemoteId = AttachmentId;
 
     fn remote_id(&self) -> Option<&Self::RemoteId> {
-        self.remote_id.as_ref()
+        match &self.attachment_type {
+            AttachmentType::Remote(id) => id.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Return the local id counterpart for a given `remote_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn remote_id_counterpart(
+        remote_id: Self::RemoteId,
+        tether: &Tether,
+    ) -> Result<Option<Self::IdType>, StashError> {
+        let json = AttachmentType::Remote(Some(remote_id)).to_json()?;
+
+        match tether
+            .query_value::<_, Self::IdType>(
+                indoc!(
+                    "
+                    SELECT
+                        local_id AS value
+                    FROM
+                        attachments
+                    WHERE
+                        attachment_type = ?
+                    LIMIT 1
+                    ",
+                ),
+                params![json],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 }
 
 impl Attachment {
+    /// Gets the remote id of the attachment.
+    /// This is here to lower compile times.
+    pub fn remote_id(&self) -> Option<AttachmentId> {
+        match &self.attachment_type {
+            AttachmentType::Remote(id) => id.clone(),
+            _ => None,
+        }
+    }
     /// Load attachment metadata for a given `conversation_id`.
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
@@ -257,35 +335,20 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.local_id.is_none() {
-            if let Some(remote_id) = self.remote_id.clone() {
-                if let Some(existing) =
-                    Self::find_first("WHERE remote_id=?", params![remote_id], bond).await?
-                {
-                    self.local_id = existing.local_id;
-                    self.row_id = existing.row_id;
-                }
-            }
-        }
-
-        if self.local_id.is_some()
-            && (self.remote_id.is_none()
-                || self.key_packets.is_none()
-                || self.enc_signature.is_none()
-                || self.signature.is_none())
-        {
+        // If we already exist in the db
+        if let Some(local_id) = self.local_id {
             // There is currently a race because we try to write too much data at the same time
             // rather than what really changed. It's highly unlikely that we ever want to remove
             // the remote id of an attachment that already has one. This happens in the
             // context of drafts, where a local change to the message body metadata can
             // accidentally reset the attachment remote id to nothing, causing the send
             // to fail.
-            if let Some(existing) = Attachment::find_by_id(self.local_id.unwrap(), bond).await? {
+            if let Some(existing) = Attachment::find_by_id(local_id, bond).await? {
+                if existing.remote_id().is_some() {
+                    self.attachment_type = existing.attachment_type;
+                }
                 if self.key_packets.is_none() {
                     self.key_packets = existing.key_packets;
-                }
-                if self.remote_id.is_none() {
-                    self.remote_id = existing.remote_id;
                 }
                 if self.enc_signature.is_none() {
                     self.enc_signature = existing.enc_signature;
@@ -293,7 +356,15 @@ impl Attachment {
                 if self.signature.is_none() {
                     self.signature = existing.signature;
                 }
+            } else {
+                error!("local_id exists but attachment does not exist in database?!");
             }
+        // If another remote attachment exists in the db
+        } else if let Some(existing) =
+            Attachment::find_by_remote_id(&self.attachment_type, bond).await?
+        {
+            self.local_id = existing.local_id;
+            self.row_id = existing.row_id;
         }
 
         if self.local_address_id.is_none() {
@@ -399,16 +470,10 @@ impl Attachment {
         api: &PM,
         tether: &mut Tether,
     ) -> Result<Option<()>, AppError> {
-        let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
-            remote_id
-        } else {
+        let Some(remote_id) = self.remote_id() else {
             return Err(StashError::IdNotSet.into());
         };
-        let mut attachment = Self::from(
-            Self::fetch_metadata(remote_attachment_id, api)
-                .await?
-                .attachment,
-        );
+        let mut attachment = Self::from(Self::fetch_metadata(remote_id, api).await?.attachment);
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
         let tx = tether.transaction().await?;
@@ -452,19 +517,14 @@ impl Attachment {
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         let mut result = Vec::with_capacity(message.attachments_metadata.len());
         for metadata in &mut message.attachments_metadata {
-            //Handle case where we have local not uploaded attachments.
-            let attachment = if metadata.local_id.is_some() && metadata.remote_id.is_none() {
-                Attachment::find_by_id(metadata.local_id.unwrap(), bond).await?
+            // Handle case where we have local not uploaded attachments.
+            let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
+                Attachment::find_by_id(local_id, bond).await?
             } else {
-                Attachment::find_first(
-                    "WHERE remote_id = ?",
-                    params![metadata.remote_id.clone()],
-                    bond,
-                )
-                .await?
+                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = attachment {
+            if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -515,19 +575,14 @@ impl Attachment {
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
         for metadata in &mut conversation.attachments_metadata {
-            //Handle case where we have local not uploaded attachments.
-            let attachment = if metadata.local_id.is_some() && metadata.remote_id.is_none() {
-                Attachment::find_by_id(metadata.local_id.unwrap(), bond).await?
+            // Handle case where we have local not uploaded attachments.
+            let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
+                Attachment::find_by_id(local_id, bond).await?
             } else {
-                Attachment::find_first(
-                    "WHERE remote_id = ?",
-                    params![metadata.remote_id.clone()],
-                    bond,
-                )
-                .await?
+                Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = attachment {
+            if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -632,64 +687,6 @@ impl Attachment {
             })
     }
 
-    /// Encrypt an attachment from a given `path` with an optional `size_hint`.
-    ///
-    /// Returns the
-    /// # Errors
-    ///
-    /// Returns error if the encryption failed or the address can't be located.
-    pub async fn encrypt_from_path(
-        context: &MailUserContext,
-        address_id: &AddressId,
-        path: PathBuf,
-        size_hint: Option<usize>,
-    ) -> MailContextResult<EncryptedAttachment> {
-        let pgp_provider = new_pgp_provider();
-
-        let tether = context.user_stash().connection();
-        let unlocked_address_keys = context
-            .unlocked_address_keys(&pgp_provider, &tether, address_id)
-            .await?;
-
-        let primary_address_key = unlocked_address_keys.primary_for_mail().map_err(|e| {
-            error!("Could not retrieve primary address key: {e:?}");
-            MailContextError::Crypto
-        })?;
-        drop(tether);
-
-        tokio::task::spawn_blocking(move || {
-            let mut data = Vec::with_capacity(size_hint.unwrap_or(1024));
-            let mut writer = proton_crypto_inbox::attachment::encrypt_and_sign_to_writer(
-                &pgp_provider,
-                &primary_address_key,
-                &mut data,
-            )
-            .map_err(|e| {
-                error!("Failed to create encrypted attachment stream write: {e:?}");
-                MailContextError::Crypto
-            })?;
-            let mut stream_in = std::fs::File::open(&path).inspect_err(|e| {
-                error!("Failed to open attachment: {e:?}");
-            })?;
-            std::io::copy(&mut stream_in, &mut writer).map_err(|e| {
-                error!("Failed encrypted attachment: {e:?}");
-                MailContextError::Crypto
-            })?;
-
-            let metadata = writer.finalize().inspect_err(|e| {
-                error!("Failed finalize encrypted attachment: {e:?}");
-            })?;
-
-            Ok(EncryptedAttachment { metadata, data })
-        })
-        .await
-        .map_err(|err| {
-            let e = anyhow!("Failed to join attachment encryption task: {err:?}");
-            error!("{e:?}");
-            MailContextError::Other(e)
-        })?
-    }
-
     /// Create a new attachment from the given file `path`.
     ///
     /// It is expected that the attachment data temporarily exists in another location before it
@@ -748,7 +745,7 @@ impl Attachment {
 
         let mut attachment = Attachment {
             local_id: None,
-            remote_id: None,
+            attachment_type: AttachmentType::Remote(None),
             local_address_id,
             remote_address_id: Some(address_id.clone()),
             local_conversation_id: None,
@@ -779,19 +776,38 @@ impl Attachment {
         debug!("Saving new attachment record");
         let tx = tether.transaction().await?;
         attachment.save(&tx).await?;
-        tx.commit().await?;
 
         debug!("Storing attachment in cache");
-        let cache_key = CacheAttachmentKey::from(&attachment);
 
         let data = tokio::fs::read(path).await?;
-        ctx.attachements_cache().add_item(cache_key, &data)?;
+        ctx.store_attachment_in_cache(
+            &attachment.filename,
+            attachment.local_id.unwrap(),
+            data,
+            &tx,
+        )
+        .await?;
+        tx.commit().await?;
 
         info!(
             "Attachment created with id {}",
             attachment.local_id.unwrap()
         );
         Ok(attachment)
+    }
+
+    /// Tries to find an attachment by remote id.
+    /// This only returns Some if AttachmentType::Remote(Some(_)) and it finds such a record.
+    pub async fn find_by_remote_id(
+        attachment_type: &AttachmentType,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        if let AttachmentType::Remote(Some(_)) = attachment_type {
+            let json = attachment_type.to_json()?;
+            Attachment::find_first("WHERE attachment_type = ?", params![json], tether).await
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -818,7 +834,7 @@ impl From<ApiAttachment> for Attachment {
     fn from(value: ApiAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id),
+            attachment_type: AttachmentType::Remote(Some(value.id)),
             local_address_id: None,
             remote_address_id: Some(value.address_id),
             local_conversation_id: None,
@@ -847,7 +863,7 @@ impl From<ApiMessageAttachment> for Attachment {
     fn from(value: ApiMessageAttachment) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id),
+            attachment_type: AttachmentType::Remote(Some(value.id)),
             local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,
@@ -876,7 +892,7 @@ impl From<AttachmentMetadata> for Attachment {
     fn from(value: AttachmentMetadata) -> Self {
         Self {
             local_id: value.local_id,
-            remote_id: value.remote_id,
+            attachment_type: value.attachment_type,
             local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,
@@ -904,7 +920,7 @@ impl From<Attachment> for AttachmentMetadata {
     fn from(value: Attachment) -> Self {
         Self {
             local_id: value.local_id,
-            remote_id: value.remote_id,
+            attachment_type: value.attachment_type,
             disposition: value.disposition,
             mime_type: value.mime_type,
             filename: value.filename,
