@@ -82,6 +82,13 @@ pub trait ProtonMail {
         params: NewAttachmentParams,
     ) -> ApiServiceResult<PostAttachmentResponse>;
 
+    /// Delete an attachment with `id` on the server.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    async fn delete_attachment(&self, id: AttachmentId) -> ApiServiceResult<()>;
+
     /// TODO: Document this method.
     ///
     /// # Parameters

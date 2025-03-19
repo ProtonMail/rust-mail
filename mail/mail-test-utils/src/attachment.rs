@@ -156,6 +156,24 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate new mock for deleting an attachment on the server.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_id`      - The id of the attachment.
+    ///
+    #[function_name::named]
+    pub async fn mock_delete_attachment(&self, attachment_id: AttachmentId) {
+        let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
+        Mock::given(method("DELETE"))
+            .and(path(path_for_attachment))
+            .respond_with(ResponseTemplate::new(200))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate new mock for creating a new attachment.
     ///
     /// Note that encrypted parts of the data are not checked as they are prone to change
@@ -219,7 +237,7 @@ impl MailTestContext {
                 mock.respond_with(ResponseTemplate::new(code).set_body_json(error))
             }
         }
-        .up_to_n_times(1)
+        .expect(1)
         .named(function_name!())
         .mount(self.mock_server())
         .await;

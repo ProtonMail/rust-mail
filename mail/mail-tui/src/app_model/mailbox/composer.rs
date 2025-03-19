@@ -3,10 +3,10 @@ use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
-use crate::widgets::{TextInput, TextInputState};
+use crate::widgets::{ScrollableList, ScrollableListState, TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
-use proton_mail_common::datatypes::{Disposition, LocalMessageId, MimeType};
+use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
@@ -38,6 +38,7 @@ pub struct Composer {
     cc_input_state: TextInputState,
     bcc_input_state: TextInputState,
     subject_input_state: TextInputState,
+    attachment_list_state: ScrollableListState,
     attachment_infos: Vec<AttachmentInfo>,
     draft_sync_status: Option<DraftSyncStatus>,
     // for table observer.
@@ -286,6 +287,7 @@ impl Composer {
                 cc_input_state: TextInputState::with_value(cc_list),
                 bcc_input_state: TextInputState::with_value(bcc_list),
                 subject_input_state: TextInputState::with_value(subject),
+                attachment_list_state: ScrollableListState::new(None),
                 attachment_infos,
                 draft_sync_status: sync_status,
                 _observer_cancellation_token: cancellation_token,
@@ -389,6 +391,30 @@ impl Composer {
         ])
     }
 
+    /// Remove an attachment from the draft
+    fn remove_attachment(
+        &mut self,
+        context: Arc<MailUserContext>,
+        id: LocalAttachmentId,
+    ) -> Command<Messages> {
+        let action = self.draft.to_remove_attachment_action(id);
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Removing Attachment from message".to_owned(),
+            )),
+            Command::task(async move {
+                let tether = context.user_stash().connection();
+                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+                    Command::message(anyhow::Error::new(e).into())
+                } else {
+                    Command::message(ComposerMessage::RefreshAttachmentList.into())
+                };
+
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
+
     /// Add attachment to the draft
     fn refresh_attachment_list(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
         let metadata_id = self.draft.metadata_id;
@@ -403,6 +429,7 @@ impl Composer {
 }
 
 struct AttachmentInfo {
+    id: LocalAttachmentId,
     disposition: Disposition,
     filename: String,
     state: DraftAttachmentState,
@@ -411,6 +438,7 @@ struct AttachmentInfo {
 impl From<DraftAttachment> for AttachmentInfo {
     fn from(value: DraftAttachment) -> Self {
         Self {
+            id: value.metadata.local_id.unwrap(),
             disposition: value.metadata.disposition,
             filename: value.metadata.filename,
             state: value.state,
@@ -518,7 +546,7 @@ impl StateHandler for Composer {
         ])
         .areas(message_area);
 
-        frame.render_widget(
+        let list = ScrollableList::new(
             List::new(self.attachment_infos.iter().map(|a| {
                 Line::from(vec![
                     match a.state {
@@ -538,8 +566,8 @@ impl StateHandler for Composer {
                 ])
             }))
             .block(Block::new().title("Attachments").borders(Borders::TOP)),
-            attachment_list_area,
         );
+        frame.render_stateful_widget(list, attachment_list_area, &mut self.attachment_list_state);
 
         frame.render_widget(
             Block::new().borders(Borders::TOP | Borders::LEFT),
@@ -567,6 +595,7 @@ impl StateHandler for Composer {
         frame.render_widget(Line::from(help_text), footer);
     }
 
+    #[allow(clippy::too_many_lines)]
     fn handle_event(
         &mut self,
         _: &Arc<MailUserContext>,
@@ -598,7 +627,12 @@ impl StateHandler for Composer {
                             self.selected_input = SelectedInput::Body;
                         }
                         SelectedInput::Body => {
+                            self.selected_input = SelectedInput::Attachments;
+                            self.attachment_list_state.select(Some(0));
+                        }
+                        SelectedInput::Attachments => {
                             self.selected_input = SelectedInput::To;
+                            self.attachment_list_state.select(None);
                             self.to_input_state.set_selected(true);
                         }
                     }
@@ -624,7 +658,14 @@ impl StateHandler for Composer {
                     }
                 }
                 KeyCode::Char('d') => {
-                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    if self.selected_input == SelectedInput::Attachments {
+                        if let Some(index) = self.attachment_list_state.selected() {
+                            return Command::message(
+                                ComposerMessage::RemoveAttachment(self.attachment_infos[index].id)
+                                    .into(),
+                            );
+                        }
+                    } else if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Discard.into());
                     }
                 }
@@ -646,6 +687,19 @@ impl StateHandler for Composer {
             }
             SelectedInput::Body => {
                 self.text_area.input(tui_textarea::Input::from(event));
+            }
+            SelectedInput::Attachments => {
+                if let Event::Key(key) = &event {
+                    match key.code {
+                        KeyCode::Char('k') | KeyCode::Up => {
+                            self.attachment_list_state.prev();
+                        }
+                        KeyCode::Char('j') | KeyCode::Down => {
+                            self.attachment_list_state.next();
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
 
@@ -681,6 +735,9 @@ impl StateHandler for Composer {
                 self.attachment_infos = list.into_iter().map(AttachmentInfo::from).collect();
                 Command::none()
             }
+            ComposerMessage::RemoveAttachment(id) => {
+                self.remove_attachment(user_ctx.to_owned(), id)
+            }
         }
     }
 }
@@ -692,6 +749,7 @@ enum SelectedInput {
     Bcc,
     Subject,
     Body,
+    Attachments,
 }
 
 fn recipients_value_to_list(

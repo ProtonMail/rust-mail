@@ -2,7 +2,9 @@ use std::mem;
 use std::path::PathBuf;
 
 use crate::actions::draft;
-use crate::actions::draft::{AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend};
+use crate::actions::draft::{
+    AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend,
+};
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::attachments::DraftAttachment;
@@ -21,7 +23,7 @@ use compose::maybe_sanitize;
 use derive_more::derive::TryFrom;
 use futures::future::join3;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
-use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedError};
 use proton_api_core::consts::Mail;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::AddressId;
@@ -1044,7 +1046,7 @@ impl Draft {
     ///
     /// Returns error if the query or queuing the action failed.
     pub async fn add_attachment(
-        &mut self,
+        &self,
         ctx: &MailUserContext,
         attachment: Attachment,
     ) -> Result<ActionId, MailContextError> {
@@ -1056,18 +1058,15 @@ impl Draft {
 
         Ok(result.id)
     }
+
     /// Add a new `attachment` to this draft.
     ///
     /// Similar to [`add_attachment`] but return an action queuer instead.
     ///
-    pub fn to_add_attachment_action(
-        &mut self,
-        attachment: Attachment,
-    ) -> DraftAttachmentUploadQueuer {
+    pub fn to_add_attachment_action(&self, attachment: Attachment) -> DraftAttachmentUploadQueuer {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
         let attachment_id = attachment.local_id.unwrap();
-        //self.attachments.push(attachment);
 
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,
@@ -1076,6 +1075,38 @@ impl Draft {
             save_action,
             AttachmentUploadMode::Create,
         )
+    }
+
+    /// Remove the attachment with `attachment_id` from  this draft.
+    ///
+    /// Use [`Attachment::create_local`] to create a new attachment first.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query or queuing the action failed.
+    pub async fn remove_attachment(
+        &self,
+        ctx: &MailUserContext,
+        attachment_id: LocalAttachmentId,
+    ) -> Result<ActionId, MailContextError> {
+        let remove_action = self.to_remove_attachment_action(attachment_id);
+
+        let queue = ctx.action_queue();
+        let tether = ctx.user_stash().connection();
+        let result = remove_action.queue(queue, &tether).await?;
+
+        Ok(result.id)
+    }
+
+    /// Remove the attachment with `attachment_id` from  this draft.
+    ///
+    /// Similar to [`remove_attachment`] but return an action queuer instead.
+    ///
+    pub fn to_remove_attachment_action(
+        &self,
+        attachment_id: LocalAttachmentId,
+    ) -> DraftAttachmentRemovalQueuer {
+        DraftAttachmentRemovalQueuer::new(self.metadata_id, attachment_id)
     }
 
     /// Retry the upload of a failed attachment.
@@ -1355,6 +1386,56 @@ impl DraftAttachmentUploadQueuer {
             .queue_action_with_metadata(
                 AttachmentUpload::new(self.id, self.address_id, self.attachment_id, self.mode),
                 metadata,
+            )
+            .await?)
+    }
+}
+
+/// Utility type to wrap the queueing of attachment removal.
+pub struct DraftAttachmentRemovalQueuer {
+    id: MetadataId,
+    attachment_id: LocalAttachmentId,
+}
+
+impl DraftAttachmentRemovalQueuer {
+    fn new(id: MetadataId, attachment_id: LocalAttachmentId) -> Self {
+        Self { id, attachment_id }
+    }
+
+    /// Consume and queue this action.
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::attachment_remove",skip_all)]
+    pub async fn queue(
+        self,
+        queue: &Queue,
+        tether: &Tether,
+    ) -> Result<QueuedActionOutput<AttachmentRemove>, MailContextError> {
+        // Find existing attachment metadata.
+        let Some(attachment_metadata) =
+            DraftAttachmentMetadata::find_by_id(self.attachment_id, tether).await?
+        else {
+            return Err(AttachmentError::AttachmentMetadataNotFound(self.attachment_id).into());
+        };
+
+        let mut metadata = MetadataBuilder::new()
+            .with_resource(&self.id)
+            .expect("This should never fail");
+        // The removal action can only run when the current action completes.
+        if let Some(action_id) = attachment_metadata.action_id {
+            // Try to cancel the existing action if it hasn't run yet.
+            if let Err(e) = queue.cancel(action_id).await {
+                // Only fail if there is a real error
+                match e {
+                    QueuedError::ActionNotFound(_) | QueuedError::ActionInExecution(_) => {}
+                    e => return Err(e.into()),
+                }
+            }
+            metadata = metadata.with_dependency(action_id);
+        };
+
+        Ok(queue
+            .queue_action_with_metadata(
+                AttachmentRemove::new(self.id, self.attachment_id),
+                metadata.build(),
             )
             .await?)
     }

@@ -1,3 +1,4 @@
+mod attachment_remove;
 mod attachment_upload;
 mod discard;
 mod save;
@@ -6,6 +7,7 @@ mod undo_send;
 
 use crate::datatypes::SystemLabelId;
 use crate::{AppError, MailContextError};
+pub use attachment_remove::*;
 pub use attachment_upload::*;
 pub use discard::*;
 use proton_action_queue::action::ActionGroup;

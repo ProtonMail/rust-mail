@@ -67,9 +67,12 @@ impl DraftAttachment {
 
         Ok(attachments
             .into_iter()
-            .map(|attachment| {
+            .filter_map(|attachment| {
                 let (state, timestamp) =
                     if let Some(metadata) = metadata_map.get(&attachment.local_id.unwrap()) {
+                        if metadata.deleted {
+                            return None;
+                        }
                         (
                             DraftAttachmentState::from_draft_attachment_metadata(metadata),
                             metadata.state_timestamp(),
@@ -79,11 +82,11 @@ impl DraftAttachment {
                         // or it was inherited from a reply/forward.
                         (DraftAttachmentState::Uploaded, 0)
                     };
-                DraftAttachment {
+                Some(DraftAttachment {
                     state,
                     metadata: AttachmentMetadata::from(attachment),
                     state_modified_timestamp: timestamp,
-                }
+                })
             })
             .collect())
     }

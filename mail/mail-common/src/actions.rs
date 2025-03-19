@@ -117,6 +117,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     queue.register::<draft::Discard>().expect(ERR_MSG);
     queue.register::<draft::UndoSend>().expect(ERR_MSG);
     queue.register::<draft::AttachmentUpload>().expect(ERR_MSG);
+    queue.register::<draft::AttachmentRemove>().expect(ERR_MSG);
     queue.register::<event_poll::EventPoll>().expect(ERR_MSG);
 }
 

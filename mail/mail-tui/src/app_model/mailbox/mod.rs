@@ -14,7 +14,9 @@ use crate::messages::Messages;
 pub use model::Model;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
 use proton_core_common::models::Label;
-use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, LocalMessageId};
+use proton_mail_common::datatypes::{
+    ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
+};
 use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::models::{Attachment, Message as MailMessage};
 use proton_mail_common::Mailbox;
@@ -109,6 +111,7 @@ pub enum ComposerMessage {
     Discard,
     CreateAttachment(PathBuf),
     AddAttachment(Box<Attachment>),
+    RemoveAttachment(LocalAttachmentId),
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
 }
