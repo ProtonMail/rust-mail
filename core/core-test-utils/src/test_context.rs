@@ -199,6 +199,7 @@ impl TestContext {
             api_config.clone(),
             tmp_dir.path().join("core-cache"),
             None,
+            tmp_dir.path().join("logs"),
         )
         .await
         .expect("failed to create core context");

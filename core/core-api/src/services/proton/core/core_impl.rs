@@ -1,3 +1,4 @@
+use std::io::Cursor;
 use std::time::Duration;
 
 use bytes::Bytes;
@@ -239,6 +240,36 @@ impl ProtonCore for Proton {
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()> {
         POST!("{CORE_V4}/devices")
             .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
+
+    async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()> {
+        POST!("{CORE_V4}/report/bug")
+            .multipart(move |mut form| {
+                form.add_text("OS", body.os);
+                form.add_text("OSVersion", body.os_version);
+                form.add_text("Client", body.client);
+                form.add_text("ClientType", body.client_type.to_string());
+                form.add_text("Title", body.title);
+                form.add_text("Description", body.description);
+                form.add_text("Username", body.username);
+                if let Some((file_name, logs)) = body.logs {
+                    form.add_reader_file_with_mime(
+                        "ApplicationLogs",
+                        Cursor::new(logs),
+                        file_name,
+                        "application/zip"
+                            .parse()
+                            .expect("Somehow application/zip MIME left the earth"),
+                    );
+                }
+                form
+            })
+            .await?
             .send_with(self)
             .await?
             .ok()?;

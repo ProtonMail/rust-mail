@@ -309,4 +309,17 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn register_device(&self, body: RegisterDeviceRequest) -> ApiServiceResult<()>;
+
+    /// This method allows to create a ticket for bug in API (and in zendesk)
+    /// for support team to review issue reported by a user.
+    ///
+    /// # Parameters
+    ///
+    /// * `body` - Struct converted to multipart request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()>;
 }

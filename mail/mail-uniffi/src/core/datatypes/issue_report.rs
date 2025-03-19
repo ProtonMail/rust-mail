@@ -1,4 +1,5 @@
 use crate::{UniffiEnum, UniffiRecord};
+use proton_core_common::datatypes::{ClientType as RealClientType, IssueReport as RealIssueReport};
 
 /// Representation of User's Report of an issue.
 #[derive(UniffiRecord)]
@@ -66,7 +67,7 @@ pub struct IssueReport {
     ///
     /// Can be empty.
     /// Provided by the user.
-    pub stepst_to_reproduce: String,
+    pub steps_to_reproduce: String,
 
     /// User's expected behavior.
     ///
@@ -91,4 +92,30 @@ pub struct IssueReport {
 #[derive(UniffiEnum)]
 pub enum ClientType {
     Email = 1,
+}
+
+impl From<ClientType> for RealClientType {
+    fn from(value: ClientType) -> RealClientType {
+        match value {
+            ClientType::Email => RealClientType::Email,
+        }
+    }
+}
+
+impl From<IssueReport> for RealIssueReport {
+    fn from(value: IssueReport) -> RealIssueReport {
+        RealIssueReport {
+            operating_system: value.operating_system,
+            operating_system_version: value.operating_system_version,
+            client: value.client,
+            client_version: value.client_version,
+            client_type: value.client_type.into(),
+            title: value.title,
+            summary: value.summary,
+            steps_to_reproduce: value.steps_to_reproduce,
+            expected_result: value.expected_result,
+            actual_result: value.actual_result,
+            logs: value.logs,
+        }
+    }
 }

@@ -244,3 +244,28 @@ pub struct RegisterDeviceRequest {
     /// TODO: Document this field
     pub push_notification_status: Option<i32>,
 }
+
+/// Represents `POST /report/bug` request body
+///
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostReportBug {
+    /// OS name
+    #[serde(rename = "OS")]
+    pub os: String,
+    /// OS version
+    #[serde(rename = "OSVersion")]
+    pub os_version: String,
+    /// Client application name
+    pub client: String,
+    /// Client application type (1 = Email)
+    pub client_type: u8,
+    /// Generic title
+    pub title: String,
+    /// Description of the bug
+    pub description: String,
+    /// Username (empty for no username)
+    pub username: String,
+    /// Logs (filename, zipped bytes)
+    pub logs: Option<(String, Vec<u8>)>,
+}
