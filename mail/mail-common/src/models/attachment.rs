@@ -215,59 +215,6 @@ impl AttachmentType {
 
 sql_using_serde!(AttachmentType);
 
-impl ModelIdExtension for Attachment {
-    type RemoteId = AttachmentId;
-
-    fn remote_id(&self) -> Option<&Self::RemoteId> {
-        match &self.attachment_type {
-            AttachmentType::Remote(id) => id.as_ref(),
-            _ => None,
-        }
-    }
-
-    /// Return the local id counterpart for a given `remote_id`.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the query failed.
-    async fn remote_id_counterpart(
-        remote_id: Self::RemoteId,
-        tether: &Tether,
-    ) -> Result<Option<Self::IdType>, StashError> {
-        let json = AttachmentType::Remote(Some(remote_id)).to_json()?;
-
-        match tether
-            .query_value::<_, Self::IdType>(
-                indoc!(
-                    "
-                    SELECT
-                        local_id AS value
-                    FROM
-                        attachments
-                    WHERE
-                        attachment_type = ?
-                    LIMIT 1
-                    ",
-                ),
-                params![json],
-            )
-            .await
-        {
-            Ok(v) => Ok(Some(v)),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    Err(e)
-                }
-            }
-        }
-    }
-}
-
 impl Attachment {
     /// Gets the remote id of the attachment.
     /// This is here to lower compile times.
@@ -807,6 +754,40 @@ impl Attachment {
             Attachment::find_first("WHERE attachment_type = ?", params![json], tether).await
         } else {
             Ok(None)
+        }
+    }
+
+    /// Return the local id counterpart for a given `remote_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    pub async fn remote_id_counterpart(
+        remote_id: AttachmentId,
+        tether: &Tether,
+    ) -> Result<Option<LocalAttachmentId>, StashError> {
+        let json = AttachmentType::Remote(Some(remote_id)).to_json()?;
+
+        match tether
+            .query_value::<_, LocalAttachmentId>(
+                indoc!(
+                    "
+                    SELECT
+                        local_id AS value
+                    FROM
+                        attachments
+                    WHERE
+                        attachment_type = ?
+                    LIMIT 1
+                    ",
+                ),
+                params![json],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 }
