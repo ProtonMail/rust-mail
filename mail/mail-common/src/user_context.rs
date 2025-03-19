@@ -97,6 +97,12 @@ impl MailUserContext {
         self.this.upgrade().expect("Should never fail")
     }
 
+    /// Get a weak reference to this context.
+    #[must_use]
+    pub fn as_weak(&self) -> Weak<Self> {
+        Weak::clone(&self.this)
+    }
+
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
     /// that have an expiration date.
     fn init_expiration_loop(&self) {

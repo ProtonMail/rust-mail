@@ -52,9 +52,10 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
     ctx.catch_all().await;
 
     let page_size = 5;
-    let mut scroller = MailScroller::search(user_ctx.clone(), SearchOptions::default(), page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::search(user_ctx.as_weak(), SearchOptions::default(), page_size)
+            .await
+            .unwrap();
 
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 0);
@@ -84,7 +85,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
 
     // Online
     let mut scroller = MailScroller::search(
-        user_ctx.clone(),
+        user_ctx.as_weak(),
         SearchOptions::from(search_phrase),
         page_size,
     )
@@ -137,10 +138,13 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     assert!(scroller.fetch_more().await.unwrap().is_empty());
 
     // Search always relay on online data even for the same options used just before.
-    let mut scroller =
-        MailScroller::search(user_ctx, SearchOptions::from(search_phrase), page_size)
-            .await
-            .unwrap();
+    let mut scroller = MailScroller::search(
+        user_ctx.as_weak(),
+        SearchOptions::from(search_phrase),
+        page_size,
+    )
+    .await
+    .unwrap();
     scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
@@ -209,7 +213,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
     ctx.catch_all().await;
 
     let mut scroller = MailScroller::search(
-        user_ctx.clone(),
+        user_ctx.as_weak(),
         SearchOptions::from(search_phrase),
         page_size,
     )

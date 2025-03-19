@@ -83,6 +83,8 @@ pub enum MailContextError {
     Draft(#[from] draft::Error),
     #[error("Attempting to create more than one context for the user with id {0}")]
     DuplicateContext(UserId),
+    #[error("The context instance has been dropped")]
+    MissingContext,
     #[error("A task was cancelled")]
     TaskCancelled,
     #[error("Queue Write Guard Expired")]

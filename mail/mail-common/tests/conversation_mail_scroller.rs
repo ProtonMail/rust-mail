@@ -137,9 +137,10 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let expected = expected_conversations(page_size, REMOTE_LABEL_ID, &data).unwrap();
     let actual = scroller.fetch_more().await.unwrap();
     assert_eq!(actual, expected);
@@ -175,9 +176,10 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     // First call is empty
     let actual = scroller.all_items().await.unwrap();
@@ -220,7 +222,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
 
     // Online
     let mut scroller =
-        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
             .await
             .unwrap();
     // Conversations can be accessed only when progressed.
@@ -252,9 +254,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // and one previous page request on init.
     // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
     assert_scroller_content(
         &mut scroller,
@@ -301,7 +304,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     bond.commit().await.unwrap();
 
     let mut scroller =
-        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
             .await
             .unwrap();
     let WatcherHandle {
@@ -386,9 +389,10 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     // First call is empty
     let actual = scroller.all_items().await.unwrap();
@@ -434,9 +438,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     // First call is empty
     let actual = scroller.all_items().await.unwrap();
@@ -497,9 +502,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     // First call is empty
     let actual = scroller.all_items().await.unwrap();
@@ -547,7 +553,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 
     let page_size = 5;
     let mut scroller =
-        MailScroller::conversations(user_ctx.clone(), local_label_id, unread, page_size)
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
             .await
             .unwrap();
 
@@ -770,9 +776,10 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     bond.commit().await.unwrap();
 
     let page_size = 50;
-    let mut scroller = MailScroller::conversations(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
 
     // First call is empty
     let actual = scroller.all_items().await.unwrap();

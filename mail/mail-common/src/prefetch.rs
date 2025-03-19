@@ -128,7 +128,7 @@ impl Prefetch {
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
         let Ok(mut scroller) =
-            MailScroller::conversations(ctx.clone(), local_label_id, ReadFilter::All, 50).await
+            MailScroller::conversations(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
@@ -180,7 +180,7 @@ impl Prefetch {
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
         let Ok(mut scroller) =
-            MailScroller::messages(ctx.clone(), local_label_id, ReadFilter::All, 50).await
+            MailScroller::messages(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };

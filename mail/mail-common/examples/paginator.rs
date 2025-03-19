@@ -103,7 +103,7 @@ async fn main() {
 
     let filter = ReadFilter::Unread;
     let mut paginator = MailScroller::conversations(
-        Arc::clone(&user_ctx),
+        user_ctx.as_weak(),
         label.local_id.unwrap(),
         filter,
         page_count as usize,

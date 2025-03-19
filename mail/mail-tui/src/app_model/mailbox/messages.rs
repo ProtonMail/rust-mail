@@ -87,8 +87,10 @@ impl MessagesState {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
-                async move { MailScroller::messages(context, label_id, filter, ITEM_LIMIT).await }
-                    .boxed()
+                async move {
+                    MailScroller::messages(context.as_weak(), label_id, filter, ITEM_LIMIT).await
+                }
+                .boxed()
             },
             |result| match result {
                 Ok(messages) => MessageMessage::Refreshed(messages).into(),
@@ -140,7 +142,7 @@ impl MessagesState {
             || {
                 async move {
                     MailScroller::search(
-                        context,
+                        context.as_weak(),
                         SearchOptions::from(search_phrase_clone),
                         ITEM_LIMIT,
                     )
