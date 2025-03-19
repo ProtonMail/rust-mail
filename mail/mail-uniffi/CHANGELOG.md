@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `rust_sdk_version_[major|minor|patch]`: Get individual version components of for the rust
      sdk version.
   - `is_valid_email_address`: Validate whether an email address is correctly formatted.
+  - `report_an_issue` method for performing API report
+  - `IssueReport` struct for creating a report
 
 ### Fixed
 

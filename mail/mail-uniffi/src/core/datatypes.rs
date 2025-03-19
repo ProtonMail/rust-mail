@@ -47,11 +47,13 @@ mod account_details;
 mod avatar;
 mod connection_status;
 mod contact_list;
+mod issue_report;
 
 pub use account_details::*;
 pub use avatar::*;
 pub use connection_status::*;
 pub use contact_list::*;
+pub use issue_report::*;
 use muon::client::flow::LoginFlowData;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::store::UserData;
