@@ -376,7 +376,7 @@ impl Draft {
                 .save(&tx)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-            tokio::fs::create_dir_all(attachment_staging_path(&context, metadata.id.unwrap()))
+            tokio::fs::create_dir_all(attachment_staging_path(context, metadata.id.unwrap()))
                 .await
                 .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
             tx.commit().await?;
@@ -392,7 +392,7 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
             debug!("Draft metadata has no pending changes, syncing.");
-            match Message::force_sync_message_and_body(&context, remote_id, true).await {
+            match Message::force_sync_message_and_body(context, remote_id, true).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
 
