@@ -62,7 +62,7 @@ impl ConversationsState {
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    MailScroller::conversations(context, label_id, filter, ITEM_LIMIT)
+                    MailScroller::conversations(context.as_weak(), label_id, filter, ITEM_LIMIT)
                         .await
                 }
                 .boxed()

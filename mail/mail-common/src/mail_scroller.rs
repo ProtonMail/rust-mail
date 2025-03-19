@@ -4,8 +4,8 @@ use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::LocalLabelId;
-use stash::stash::{StashError, WatcherHandle};
-use std::sync::Arc;
+use stash::stash::WatcherHandle;
+use std::sync::Weak;
 
 mod mail_scroller_source;
 mod mail_scroller_watcher;
@@ -29,7 +29,7 @@ mod conversation_scroller;
 /// Whether the data is cached or always updated from the server, depends on the implementation
 /// of [`MailScrollerSource`].
 pub struct MailScroller<T: MailScrollerSource + 'static> {
-    ctx: Arc<MailUserContext>,
+    ctx: Weak<MailUserContext>,
     source: T,
     total: u64,
     task: MailPaginatorJoinHandle,
@@ -37,7 +37,7 @@ pub struct MailScroller<T: MailScrollerSource + 'static> {
 
 impl MailScroller<DataScrollerSource<ConversationScrollData>> {
     pub async fn conversations(
-        ctx: Arc<MailUserContext>,
+        ctx: Weak<MailUserContext>,
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
@@ -49,7 +49,7 @@ impl MailScroller<DataScrollerSource<ConversationScrollData>> {
 
 impl MailScroller<DataScrollerSource<MessageScrollData>> {
     pub async fn messages(
-        ctx: Arc<MailUserContext>,
+        ctx: Weak<MailUserContext>,
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
@@ -61,7 +61,7 @@ impl MailScroller<DataScrollerSource<MessageScrollData>> {
 
 impl MailScroller<SearchScrollerSource> {
     pub async fn search(
-        ctx: Arc<MailUserContext>,
+        ctx: Weak<MailUserContext>,
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
@@ -77,8 +77,12 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if something went wrong with initializing the data source.
-    async fn new(ctx: Arc<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
-        let (total, task) = source.initialize(&ctx).await?;
+    async fn new(ctx: Weak<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
+        let (total, task) = if let Some(ctx) = ctx.upgrade() {
+            source.initialize(&ctx).await?
+        } else {
+            return Err(MailContextError::MissingContext);
+        };
 
         Ok(Self {
             ctx,
@@ -88,14 +92,16 @@ impl<T: MailScrollerSource> MailScroller<T> {
         })
     }
 
-    pub fn watch(&mut self) -> Result<WatcherHandle, StashError> {
+    pub fn watch(&mut self) -> Result<WatcherHandle, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+
         let (sender, new_receiver) = flume::unbounded();
         let sender_clone = sender.clone();
         self.source.set_notify(sender);
 
         let WatcherHandle {
             receiver, handle, ..
-        } = self.ctx.user_stash().subscribe_to(|sender| {
+        } = ctx.user_stash().subscribe_to(|sender| {
             Box::new(MailScrollerWatcher {
                 sender,
                 tables: self.source.watched_tables(),
@@ -136,9 +142,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
     ///
     /// Returns error if the data could not be fetched or saved.
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        let is_online = self.ctx.session().status().await.is_online();
+        let is_online = ctx.session().status().await.is_online();
         let result = if self.task.is_some() && is_online {
             // Unwrap is safe here since we checked for `Some` above.
             self.task
@@ -154,7 +162,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
             Ok(())
         };
 
-        let (items, new_total, task) = self.source.sync_next(&self.ctx).await?;
+        let (items, new_total, task) = self.source.sync_next(&ctx).await?;
         self.total = new_total;
         self.task = task;
 
@@ -179,9 +187,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
     ///
     /// Return error if the query failed.
     pub async fn all_items(&mut self) -> Result<Vec<T::Item>, MailContextError> {
-        self.total = self.source.all_items_total(&self.ctx).await?;
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
 
-        self.source.visible_items(&self.ctx).await
+        self.total = self.source.all_items_total(&ctx).await?;
+
+        self.source.visible_items(&ctx).await
     }
 
     /// Return the total number of elements available.
@@ -194,6 +204,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
     /// Return the number of already seen elements.
     pub async fn seen(&self) -> Result<u64, MailContextError> {
-        self.source.visible_items_total(&self.ctx).await
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+
+        self.source.visible_items_total(&ctx).await
     }
 }

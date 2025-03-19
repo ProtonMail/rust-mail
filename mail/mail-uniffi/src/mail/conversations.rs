@@ -553,7 +553,7 @@ pub async fn scroll_conversations_for_label(
     let context = session.ctx()?;
     uniffi_async(async move {
         let mut scroller =
-            MailScroller::conversations(Arc::clone(&context), label_id.into(), filter.into(), 50)
+            MailScroller::conversations(context.as_weak(), label_id.into(), filter.into(), 50)
                 .await?;
         let handle = scroller.watch()?;
 

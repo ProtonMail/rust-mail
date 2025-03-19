@@ -113,9 +113,10 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
     bond.commit().await.unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::messages(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     let expected = expected_messages(page_size, REMOTE_LABEL_ID, &data).unwrap();
@@ -157,9 +158,10 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let mut scroller = MailScroller::messages(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 0);
 
@@ -202,9 +204,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     bond.commit().await.unwrap();
 
     // Online
-    let mut scroller = MailScroller::messages(user_ctx.clone(), local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -252,9 +255,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     // Cached - it will trigger two more background requests for pages as we fetch more
     // This is because cursor have only two pages in cache, which means we will try to get new page everytime we progress
 
-    let mut scroller = MailScroller::messages(user_ctx, local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
@@ -325,9 +329,10 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     counters.save(&bond).await.unwrap();
     bond.commit().await.unwrap();
 
-    let mut scroller = MailScroller::messages(user_ctx.clone(), local_label_id, unread, page_size)
-        .await
-        .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let WatcherHandle {
         handle: _handle,
         receiver,

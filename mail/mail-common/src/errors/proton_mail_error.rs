@@ -192,6 +192,7 @@ impl From<MailContextError> for ProtonMailError {
             }
             MailContextError::Label(label_error) => Self::from(label_error),
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
+            MailContextError::MissingContext => Self::Unexpected(Unexpected::Internal),
             MailContextError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
             MailContextError::AttachmentEncryption(_) => Self::Unexpected(Unexpected::Crypto),
             MailContextError::CalledFetchedAttachmentOnPgp
