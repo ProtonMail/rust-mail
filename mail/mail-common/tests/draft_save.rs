@@ -94,10 +94,9 @@ async fn create_empty_draft() {
     );
 
     // Loading the message body should not trigger any network requests.
-    let message_body_metadata =
-        Message::message_body(user_ctx.clone(), draft_message.local_id.unwrap())
-            .await
-            .unwrap();
+    let message_body_metadata = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+        .await
+        .unwrap();
 
     assert!(message_body_metadata.metadata.attachments.is_empty());
 
@@ -119,9 +118,7 @@ async fn create_empty_draft() {
         .any(|l| { l.remote_label_id == LabelId::drafts().into() }));
 
     // Opening this draft should work;
-    Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    Draft::open(&user_ctx, draft_message_id).await.unwrap();
 }
 
 #[tokio::test]
@@ -262,9 +259,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening the draft and check if all the information is up to date
-    let (draft, _) = Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    let (draft, _) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(draft.body(), new_body);
     assert_eq!(draft.subject, new_subject);
     assert_eq!(draft.to_list, new_to_list);
@@ -406,7 +401,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     );
 
     // Create draft.
-    let (draft, _) = Draft::open(user_ctx.as_weak(), message.local_id.unwrap())
+    let (draft, _) = Draft::open(&user_ctx, message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -418,7 +413,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     drop(draft);
 
     // Opening this draft again should not create new metadata;
-    let (draft, _) = Draft::open(user_ctx.as_weak(), message.local_id.unwrap())
+    let (draft, _) = Draft::open(&user_ctx, message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -621,13 +616,9 @@ async fn create_draft_reply_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::force_sync_message_and_body(
-        user_ctx.clone(),
-        existing_message.remote_id.unwrap(),
-        false,
-    )
-    .await
-    .unwrap();
+    Message::force_sync_message_and_body(&user_ctx, existing_message.remote_id.unwrap(), false)
+        .await
+        .unwrap();
 
     let tx = tether.transaction().await.unwrap();
     // Insert attachment data into the cache.
@@ -708,7 +699,7 @@ async fn create_draft_reply_impl(
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let draft_body = Message::message_body(user_ctx.clone(), draft_message.local_id.unwrap())
+    let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -725,9 +716,7 @@ async fn create_draft_reply_impl(
     );
 
     // Opening this draft should work;
-    Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    Draft::open(&user_ctx, draft_message_id).await.unwrap();
 
     draft_body
 }
@@ -779,9 +768,7 @@ async fn open_draft_sync_status_success() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening this draft should work;
-    let (_, sync_status) = Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Synced);
 }
 
@@ -842,9 +829,7 @@ async fn open_draft_sync_status_cached() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening this draft should work;
-    let (_, sync_status) = Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Cached);
 }
 
@@ -881,8 +866,6 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     // Opening this draft should work;
-    let (_, sync_status) = Draft::open(user_ctx.as_weak(), draft_message_id)
-        .await
-        .unwrap();
+    let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Synced);
 }

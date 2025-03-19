@@ -575,7 +575,7 @@ pub async fn get_message_body(
 ) -> Result<Arc<DecryptedMessage>, ActionError> {
     let ctx = mbox.ctx()?;
     uniffi_async(async move {
-        let body = models::Message::message_body(Arc::clone(&ctx), id.into()).await?;
+        let body = models::Message::message_body(&ctx, id.into()).await?;
         Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
@@ -999,7 +999,7 @@ pub async fn resolve_message_id(
 ) -> Result<Id, ActionError> {
     let user_ctx = session.ctx()?;
     uniffi_async(async move {
-        let local_id = RealMessage::find_or_fetch_by_remote_id(user_ctx, remote_id.into()).await?;
+        let local_id = RealMessage::find_or_fetch_by_remote_id(&user_ctx, remote_id.into()).await?;
         Ok::<_, RealProtonMailError>(local_id.into())
     })
     .await

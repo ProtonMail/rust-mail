@@ -108,7 +108,6 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-use std::sync::Arc;
 use tracing::{error, warn};
 //  ENUMS
 //==============================================================================
@@ -993,11 +992,16 @@ impl EncryptedMessageBody {
     /// Return error if the decryption failed.
     pub async fn into_decrypted_message<P: PGPProviderSync>(
         mut self,
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         with_attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
+        let ctx = ctx
+            .as_weak()
+            .upgrade()
+            .ok_or(MailContextError::MissingContext)?;
+
         // TODO: Verify signature.
         let (decrypted_body, _) = self
             .decrypt(&pgp_provider, &address_keys)

@@ -109,7 +109,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::open(context.as_weak(), message_id).await {
+                    match Draft::open(&context, message_id).await {
                         Ok((draft, sync_status)) => {
                             Composer::create(draft, Some(sync_status), context.user_stash().clone())
                                 .await

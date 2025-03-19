@@ -152,7 +152,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    Draft::open(user_ctx.as_weak(), message.local_id.unwrap())
+    Draft::open(&user_ctx, message.local_id.unwrap())
         .await
         .expect_err("Should not work");
 }
@@ -240,7 +240,7 @@ async fn discard_draft_by_message_id() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    Draft::open(user_ctx.as_weak(), message.local_id.unwrap())
+    Draft::open(&user_ctx, message.local_id.unwrap())
         .await
         .expect_err("Should not work");
 }
@@ -309,7 +309,7 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
         .unwrap();
     assert!(conv_message.is_none());
 
-    Draft::open(user_ctx.as_weak(), local_message_id)
+    Draft::open(&user_ctx, local_message_id)
         .await
         .expect_err("Should not work");
 }
@@ -391,7 +391,7 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
         .unwrap();
     assert!(conv_message.is_none());
 
-    Draft::open(user_ctx.as_weak(), local_message_id)
+    Draft::open(&user_ctx, local_message_id)
         .await
         .expect_err("Should not work");
 }
@@ -441,7 +441,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     tx.commit().await.unwrap();
 
     // Get the message body - required to reply to draft.
-    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
+    Message::message_body(&user_ctx, existing_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -491,7 +491,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         .unwrap();
     assert!(conv_message.is_some());
 
-    Draft::open(user_ctx.as_weak(), local_message_id)
+    Draft::open(&user_ctx, local_message_id)
         .await
         .expect_err("Should not work");
 }
@@ -549,7 +549,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
     tx.commit().await.unwrap();
 
     // Get the message body - required to reply to draft.
-    Message::message_body(user_ctx.clone(), existing_message.local_id.unwrap())
+    Message::message_body(&user_ctx, existing_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -609,7 +609,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .unwrap();
     assert!(conv_message.is_some());
 
-    Draft::open(user_ctx.as_weak(), local_message_id)
+    Draft::open(&user_ctx, local_message_id)
         .await
         .expect_err("Should not work");
 }

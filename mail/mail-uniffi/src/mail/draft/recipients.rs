@@ -243,10 +243,7 @@ impl ComposerRecipientList {
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let email = recipient.email.clone();
-            match self
-                .list
-                .add_single(Arc::clone(&self.ctx), recipient.into())
-            {
+            match self.list.add_single(&self.ctx, recipient.into()) {
                 Ok(()) => {
                     if let Err(e) = self.save_draft(&self.ctx).await {
                         error!("Failed to queue draft save after recipient add: {e:?}");
@@ -281,7 +278,7 @@ impl ComposerRecipientList {
         async_runtime().block_on(async move {
             let recipients_cloned = recipients.clone();
             let duplicates = self.list.add_group(
-                Arc::clone(&self.ctx),
+                &self.ctx,
                 group_name.clone(),
                 recipients.into_iter().map_into(),
                 total_contacts_in_group,

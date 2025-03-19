@@ -24,7 +24,6 @@ use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::actions::{
@@ -1774,7 +1773,7 @@ impl Message {
     /// - if a message with the given id could not be found
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
     pub async fn message_body(
-        user_context: Arc<MailUserContext>,
+        user_context: &MailUserContext,
         id: LocalMessageId,
     ) -> MailContextResult<DecryptedMessageBody> {
         let tether = &mut user_context.user_stash().connection();
@@ -1807,7 +1806,7 @@ impl Message {
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn fetch_message_body(
         &self,
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         tether: &mut Tether,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
@@ -1832,14 +1831,9 @@ impl Message {
         let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
-        let decrypted = Self::decrypt_message_body(
-            Arc::clone(&ctx),
-            &self.remote_address_id,
-            encrypted_body,
-            tether,
-            true,
-        )
-        .await?;
+        let decrypted =
+            Self::decrypt_message_body(ctx, &self.remote_address_id, encrypted_body, tether, true)
+                .await?;
         trace!("Message successfully decrypted. Caching...");
 
         let tx = tether.transaction().await?;
@@ -2458,7 +2452,7 @@ impl Message {
     /// - if the message body could not be written to the cache
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx))]
     pub async fn force_sync_message_and_body(
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         message_id: MessageId,
         with_attachment_prefetch: bool,
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
@@ -2468,7 +2462,7 @@ impl Message {
             Self::sync_message_and_body(message_id, ctx.api(), &mut tether).await?;
 
         let decrypted = Self::decrypt_message_body(
-            Arc::clone(&ctx),
+            ctx,
             &message.remote_address_id,
             encrypted,
             &tether,
@@ -2531,7 +2525,7 @@ impl Message {
     ///
     /// Returns error if the decryption or loading addresses fails.
     async fn decrypt_message_body(
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         address_id: &AddressId,
         encrypted_message_body: EncryptedMessageBody,
         tether: &Tether,
@@ -2629,7 +2623,7 @@ impl Message {
     /// Returns an error if the network failed or if the database cannot write/read message.
     ///
     pub async fn find_or_fetch_by_remote_id(
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         remote_id: MessageId,
     ) -> MailContextResult<LocalMessageId> {
         let tether = &ctx.user_stash().connection();
