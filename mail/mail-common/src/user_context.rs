@@ -33,6 +33,7 @@ use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
@@ -50,6 +51,7 @@ pub struct MailUserContext {
     prefetch: PrefetchNotify,
     /// Last id of the event loop action.
     last_event_loop_action_id: Mutex<Option<ActionId>>,
+    pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
 
 impl MailUserContext {
@@ -80,6 +82,7 @@ impl MailUserContext {
             default_queue_executor,
             send_queue_executors,
             last_event_loop_action_id: Mutex::new(None),
+            is_cleanup_cache_running: Default::default(),
         });
 
         this.user_context

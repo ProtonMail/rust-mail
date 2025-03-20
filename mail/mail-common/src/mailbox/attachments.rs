@@ -25,6 +25,7 @@ use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, error};
@@ -506,21 +507,21 @@ impl Attachment {
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
     async fn cleanup_cache(ctx: &MailUserContext) {
-        static EXECUTING: AtomicBool = AtomicBool::new(false);
-        struct G;
+        struct G(Arc<AtomicBool>);
         impl Drop for G {
             fn drop(&mut self) {
-                EXECUTING.store(false, Ordering::Release);
+                self.0.store(false, Ordering::Release);
             }
         }
 
-        if EXECUTING.swap(true, Ordering::Acquire) {
+        let is_executing = ctx.is_cleanup_cache_running.clone();
+        if is_executing.swap(true, Ordering::Acquire) {
             debug!("Cleanup routine already running");
             return;
         }
         if let Some(ctx_2) = ctx.this.upgrade() {
             ctx.spawn(async move {
-                let _g = G;
+                let _g = G(is_executing);
                 if let Err(e) = Self::do_cleanup_cache(&ctx_2).await {
                     error!("Error cleaning up attachments: {e}");
                 }
