@@ -268,7 +268,7 @@ impl Attachment {
     /// # Errors
     ///
     /// Returns error if the copy of the data or the db query failed.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, bond))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, bond))]
     pub async fn copy_attachment_to_cache(
         ctx: &MailUserContext,
         name: &str,

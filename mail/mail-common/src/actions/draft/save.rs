@@ -567,8 +567,7 @@ impl Save {
                     // data.
                     let original_attachment_id = original_attachment.local_id.unwrap();
                     if let Some(og_path) =
-                        MailUserContext::get_attachment_from_cache(original_attachment_id, &bond)
-                            .await?
+                        Attachment::path_from_cache(original_attachment_id, &bond).await?
                     {
                         debug!("Attachment present in cache, performing copy");
                         let path = PathBuf::from(og_path);
