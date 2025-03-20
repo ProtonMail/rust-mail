@@ -735,6 +735,11 @@ pub struct DraftAttachmentMetadata {
     /// Upload action that is currently queued or running.
     #[DbField]
     pub action_id: Option<ActionId>,
+    /// Whether this entry was removed from the attachment list.
+    ///
+    /// We keep it hidden until the action succeeds so we can recover.
+    #[DbField]
+    pub deleted: bool,
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -756,6 +761,7 @@ impl DraftAttachmentMetadata {
             ownership: DraftAttachmentOwnership::Owned,
             display_order,
             row_id: None,
+            deleted: false,
         }
     }
 
@@ -778,6 +784,7 @@ impl DraftAttachmentMetadata {
             ownership: DraftAttachmentOwnership::Inherited,
             display_order,
             row_id: None,
+            deleted: false,
         }
     }
 
@@ -797,6 +804,7 @@ impl DraftAttachmentMetadata {
             ownership: DraftAttachmentOwnership::Owned,
             display_order,
             row_id: None,
+            deleted: false,
         }
     }
 
@@ -952,6 +960,7 @@ impl DraftAttachmentMetadata {
                 action_id: None,
                 display_order: order,
                 row_id: None,
+                deleted: false,
             })
             .collect::<Vec<_>>();
 

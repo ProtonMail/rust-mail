@@ -153,7 +153,7 @@ impl MailTestContext {
                         .map(|header| format!("    {}: {:?}", header.0, header.1))
                         .collect::<Vec<String>>()
                         .join("\n"),
-                    String::from_utf8(request.body.clone()).unwrap(),
+                    String::from_utf8_lossy(&request.body)
                 );
             })
             .named(function_name!())

@@ -5,7 +5,7 @@ use crate::errors::{DraftAttachmentError, DraftAttachmentErrorReason, ProtonErro
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
 use crate::{uniffi_async, AsyncLiveQueryCallback};
-use proton_mail_common::datatypes::Disposition;
+use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::attachments::{
     DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
 };
@@ -131,8 +131,26 @@ impl AttachmentList {
             )
             .await?;
 
-            let mut instance = draft.instance.write().await;
+            let instance = draft.instance.read().await;
             instance.add_attachment(&draft.ctx, attachment).await?;
+            Ok(())
+        })
+        .await
+        .map_err(DraftAttachmentError::from)
+    }
+
+    /// Remove an attachment from this draft.
+    pub async fn remove(&self, id: Id) -> Result<(), DraftAttachmentError> {
+        let id: LocalAttachmentId = id.into();
+        let Some(draft) = self.draft.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Draft,
+            )));
+        };
+
+        uniffi_async::<(), RealProtonMailError, _>(async move {
+            let instance = draft.instance.read().await;
+            instance.remove_attachment(&draft.ctx, id).await?;
             Ok(())
         })
         .await

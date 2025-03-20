@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `is_valid_email_address`: Validate whether an email address is correctly formatted.
   - `report_an_issue` method for performing API report
   - `IssueReport` struct for creating a report
+  - `AttachmentList::remove`: Remove attachments from a draft.
 
 ### Fixed
 

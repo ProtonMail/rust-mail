@@ -1,12 +1,12 @@
 use bytes::Bytes;
-use std::io::Cursor;
-use std::time::Duration;
-
+use muon::DELETE;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{serde_to_query, GET, POST, PUT};
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
+use std::io::Cursor;
+use std::time::Duration;
 
 use crate::services::proton::prelude::*;
 use crate::services::proton::{Package, PostSendRequest, MAIL_V4};
@@ -87,6 +87,14 @@ impl ProtonMail for Proton {
             .ok()?;
 
         Ok(response.into_body_json()?)
+    }
+
+    async fn delete_attachment(&self, id: AttachmentId) -> ApiServiceResult<()> {
+        DELETE!("{MAIL_V4}/attachments/{id}")
+            .send_with(self)
+            .await?
+            .ok()?;
+        Ok(())
     }
 
     async fn get_conversation(

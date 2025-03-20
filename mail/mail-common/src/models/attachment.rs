@@ -790,6 +790,37 @@ impl Attachment {
             Err(e) => Err(e),
         }
     }
+
+    /// Return the remote id counterpart for a given `local_id`.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    pub async fn local_id_counterpart(
+        local_attachment_id: LocalAttachmentId,
+        tether: &Tether,
+    ) -> Result<Option<AttachmentType>, StashError> {
+        match tether
+            .query_value::<_, AttachmentType>(
+                indoc! {"
+               SELECT
+                    attachment_type AS value
+               FROM
+                    attachments
+               WHERE
+                    local_id = ?
+               LIMIT 1
+               "
+                },
+                params![local_attachment_id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't
