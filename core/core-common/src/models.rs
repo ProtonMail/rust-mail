@@ -472,16 +472,8 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
             .await
         {
             Ok(v) => Ok(Some(v)),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    Err(e)
-                }
-            }
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 

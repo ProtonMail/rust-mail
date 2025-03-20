@@ -219,7 +219,7 @@ impl AttachmentUpload {
             return Err(AttachmentError::AttachmentDataMissing(self.attachment_id).into());
         };
 
-        if attachment.is_synced() {
+        if attachment.remote_id().is_some() {
             tracing::warn!("Attachment {} is already synced", self.attachment_id);
             return Ok(());
         }
