@@ -276,7 +276,7 @@ impl MessagesState {
                 let tether = stash.connection();
                 let local_id = metadata.local_id.unwrap();
 
-                let decrypted = MailMessage::message_body(ctx, local_id)
+                let decrypted = MailMessage::message_body(&ctx, local_id)
                     .await
                     .context("Failed to get message body")?;
 

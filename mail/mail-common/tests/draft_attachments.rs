@@ -110,7 +110,7 @@ async fn attachment_not_removed_on_error() {
 
     // Opening this draft will sync the data from the server, since the upload failed of the attachment
     // failed we need to preserve the failed attachments or they will get lost.
-    let (draft, sync_status) = Draft::open(user_ctx, draft_message_id).await.unwrap();
+    let (draft, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     let draft_attachments = draft.attachments(&tether).await.unwrap();
     assert!(matches!(sync_status, DraftSyncStatus::Synced));
     assert_eq!(draft_attachments.len(), 1);

@@ -614,7 +614,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     /// See [`RecipientList::add_single`] for more details.
     pub fn add_single(
         &self,
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         entry: RecipientEntry,
     ) -> Result<(), RecipientError> {
         let mut list = self.list.write();
@@ -627,6 +627,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
             let cb = { self.cb.lock().clone() };
 
             // run validation in the background.
+            let ctx = ctx.as_arc();
             let ctx_cloned = Arc::clone(&ctx);
             ctx_cloned.spawn(async move {
                 let new_state = validate_address(&ctx, email.clone()).await;
@@ -652,7 +653,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     /// See [`RecipientList::add_group`] for more details.
     pub fn add_group(
         &self,
-        ctx: Arc<MailUserContext>,
+        ctx: &MailUserContext,
         group_name: NonEmptyString,
         entries: impl IntoIterator<Item = RecipientEntry>,
         total_in_group: u64,
@@ -674,8 +675,9 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
             .collect::<Vec<_>>();
 
         let cb = { self.cb.lock().clone() };
-        let list_cloned = Arc::clone(&self.list);
+        let ctx = ctx.as_arc();
         let ctx_cloned = Arc::clone(&ctx);
+        let list_cloned = Arc::clone(&self.list);
         ctx_cloned.spawn(async move {
             let mut update_statuses = Vec::with_capacity(to_validate.len());
             for email in to_validate {

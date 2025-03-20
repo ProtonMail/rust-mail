@@ -163,7 +163,7 @@ impl Prefetch {
                 "Prefetching message {message_id_to_open} body for conversation {local_id}",
                 local_id = item.local_id
             );
-            let _ = Message::message_body(ctx.clone(), message_id_to_open).await;
+            let _ = Message::message_body(ctx, message_id_to_open).await;
             yield_now().await;
         }
 
@@ -207,9 +207,7 @@ impl Prefetch {
                     .await?
                     .ok_or(AppError::MessageMissing(local_id))?;
 
-                saved_message
-                    .fetch_message_body(ctx.clone(), &mut tether)
-                    .await
+                saved_message.fetch_message_body(ctx, &mut tether).await
             })
             .await;
             yield_now().await;

@@ -1,6 +1,5 @@
 use std::mem;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use crate::actions::draft;
 use crate::actions::draft::{AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend};
@@ -333,7 +332,7 @@ impl Draft {
     /// or the message is not a draft.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
     pub async fn open(
-        context: Arc<MailUserContext>,
+        context: &MailUserContext,
         message_id: LocalMessageId,
     ) -> Result<(Self, DraftSyncStatus), MailContextError> {
         let tether = &mut context.user_stash().connection();
@@ -377,7 +376,7 @@ impl Draft {
                 .save(&tx)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-            tokio::fs::create_dir_all(attachment_staging_path(&context, metadata.id.unwrap()))
+            tokio::fs::create_dir_all(attachment_staging_path(context, metadata.id.unwrap()))
                 .await
                 .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
             tx.commit().await?;
@@ -393,7 +392,7 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
             debug!("Draft metadata has no pending changes, syncing.");
-            match Message::force_sync_message_and_body(context.clone(), remote_id, true).await {
+            match Message::force_sync_message_and_body(context, remote_id, true).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
 

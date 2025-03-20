@@ -58,12 +58,12 @@ async fn mailbox_message_body_simple() {
 
     // We fetch it twice and expect it to be the same, with only 1 req being actually made.
     let decrypted_body = saved_message
-        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
     let decrypted_body2 = saved_message
-        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
@@ -127,7 +127,7 @@ async fn mailbox_message_body_mime() {
     // Action:
     //   * Get message body and PGP attachments
     let decrypted_message = saved_message
-        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
@@ -231,7 +231,7 @@ async fn mailbox_message_retains_pgp_attachments() {
     // Action:
     //   * Get message body and PGP attachments
     let decrypted_message = saved_message
-        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
@@ -265,7 +265,7 @@ async fn mailbox_message_retains_pgp_attachments() {
 
     assert_eq!(saved_message_2.attachments_metadata.len(), 3);
     let decrypted_message_2 = saved_message
-        .fetch_message_body(user_ctx.clone(), &mut tether)
+        .fetch_message_body(&user_ctx, &mut tether)
         .await
         .unwrap();
 
