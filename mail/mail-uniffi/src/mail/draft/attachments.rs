@@ -260,3 +260,9 @@ impl DraftAttachmentWatcher {
         self.abort_handle.abort();
     }
 }
+
+impl Drop for DraftAttachmentWatcher {
+    fn drop(&mut self) {
+        self.disconnect();
+    }
+}

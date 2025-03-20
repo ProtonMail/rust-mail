@@ -138,6 +138,12 @@ impl DraftSendResultWatcher {
     }
 }
 
+impl Drop for DraftSendResultWatcher {
+    fn drop(&mut self) {
+        self.disconnect();
+    }
+}
+
 /// Return all unseen send results for drafts.
 ///
 /// # Errors
