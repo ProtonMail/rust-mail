@@ -16,7 +16,8 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, IntoTransaction, StashError};
 use std::io::Read;
-use std::path::PathBuf;
+use std::os::unix::fs::MetadataExt;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::error;
 
@@ -242,7 +243,7 @@ impl MailUserContext {
         // - Two different attachments might share the same name.
         let mut path = self.mail_context().attachments_cache_path();
         path.push(format!("{id}"));
-        std::fs::create_dir_all(&path)?;
+        tokio::fs::create_dir_all(&path).await?;
         path.push(name);
         let path = path
             .into_os_string()
@@ -258,6 +259,55 @@ impl MailUserContext {
                 VALUES (?, ?, ?)",
                     },
             params![id, path.clone(), data_len],
+        )
+        .await?;
+        Ok(path)
+    }
+
+    /// Creates the attachment in the attachment_cache table and copies the
+    /// contents from the given `attachment_path`.
+    ///
+    /// Returns the path as a String.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the copy of the data or the db query failed.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, bond))]
+    pub async fn copy_attachment_to_cache(
+        &self,
+        name: &str,
+        id: LocalAttachmentId,
+        attachment_path: &Path,
+        bond: &Bond<'_>,
+    ) -> MailContextResult<String> {
+        let metadata = tokio::fs::metadata(attachment_path).await?;
+        let data_size = metadata.size();
+        // We will write the attachment to
+        // {CACHE_PATH}/attachments/{id}/{name}
+        // The reason for this scheme is twofold:
+        // - The clients require that the name of the attachment be the name
+        // - Two different attachments might share the same name.
+        let mut path = self.mail_context().attachments_cache_path();
+        path.push(format!("{id}"));
+        tokio::fs::create_dir_all(&path).await?;
+        path.push(name);
+
+        tokio::fs::copy(attachment_path, &path)
+            .await
+            .inspect_err(|e| error!("Failed to copy attachment: {e:?}"))?;
+
+        let path = path
+            .into_os_string()
+            .into_string()
+            // This is infailable since all pieces exist as a string at some point.
+            .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
+
+        bond.execute(
+            indoc! {
+            "INSERT INTO attachment_cache (attachment_id, path, size)
+                VALUES (?, ?, ?)",
+                    },
+            params![id, path.clone(), data_size],
         )
         .await?;
         Ok(path)
