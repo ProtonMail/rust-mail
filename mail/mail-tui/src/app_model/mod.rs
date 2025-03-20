@@ -139,7 +139,8 @@ impl AppModel {
                 user_db_path,
                 core_cache_dir,
                 mail_cache_dir,
-                2 << 30, // 1GiB
+                // 1 << 25, // 32MiB
+                1 << 15, // 32MiB
                 None,
                 Arc::new(keychain),
                 app_config.api_config(),

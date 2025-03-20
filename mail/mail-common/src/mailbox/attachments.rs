@@ -519,14 +519,13 @@ impl Attachment {
             debug!("Cleanup routine already running");
             return;
         }
-        if let Some(ctx_2) = ctx.this.upgrade() {
-            ctx.spawn(async move {
-                let _g = G(is_executing);
-                if let Err(e) = Self::do_cleanup_cache(&ctx_2).await {
-                    error!("Error cleaning up attachments: {e}");
-                }
-            });
-        }
+        let ctx_2 = ctx.as_arc();
+        ctx.spawn(async move {
+            let _g = G(is_executing);
+            if let Err(e) = Self::do_cleanup_cache(&ctx_2).await {
+                error!("Error cleaning up attachments: {e}");
+            }
+        });
     }
 }
 
