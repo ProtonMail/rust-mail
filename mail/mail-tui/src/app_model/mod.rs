@@ -143,6 +143,7 @@ impl AppModel {
                 None,
                 Arc::new(keychain),
                 app_config.api_config(),
+                None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
                 Some(log_file),
             )
             .await?;

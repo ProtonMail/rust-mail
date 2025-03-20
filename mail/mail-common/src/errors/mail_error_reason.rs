@@ -1,5 +1,4 @@
 use proton_api_core::services::proton::AddressId;
-use proton_api_core::services::proton::HumanVerificationChallenge;
 
 /// Specific Reason for error occurrence
 ///
@@ -96,7 +95,6 @@ pub enum ContextErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum LoginErrorReason {
-    HumanVerificationChallenge(HumanVerificationChallenge),
     InvalidCredentials,
     UnsupportedTfa,
     CantUnlockUserKey,

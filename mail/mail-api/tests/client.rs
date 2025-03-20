@@ -56,7 +56,7 @@ mod messages {
     #[tokio::test]
     async fn get_messages_page_size_limit(page_size: u64, want_size: u64) -> Result<()> {
         let server = MockServer::start().await;
-        let session = new_session(&server)?;
+        let session = new_session(&server).await?;
 
         Mock::given(method("GET"))
             .and(path_regex("mail/v4/messages"))
@@ -97,7 +97,7 @@ mod messages {
     }
 
     /// Create a new session which sends requests to the given mock server.
-    fn new_session(server: &MockServer) -> Result<Session> {
+    async fn new_session(server: &MockServer) -> Result<Session> {
         let config = Config {
             env_id: EnvId::new_custom(MockApiEnv::new(server.uri())),
 
@@ -107,6 +107,7 @@ mod messages {
         Ok(Session::builder()
             .with_config(config)
             .with_status(StatusWatcher::with_observer(StatusObserver::test()))
-            .build()?)
+            .build()
+            .await?)
     }
 }

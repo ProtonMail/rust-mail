@@ -16,7 +16,6 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::BuildError;
@@ -24,6 +23,7 @@ use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Config as ApiConfig;
 use proton_api_core::session::Session as ApiSession;
 use proton_api_core::status_watcher::StatusWatcher;
+use proton_api_core::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
@@ -223,6 +223,10 @@ impl CoreSessionState {
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
 /// Context for core operations.
+///
+/// Acronyms used in the fields:
+/// - `db`: Database
+/// - `hv`: Human Verification
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
@@ -234,6 +238,7 @@ pub struct Context {
     active_user_contexts: Mutex<HashMap<UserId, Weak<UserContext>>>,
     cache_path: PathBuf,
     api_config: ApiConfig,
+    hv_notifier: Option<DynChallengeNotifier>,
     cancellation_token: CancellationToken,
 }
 
@@ -243,13 +248,12 @@ impl Context {
     /// for the user database.
     ///
     /// # Params
-    /// * `async_runtime`: Instance of a multithreaded async runtime.
     /// * `account_db_path`: Path where the account db will be written.
     /// * `user_db_path`: Path where each user db will be written.
     /// * `key_chain`: Implementation of a keychain store.
     /// * `initializers`: List of user database initializers that should be called.
-    /// * `client`: Instance of the http client.
-    /// * `network_callback`: Callback to be notified of network status changes.
+    /// * `api_config`: Configuration for any constructed API sessions.
+    /// * `hv_notifier`: Optional notifier to handle human verification challenges.
     /// * `cache_path`: Cache path for cached data.
     /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
     ///
@@ -263,6 +267,7 @@ impl Context {
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
+        hv_notifier: Option<DynChallengeNotifier>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
@@ -291,6 +296,7 @@ impl Context {
             active_user_contexts: Mutex::new(HashMap::new()),
             cache_path: cache_path.into(),
             api_config,
+            hv_notifier,
             cancellation_token: CancellationToken::new(),
         }))
     }
@@ -504,12 +510,12 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if there is no encryption key in the keychain.
-    pub fn new_login_flow(&self, challenge: Option<ChallengeObserver>) -> CoreContextResult<Flow> {
+    pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
         // Ensure we have an encryption key
         let _ = self.get_encryption_key()?;
 
         // Create a new API session
-        let session = self.new_api_session(None, None, challenge)?;
+        let session = self.new_api_session(None, None).await?;
 
         // Create a new login flow
         Ok(Flow::new(session))
@@ -530,7 +536,6 @@ impl Context {
         &self,
         user_id: UserId,
         session_id: SessionId,
-        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<Flow> {
         let key = self.get_encryption_key()?;
         let tether = self.account_stash().connection();
@@ -551,14 +556,14 @@ impl Context {
 
         match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
-                self.new_api_session(Some(&session), None, challenge)?,
+                self.new_api_session(Some(&session), None).await?,
                 user_id,
                 session_id,
                 password,
             )),
 
             CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
-                self.new_api_session(Some(&session), None, challenge)?,
+                self.new_api_session(Some(&session), None).await?,
                 user_id,
                 session_id,
             )),
@@ -601,7 +606,6 @@ impl Context {
         &self,
         session: &CoreSession,
         status: Option<StatusWatcher>,
-        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<Arc<UserContext>> {
         // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
@@ -620,7 +624,7 @@ impl Context {
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session), status, challenge)?;
+        let session = self.new_api_session(Some(session), status).await?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -635,8 +639,9 @@ impl Context {
 
         for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
-                .new_api_session(Some(&session), None, None)
+                .new_api_session(Some(&session), None)
                 .inspect_err(|err| error!("failed to create API session: {err:?}"))
+                .await
             else {
                 continue;
             };
@@ -732,11 +737,10 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    fn new_api_session(
+    async fn new_api_session(
         &self,
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
-        challenge: Option<ChallengeObserver>,
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
@@ -752,11 +756,11 @@ impl Context {
             builder = builder.with_status(status);
         }
 
-        if let Some(challenge) = challenge {
-            builder = builder.with_challenge(challenge);
+        if let Some(notifier) = &self.hv_notifier {
+            builder = builder.with_notifier(Arc::clone(notifier));
         }
 
-        Ok(builder.build()?)
+        Ok(builder.build().await?)
     }
 
     /// Get the stash in use

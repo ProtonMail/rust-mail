@@ -29,6 +29,7 @@ async fn prepare_context(dir: &TempDir) -> (Arc<Context>, Arc<dyn KeyChain>) {
         Arc::clone(&key_chain),
         [],
         config,
+        None,
         cache_dir,
         None,
         None,
@@ -65,7 +66,7 @@ async fn main() {
     let legacy_dir = TempDir::new("core-common-legacy").unwrap();
     let (legacy_context, legacy_key_chain) = prepare_context(&legacy_dir).await;
 
-    let mut flow = legacy_context.new_login_flow(None).unwrap();
+    let mut flow = legacy_context.new_login_flow().await.unwrap();
 
     flow.login(user_email, user_password, LoginExtraInfo::default())
         .await
@@ -131,7 +132,7 @@ async fn main() {
     tracing::info!("Step 3. We create a new login flow, simulating migration");
     let et_dir = TempDir::new("core-common-et").unwrap();
     let (et_context, _et_key_chain) = prepare_context(&et_dir).await;
-    let mut flow = et_context.new_login_flow(None).unwrap();
+    let mut flow = et_context.new_login_flow().await.unwrap();
     flow.migrate(user_data, login_flow_data, decrypted_refresh_token)
         .await
         .unwrap();
@@ -142,7 +143,7 @@ async fn main() {
     let session = et_context.get_session(session_id).await.unwrap().unwrap();
 
     let ctx = et_context
-        .user_context_from_session(&session, None, None)
+        .user_context_from_session(&session, None)
         .await
         .unwrap();
 

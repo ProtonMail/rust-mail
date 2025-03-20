@@ -1,7 +1,6 @@
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_api_core::auth::UserKeySecret;
-use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::services::proton::UserId;
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
@@ -115,7 +114,6 @@ impl MailTestContext {
             .user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
-                Some(ChallengeObserver::default()),
             )
             .await
             .expect("failed to create user context");

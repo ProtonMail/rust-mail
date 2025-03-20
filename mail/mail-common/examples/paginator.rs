@@ -76,11 +76,12 @@ async fn main() {
         Arc::new(keychain),
         Config::default(),
         None,
+        None,
     )
     .await
     .unwrap();
 
-    let mut flow = ctx.new_login_flow(None).unwrap();
+    let mut flow = ctx.new_login_flow().await.unwrap();
 
     flow.login(username, password, LoginExtraInfo::default())
         .await

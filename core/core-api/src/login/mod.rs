@@ -1,6 +1,6 @@
 use crate::login::state::State;
 use crate::service::{ApiServiceError, ServiceError};
-use crate::services::proton::{HumanVerificationChallenge, SessionId, UserId};
+use crate::services::proton::{SessionId, UserId};
 use crate::session::Session;
 use crate::store::{StoreError, UserData};
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
@@ -17,10 +17,6 @@ mod state;
 /// TODO: Document this enum.
 #[derive(Debug, Error)]
 pub enum LoginError {
-    /// TODO: Document this variant.
-    #[error("Human Verification Required'")]
-    HumanVerificationRequired(HumanVerificationChallenge),
-
     /// TODO: Document this variant.
     #[error("Operation is not valid in the current state")]
     InvalidState,

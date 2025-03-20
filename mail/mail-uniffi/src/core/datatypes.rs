@@ -829,6 +829,9 @@ pub struct ApiConfig {
 
     /// Env to connect to.
     pub env_id: ApiEnvId,
+
+    /// Proxy to use.
+    pub proxy: Option<String>,
 }
 
 impl Default for ApiConfig {
@@ -837,6 +840,7 @@ impl Default for ApiConfig {
             app_version: String::from("Other"),
             user_agent: String::from("NoClient/0.1.0"),
             env_id: ApiEnvId::Prod,
+            proxy: None,
         }
     }
 }
@@ -847,6 +851,7 @@ impl From<ApiConfig> for RealApiConfig {
             app_version: config.app_version,
             user_agent: Some(config.user_agent),
             env_id: config.env_id.into(),
+            proxy: config.proxy,
         }
     }
 }

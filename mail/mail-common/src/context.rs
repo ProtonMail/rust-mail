@@ -3,13 +3,13 @@ use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::BuildError;
 use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
+use proton_api_core::verification::DynChallengeNotifier;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::action_queue::{
     CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
@@ -204,6 +204,7 @@ impl MailContext {
         connection_pool_size: Option<u32>,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
+        hv_notifier: Option<DynChallengeNotifier>,
         log_path: Option<PathBuf>,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
@@ -215,6 +216,7 @@ impl MailContext {
             key_chain,
             initializers,
             api_config,
+            hv_notifier,
             core_cache_path,
             connection_pool_size,
             log_path,
@@ -252,8 +254,8 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub fn new_login_flow(&self, challenge: Option<ChallengeObserver>) -> MailContextResult<Flow> {
-        Ok(self.core_context.new_login_flow(challenge)?)
+    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
+        Ok(self.core_context.new_login_flow().await?)
     }
 
     /// Resume a partially completed login flow.
@@ -276,11 +278,10 @@ impl MailContext {
         &self,
         user_id: UserId,
         session_id: SessionId,
-        challenge: Option<ChallengeObserver>,
     ) -> MailContextResult<Flow> {
         let flow = self
             .core_context
-            .resume_login_flow(user_id, session_id, challenge)
+            .resume_login_flow(user_id, session_id)
             .await?;
 
         Ok(flow)
@@ -312,11 +313,10 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         status: Option<StatusWatcher>,
-        challenge: Option<ChallengeObserver>,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_session(session, status, challenge)
+            .user_context_from_session(session, status)
             .await?;
         Arc::clone(self)
             .new_user_context::<CheckNetworkStatusSubscriber>(ctx)

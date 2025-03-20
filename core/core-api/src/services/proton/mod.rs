@@ -46,18 +46,26 @@
 //! other functionality, and would get saved to the database.
 //!
 
-use crate::human_verification::ChallengeObserver;
-use crate::human_verification::ChallengeObserverLayer;
+use crate::services::proton::layers::CookieJarLayer;
+use crate::services::proton::layers::SetCryptoClockLayer;
+use crate::services::proton::layers::SetDefaultServiceTypeLayer;
+use crate::services::proton::layers::SetDefaultTimeoutLayer;
 use crate::services::proton::store::MuonStoreImpl;
 use crate::session::Config;
-use crate::status_observer::StatusObserver;
 use crate::status_observer::StatusObserverLayer;
+use crate::status_watcher::StatusWatcher;
 use crate::store::Store;
+use crate::verification::ChallengeNotifierLayer;
+use crate::verification::DynChallengeNotifier;
+use cookie::CookieJar;
+use muon::App;
+use muon::client::Builder;
 use muon::client::middleware::{DisplayLogger, Tagger};
+use muon::common::ConstProxy;
 use muon::common::IntoDyn;
 use muon::dns::{GoogleDoh, Quad9Doh};
 use muon::error::ParseAppVersionErr;
-use muon::{App, Error as MuonError};
+use muon::error::ParseEndpointErr;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -107,34 +115,59 @@ pub enum BuildError {
     #[error(transparent)]
     ParseAppVersion(#[from] ParseAppVersionErr),
 
+    /// A proxy endpoint could not be parsed.
+    #[error(transparent)]
+    ParseEndpoint(#[from] ParseEndpointErr),
+
     /// The client could not be built.
     #[error(transparent)]
-    Build(#[from] MuonError),
+    Build(#[from] muon::Error),
 }
 
 /// Builds a new Proton client.
-pub fn build<S: Store>(
+pub async fn build<S: Store>(
     config: &Arc<Config>,
     store: &Arc<RwLock<S>>,
-    status: StatusObserver,
-    challenge: ChallengeObserver,
+    status: &StatusWatcher,
+    notifier: DynChallengeNotifier,
 ) -> Result<Proton, BuildError> {
-    let store = MuonStoreImpl::new(&config.env_id, store);
-
     let app = if let Some(agent) = &config.user_agent {
         App::new(&config.app_version)?.with_user_agent(agent)
     } else {
         App::new(&config.app_version)?
     };
 
-    let client = Proton::builder(app, store)
+    let proxy = if let Some(proxy) = &config.proxy {
+        Some(ConstProxy::new(proxy.parse()?))
+    } else {
+        None
+    };
+
+    let store = MuonStoreImpl::new(&config.env_id, store);
+    let builder = Proton::builder_async(app, store).await;
+
+    build_with(builder, status, notifier, proxy)
+}
+
+fn build_with(
+    mut builder: Builder,
+    status: &StatusWatcher,
+    notifier: DynChallengeNotifier,
+    proxy: Option<ConstProxy>,
+) -> Result<Proton, BuildError> {
+    if let Some(proxy) = proxy {
+        builder = builder.proxy(proxy);
+    }
+
+    let client = builder
         .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
         .layer_front(Tagger::default())
-        .layer_back(layers::SetCryptoClockLayer)
-        .layer_back(layers::SetDefaultServiceTypeLayer)
-        .layer_back(layers::SetDefaultTimeoutLayer)
-        .layer_back(ChallengeObserverLayer::new(challenge))
-        .layer_back(StatusObserverLayer::new(status))
+        .layer_back(SetCryptoClockLayer)
+        .layer_back(SetDefaultServiceTypeLayer)
+        .layer_back(SetDefaultTimeoutLayer)
+        .layer_back(StatusObserverLayer::new(status.observer()))
+        .layer_back(ChallengeNotifierLayer::new(notifier))
+        .layer_back(CookieJarLayer::new(CookieJar::new()))
         .layer_back(DisplayLogger::debug())
         .build()?;
 

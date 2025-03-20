@@ -231,6 +231,7 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
         .with_config(api_config)
         .with_status(StatusWatcher::with_observer(StatusObserver::test()))
         .build()
+        .await
         .unwrap();
     let kinds = vec![
         RollbackItemType::Conversation,

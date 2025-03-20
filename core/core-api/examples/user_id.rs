@@ -31,6 +31,7 @@ async fn main() {
     let session = Session::builder()
         .with_app_version(app_version)
         .build()
+        .await
         .unwrap();
 
     let mut login_flow = Flow::new(session.clone());

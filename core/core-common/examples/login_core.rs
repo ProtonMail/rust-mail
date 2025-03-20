@@ -32,6 +32,7 @@ async fn main() {
         Arc::new(key_chain),
         [],
         config,
+        None,
         cache_dir,
         None,
         None,
@@ -39,7 +40,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = context.new_login_flow(None).unwrap();
+    let mut flow = context.new_login_flow().await.unwrap();
 
     flow.login(user_email, user_password, LoginExtraInfo::default())
         .await

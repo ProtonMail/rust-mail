@@ -26,7 +26,7 @@ async fn main() {
     tracing_subscriber::registry().with(file_subscriber).init();
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
-    let session = Session::new().unwrap();
+    let session = Session::new().await.unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow

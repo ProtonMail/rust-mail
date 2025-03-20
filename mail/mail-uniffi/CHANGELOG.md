@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Added
+
+  - [ET-736] Human Verification
+
+
 ## [0.63.0] - 2025-03-24
+
+### Fixed
+
+  - Call `disconnect()` when dropping `DraftAttachmentWatcher` and `DraftSendResultWatcher`.
 
 ### Added
 
@@ -20,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
  - Log spam from deferred draft attachment cleaner.
+
 
 ## [0.62.0] - 2025-03-24
 
@@ -41,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
   - `DecryptedBody::get_all_attachments` was deleted as it is no longer necessary.
+
 
 ## [0.61.0] - 2025-03-20
 
