@@ -1024,9 +1024,7 @@ impl Draft {
             .iter()
             .find(|a| a.content_id.as_deref() == Some(cid))
         {
-            let data = ctx
-                .get_attachment_content_data(attachment, &mut tether)
-                .await?;
+            let data = attachment.content_data(ctx, &mut tether).await?;
             Ok(EmbeddedAttachmentInfo {
                 data,
                 mime: attachment.mime_type.to_string(),

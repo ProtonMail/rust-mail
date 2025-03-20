@@ -3,6 +3,7 @@ use crate::errors::ActionError;
 use crate::mail::{DecryptedAttachment, Mailbox};
 use crate::uniffi_async;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::models::Attachment;
 
 #[uniffi_export]
 impl Mailbox {
@@ -31,7 +32,7 @@ impl Mailbox {
     ) -> Result<DecryptedAttachment, ActionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            ctx.get_attachment(local_attachment_id.into())
+            Attachment::get_attachment(&ctx, local_attachment_id.into())
                 .await
                 .map(DecryptedAttachment::try_from)?
                 .map_err(RealProtonMailError::from)

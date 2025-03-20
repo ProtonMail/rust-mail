@@ -727,7 +727,8 @@ impl Attachment {
         debug!("Storing attachment in cache");
 
         let data = tokio::fs::read(path).await?;
-        ctx.store_attachment_in_cache(
+        Attachment::store_in_cache(
+            ctx,
             &attachment.filename,
             attachment.local_id.unwrap(),
             data,

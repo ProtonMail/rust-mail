@@ -14,6 +14,7 @@ use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback};
 use futures::TryFutureExt;
 use proton_api_core::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
+use proton_mail_common::models::Attachment;
 use proton_mail_common::MailUserContext;
 use stash::stash::Stash;
 use std::sync::Arc;
@@ -192,7 +193,7 @@ impl MailUserSession {
     ) -> Result<DecryptedAttachment, ActionError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
-            ctx.get_attachment(local_attachment_id.into())
+            Attachment::get_attachment(&ctx, local_attachment_id.into())
                 .await
                 .map(DecryptedAttachment::try_from)?
                 .map_err(RealProtonMailError::from)

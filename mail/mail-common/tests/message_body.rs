@@ -158,16 +158,16 @@ async fn mailbox_message_body_mime() {
     assert_eq!(pgp_attachments[0].filename, "attachment1.txt");
     assert_eq!(pgp_attachments[0].mime_type, MimeType::text_plain());
 
-    let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[0], &mut tether)
+    let data = pgp_attachments[0]
+        .content_data(&user_ctx, &mut tether)
         .await
         .unwrap();
     assert_eq!(data, b"attachment1");
 
     assert_eq!(pgp_attachments[1].filename, "attachment2.txt");
     assert_eq!(pgp_attachments[1].mime_type, MimeType::text_plain());
-    let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[1], &mut tether)
+    let data = pgp_attachments[1]
+        .content_data(&user_ctx, &mut tether)
         .await
         .unwrap();
     assert_eq!(data, b"attachment2");
@@ -180,8 +180,8 @@ async fn mailbox_message_body_mime() {
         pgp_attachments[2].mime_type,
         MimeType::from_str("application/pgp-keys").unwrap()
     );
-    let data = user_ctx
-        .get_attachment_content_data(&pgp_attachments[2], &mut tether)
+    let data = pgp_attachments[2]
+        .content_data(&user_ctx, &mut tether)
         .await
         .unwrap();
     assert_eq!(data, TEST_MESSAGE_BODY_MIME_SIGNATURE.as_bytes());

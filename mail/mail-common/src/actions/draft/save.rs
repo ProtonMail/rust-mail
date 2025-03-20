@@ -572,7 +572,8 @@ impl Save {
                     {
                         debug!("Attachment present in cache, performing copy");
                         let path = PathBuf::from(og_path);
-                        ctx.copy_attachment_to_cache(
+                        Attachment::copy_attachment_to_cache(
+                            ctx,
                             &new_attachment.filename,
                             new_attachment.local_id.unwrap(),
                             &path,

@@ -47,7 +47,7 @@ pub struct DecryptedAttachment {
     // pub verification_result: VerificationResult,
 }
 
-impl MailUserContext {
+impl Attachment {
     /// Tries to get where an attachment is stored.
     ///
     /// a. Try to read it from the cache
@@ -55,24 +55,22 @@ impl MailUserContext {
     ///     - Download it if it can't find it
     ///     - Save it to disk
     ///     - Return the path as a String
-    pub async fn get_attachment_content_path(
+    pub async fn content_path(
         &self,
-        attachment: &Attachment,
+        ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<String> {
         let tx = into_transaction
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
-        {
+        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
             tx.commit().await?;
             return Ok(path);
         };
         tx.commit().await?;
 
-        let data = self.fetch_attachment_data(attachment).await?;
+        let data = self.fetch_data(ctx).await?;
 
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
@@ -81,21 +79,13 @@ impl MailUserContext {
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
-        {
+        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
             tx.commit().await?;
             return Ok(path);
         };
 
-        let at = self
-            .store_attachment_in_cache(
-                &attachment.filename,
-                attachment.local_id.unwrap(),
-                data,
-                &tx,
-            )
-            .await?;
+        let at =
+            Self::store_in_cache(ctx, &self.filename, self.local_id.unwrap(), data, &tx).await?;
         tx.commit().await?;
         Ok(at)
     }
@@ -108,24 +98,22 @@ impl MailUserContext {
     ///     - Save it to disk
     ///     - Return the data.
     /// c. Trigger the [`Self::cleanup_attachment_cache`] background routine
-    pub async fn get_attachment_content_data(
+    pub async fn content_data(
         &self,
-        attachment: &Attachment,
+        ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<Vec<u8>> {
         let tx = into_transaction
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
-        {
+        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
             tx.commit().await?;
             return Ok(fs::read(path).await?);
         };
         tx.commit().await?;
 
-        let data = self.fetch_attachment_data(attachment).await?;
+        let data = self.fetch_data(ctx).await?;
 
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
@@ -134,20 +122,18 @@ impl MailUserContext {
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::get_attachment_from_cache(attachment.local_id.unwrap(), &tx).await?
-        {
+        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
             return Ok(fs::read(path).await?);
         };
 
-        if let Err(e) = self
-            .store_attachment_in_cache(
-                &attachment.filename,
-                attachment.local_id.unwrap(),
-                data.clone(),
-                &tx,
-            )
-            .await
+        if let Err(e) = Self::store_in_cache(
+            ctx,
+            &self.filename,
+            self.local_id.unwrap(),
+            data.clone(),
+            &tx,
+        )
+        .await
         {
             error!("Could not save attachment to disk/database, but will continue: {e:?}");
         }
@@ -176,14 +162,12 @@ impl MailUserContext {
     /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
     pub async fn get_attachment(
-        &self,
+        ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> MailboxResult<DecryptedAttachment> {
-        let attachment = self.sync_attachment(attachment_id).await?;
-        let mut tether = self.user_stash().connection();
-        let data_path = self
-            .get_attachment_content_path(&attachment, &mut tether)
-            .await?;
+        let attachment = Self::sync(ctx, attachment_id).await?;
+        let mut tether = ctx.user_stash().connection();
+        let data_path = attachment.content_path(ctx, &mut tether).await?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -199,7 +183,7 @@ impl MailUserContext {
 
     /// Returns a fs path to an attachment in the filesystem.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(tx))]
-    pub async fn get_attachment_from_cache(
+    pub async fn path_from_cache(
         id: LocalAttachmentId,
         tx: &Bond<'_>,
     ) -> Result<Option<String>, StashError> {
@@ -237,9 +221,9 @@ impl MailUserContext {
 
     /// Creates the attachment in the attachment_cache table and stores it in the disk
     /// Returns the path as a String.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, data, bond))]
-    pub async fn store_attachment_in_cache(
-        &self,
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, data, bond))]
+    pub async fn store_in_cache(
+        ctx: &MailUserContext,
         name: &str,
         id: LocalAttachmentId,
         data: Vec<u8>,
@@ -250,7 +234,7 @@ impl MailUserContext {
         // The reason for this scheme is twofold:
         // - The clients require that the name of the attachment be the name
         // - Two different attachments might share the same name.
-        let mut path = self.mail_context().attachments_cache_path();
+        let mut path = ctx.mail_context().attachments_cache_path();
         path.push(format!("{id}"));
         tokio::fs::create_dir_all(&path).await?;
         path.push(name);
@@ -271,7 +255,7 @@ impl MailUserContext {
         )
         .await?;
         // Execute the cleanup routine in the background.
-        self.cleanup_attachment_cache().await;
+        Self::cleanup_cache(ctx).await;
         Ok(path)
     }
 
@@ -285,7 +269,7 @@ impl MailUserContext {
     /// Returns error if the copy of the data or the db query failed.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, bond))]
     pub async fn copy_attachment_to_cache(
-        &self,
+        ctx: &MailUserContext,
         name: &str,
         id: LocalAttachmentId,
         attachment_path: &Path,
@@ -298,7 +282,7 @@ impl MailUserContext {
         // The reason for this scheme is twofold:
         // - The clients require that the name of the attachment be the name
         // - Two different attachments might share the same name.
-        let mut path = self.mail_context().attachments_cache_path();
+        let mut path = ctx.mail_context().attachments_cache_path();
         path.push(format!("{id}"));
         tokio::fs::create_dir_all(&path).await?;
         path.push(name);
@@ -325,10 +309,10 @@ impl MailUserContext {
     }
 
     /// Fetches and decrypts an attachment from the API.
-    async fn fetch_attachment_data(&self, attachment: &Attachment) -> MailContextResult<Vec<u8>> {
-        let attachment_id = attachment.local_id.expect("Should be set");
+    async fn fetch_data(&self, ctx: &MailUserContext) -> MailContextResult<Vec<u8>> {
+        let attachment_id = self.local_id.expect("Should be set");
         let pgp_provider = new_pgp_provider();
-        let remote_attachment_id = match &attachment.attachment_type {
+        let remote_attachment_id = match &self.attachment_type {
             crate::models::AttachmentType::Remote(Some(id)) => id,
             crate::models::AttachmentType::Remote(None) => {
                 return Err(MailContextError::CalledFetchedAttachmentLocalAttachment)
@@ -337,14 +321,14 @@ impl MailUserContext {
                 return Err(MailContextError::CalledFetchedAttachmentOnPgp)
             }
         };
-        let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), self.api())
+        let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {
                 error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}",);
                 e
             })?;
         let (decrypted_content, _verification_result) = self
-            .decrypt_attachment_content(&pgp_provider, attachment, encrypted_content.as_ref())
+            .decrypt_content(ctx, &pgp_provider, encrypted_content.as_ref())
             .await
             // There is not much we can do at this point, and we need to convert from a
             // MailboxError
@@ -357,8 +341,11 @@ impl MailUserContext {
     }
 
     /// Sync attachment metadata
-    async fn sync_attachment(&self, attachment_id: LocalAttachmentId) -> MailboxResult<Attachment> {
-        let mut conn = self.user_stash().connection();
+    async fn sync(
+        ctx: &MailUserContext,
+        attachment_id: LocalAttachmentId,
+    ) -> MailboxResult<Attachment> {
+        let mut conn = ctx.user_stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)
             .await
             .inspect_err(|e| {
@@ -368,7 +355,7 @@ impl MailUserContext {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(self.api(), &mut conn)
+                .sync_complete_metadata(ctx.api(), &mut conn)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id:?}) metadata: {e:?})")
@@ -383,40 +370,36 @@ impl MailUserContext {
     }
 
     /// Decrypt attachment content
-    async fn decrypt_attachment_content<Provider: PGPProviderSync>(
+    async fn decrypt_content<Provider: PGPProviderSync>(
         &self,
+        ctx: &MailUserContext,
         pgp_provider: &Provider,
-        attachment_info: &Attachment,
         data: impl Read,
     ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
         // Can't decrypt with the remote address id.
-        let Some(remote_address_id) = &attachment_info.remote_address_id else {
-            return Err(
-                AppError::AttachmentHasNoAddressId(attachment_info.local_id.unwrap()).into(),
-            );
+        let Some(remote_address_id) = &self.remote_address_id else {
+            return Err(AppError::AttachmentHasNoAddressId(self.local_id.unwrap()).into());
         };
 
         // Sanity check that the key packets are set, there is an expect() in the decryption
         // code that can trigger application crashes.
-        if attachment_info.key_packets.is_none() {
-            return Err(
-                AppError::AttachmentMissingKeyPackets(attachment_info.local_id.unwrap()).into(),
-            );
+        if self.key_packets.is_none() {
+            return Err(AppError::AttachmentMissingKeyPackets(self.local_id.unwrap()).into());
         }
 
         let mut result_buffer: Vec<u8> =
-            Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
+            Vec::with_capacity(self.size.try_into().unwrap_or_default());
 
-        let tether = self.user_stash().connection();
+        let tether = ctx.user_stash().connection();
 
-        let address_keys = self
+        let address_keys = ctx
             .unlocked_address_keys(pgp_provider, &tether, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.
         let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();
 
-        let mut decrypting_reader = attachment_info.decrypt_from_reader(
+        let mut decrypting_reader = self.decrypt_from_reader(
             pgp_provider,
             address_keys.as_ref(),
             &verification_keys,
@@ -436,17 +419,17 @@ impl MailUserContext {
     /// being accessed.
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_possible_wrap)]
-    async fn do_cleanup_attachment_cache(&self) -> anyhow::Result<()> {
+    async fn do_cleanup_cache(ctx: &MailUserContext) -> anyhow::Result<()> {
         // First let's check whether we should run. We run on two conditions:
         // 1. If the cache is too big
         // 2. If an attachment is scheduled for deletion (the attachment row has been deleted but not in the fs)
-        let mut tether = self.user_stash().connection();
+        let mut tether = ctx.user_stash().connection();
         let current_size = tether
             .query_value::<_, u64>("SELECT SUM(size) AS value FROM attachment_cache", vec![])
             .await
             .context("Error getting total cache utilization")?;
 
-        let max_size = self.mail_context().attachment_cache_size;
+        let max_size = ctx.mail_context().attachment_cache_size;
         if current_size < max_size {
             debug!("Not deleting attachments from cache yet.");
             return Ok(());
@@ -496,7 +479,7 @@ impl MailUserContext {
             return Ok(());
         }
 
-        match self.user_context().delete_files_safe(files) {
+        match ctx.user_context().delete_files_safe(files) {
             Err(DeleteFilesSafeError::Failed(e)) => {
                 // This will almost never happen in practice. This means that for whatever reason a
                 // file move failed (?) of a file that hasn't been touched for a long time
@@ -522,7 +505,7 @@ impl MailUserContext {
 
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
-    async fn cleanup_attachment_cache(&self) {
+    async fn cleanup_cache(ctx: &MailUserContext) {
         static EXECUTING: AtomicBool = AtomicBool::new(false);
         struct G;
         impl Drop for G {
@@ -535,10 +518,10 @@ impl MailUserContext {
             debug!("Cleanup routine already running");
             return;
         }
-        if let Some(this) = self.this.upgrade() {
-            self.spawn(async move {
+        if let Some(ctx_2) = ctx.this.upgrade() {
+            ctx.spawn(async move {
                 let _g = G;
-                if let Err(e) = this.do_cleanup_attachment_cache().await {
+                if let Err(e) = Self::do_cleanup_cache(&ctx_2).await {
                     error!("Error cleaning up attachments: {e}");
                 }
             });

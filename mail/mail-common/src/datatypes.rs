@@ -1043,8 +1043,14 @@ impl EncryptedMessageBody {
                 let tx = tether.transaction().await?;
                 for (mut att, data) in model_attachments {
                     att.save(&tx).await?;
-                    ctx.store_attachment_in_cache(&att.filename, att.local_id.unwrap(), data, &tx)
-                        .await?;
+                    Attachment::store_in_cache(
+                        &ctx,
+                        &att.filename,
+                        att.local_id.unwrap(),
+                        data,
+                        &tx,
+                    )
+                    .await?;
                     self.metadata.attachments.push(att);
                 }
                 self.metadata.save(&tx).await?;
