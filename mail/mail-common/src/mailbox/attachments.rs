@@ -563,9 +563,10 @@ fn get_utility(
     // Right now, an attachment that is opened 2 times will be 3x more likely to be used.
     let hit_count_ratio = 1.0;
 
-    // Spam and trash should be punished harshly
-    let spam = 0.01;
-    let trash = 0.1;
+    // Spam and trash could be accounted for. They aren't for now but they could in the future just
+    // by changing these.
+    let spam = 1.0;
+    let trash = 1.0;
 
     // Let's say that attachments of messages that have been starred are 10x more likely to be
     // used as normal
