@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::actions::draft::{
     local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id, SEND_ACTION_GROUP,
 };
@@ -29,6 +27,8 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
+use std::mem;
+use std::path::PathBuf;
 use tracing::{debug, error, warn};
 
 /// Action which creates or updates a draft on the server.
@@ -562,31 +562,24 @@ impl Save {
                     })?;
 
                     // Ensure the newly created attachment has a data copy. This is required
-                    // for sending to external (non-proton) addresses.
-
+                    // for sending to external (non-proton) addresses. However, it is possible
+                    // the attachment has not been synced, so we can only do this if we have the
+                    // data.
                     let original_attachment_id = original_attachment.local_id.unwrap();
-                    let Some(og_path) =
+                    if let Some(og_path) =
                         MailUserContext::get_attachment_from_cache(original_attachment_id, &bond)
                             .await?
-                    else {
-                        error!("Attachment could not be found in cache");
-                        return Err(AppError::AttachmentMissing(original_attachment_id).into());
-                    };
-
-                    let og_data = tokio::fs::read(og_path).await?;
-
-                    // This could be faster:
-                    // - Hard-link to avoid the copy altogether
-                    // - Use fs::copy which uses faster syscalls on linux (copy_file_range, sendfile...)
-                    //
-                    // But we just userspace copy for now.
-                    ctx.store_attachment_in_cache(
-                        &new_attachment.filename,
-                        new_attachment.local_id.unwrap(),
-                        og_data,
-                        &bond,
-                    )
-                    .await?;
+                    {
+                        debug!("Attachment present in cache, performing copy");
+                        let path = PathBuf::from(og_path);
+                        ctx.copy_attachment_to_cache(
+                            &new_attachment.filename,
+                            new_attachment.local_id.unwrap(),
+                            &path,
+                            &bond,
+                        )
+                        .await?;
+                    }
                 }
             }
         }

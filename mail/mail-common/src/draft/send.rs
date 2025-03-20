@@ -21,7 +21,7 @@ use proton_crypto_inbox::message::packages::{
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use stash::stash::Bond;
 use std::collections::{HashMap, HashSet};
-use tracing::{debug, error};
+use tracing::{debug, debug_span, error, Instrument};
 
 /// Loads the send preferences for each recipient of the message.
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
@@ -243,6 +243,9 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
 
         let loaded_data = context
             .get_attachment_content_data(attachment, guard)
+            .instrument(
+                debug_span!("mime_package::get_attachment_content_data", id = ?attachment.local_id),
+            )
             .await
             .map_err(|e| {
                 error!("Failed to read attachment file: {e:?}");
