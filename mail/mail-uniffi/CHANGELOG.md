@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+  - Call `disconnect()` when dropping `DraftAttachmentWatcher` and `DraftSendResultWatcher`.
+
+
 ## [0.61.0] - 2025-03-20
 
 ### Added
@@ -16,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Fix save issue when attachment are present in a reply/forward draft.
+
 
 ## [0.60.0] - 2025-03-20
 
