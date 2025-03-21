@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Changed
+
+  - `mark_messaages_ham` now takes `mailbox` for consistency and a single `id` and is called `mark_message_ham`
+
 ### Fixed
   - Call `disconnect()` when dropping `DraftAttachmentWatcher` and `DraftSendResultWatcher`.
   - The watcher also reloads when new attachments exist.
