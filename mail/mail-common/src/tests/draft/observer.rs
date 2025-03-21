@@ -1,6 +1,7 @@
-use crate::draft::observers::DraftSendResultWatcher;
+use crate::draft::observers::{DraftAttachmentObserver, DraftSendResultWatcher};
 use crate::models::{
-    Conversation, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message,
+    Attachment, Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure,
+    DraftSendResult, DraftSendResultOrigin, Message,
 };
 use proton_api_core::services::proton::AddressId;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
@@ -187,6 +188,70 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
         .unwrap()
         .unwrap();
     assert_eq!(new_values, vec![v2.clone()]);
+}
+
+#[tokio::test]
+async fn draft_attachment_observer_updates_when_attachment_is_removed() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+
+    let mut conn = stash.connection();
+    let tx = conn.transaction().await.unwrap();
+    let mut attachment = Attachment {
+        local_id: None,
+        attachment_type: Default::default(),
+        local_address_id: None,
+        remote_address_id: None,
+        local_conversation_id: None,
+        remote_conversation_id: None,
+        local_message_id: None,
+        remote_message_id: None,
+        disposition: Default::default(),
+        enc_signature: None,
+        is_auto_forwardee: false,
+        key_packets: None,
+        mime_type: Default::default(),
+        filename: "".to_string(),
+        sender: None,
+        signature: None,
+        size: 0,
+        content_id: None,
+        transfer_encoding: None,
+        image_width: None,
+        image_height: None,
+        row_id: None,
+    };
+    attachment.save(&tx).await.unwrap();
+    let metadata = DraftMetadata::empty(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let mut watcher = DraftAttachmentObserver::new(metadata.id.unwrap(), stash.clone())
+        .await
+        .unwrap();
+
+    let mut attachment_metadata =
+        DraftAttachmentMetadata::new(attachment.local_id.unwrap(), metadata.id.unwrap(), 0);
+    // Create metadata.
+    let tx = conn.transaction().await.unwrap();
+    attachment_metadata.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    // Trigger for new attachment.
+    tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Simulate delete
+    let tx = conn.transaction().await.unwrap();
+    attachment_metadata.deleted = true;
+    attachment_metadata.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+
+    // Trigger for update.
+    tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
+        .await
+        .unwrap()
+        .unwrap();
 }
 
 async fn create_test_messages(count: usize, bond: &Bond<'_>) {
