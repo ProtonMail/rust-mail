@@ -8,8 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased] - 2025-03-xx
 
 ### Fixed
+
   - Call `disconnect()` when dropping `DraftAttachmentWatcher` and `DraftSendResultWatcher`.
   - The watcher also reloads when new attachments exist.
+  - `DraftAttachmentObserver` also reacts to removal.
 
 ### Removed
 

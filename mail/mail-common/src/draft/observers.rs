@@ -64,7 +64,7 @@ impl DraftSendResultWatcher {
             }
 
             let new_state = HashSet::from_iter(all_unseen.clone());
-            if new_state.difference(&self.unseen).next().is_none() {
+            if new_state == self.unseen {
                 // no difference, continue loop
                 continue;
             }
@@ -113,6 +113,7 @@ impl DraftAttachmentObserver {
             current: HashSet::from_iter(
                 current
                     .into_iter()
+                    .filter(|v| !v.deleted)
                     .map(DraftAttachmentMetadataObserverState::from),
             ),
             watcher_handle: handle,
@@ -137,11 +138,12 @@ impl DraftAttachmentObserver {
             let new_state_set = HashSet::from_iter(
                 current
                     .into_iter()
+                    .filter(|v| !v.deleted)
                     .map(DraftAttachmentMetadataObserverState::from),
             );
 
             // No changes continue;
-            if new_state_set.difference(&self.current).next().is_none() {
+            if new_state_set == self.current {
                 continue;
             }
 
