@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.59.2] - 2025-03-21
+
+### Fixed
+
+ - Potential crash in db watcher system.
+
 ## [0.59.1] - 2025-03-21
 
 ### Fixed
