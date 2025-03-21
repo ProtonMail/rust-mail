@@ -5923,9 +5923,9 @@ dependencies = [
 
 [[package]]
 name = "sqlite-watcher"
-version = "0.4.3"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6490ccf63d6cc3a611f18583dfeca6ae5b7ca42b0f86d84d5eb7cedb3188fc06"
+checksum = "5e1f7b8dbd87c99a5efb4ed21813028536a10f858855930564ed992ea6f9d322"
 dependencies = [
  "fixedbitset",
  "flume",
