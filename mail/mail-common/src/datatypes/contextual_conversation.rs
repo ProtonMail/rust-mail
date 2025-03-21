@@ -1,11 +1,12 @@
 use std::collections::BTreeSet;
+use std::time::Instant;
 
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
 };
-use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
+use crate::models::{Attachment, Conversation, ConversationLabel, Message, MessageLabel};
 use crate::AppError;
 use futures::try_join;
 use itertools::Itertools;
@@ -191,6 +192,7 @@ impl ContextualConversation {
         stash: &Stash,
         api: &Session,
     ) -> Result<Option<ContextualConversationAndMessages>, AppError> {
+        let t = Instant::now();
         let mut conn = stash.connection();
         let label = Label::find_by_id(local_label_id, &conn)
             .await?
@@ -203,6 +205,11 @@ impl ContextualConversation {
         let messages = Message::in_conversation(local_conversation_id, &conn).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
+
+        debug!(
+            "Obtained messages and conversations for {local_conversation_id} in {:?}",
+            t.elapsed()
+        );
 
         Ok(Some(ContextualConversationAndMessages {
             conversation,
@@ -382,6 +389,8 @@ impl TableObserver for ContextualConversationWatcher {
             Message::table_name().to_string(),
             MessageLabel::table_name().to_string(),
             Label::table_name().to_string(),
+            // This is needed for pgp attachments
+            Attachment::table_name().to_string(),
         ]
     }
 
