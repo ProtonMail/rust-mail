@@ -942,47 +942,6 @@ impl From<Attachment> for AttachmentMetadata {
     }
 }
 
-/// This is the metadata for where or if the attachment has the data downloaded
-/// It's stored in a separate table because:
-/// 1. Attachments can not have data yet (or anymore).
-/// 2. Data might still exist even if it hasn't been deleted yet.
-///
-/// It contains a bunch of fields useful for deciding whether or not to evict the attachment.
-/// See the [`attachments`] module to see more details on how these are calculated
-///
-/// [`attachments`]: crate::mailbox::attachments
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
-#[TableName("attachment_cache")]
-pub struct AttachmentCacheMetadata {
-    /// The primary id, and also the foreign key of an attachment. It always exists as records are
-    /// created with raw sql.
-    #[IdField]
-    pub attachment_id: LocalAttachmentId,
-
-    /// Last access time of the attachment.
-    #[DbField]
-    pub atime: u64,
-
-    /// Creation time of the attachment. Currently unused.
-    #[DbField]
-    pub ctime: u64,
-
-    /// How many times this attachment has been accessed. It starts at 0.
-    #[DbField]
-    pub hit_count: u64,
-
-    /// The path in the filesystem for this attachment.
-    #[DbField]
-    pub path: String,
-
-    /// The size of the attachment in bytes
-    #[DbField]
-    pub size: u64,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
-}
-
 #[cfg(test)]
 #[path = "../tests/models/attachments.rs"]
 mod attachments;
