@@ -248,7 +248,7 @@ impl ProtonCore for Proton {
     }
 
     async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()> {
-        POST!("{CORE_V4}/report/bug")
+        POST!("{CORE_V4}/reports/bug")
             .multipart(move |mut form| {
                 form.add_text("OS", body.os);
                 form.add_text("OSVersion", body.os_version);

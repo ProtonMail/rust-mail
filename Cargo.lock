@@ -388,8 +388,6 @@ dependencies = [
  "log",
  "pin-project",
  "thiserror 1.0.69",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
