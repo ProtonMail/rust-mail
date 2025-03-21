@@ -89,7 +89,11 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<String> {
-        if let Some(path) = Self::path_from_cache_(self.local_id.unwrap(), into_transaction).await?
+        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
+            self.local_id.unwrap(),
+            into_transaction,
+        )
+        .await?
         {
             return Ok(path);
         };
@@ -103,7 +107,9 @@ impl Attachment {
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
+        if let Some(path) =
+            Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), &tx).await?
+        {
             tx.commit().await?;
             return Ok(path);
         };
@@ -127,7 +133,11 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<Vec<u8>> {
-        if let Some(path) = Self::path_from_cache_(self.local_id.unwrap(), into_transaction).await?
+        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
+            self.local_id.unwrap(),
+            into_transaction,
+        )
+        .await?
         {
             return Ok(fs::read(path).await?);
         };
@@ -141,7 +151,9 @@ impl Attachment {
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
+        if let Some(path) =
+            Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), &tx).await?
+        {
             return Ok(fs::read(path).await?);
         };
 
@@ -200,7 +212,8 @@ impl Attachment {
         })
     }
 
-    pub async fn path_from_cache_(
+    /// Starts a transaction, returns the fs path to the attachment and updates hit/atime metadata
+    async fn path_from_cache_and_update_metadata_atomic(
         id: LocalAttachmentId,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<Option<String>> {
@@ -208,7 +221,7 @@ impl Attachment {
             .transaction()
             .await
             .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache(id, &tx).await? {
+        if let Some(path) = Self::path_from_cache_and_update_metadata(id, &tx).await? {
             tx.commit().await?;
             return Ok(Some(path));
         };
@@ -216,8 +229,9 @@ impl Attachment {
     }
 
     /// Returns a fs path to an attachment in the filesystem.
+    /// Also updates hit/atime metadata
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(tx))]
-    pub async fn path_from_cache(
+    pub async fn path_from_cache_and_update_metadata(
         id: LocalAttachmentId,
         tx: &Bond<'_>,
     ) -> Result<Option<String>, StashError> {

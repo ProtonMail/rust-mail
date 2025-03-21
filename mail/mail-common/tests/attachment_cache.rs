@@ -1,4 +1,5 @@
 use insta::assert_snapshot;
+use itertools::Itertools;
 use proton_api_core::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_common::datatypes::exclusive_location::ExclusiveLocation;
@@ -7,6 +8,7 @@ use proton_mail_common::models::attachment_cache::AttachmentCacheMetadata;
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_test_utils::utils::create_address;
 use stash::orm::Model;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime};
 
@@ -319,9 +321,13 @@ async fn integration() -> anyhow::Result<()> {
     }
     tx.commit().await?;
 
-    let files_before: Vec<String> = tether
-        .query_values("SELECT path AS value FROM attachment_cache", vec![])
-        .await?;
+    let files_before = tether
+        .query_values::<_, String>("SELECT path AS value FROM attachment_cache", vec![])
+        .await?
+        .into_iter()
+        .map(PathBuf::from)
+        .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
+        .join("\n");
 
     // Let's allow it to cleanup
     user_ctx
@@ -330,24 +336,26 @@ async fn integration() -> anyhow::Result<()> {
 
     Attachment::do_cleanup_cache(&user_ctx).await?;
 
-    let files_after: Vec<String> = tether
-        .query_values("SELECT path AS value FROM attachment_cache", vec![])
-        .await?;
+    let files_after = tether
+        .query_values::<_, String>("SELECT path AS value FROM attachment_cache", vec![])
+        .await?
+        .into_iter()
+        .map(PathBuf::from)
+        .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
+        .join("\n");
 
     let output = format!(
         "
 This test shows the before and after of a cleanup with a max size of {} bytes
 
 ---------- All attachments ----------
-{}
+{files_before}
 
 
 ---------- Cleaned attachments ----------
-{}
+{files_after}
 ",
         user_ctx.mail_context().attachment_cache_size,
-        files_before.join("\n"),
-        files_after.join("\n"),
     );
 
     assert_snapshot!(output);
