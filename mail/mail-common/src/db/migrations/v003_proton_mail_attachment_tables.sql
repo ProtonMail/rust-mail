@@ -32,9 +32,5 @@ CREATE TABLE attachment_cache (
     ctime INTEGER NOT NULL DEFAULT (unixepoch('now')),
     hit_count INTEGER NOT NULL DEFAULT 0,
     path TEXT NOT NULL,
-    size INTEGER NOT NULL,
-
-    CONSTRAINT attachment_cache_attachment_id
-        FOREIGN KEY (attachment_id)
-        REFERENCES attachments (local_id)
+    size INTEGER NOT NULL
 );
