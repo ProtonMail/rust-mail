@@ -89,15 +89,10 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<String> {
-        let tx = into_transaction
-            .transaction()
-            .await
-            .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
-            tx.commit().await?;
+        if let Some(path) = Self::path_from_cache_(self.local_id.unwrap(), into_transaction).await?
+        {
             return Ok(path);
         };
-        tx.commit().await?;
 
         let data = self.fetch_data(ctx).await?;
 
@@ -132,15 +127,10 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
     ) -> MailContextResult<Vec<u8>> {
-        let tx = into_transaction
-            .transaction()
-            .await
-            .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache(self.local_id.unwrap(), &tx).await? {
-            tx.commit().await?;
+        if let Some(path) = Self::path_from_cache_(self.local_id.unwrap(), into_transaction).await?
+        {
             return Ok(fs::read(path).await?);
         };
-        tx.commit().await?;
 
         let data = self.fetch_data(ctx).await?;
 
@@ -208,6 +198,21 @@ impl Attachment {
             },
             data_path: data_path.into(),
         })
+    }
+
+    pub async fn path_from_cache_(
+        id: LocalAttachmentId,
+        into_transaction: &mut impl IntoTransaction,
+    ) -> MailContextResult<Option<String>> {
+        let tx = into_transaction
+            .transaction()
+            .await
+            .map_err(MailContextError::IntoTransactionError)?;
+        if let Some(path) = Self::path_from_cache(id, &tx).await? {
+            tx.commit().await?;
+            return Ok(Some(path));
+        };
+        Ok(None)
     }
 
     /// Returns a fs path to an attachment in the filesystem.
@@ -535,6 +540,7 @@ impl Attachment {
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
     pub async fn cleanup_cache(ctx: &MailUserContext) {
+        // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
         impl Drop for G {
             fn drop(&mut self) {
@@ -680,9 +686,10 @@ fn attachments_to_delete(
 
 #[cfg(test)]
 mod test {
+    use std::sync::atomic::AtomicU64;
+
     use itertools::Itertools as _;
     use proton_api_core::services::proton::LabelId;
-    use proton_api_mail::services::proton::common::AttachmentId;
 
     use crate::datatypes::SystemLabelId as _;
 
@@ -701,9 +708,56 @@ mod test {
         atime: Duration,
         size: u64,
     }
+
+    impl UsedVariables {
+        fn unpack(self, now: Duration) -> (AttachmentCacheMetadata, Attachment, Message) {
+            let at_cache = AttachmentCacheMetadata {
+                attachment_id: 0.into(),
+                atime: (now - self.atime).as_secs(),
+                hit_count: self.hit_count,
+                size: self.size,
+                path: String::from(self.attachment_name),
+                row_id: Default::default(),
+                ctime: Default::default(),
+            };
+            let attachment = Attachment {
+                disposition: self.disposition,
+                attachment_type: self.att_type,
+                filename: self.attachment_name.into(),
+                ..Default::default()
+            };
+
+            let mut message = Message::default();
+
+            if self.starred {
+                message.label_ids.push(LabelId::starred());
+            }
+            if self.trash {
+                message.exclusive_location = Some(ExclusiveLocation::System {
+                    name: SystemLabel::Trash,
+                    local_id: 0.into(),
+                });
+            }
+            if self.spam {
+                if self.trash {
+                    panic!("Conflicting trash and spam fields")
+                }
+
+                message.exclusive_location = Some(ExclusiveLocation::System {
+                    name: SystemLabel::Trash,
+                    local_id: 1.into(),
+                });
+            }
+            (at_cache, attachment, message)
+        }
+    }
+
     fn default() -> UsedVariables {
+        static UNIQUE: AtomicU64 = AtomicU64::new(0);
+        let remote_id = UNIQUE.fetch_add(1, Ordering::Relaxed).to_string();
+
         UsedVariables {
-            att_type: AttachmentType::Remote(Some(AttachmentId::from("turtles"))),
+            att_type: AttachmentType::Remote(Some(remote_id.into())),
             ..Default::default()
         }
     }
@@ -725,45 +779,8 @@ mod test {
             .expect("Time went backwards");
         let atts = vars
             .into_iter()
-            .map(|var| {
-                let at_cache = AttachmentCacheMetadata {
-                    attachment_id: 0.into(),
-                    atime: (now - var.atime).as_secs(),
-                    hit_count: var.hit_count,
-                    size: var.size,
-                    path: String::from(var.attachment_name),
-                    row_id: Default::default(),
-                    ctime: Default::default(),
-                };
-                let attachment = Attachment {
-                    disposition: var.disposition,
-                    attachment_type: var.att_type,
-                    ..Default::default()
-                };
-
-                let mut message = Message::default();
-
-                if var.starred {
-                    message.label_ids.push(LabelId::starred());
-                }
-                if var.trash {
-                    message.exclusive_location = Some(ExclusiveLocation::System {
-                        name: SystemLabel::Trash,
-                        // It doesn't get read so it's ok
-                        local_id: 0.into(),
-                    });
-                }
-                if var.spam {
-                    if var.trash {
-                        panic!("Conflicting trash and spam fields")
-                    }
-
-                    message.exclusive_location = Some(ExclusiveLocation::System {
-                        name: SystemLabel::Trash,
-                        local_id: 0.into(),
-                    });
-                }
-
+            .map(|var| var.unpack(now))
+            .map(|(at_cache, attachment, message)| {
                 let utility = get_utility(&at_cache, &attachment, &message, now);
                 (utility, at_cache)
             })
@@ -1002,9 +1019,8 @@ mod test {
         insta::assert_snapshot!(test_order_with_bytes(vars, 250_000));
     }
 
-    #[test]
-    fn comprehensive_priority_test() {
-        let vars = [
+    fn comprehensive() -> impl Iterator<Item = UsedVariables> {
+        [
             // Zero-sized attachments should always be preserved regardless of other factors
             UsedVariables {
                 attachment_name: "zero_sized_in_trash",
@@ -1172,10 +1188,14 @@ mod test {
                 atime: Duration::from_secs(300), // 5 minutes
                 ..default()
             },
-        ];
+        ]
+        .into_iter()
+    }
 
+    #[test]
+    fn comprehensive_priority_test() {
         // Test with unlimited bytes to delete to see full priority order
-        insta::assert_snapshot!(test_order(vars));
+        insta::assert_snapshot!(test_order(comprehensive()));
     }
 
     #[test]

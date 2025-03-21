@@ -182,7 +182,7 @@ pub struct MailContext {
     core_context: Arc<Context>,
     mail_cache_path: PathBuf,
     /// This will get used in the near future.
-    pub(crate) attachment_cache_size: u64,
+    pub attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
 }
 

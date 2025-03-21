@@ -1,0 +1,35 @@
+---
+source: mail/mail-common/tests/attachment_cache.rs
+expression: output
+---
+This test shows the before and after of a cleanup with a max size of 262144 bytes
+
+---------- All attachments ----------
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/1/zero_sized_in_trash
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/2/spam_tiny_new
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/3/trash_tiny_new
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/4/ancient_tiny
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/5/recent_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/6/frequently_accessed_medium
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/7/rarely_accessed_small
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/8/starred_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/9/unstarred_medium
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/10/pgp_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/11/normal_small
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/12/inline_medium
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/13/attachment_medium
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/14/starred_trash_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/15/pgp_old_but_frequent
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/16/tiny_inline_ancient_but_starred
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/17/unsent_draft_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/18/fresh_but_huge
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/19/perfect_storm
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/20/golden_child
+
+
+---------- Cleaned attachments ----------
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/2/spam_tiny_new
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/3/trash_tiny_new
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/12/inline_medium
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/14/starred_trash_large
+/tmp/pmc_test.Tu8oGedhbdGj/mail-cache/attachments/20/golden_child
