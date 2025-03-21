@@ -2693,6 +2693,7 @@ impl TableObserver for MessageWatcher {
             Message::table_name().to_string(),
             MessageLabel::table_name().to_string(),
             Label::table_name().to_string(),
+            Attachment::table_name().to_string(), // This is needed for pgp attachments
         ]
     }
 

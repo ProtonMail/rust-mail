@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
   - Call `disconnect()` when dropping `DraftAttachmentWatcher` and `DraftSendResultWatcher`.
+  - The watcher also reloads when new attachments exist.
+
+### Removed
+
+  - `DecryptedBody::get_all_attachments` was deleted as it is no longer necessary.
 
 
 ## [0.61.0] - 2025-03-20
@@ -38,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - MailScroller & Prefetcher now stores only non existent data.
   - DratAttachmentState now has the error reason.
   - Subscription ID is optional
+
 
 
 ## [0.59.0] - 2025-03-17
