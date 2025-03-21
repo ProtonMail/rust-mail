@@ -143,7 +143,7 @@ impl AppModel {
                 None,
                 Arc::new(keychain),
                 app_config.api_config(),
-                log_file,
+                Some(log_file),
             )
             .await?;
 

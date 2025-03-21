@@ -31,7 +31,7 @@ async fn prepare_context(dir: &TempDir) -> (Arc<Context>, Arc<dyn KeyChain>) {
         config,
         cache_dir,
         None,
-        "",
+        None,
     )
     .await
     .unwrap();

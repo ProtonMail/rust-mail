@@ -193,7 +193,7 @@ async fn create_mail_session_inner(
         connection_pool_size,
         Arc::new(key_chain),
         api_env_config.into(),
-        log_path,
+        Some(log_path),
     )
     .await?;
 

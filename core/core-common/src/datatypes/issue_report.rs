@@ -23,6 +23,7 @@ use crate::{CoreContextError, UserContext};
 #[path = "../tests/issue_report/zip_file.rs"]
 mod zip_file;
 
+/// Represents Report issue form.
 pub struct IssueReport {
     /// Name of the operating system app was run in.
     ///
@@ -114,6 +115,7 @@ pub enum ClientType {
 
 /// Maximum number of bytes accepted - 50Mb
 const MAX_LOG_BYTES: u64 = 1024 * 1024 * 50;
+type ZippedFile = (String, Vec<u8>);
 
 /// Report an issue functionality.
 ///
@@ -130,9 +132,15 @@ pub async fn report_an_issue(
     report: IssueReport,
     user_ctx: &UserContext,
 ) -> Result<(), CoreContextError> {
-    let logs: Option<(String, Vec<u8>)> = if report.logs {
-        let log_path = user_ctx.get_log_path();
-        Some(zip_file_in_memory(log_path, Utc::now(), MAX_LOG_BYTES).await?)
+    let logs: Option<ZippedFile> = if report.logs {
+        if let Some(log_path) = user_ctx.get_log_path() {
+            Some(zip_file_in_memory(log_path, Utc::now(), MAX_LOG_BYTES).await?)
+        } else {
+            tracing::error!(
+                "Could not attach logs to the bug report due to missing path in user context."
+            );
+            None
+        }
     } else {
         None
     };
@@ -145,10 +153,7 @@ pub async fn report_an_issue(
 
 /// Form payload mirroring Proton's bug report API.
 ///
-fn create_bug_report_payload(
-    report: IssueReport,
-    logs: Option<(String, Vec<u8>)>,
-) -> PostReportBug {
+fn create_bug_report_payload(report: IssueReport, logs: Option<ZippedFile>) -> PostReportBug {
     let mut description = format!("SUMMARY\n{}", report.summary);
 
     if !report.steps_to_reproduce.is_empty() {
@@ -199,7 +204,7 @@ async fn zip_file_in_memory(
     path: impl AsRef<Path>,
     now: DateTime<Utc>,
     max_bytes: u64,
-) -> Result<(String, Vec<u8>), CoreContextError> {
+) -> Result<ZippedFile, CoreContextError> {
     let mut file = File::open(&path).await?;
     let metadata = file.metadata().await?;
 

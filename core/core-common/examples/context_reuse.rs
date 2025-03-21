@@ -41,7 +41,7 @@ async fn main() {
         config,
         cache_dir,
         None,
-        "",
+        None,
     )
     .await
     .unwrap();

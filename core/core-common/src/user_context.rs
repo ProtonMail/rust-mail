@@ -130,7 +130,7 @@ impl UserContext {
 
     /// Get path to the log file.
     #[must_use]
-    pub fn get_log_path(&self) -> &Path {
+    pub fn get_log_path(&self) -> Option<&Path> {
         self.context.get_log_path()
     }
 

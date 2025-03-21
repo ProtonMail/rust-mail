@@ -3241,7 +3241,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.2.0"
-source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=feat%2FMUON-46%2Fmultipart-requests#7fd603660a488ede60961195206d737380592ca0"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "muon-impl",
  "muon-proc",
@@ -3250,7 +3250,7 @@ dependencies = [
 [[package]]
 name = "muon-impl"
 version = "0.13.1"
-source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=feat%2FMUON-46%2Fmultipart-requests#7fd603660a488ede60961195206d737380592ca0"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -3302,7 +3302,7 @@ dependencies = [
 [[package]]
 name = "muon-proc"
 version = "0.5.0"
-source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=feat%2FMUON-46%2Fmultipart-requests#7fd603660a488ede60961195206d737380592ca0"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "cfg-if",
  "proc-macro2",
