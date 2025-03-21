@@ -1,5 +1,5 @@
 use std::mem;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::actions::draft;
 use crate::actions::draft::{
@@ -378,7 +378,7 @@ impl Draft {
                 .save(&tx)
                 .await
                 .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-            tokio::fs::create_dir_all(attachment_staging_path(context, metadata.id.unwrap()))
+            tokio::fs::create_dir_all(draft_attachment_staging_path(context, metadata.id.unwrap()))
                 .await
                 .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
             tx.commit().await?;
@@ -592,7 +592,7 @@ impl Draft {
         .await
         .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
 
-        tokio::fs::create_dir_all(attachment_staging_path(context, metadata.id.unwrap()))
+        tokio::fs::create_dir_all(draft_attachment_staging_path(context, metadata.id.unwrap()))
             .await
             .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
 
@@ -1038,6 +1038,27 @@ impl Draft {
         }
     }
 
+    /// Delete an attachment file, but only if it is part of the draft staging area.
+    ///
+    /// If the removal fails, due to file locks, it will be GCed later by a background task.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the remove failed.
+    pub async fn delete_attachment_if_in_staging_area(&self, ctx: &MailUserContext, path: &Path) {
+        let staging_path = self.attachment_staging_path(ctx);
+        if path.starts_with(&staging_path) {
+            if let Err(e) = tokio::fs::remove_file(&staging_path).await {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    // This is a warning as the background process will try again.
+                    tracing::warn!(
+                        "Failed to delete attachment from staging area at {path:?}: {e:?}"
+                    );
+                }
+            }
+        }
+    }
+
     /// Add a new `attachment` to this draft.
     ///
     /// Use [`Attachment::create_local`] to create a new attachment first.
@@ -1147,7 +1168,7 @@ impl Draft {
 
     /// Get the path where attachments should be staged.
     pub fn attachment_staging_path(&self, context: &MailUserContext) -> PathBuf {
-        attachment_staging_path(context, self.metadata_id)
+        draft_attachment_staging_path(context, self.metadata_id)
     }
 
     /// Get the list of attachments and their upload status.
@@ -1441,7 +1462,11 @@ impl DraftAttachmentRemovalQueuer {
     }
 }
 
-fn attachment_staging_path(context: &MailUserContext, metadata_id: MetadataId) -> PathBuf {
+/// Get the attachment staging path for a given draft with `metadata_id`.
+pub fn draft_attachment_staging_path(
+    context: &MailUserContext,
+    metadata_id: MetadataId,
+) -> PathBuf {
     context
         .attachment_staging_path()
         .join(metadata_id.to_string())

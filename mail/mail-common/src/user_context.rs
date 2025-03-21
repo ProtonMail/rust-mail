@@ -5,6 +5,7 @@ mod initialization;
 
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
+use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -81,6 +82,9 @@ impl MailUserContext {
             send_queue_executors,
             last_event_loop_action_id: Mutex::new(None),
         });
+
+        // Start draft staging area cleaner.
+        DraftStagingAreaCleaner::new().run(Arc::clone(&this));
 
         this.user_context
             .queue()
