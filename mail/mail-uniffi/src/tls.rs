@@ -5,7 +5,7 @@ use std::sync::Once;
 
 static INIT_ONCE: Once = Once::new();
 
-#[export_name = "Java_uniffi_proton_1mail_1uniffi_RustInit_init_1tls"]
+#[unsafe(export_name = "Java_uniffi_proton_1mail_1uniffi_RustInit_init_1tls")]
 pub extern "C" fn init_tls(env: JNIEnv<'_>, cls: JClass<'_>) {
     INIT_ONCE.call_once(|| {
         if let Err(e) = try_init_tls(env, cls) {
