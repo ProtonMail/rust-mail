@@ -872,13 +872,10 @@ pub async fn delete_messages(
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
-pub async fn mark_messages_ham(
-    session: Arc<MailUserSession>,
-    message_ids: Vec<Id>,
-) -> Result<(), ActionError> {
-    let ctx = session.ctx()?;
+pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {
+    let ctx = mailbox.ctx()?;
     uniffi_async(async move {
-        RealMessage::action_ham(ctx.action_queue(), message_ids.map_vec())
+        RealMessage::action_ham(ctx.action_queue(), vec![message_id.into()])
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
