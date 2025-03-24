@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
-## [0.62.0] - 2025-03-24
+## [0.63.0] - 2025-03-24
+
+### Added
+
+ - [ET-548]: Report an issue feature is fully implemeneted
+
+
+## [0.62.1] - 2025-03-24
 
 ### Fixed
 
