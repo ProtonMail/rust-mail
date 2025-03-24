@@ -4,7 +4,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType};
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
-use crate::draft::{Draft, ReplyMode, SaveOrSendError};
+use crate::draft::{draft_attachment_staging_path, Draft, ReplyMode, SaveOrSendError};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
     DraftSendResultOrigin, MailSettings, Message, MetadataId,
@@ -389,6 +389,16 @@ impl Send {
             .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
 
         tx.commit().await?;
+
+        // try to delete staging path.
+        let staging_path = draft_attachment_staging_path(context, action.metadata_id);
+        if let Err(e) = tokio::fs::remove_dir_all(&staging_path).await {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                // This is a warning as the background process will try again.
+                tracing::warn!("Failed to remove staging path: {e:?}");
+            }
+        }
+
         Ok((
             metadata.remote_id.expect("This is valid"),
             response.delivery_time,

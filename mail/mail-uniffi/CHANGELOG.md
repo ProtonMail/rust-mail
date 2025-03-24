@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Added
+
+ - [ET-2492]: Auto clean attachments uploaded to draft staging area.
+
 ### Changed
 
   - `mark_messaages_ham` now takes `mailbox` for consistency and a single `id` and is called `mark_message_ham`
@@ -20,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
   - `DecryptedBody::get_all_attachments` was deleted as it is no longer necessary.
-
 
 ## [0.61.0] - 2025-03-20
 

@@ -122,16 +122,21 @@ impl AttachmentList {
                 instance.address_id.clone()
             };
             let mut tether = draft.ctx.user_stash().connection();
-            let attachment = RealAttachment::create_local(
+
+            let result = RealAttachment::create_local(
                 &draft.ctx,
                 address_id,
                 Disposition::Attachment,
                 &path,
                 &mut tether,
             )
-            .await?;
+            .await;
 
             let instance = draft.instance.read().await;
+            instance
+                .delete_attachment_if_in_staging_area(&draft.ctx, &path)
+                .await;
+            let attachment = result?;
             instance.add_attachment(&draft.ctx, attachment).await?;
             Ok(())
         })
