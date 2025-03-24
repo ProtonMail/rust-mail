@@ -5,27 +5,30 @@ use uniffi::Enum as UniffiEnum;
 /// This enum represents the system labels that are available in ProtonMail.
 /// Their values corresponds to the remote ids of the labels in the core API database.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, UniffiEnum)]
-#[repr(u8)]
 pub enum SystemLabel {
-    Inbox = 0,
-    AllDrafts = 1,
-    AllSent = 2,
-    Trash = 3,
-    Spam = 4,
-    AllMail = 5,
-    Archive = 6,
-    Sent = 7,
-    Drafts = 8,
-    Outbox = 9,
-    Starred = 10,
-    Scheduled = 12,
-    AlmostAllMail = 15,
-    Snoozed = 16,
-    CategorySocial = 20,
-    CategoryPromotions = 21,
-    CatergoryUpdates = 22,
-    CategoryForums = 23,
-    CategoryDefault = 24,
+    Inbox,
+    AllDrafts,
+    AllSent,
+    Trash,
+    Spam,
+    AllMail,
+    Archive,
+    Sent,
+    Drafts,
+    Outbox,
+
+    Starred,
+    Scheduled,
+    Blocked,
+    AlmostAllMail,
+    Snoozed,
+    Pinned,
+
+    CategorySocial,
+    CategoryPromotions,
+    CatergoryUpdates,
+    CategoryForums,
+    CategoryDefault,
 }
 
 impl SystemLabel {
@@ -56,6 +59,8 @@ impl From<RealSystemLabel> for SystemLabel {
             RealSystemLabel::CatergoryUpdates => SystemLabel::CatergoryUpdates,
             RealSystemLabel::CategoryForums => SystemLabel::CategoryForums,
             RealSystemLabel::CategoryDefault => SystemLabel::CategoryDefault,
+            RealSystemLabel::Blocked => SystemLabel::Blocked,
+            RealSystemLabel::Pinned => SystemLabel::Pinned,
         }
     }
 }
@@ -82,6 +87,8 @@ impl From<SystemLabel> for RealSystemLabel {
             SystemLabel::CatergoryUpdates => RealSystemLabel::CatergoryUpdates,
             SystemLabel::CategoryForums => RealSystemLabel::CategoryForums,
             SystemLabel::CategoryDefault => RealSystemLabel::CategoryDefault,
+            SystemLabel::Blocked => RealSystemLabel::Blocked,
+            SystemLabel::Pinned => RealSystemLabel::Pinned,
         }
     }
 }

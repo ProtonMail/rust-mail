@@ -39,10 +39,11 @@ pub enum SystemLabel {
     Outbox = 9,
 
     Starred = 10,
-    AlmostAllMail = 15,
-
     Scheduled = 12,
+    Blocked = 14,
+    AlmostAllMail = 15,
     Snoozed = 16,
+    Pinned = 17,
 
     CategorySocial = 20,
     CategoryPromotions = 21,
