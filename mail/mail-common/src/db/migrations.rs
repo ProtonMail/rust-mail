@@ -6,6 +6,7 @@ use stash::stash::Stash;
 mod v001_proton_mail_default_labels;
 mod v005_proton_mail_conversation_counters;
 mod v007_proton_mail_message_counters;
+mod v012_proton_mail_new_system_labels;
 
 const VERSION_TABLE_NAME: &str = "proton_mail_db_version";
 
