@@ -818,8 +818,7 @@ sql_using_serde!(AttachmentEncryptedSignature);
 /// The attachment data is all stored in one table and initialized partially
 /// with data from all these sources.
 ///
-//TODO(ET-2277): Revert Serialize/Deserialize
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
     /// Local attachment id.
     pub local_id: Option<LocalAttachmentId>,
@@ -1544,8 +1543,7 @@ impl MessageLabelsCount {
 }
 
 /// TODO: Document this struct.
-//TODO(ET-2277): Revert Serialize/Deserialize
-#[derive(Clone, Copy, Default, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct MessageFlags(u64);
 
 bitflags::bitflags! {

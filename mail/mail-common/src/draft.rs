@@ -9,14 +9,14 @@ use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType}
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::{
-    crate_draft_params, encrypt_draft_body, get_signature, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply,
+    encrypt_draft_body, get_signature, patch_draft_with_reply_mode, prepare_html_reply,
+    prepare_plain_text_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
     DraftSendResult, DraftSendResultOrigin, EmbeddedAttachmentInfo, MailSettings, Message,
-    MessageBodyMetadata, MetadataId,
+    MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use compose::maybe_sanitize;
@@ -29,6 +29,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::AddressId;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_api_mail::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_api_mail::services::proton::response_data::Message as ApiMessage;
@@ -719,20 +720,17 @@ impl Draft {
         context: &MailUserContext,
         session: &Session,
         address_id: AddressId,
-        message: &Message,
-        message_body_metadata: &MessageBodyMetadata,
+        save_action: &Save,
+        attachments: &[Attachment],
         message_body: &str,
         draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
-        let params = crate_draft_params(message, message_body_metadata, encrypted);
+        let params = save_action.crate_draft_params(encrypted);
 
         let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
-        debug!(
-            "Draft create with {} attachments",
-            message_body_metadata.attachments.len()
-        );
-        for attachment in &message_body_metadata.attachments {
+        debug!("Draft create with {} attachments", attachments.len());
+        for attachment in attachments {
             let Some(remote_id) = attachment.remote_id().clone() else {
                 // When adding new attachment to a draft, we reflect the state correctly offline
                 // but we can not attach an attachment until it has a remote id. We skip attachments
@@ -784,19 +782,18 @@ impl Draft {
         context: &MailUserContext,
         session: &Session,
         address_id: AddressId,
-        message: &Message,
-        message_body_metadata: &MessageBodyMetadata,
+        local_message_id: LocalMessageId,
+        message_id: MessageId,
+        save_action: &Save,
+        attachments: &[Attachment],
         message_body: &str,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
-        let params = crate_draft_params(message, message_body_metadata, encrypted);
+        let params = save_action.crate_draft_params(encrypted);
 
         let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
-        debug!(
-            "Draft update with {} attachments",
-            message_body_metadata.attachments.len()
-        );
-        for attachment in &message_body_metadata.attachments {
+        debug!("Draft update with {} attachments", attachments.len());
+        for attachment in attachments {
             let Some(remote_id) = attachment.remote_id().clone() else {
                 // When adding new attachment to a draft, we reflect the state correctly offline
                 // but we can not attach an attachment until it has a remote id. We skip attachments
@@ -819,11 +816,7 @@ impl Draft {
 
         match session
             .api()
-            .update_draft(
-                message.remote_id.clone().unwrap(),
-                params,
-                attachment_key_packets,
-            )
+            .update_draft(message_id, params, attachment_key_packets)
             .await
         {
             Err(e) => {
@@ -831,9 +824,7 @@ impl Draft {
                     if proton_error.code == Mail::MessageAlreadySent as u32 {
                         return Err(SaveOrSendError::AlreadySent.into());
                     } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
-                        return Err(
-                            SaveOrSendError::MessageNotADraft(message.local_id.unwrap()).into()
-                        );
+                        return Err(SaveOrSendError::MessageNotADraft(local_message_id).into());
                     } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
                         return Err(SaveOrSendError::DraftDoesNotExistOnServer.into());
                     }
@@ -1496,7 +1487,7 @@ async fn queue_or_replace_draft_save(
             .await
         {
             Ok(v) => Ok(v),
-            //TODO(ET-2277): More elegant solution
+            //TODO: More elegant solution
             // It is possible under certain circumstances to issue a replace
             // that can end of up in a cyclic dependency. E.g: Save(A) -> Upload Attachment (B) ->
             // Save (C). Replacing A with C will cause C to Depend on B and B on C rather

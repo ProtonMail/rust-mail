@@ -1,11 +1,11 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
 use crate::draft::{Draft, ReplyMode, SaveOrSendError};
-use crate::models::{MailSettings, Message, MessageBodyMetadata};
+use crate::models::{MailSettings, Message};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
 use proton_api_core::services::proton::AddressId;
-use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
+use proton_api_mail::services::proton::request_data::DraftRecipient;
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -70,29 +70,6 @@ pub(super) async fn patch_draft_with_reply_mode(
     }
 }
 
-/// Create draft params from `message` and `message_body_metadata`
-pub(super) fn crate_draft_params(
-    message: &Message,
-    message_body_metadata: &MessageBodyMetadata,
-    encrypted_draft: EncryptedDraft,
-) -> DraftParams {
-    DraftParams {
-        subject: message.subject.clone(),
-        unread: message.unread,
-        sender: DraftSender {
-            address: message.sender.address.clone(),
-            name: message.sender.name.clone(),
-        },
-        to_list: recipient_from_message_sender(&message.to_list.value),
-        cc_list: recipient_from_message_sender(&message.cc_list.value),
-        bcc_list: recipient_from_message_sender(&message.bcc_list.value),
-        external_id: message.external_id.clone().map(|id| id.to_string()),
-        draft_flags: 0,
-        body: encrypted_draft,
-        mime_type: message_body_metadata.mime_type.into(),
-    }
-}
-
 /// Build signature from mail settings.
 pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> String {
     let line_break = if mail_settings.draft_mime_type == MimeType::TextHtml {
@@ -119,7 +96,9 @@ pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> 
     signature
 }
 
-fn recipient_from_message_sender(recipients: &[MessageRecipient]) -> Vec<DraftRecipient> {
+pub(crate) fn recipient_from_message_sender(
+    recipients: &[MessageRecipient],
+) -> Vec<DraftRecipient> {
     recipients
         .iter()
         .map(|v| DraftRecipient {

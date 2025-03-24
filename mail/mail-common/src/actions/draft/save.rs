@@ -20,9 +20,13 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_mail::services::proton::prelude::DraftReplyOrForwardParams;
+use proton_api_mail::services::proton::prelude::{
+    DraftParams, DraftReplyOrForwardParams, ExternalId,
+};
+use proton_api_mail::services::proton::request_data::DraftSender;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
-use proton_mail_ids::LocalConversationId;
+use proton_crypto_inbox::message::EncryptedDraft;
+use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -64,10 +68,14 @@ pub struct Save {
     reply_mode: Option<ReplyMode>,
     /// For error reporting when action fails
     save_origin: DraftSendResultOrigin,
-    /// Message metadata at the time of excecution.
-    message_metadata: Option<Message>,
-    /// Message body metadata at the time of execution
-    message_body_metadata: Option<MessageBodyMetadata>,
+    /// Attachments associated with this message.
+    attachment_ids: Vec<LocalAttachmentId>,
+    /// Message's external id.
+    external_id: Option<ExternalId>,
+    /// Whether the draft is unread or not.
+    unread: Option<bool>,
+    /// Draft Sender
+    sender: Option<MessageSender>,
 }
 
 impl Save {
@@ -93,8 +101,35 @@ impl Save {
             parent_id: None,
             reply_mode: None,
             save_origin,
-            message_metadata: None,
-            message_body_metadata: None,
+            external_id: None,
+            attachment_ids: Vec::new(),
+            unread: None,
+            sender: None,
+        }
+    }
+
+    /// Convert the existing action state into a [`DraftParams`].
+    pub fn crate_draft_params(&self, encrypted_draft: EncryptedDraft) -> DraftParams {
+        DraftParams {
+            subject: self.subject.clone(),
+            unread: self.unread.expect("Should be set at this point"),
+            sender: self
+                .sender
+                .clone()
+                .map(|sender| DraftSender {
+                    address: sender.address,
+                    name: sender.name,
+                })
+                .expect("Should be set at this point"),
+            to_list: compose::recipient_from_message_sender(&self.to_list.to_message_recipients()),
+            cc_list: compose::recipient_from_message_sender(&self.cc_list.to_message_recipients()),
+            bcc_list: compose::recipient_from_message_sender(
+                &self.bcc_list.to_message_recipients(),
+            ),
+            external_id: self.external_id.clone().map(|id| id.to_string()),
+            draft_flags: 0,
+            body: encrypted_draft,
+            mime_type: self.mime_type.into(),
         }
     }
 }
@@ -158,6 +193,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
         debug!("Draft has {} attachments", attachments.len());
         let attachment_metadata = Save::attachment_metadata(&attachments);
+        let attachment_ids = attachments
+            .iter()
+            .map(|a| a.local_id.unwrap())
+            .collect::<Vec<_>>();
 
         let conversation_id = if let Some(id) = metadata.local_conversation_id {
             id
@@ -183,7 +222,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         };
 
         let time = draft::compose::create_timestamp();
-        let (message, body_metadata) = if let Some(message_id) = metadata.local_message_id {
+        let message = if let Some(message_id) = metadata.local_message_id {
             debug!("Local message id is set, update");
             let Some(mut message) = Message::find_by_id(message_id, bond)
                 .await
@@ -227,7 +266,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 error!("Failed to update draft body metadata: {e:?}");
             })?;
 
-            (message, body_metadata)
+            message
         } else {
             debug!("Local message id is not set, creating new draft");
             let display_order = Message::next_display_order(bond)
@@ -292,7 +331,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 error!("Failed to apply all_mail label to new message: {e:?}");
             })?;
 
-            (message, message_body_metadata)
+            message
         };
 
         let body = mem::take(&mut action.body);
@@ -312,8 +351,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
         action.conversation_id = metadata.local_conversation_id;
         action.reply_mode = metadata.reply_mode;
         action.parent_id = metadata.local_parent_id;
-        action.message_metadata = Some(message);
-        action.message_body_metadata = Some(body_metadata);
+        action.attachment_ids = attachment_ids;
+        action.sender = Some(message.sender);
+        action.unread = Some(message.unread);
 
         Ok(())
     }
@@ -354,12 +394,15 @@ impl Save {
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let session = ctx.session();
 
-        let message_id = action.message_id.expect("Should be set");
+        let local_message_id = action.message_id.expect("Should be set");
         let conversation_id = action.conversation_id.expect("Should be set");
 
-        let Some(message) = action.message_metadata.as_mut() else {
-            error!("Message metadata missing from actions");
-            return Err(AppError::MessageMissing(message_id).into());
+        if Message::find_by_id(local_message_id, guard.tether())
+            .await?
+            .is_none()
+        {
+            error!("Message {local_message_id} does not exits");
+            return Err(AppError::MessageMissing(local_message_id).into());
         };
 
         if Conversation::find_by_id(conversation_id, guard.tether())
@@ -367,10 +410,6 @@ impl Save {
             .is_none()
         {
             return Err(AppError::ConversationNotFound(conversation_id).into());
-        };
-
-        let Some(message_body_metadata) = action.message_body_metadata.as_mut() else {
-            return Err(AppError::MessageBodyMetadataMissing(message_id).into());
         };
 
         let remote_parent_id = if let Some(parent_id) = action.parent_id {
@@ -403,64 +442,49 @@ impl Save {
         // ids.
 
         // Check message id.
-        if message.remote_id.is_none() {
-            debug!("Resolving remote message id");
-            let remote_id =
-                Message::local_id_counterpart(message.local_id.unwrap(), guard.tether())
-                    .await
-                    .inspect_err(|e| error!("Failed to resolve remote message id: {e}"))?;
-            if remote_id.is_none() {
-                debug!("Message does not have remote id yet");
-            }
-            message.remote_id = remote_id;
+        debug!("Resolving remote message id");
+        let remote_message_id = Message::local_id_counterpart(local_message_id, guard.tether())
+            .await
+            .inspect_err(|e| error!("Failed to resolve remote message id: {e}"))?;
+        if remote_message_id.is_none() {
+            debug!("Message does not have remote id yet");
         }
 
         // Reload attachments if they don't have remote id or key packets.
-        for attachment in &mut message_body_metadata.attachments {
-            if attachment.remote_id().is_none() || attachment.key_packets.is_none() {
-                debug!(
-                    "Reloading attachment from db: {}",
-                    attachment.local_id.unwrap()
-                );
-                if let Some(db_attachment) =
-                    Attachment::find_by_id(attachment.local_id.unwrap(), guard.tether())
-                        .await
-                        .inspect_err(|e| error!("Failed to reload attachment: {e}"))?
-                {
-                    *attachment = db_attachment;
-                }
-            }
-        }
-
-        let is_create = message.remote_id.is_none();
+        let attachments =
+            Attachment::find_by_ids(action.attachment_ids.iter().cloned(), guard.tether())
+                .await
+                .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
 
         // Create draft on the server.
-        let new_message = if is_create {
+        let new_message = if let Some(remote_message_id) = remote_message_id.clone() {
+            Draft::remote_update(
+                ctx,
+                session,
+                action.address_id.clone(),
+                local_message_id,
+                remote_message_id,
+                action,
+                &attachments,
+                &action.body,
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to update draft on remote: {e:?}");
+            })?
+        } else {
             Draft::remote_create(
                 ctx,
                 session,
                 action.address_id.clone(),
-                message,
-                message_body_metadata,
+                action,
+                &attachments,
                 &action.body,
                 draft_reply_or_forward_params,
             )
             .await
             .inspect_err(|e| {
                 error!("Failed to create draft on remote: {e:?}");
-            })?
-        } else {
-            Draft::remote_update(
-                ctx,
-                session,
-                action.address_id.clone(),
-                message,
-                message_body_metadata,
-                &action.body,
-            )
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update draft on remote: {e:?}");
             })?
         };
 
@@ -484,18 +508,17 @@ impl Save {
                     error!("Failed to convert api message: {e:?}");
                 })?;
 
-        if is_create {
+        if remote_message_id.is_none() {
             // When we create a draft on the server, all inherited attachments get a new remote
             // id. We need to remove and update those items for things to work correctly
 
             // API always returns the same amount, but tests may not.
             debug_assert_eq!(
                 new_message_body_metadata.attachments.len(),
-                message_body_metadata.attachments.len()
+                attachments.len()
             );
 
-            for (index, original_attachment) in message_body_metadata
-                .attachments
+            for (index, original_attachment) in attachments
                 .iter()
                 .enumerate()
                 .filter(|(_, a)| a.remote_id().is_some())
@@ -536,7 +559,7 @@ impl Save {
                     // Unlink previous attachment.
                     bond.execute(indoc! {
                         "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
-                    }, params![message.local_id.unwrap(), original_attachment.local_id.unwrap()]).await.inspect_err(|e|
+                    }, params![local_message_id, original_attachment.local_id.unwrap()]).await.inspect_err(|e|
                         error!("Failed to unlink attachment from message: {e:?}"))?;
                     // Remove attachment metadata
                     let current_display_order = attachment_metadata.display_order;
@@ -550,7 +573,7 @@ impl Save {
                         .await
                         .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
                     // Create link
-                    bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![message.local_id.unwrap(), new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
+                    bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
                     // Creat new metadata entry
                     let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
                         action.metadata_id,
@@ -602,14 +625,14 @@ impl Save {
                 new_local_message.display_order,
                 new_local_message.remote_id,
                 new_local_message.remote_conversation_id,
-                message_id
+                local_message_id
             ],
         )
         .await
         .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
 
         // Update only the headers that are produced by the api.
-        new_message_body_metadata.local_message_id = Some(message_id);
+        new_message_body_metadata.local_message_id = Some(local_message_id);
         new_message_body_metadata
             .update_fields_after_draft_create_or_update(&bond)
             .await

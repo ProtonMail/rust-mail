@@ -56,7 +56,6 @@ use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, Sys
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_ids::LocalConversationId;
-use serde::{Deserialize, Serialize};
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -68,8 +67,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use tracing::{debug, error, info, trace, warn};
 
-//TODO(ET-2277): Revert Serialize/Deserialize
-#[derive(Clone, Debug, Eq, Model, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
 #[ModelActions(on_load, on_save)]
 pub struct Message {
@@ -197,8 +195,6 @@ pub struct Message {
     pub unread: bool,
 
     /// List of custom labels.
-    //TODO(ET-2277) :revert
-    #[serde(skip)]
     pub custom_labels: Vec<CustomLabel>,
 
     #[allow(clippy::doc_markdown)]
@@ -2778,8 +2774,7 @@ impl Default for Message {
 ///
 /// For metadata associated with a message see [`MessageMetadata`].
 ///
-//TODO(ET-2277): Revert Serialize/Deserialize
-#[derive(Clone, Debug, Default, Eq, Model, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
 #[ModelActions(on_load, on_save)]
 pub struct MessageBodyMetadata {
