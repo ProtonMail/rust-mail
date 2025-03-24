@@ -627,15 +627,15 @@ async fn create_draft_reply_impl(
             .await
             .unwrap()
             .unwrap();
-        user_ctx
-            .store_attachment_in_cache(
-                &attachment.name,
-                local_attachment_id,
-                attachment.name.as_bytes().to_vec(),
-                &tx,
-            )
-            .await
-            .unwrap();
+        Attachment::store_in_cache(
+            &user_ctx,
+            &attachment.name,
+            local_attachment_id,
+            attachment.name.as_bytes().to_vec(),
+            &tx,
+        )
+        .await
+        .unwrap();
     }
     tx.commit().await.unwrap();
 

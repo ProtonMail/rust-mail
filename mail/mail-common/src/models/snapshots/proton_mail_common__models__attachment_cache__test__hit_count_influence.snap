@@ -1,0 +1,7 @@
+---
+source: mail/mail-common/src/models/attachment_cache.rs
+expression: test_order(vars)
+---
+name: no hits medium, anti-utility 384000
+name: low hits small, anti-utility 128000
+name: high hits large, anti-utility 46545

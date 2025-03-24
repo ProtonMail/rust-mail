@@ -1,21 +1,21 @@
 //! Collection of interfaces required for OS integration.
 mod keychain;
 
-use std::{
-    fs::{self},
-    io::{self, Write},
-    path::{Path, PathBuf},
-};
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
 
 pub use keychain::*;
 use tokio::task::spawn_blocking;
 
 /// This is a replacement for `fs::write` that writes to a tempfile and then renames it to `path`.
 pub fn safe_write(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> io::Result<()> {
-    let mut f = tempfile::NamedTempFile::new()?;
-    f.write_all(contents.as_ref())?;
-    let temp_path = f.into_temp_path();
-    fs::rename(temp_path, path)?;
+    let path = path.as_ref();
+    let mut filename = path.file_name().unwrap_or_default().to_owned();
+    filename.push(".tmp");
+    let tmp_file = path.with_file_name(filename);
+    fs::write(&tmp_file, contents)?;
+    fs::rename(&tmp_file, path)?;
     Ok(())
 }
 

@@ -26,7 +26,9 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
-use proton_mail_common::models::{MailSettings, Message as MailMessage, MessageScrollData};
+use proton_mail_common::models::{
+    Attachment, MailSettings, Message as MailMessage, MessageScrollData,
+};
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -451,8 +453,7 @@ impl StateHandler for MessagesState {
                         let user_ctx = Arc::clone(&user_ctx);
 
                         async move {
-                            user_ctx
-                                .get_attachment(mdata.local_id.unwrap())
+                            Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
                                 .await
                                 .map(|att| {
                                     format!(

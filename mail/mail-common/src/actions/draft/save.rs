@@ -566,13 +566,16 @@ impl Save {
                     // the attachment has not been synced, so we can only do this if we have the
                     // data.
                     let original_attachment_id = original_attachment.local_id.unwrap();
-                    if let Some(og_path) =
-                        MailUserContext::get_attachment_from_cache(original_attachment_id, &bond)
-                            .await?
+                    if let Some(og_path) = Attachment::path_from_cache_and_update_metadata(
+                        original_attachment_id,
+                        &bond,
+                    )
+                    .await?
                     {
                         debug!("Attachment present in cache, performing copy");
                         let path = PathBuf::from(og_path);
-                        ctx.copy_attachment_to_cache(
+                        Attachment::copy_attachment_to_cache(
+                            ctx,
                             &new_attachment.filename,
                             new_attachment.local_id.unwrap(),
                             &path,

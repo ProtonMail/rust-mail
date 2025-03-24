@@ -49,8 +49,7 @@ async fn test_load_attachment_buffer() {
     let attachment_local_id = local_conversation.attachments_metadata[0].local_id.unwrap();
 
     // Load and decrypt attachment.
-    let att = user_ctx
-        .get_attachment(attachment_local_id)
+    let att = Attachment::get_attachment(&user_ctx, attachment_local_id)
         .await
         .expect("decryption should not fail");
     assert_eq!(
@@ -59,8 +58,7 @@ async fn test_load_attachment_buffer() {
         "attachments should be equal"
     );
     filename_is_correct(&att);
-    let att_again = user_ctx
-        .get_attachment(attachment_local_id)
+    let att_again = Attachment::get_attachment(&user_ctx, attachment_local_id)
         .await
         .expect("decryption should not fail");
     assert_eq!(att, att_again);
@@ -104,7 +102,7 @@ async fn concurrency() {
 
     let requests = (0..30).map(|_| {
         let ctx_clone = user_ctx.clone();
-        async move { ctx_clone.get_attachment(attachment_local_id).await }
+        async move { Attachment::get_attachment(&ctx_clone, attachment_local_id).await }
     });
 
     let mut result = try_join_all(requests).await.unwrap();
@@ -159,8 +157,7 @@ async fn load_attachment_from_cache() {
     let attachment_local_id = local_conversation.attachments_metadata[0].local_id.unwrap();
 
     // Load and decrypt attachment.
-    let decryption_result = user_ctx
-        .get_attachment(attachment_local_id)
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
         .await
         .expect("decryption should not fail");
 
@@ -195,8 +192,8 @@ async fn load_attachment_content_first_time() {
 
     // Action:
     //   * Get attachment
-    let data_path = user_ctx
-        .get_attachment_content_path(&attachment, &mut tether)
+    let data_path = attachment
+        .content_path(&user_ctx, &mut tether)
         .await
         .unwrap();
 

@@ -28,6 +28,7 @@
 //!
 
 mod attachment;
+pub mod attachment_cache;
 mod conversation;
 mod draft;
 mod labels_with_counters;

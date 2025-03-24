@@ -1,4 +1,4 @@
-mod attachments;
+pub mod attachments;
 
 pub mod decrypted_message;
 

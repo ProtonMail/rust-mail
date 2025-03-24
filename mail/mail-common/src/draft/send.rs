@@ -241,8 +241,8 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
             }
         }
 
-        let loaded_data = context
-            .get_attachment_content_data(attachment, guard)
+        let loaded_data = attachment
+            .content_data(context, guard)
             .instrument(
                 debug_span!("mime_package::get_attachment_content_data", id = ?attachment.local_id),
             )

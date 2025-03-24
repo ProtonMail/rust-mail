@@ -136,7 +136,7 @@ impl DecryptedMessageBody {
                 let ctx_clone = ctx.clone();
                 let fut = ctx.spawn(async move {
                     let tether = &mut ctx_clone.user_stash().connection();
-                    ctx_clone.get_attachment_content_data(&att, tether).await
+                    att.content_data(&ctx_clone, tether).await
                 });
                 (id, fut)
             })
@@ -229,7 +229,7 @@ impl DecryptedMessageBody {
                 },
                 None => {
                     let tether = &mut ctx.user_stash().connection();
-                    ctx.get_attachment_content_data(att, tether).await?
+                    att.content_data(ctx, tether).await?
                 }
             }
         };

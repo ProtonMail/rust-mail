@@ -165,7 +165,6 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let tether = user_ctx.user_stash().connection();
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.setup_user(params.clone()).await;
