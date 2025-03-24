@@ -1884,18 +1884,13 @@ impl ToSql for MailSettingsId {
 /// System label identifiers that are constant for every account.
 pub trait SystemLabelId: for<'a> From<&'a str> {
     #[must_use]
+    fn inbox() -> Self {
+        Self::from("0")
+    }
+
+    #[must_use]
     fn all_drafts() -> Self {
         Self::from("1")
-    }
-
-    #[must_use]
-    fn all_mail() -> Self {
-        Self::from("5")
-    }
-
-    #[must_use]
-    fn all_scheduled() -> Self {
-        Self::from("12")
     }
 
     #[must_use]
@@ -1904,37 +1899,8 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
     }
 
     #[must_use]
-    fn almost_all_mail() -> Self {
-        Self::from("15")
-    }
-
-    #[must_use]
-    fn archive() -> Self {
-        Self::from("6")
-    }
-
-    #[must_use]
-    fn drafts() -> Self {
-        Self::from("8")
-    }
-
-    #[must_use]
-    fn inbox() -> Self {
-        Self::from("0")
-    }
-
-    #[must_use]
-    fn movable_sys_folder_list() -> [Self; 4] {
-        [Self::inbox(), Self::archive(), Self::spam(), Self::trash()]
-    }
-    #[must_use]
-    fn outbox() -> Self {
-        Self::from("9")
-    }
-
-    #[must_use]
-    fn sent() -> Self {
-        Self::from("7")
+    fn trash() -> Self {
+        Self::from("3")
     }
 
     #[must_use]
@@ -1943,18 +1909,58 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
     }
 
     #[must_use]
+    fn all_mail() -> Self {
+        Self::from("5")
+    }
+
+    #[must_use]
+    fn archive() -> Self {
+        Self::from("6")
+    }
+
+    #[must_use]
+    fn sent() -> Self {
+        Self::from("7")
+    }
+
+    #[must_use]
+    fn drafts() -> Self {
+        Self::from("8")
+    }
+
+    #[must_use]
+    fn outbox() -> Self {
+        Self::from("9")
+    }
+
+    #[must_use]
     fn starred() -> Self {
         Self::from("10")
     }
 
     #[must_use]
-    fn trash() -> Self {
-        Self::from("3")
+    fn all_scheduled() -> Self {
+        Self::from("12")
+    }
+
+    #[must_use]
+    fn blocked() -> Self {
+        Self::from("14")
+    }
+
+    #[must_use]
+    fn almost_all_mail() -> Self {
+        Self::from("15")
     }
 
     #[must_use]
     fn snoozed() -> Self {
         Self::from("16")
+    }
+
+    #[must_use]
+    fn pinned() -> Self {
+        Self::from("17")
     }
 
     fn category_social() -> Self {
@@ -1975,6 +1981,11 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
 
     fn category_default() -> Self {
         Self::from("24")
+    }
+
+    #[must_use]
+    fn movable_sys_folder_list() -> [Self; 4] {
+        [Self::inbox(), Self::archive(), Self::spam(), Self::trash()]
     }
 }
 
