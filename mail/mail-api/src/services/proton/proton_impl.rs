@@ -38,50 +38,39 @@ impl ProtonMail for Proton {
         &self,
         params: NewAttachmentParams,
     ) -> ApiServiceResult<PostAttachmentResponse> {
-        use common_multipart_rfc7578::client::multipart;
-        use futures_util::TryStreamExt;
         // It is not necessary to have a dedicated request here, but we leave it
         // so that it matches the current setup. Eventually, there may also be
         // an opportunity to directly convert this into form data when muon supports this.
         let request = PostUploadAttachmentRequest::from(params);
-        let mut form = multipart::Form::default();
-        form.add_text("Filename", request.filename);
-        form.add_text("MessageID", request.message_id.into_inner());
-        form.add_text("MIMEType", request.mime_type);
-        form.add_text(
-            "Disposition",
-            match request.disposition {
-                Disposition::Attachment => "attachment",
-                Disposition::Inline => "inline",
-            },
-        );
-        if let Some(content_id) = request.content_id {
-            form.add_text("ContentID", content_id);
-        }
-
-        //NOTE: Even though this is a sync reader interface, this will only result in mem copies.
-        form.add_reader_file("KeyPackets", Cursor::new(request.key_packets), "blob");
-        if let Some(signature) = request.signature {
-            form.add_reader_file("Signature", Cursor::new(signature.0), "blob");
-        }
-        if let Some(enc_signature) = request.enc_signature {
-            form.add_reader_file("EncSignature", Cursor::new(enc_signature.0), "blob");
-        }
-
-        //NOTE: Even though this is a sync reader interface, this will only result in mem copies.
-        form.add_reader_file("DataPacket", Cursor::new(request.data_packet), "blob");
-        let content_type = form.content_type();
-
-        let body = multipart::Body::from(form)
-            .try_concat()
-            .await
-            .map_err(|e| {
-                ApiServiceError::RequestError(format!("Failed to generate multipart data: {e:?}"))
-            })?;
-
         let response = POST!("{MAIL_V4}/attachments")
-            .body(body)
-            .header(("Content-Type", content_type))
+            .multipart(move |mut form| {
+                form.add_text("Filename", request.filename);
+                form.add_text("MessageID", request.message_id.into_inner());
+                form.add_text("MIMEType", request.mime_type);
+                form.add_text(
+                    "Disposition",
+                    match request.disposition {
+                        Disposition::Attachment => "attachment",
+                        Disposition::Inline => "inline",
+                    },
+                );
+                if let Some(content_id) = request.content_id {
+                    form.add_text("ContentID", content_id);
+                }
+                //NOTE: Even though this is a sync reader interface, this will only result in mem copies.
+                form.add_reader_file("KeyPackets", Cursor::new(request.key_packets), "blob");
+                if let Some(signature) = request.signature {
+                    form.add_reader_file("Signature", Cursor::new(signature.0), "blob");
+                }
+                if let Some(enc_signature) = request.enc_signature {
+                    form.add_reader_file("EncSignature", Cursor::new(enc_signature.0), "blob");
+                }
+
+                //NOTE: Even though this is a sync reader interface, this will only result in mem copies.
+                form.add_reader_file("DataPacket", Cursor::new(request.data_packet), "blob");
+                form
+            })
+            .await?
             .send_with(self)
             .await?
             .ok()?;

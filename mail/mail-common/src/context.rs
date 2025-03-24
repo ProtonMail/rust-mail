@@ -204,6 +204,7 @@ impl MailContext {
         connection_pool_size: Option<u32>,
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
+        log_path: Option<PathBuf>,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -216,6 +217,7 @@ impl MailContext {
             api_config,
             core_cache_path,
             connection_pool_size,
+            log_path,
         )
         .await?;
 

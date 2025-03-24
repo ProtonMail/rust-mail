@@ -292,6 +292,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-compression"
+version = "0.3.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "942c7cd7ae39e91bde4820d74132e9862e62c2f386c3aa90ccf55949f5bad63a"
+dependencies = [
+ "flate2",
+ "futures-core",
+ "futures-io",
+ "memchr",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "async-executor"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -360,6 +373,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.100",
+]
+
+[[package]]
+name = "async_zip"
+version = "0.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "795310de3218cde15219fc98c1cf7d8fe9db4865aab27fcf1d535d6cb61c6b54"
+dependencies = [
+ "async-compression",
+ "chrono",
+ "crc32fast",
+ "futures-util",
+ "log",
+ "pin-project",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3213,8 +3241,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.2.0"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "40357574dd591c88ff550cabc2d6a3bdfcac2b6d9e8d8d02ef5e9b9220579e66"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "muon-impl",
  "muon-proc",
@@ -3223,8 +3250,7 @@ dependencies = [
 [[package]]
 name = "muon-impl"
 version = "0.13.1"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "bd45666481a1e5ea2d6ec0826fefe173a0d9828ed71439a5e4c3056aac7105c8"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -3234,6 +3260,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "cfg-if",
+ "common-multipart-rfc7578",
  "data-encoding",
  "derive_more 1.0.0",
  "futures",
@@ -3252,7 +3279,7 @@ dependencies = [
  "num",
  "num_cpus",
  "pin-project",
- "proton-srp 0.4.2",
+ "proton-srp",
  "rand 0.8.5",
  "reqwest",
  "rustls-native-certs",
@@ -3275,8 +3302,7 @@ dependencies = [
 [[package]]
 name = "muon-proc"
 version = "0.5.0"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "f460da90475d8acb9f3e5071e49324b890b27ea80fc71288dc56dfe1ff6f396a"
+source = "git+ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git?branch=master#c72ba18cf5acd3aae22611d66a02cc18a5497166"
 dependencies = [
  "cfg-if",
  "proc-macro2",
@@ -4313,8 +4339,10 @@ dependencies = [
  "aes-gcm",
  "anyhow",
  "async-trait",
+ "async_zip",
  "base64",
  "bytes",
+ "chrono",
  "clap",
  "derive_more 2.0.1",
  "email_address",
@@ -4416,7 +4444,7 @@ dependencies = [
  "gopenpgp-sys",
  "hex",
  "parking_lot",
- "proton-srp 0.6.1",
+ "proton-srp",
  "rand 0.8.5",
  "serde",
  "subtle",
@@ -4749,22 +4777,6 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "proton-srp"
-version = "0.4.2"
-source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "2830f69261e310941c68a230eba0081b5f9a32f0286613ca34da9b9228f9b1c0"
-dependencies = [
- "base64",
- "bcrypt",
- "crypto-bigint",
- "pgp",
- "rand 0.8.5",
- "sha2",
- "thiserror 1.0.69",
- "zeroize",
 ]
 
 [[package]]
@@ -6432,6 +6444,7 @@ checksum = "6b9590b93e6fcc1739458317cccd391ad3955e2bde8913edf6f95f9e65a8f034"
 dependencies = [
  "bytes",
  "futures-core",
+ "futures-io",
  "futures-sink",
  "pin-project-lite",
  "tokio",

@@ -227,6 +227,7 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 pub struct Context {
     this: Weak<Self>,
     user_db_path: PathBuf,
+    log_path: Option<PathBuf>,
     account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
@@ -264,6 +265,7 @@ impl Context {
         api_config: ApiConfig,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
+        log_path: Option<PathBuf>,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
@@ -282,6 +284,7 @@ impl Context {
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
+            log_path,
             key_chain,
             account_stash,
             user_db_initializers: initializers,
@@ -851,6 +854,10 @@ impl Context {
         {
             ctx.cancel_all_tasks();
         }
+    }
+
+    pub fn get_log_path(&self) -> Option<&Path> {
+        self.log_path.as_deref()
     }
 
     /// Spawn an async `task` associated to this context.

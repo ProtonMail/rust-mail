@@ -130,6 +130,12 @@ impl UserContext {
         &self.user_id
     }
 
+    /// Get path to the log file.
+    #[must_use]
+    pub fn get_log_path(&self) -> Option<&Path> {
+        self.context.get_log_path()
+    }
+
     /// Retrieves the current user's account details.
     ///
     /// # Errors

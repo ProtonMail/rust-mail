@@ -128,7 +128,7 @@ impl AppModel {
         std::fs::create_dir_all(&user_db_path)?;
 
         let log_file = cache_dir.join("app.log");
-        let log_guard = init_log(log_file)?;
+        let log_guard = init_log(&log_file)?;
 
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
@@ -143,6 +143,7 @@ impl AppModel {
                 None,
                 Arc::new(keychain),
                 app_config.api_config(),
+                Some(log_file),
             )
             .await?;
 
