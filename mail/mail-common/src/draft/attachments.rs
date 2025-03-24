@@ -133,16 +133,16 @@ impl DraftStagingAreaCleaner {
                     };
                     let staging_area = ctx.attachment_staging_path();
                     debug!("Starting draft staging cleanup");
-                    let tether = ctx.user_stash().connection();
-                    let dir_reader = match tokio::fs::read_dir(&staging_area).await {
-                        Ok(d) => d,
+                    match tokio::fs::read_dir(&staging_area).await {
+                        Ok(dir_reader) => {
+                            let tether = ctx.user_stash().connection();
+                            Self::run_cleanup(dir_reader, &tether).await;
+                            drop(tether);
+                        }
                         Err(e) => {
                             error!("Failed to open draft staging dir {staging_area:?}: {e:?}");
-                            continue;
                         }
                     };
-                    Self::run_cleanup(dir_reader, &tether).await;
-                    drop(tether);
                     drop(ctx);
                     tokio::time::sleep(self.interval).await;
                 }
