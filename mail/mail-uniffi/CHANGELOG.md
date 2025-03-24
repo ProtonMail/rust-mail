@@ -7,13 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.62.0] - 2025-03-20
+
 ### Added
 
  - [ET-2492]: Auto clean attachments uploaded to draft staging area.
 
 ### Changed
 
-  - `mark_messaages_ham` now takes `mailbox` for consistency and a single `id` and is called `mark_message_ham`
+  - `mark_messaages_ham` now takes `mailbox` for consistency and a single `id` and is called `mark_message_ham`.
+  - Improved db tracking lock behavior.
 
 ### Fixed
 
