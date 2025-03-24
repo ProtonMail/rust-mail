@@ -7,11 +7,11 @@ use proton_core_common::{
 use stash::stash::Tether;
 use tracing::{debug, trace};
 
-use crate::{datatypes::ReadFilter, AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 
 use super::{
-    mail_scroller_state::MailScrollerState, remote_source::RemoteSource, MailPaginatorJoinHandle,
-    MailScrollerSource,
+    MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
+    remote_source::RemoteSource,
 };
 
 #[derive(Debug)]

@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::fburl::{validate_fburl, FbUrl};
+use crate::ParameterType;
+use crate::properties::fburl::{FbUrl, validate_fburl};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 
 #[test]
 fn fburl_struct() {

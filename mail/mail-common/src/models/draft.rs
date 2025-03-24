@@ -2,13 +2,13 @@
 #[path = "../tests/models/draft_metadata.rs"]
 mod draft_metadata;
 
+use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
 use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{DraftSaveSendErrorReason, MailErrorReason, ProtonMailError};
 use crate::models::{Attachment, Message, MessageBodyMetadata};
-use crate::MailContextError;
 use chrono::Utc;
 use derive_more::derive::TryFrom;
 use indoc::formatdoc;

@@ -3,7 +3,7 @@ use crate::{service::ApiServiceError, services::proton::ProtonData};
 use chrono::Utc;
 use muon::Client;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, Instrument, Span};
+use tracing::{Instrument, Span, debug, error};
 
 pub mod metrics;
 

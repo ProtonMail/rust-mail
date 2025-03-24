@@ -1,22 +1,22 @@
 #![allow(clippy::module_name_repetitions)]
 
+use crate::CLI_ARGS;
 use crate::app::Command;
+use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::paginator::Paginator;
-use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage, ITEM_LIMIT};
+use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
-use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
     AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
-use crate::CLI_ARGS;
-use anyhow::{anyhow, Context};
-use futures::future::try_join_all;
+use anyhow::{Context, anyhow};
 use futures::FutureExt;
+use futures::future::try_join_all;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_core_common::os::safe_write;
@@ -30,11 +30,11 @@ use proton_mail_common::models::{
     Attachment, MailSettings, Message as MailMessage, MessageScrollData,
 };
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
+use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
-use ratatui::Frame;
 use stash::stash::WatcherHandle;
 use std::fs;
 use std::path::PathBuf;
@@ -42,8 +42,8 @@ use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
 
-use super::search::SearchStatusBar;
 use super::LabelAs;
+use super::search::SearchStatusBar;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.

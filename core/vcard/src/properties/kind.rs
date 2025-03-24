@@ -9,8 +9,8 @@ use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
 use crate::properties::{any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::iana_token::{is_iana_token_value, IanaToken};
-use crate::values::x_name::{is_x_name_value, XName};
+use crate::values::iana_token::{IanaToken, is_iana_token_value};
+use crate::values::x_name::{XName, is_x_name_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

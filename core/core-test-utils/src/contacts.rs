@@ -1,7 +1,7 @@
 use crate::test_context::TestContext;
-use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::ContactId;
 use proton_api_core::services::proton::PutDeleteContacts;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
 };
@@ -10,8 +10,8 @@ use proton_api_core::services::proton::{
     PutDeleteContactsResponse,
 };
 use wiremock::{
-    matchers::{body_json, method, path},
     Mock, ResponseTemplate,
+    matchers::{body_json, method, path},
 };
 
 impl TestContext {

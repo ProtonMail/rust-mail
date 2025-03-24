@@ -4,14 +4,14 @@ use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::{LabelId, UserId};
 use proton_api_mail::services::proton::prelude::{MessageFlags, PostCancelSendResponse};
 use proton_core_common::models::ModelExtension;
+use proton_mail_common::MailContextError;
 use proton_mail_common::actions::draft::UndoSend;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::draft::{Draft, Error, UndoError};
 use proton_mail_common::models::Message;
-use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::{
-    message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
-    TEST_USER_ID,
+    TEST_USER_ID, message_body_test_message_simple, message_body_test_params,
+    message_body_test_user_secret,
 };
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
@@ -72,14 +72,18 @@ async fn draft_undo_send() {
         .unwrap()
         .unwrap();
 
-    assert!(updated_local_message
-        .label_ids
-        .contains(&LabelId::all_drafts()));
+    assert!(
+        updated_local_message
+            .label_ids
+            .contains(&LabelId::all_drafts())
+    );
     assert!(updated_local_message.label_ids.contains(&LabelId::drafts()));
     assert!(!updated_local_message.label_ids.contains(&LabelId::sent()));
-    assert!(!updated_local_message
-        .flags
-        .contains(MessageFlags::SENT.into()));
+    assert!(
+        !updated_local_message
+            .flags
+            .contains(MessageFlags::SENT.into())
+    );
 
     // flush queue.
     user_ctx.execute_single_send_action().await.unwrap();
@@ -142,13 +146,17 @@ async fn draft_undo_send_failure() {
         .unwrap();
 
     assert!(!updated_local_message.label_ids.contains(&LabelId::drafts()));
-    assert!(!updated_local_message
-        .label_ids
-        .contains(&LabelId::all_drafts()));
+    assert!(
+        !updated_local_message
+            .label_ids
+            .contains(&LabelId::all_drafts())
+    );
     assert!(updated_local_message.label_ids.contains(&LabelId::sent()));
-    assert!(updated_local_message
-        .flags
-        .contains(MessageFlags::SENT.into()));
+    assert!(
+        updated_local_message
+            .flags
+            .contains(MessageFlags::SENT.into())
+    );
 
     match err {
         QueuedError::Action(err, _) => {

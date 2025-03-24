@@ -1,4 +1,4 @@
-use crate::values::text::{is_text_value, Text};
+use crate::values::text::{Text, is_text_value};
 
 #[test]
 fn text_struct() {

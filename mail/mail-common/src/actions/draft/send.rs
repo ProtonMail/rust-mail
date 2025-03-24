@@ -1,10 +1,10 @@
 use crate::actions::draft::{
-    local_all_draft_label_id, local_draft_label_id, local_outbox_label_id, local_sent_label_id,
-    SEND_ACTION_GROUP,
+    SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_outbox_label_id,
+    local_sent_label_id,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType};
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
-use crate::draft::{draft_attachment_staging_path, Draft, ReplyMode, SaveOrSendError};
+use crate::draft::{Draft, ReplyMode, SaveOrSendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
     DraftSendResultOrigin, MailSettings, Message, MetadataId,
@@ -16,8 +16,8 @@ use proton_action_queue::action::{
 };
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::prelude::AddressId;
-use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use serde::{Deserialize, Serialize};

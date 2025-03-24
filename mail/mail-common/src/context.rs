@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::{draft, AppError, MailUserContext};
+use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
@@ -10,6 +10,7 @@ use proton_api_core::services::proton::BuildError;
 use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
+use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::action_queue::{
     CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
 };
@@ -17,7 +18,6 @@ use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,

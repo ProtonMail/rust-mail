@@ -1,5 +1,5 @@
-use crate::services::proton::common::Timeouts;
 use crate::services::proton::ProtonCore;
+use crate::services::proton::common::Timeouts;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
 use derive_more::Deref;
 use muon::common::{BoxFut, RetryPolicy, Sender, SenderLayer};
@@ -8,7 +8,7 @@ use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResu
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tracing::trace;
 

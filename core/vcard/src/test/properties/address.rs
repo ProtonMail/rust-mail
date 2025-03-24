@@ -1,8 +1,8 @@
-use crate::properties::address::{validate_adr, Address};
+use crate::ParameterType;
+use crate::properties::address::{Address, validate_adr};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::component::Component;
 use crate::values::list_component::ListComponent;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]
@@ -90,18 +90,22 @@ fn adr_property() {
         ]),
     ))
     .unwrap();
-    assert!(validate_adr(&make_property(
-        "ADR",
-        Some("pobox;ext;street;locality;region;code"),
-        None
-    ))
-    .is_err());
-    assert!(validate_adr(&make_property(
-        "ADR",
-        Some("pobox;ext;street;locality;region;code;country;toomany"),
-        None
-    ))
-    .is_err());
+    assert!(
+        validate_adr(&make_property(
+            "ADR",
+            Some("pobox;ext;street;locality;region;code"),
+            None
+        ))
+        .is_err()
+    );
+    assert!(
+        validate_adr(&make_property(
+            "ADR",
+            Some("pobox;ext;street;locality;region;code;country;toomany"),
+            None
+        ))
+        .is_err()
+    );
     property_reject_parameters(
         validate_adr,
         "ADR",

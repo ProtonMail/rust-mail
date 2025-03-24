@@ -5,7 +5,7 @@ use crate::{Event, EventLoopError};
 use anyhow::anyhow;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::EventId;
-use tracing::{self, debug, error, Level};
+use tracing::{self, Level, debug, error};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
 ///

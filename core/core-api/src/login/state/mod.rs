@@ -1,10 +1,10 @@
 use crate::auth::UserKeySecret;
+use crate::login::LoginError;
 use crate::login::state::complete::Complete;
 use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
-use crate::login::LoginError;
-use crate::services::observability::{metrics, ApiServiceObservabilityResponse};
+use crate::services::observability::{ApiServiceObservabilityResponse, metrics};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::services::proton::{SessionId, UserId};

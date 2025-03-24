@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
-use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
@@ -11,7 +11,7 @@ use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError, KeyChainExt};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
-use anyhow::{anyhow, Error as AnyhowError};
+use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -38,7 +38,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn, Level};
+use tracing::{Level, error, info, warn};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {

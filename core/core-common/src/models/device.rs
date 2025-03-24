@@ -4,7 +4,7 @@ mod tests;
 
 use proton_api_core::{
     service::ApiServiceError,
-    services::proton::{prelude::RegisterDeviceRequest, ProtonCore},
+    services::proton::{ProtonCore, prelude::RegisterDeviceRequest},
 };
 use stash::{
     macros::Model,
@@ -12,7 +12,7 @@ use stash::{
     stash::{Bond, StashError, Tether},
 };
 
-use crate::{datatypes::DeviceEnvironment, Context};
+use crate::{Context, datatypes::DeviceEnvironment};
 
 /// Error encountered during operatin on registered device model
 ///

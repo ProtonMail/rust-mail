@@ -1,13 +1,13 @@
 use crate::test_context::TestContext;
-use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::GetKeysAllResponse;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, KeyFlag, SKLDataJson, SKLSignature,
     SignedKeyList,
 };
 use wiremock::{
-    matchers::{method, path, query_param},
     Mock, ResponseTemplate,
+    matchers::{method, path, query_param},
 };
 
 pub const TEST_OTHER_USER_EMAIL: &str = "rust_test2@proton.black";

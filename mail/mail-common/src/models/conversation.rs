@@ -3,12 +3,12 @@
 mod conversations;
 
 use super::network::split_request;
-use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
+use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    filter_responses, ConversationAction, ConversationAvailableActions, GeneralActions,
-    LabelAsAction, MailActionError, MoveAction, MoveItemAction,
+    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction,
+    MailActionError, MoveAction, MoveItemAction, filter_responses,
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
@@ -17,8 +17,8 @@ use crate::datatypes::{
 };
 use crate::find_in_query;
 use crate::models::*;
-use crate::{actions::conversations::Delete, AppError};
-use anyhow::{anyhow, Context};
+use crate::{AppError, actions::conversations::Delete};
+use anyhow::{Context, anyhow};
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
@@ -27,14 +27,14 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
 use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;

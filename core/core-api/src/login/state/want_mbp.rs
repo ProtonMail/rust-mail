@@ -2,7 +2,7 @@ use futures::TryFutureExt;
 use tracing::info;
 
 use crate::login::state::{HasSessionId, HasUserId, StateData};
-use crate::login::{state::State, LoginError};
+use crate::login::{LoginError, state::State};
 use crate::services::proton::Proton;
 use crate::services::proton::{SessionId, UserId};
 

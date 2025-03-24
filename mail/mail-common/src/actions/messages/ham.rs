@@ -1,7 +1,7 @@
+use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::datatypes::{LocalMessageId, RollbackItemType, SystemLabelId};
 use crate::models::{Message, RollbackItem};
-use crate::MailUserContext;
 use futures::future::try_join_all;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};

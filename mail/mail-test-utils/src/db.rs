@@ -1,17 +1,17 @@
 use proton_core_common::db::migrations::migrate_core_db;
 use proton_mail_common::db::migrations::migrate_db;
 use stash::stash::{Stash, StashConfiguration};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 /// # Panics
 pub async fn new_test_connection() -> Stash {
     use std::io::stdout;
-    use tracing::subscriber::set_global_default;
     use tracing::Level;
+    use tracing::subscriber::set_global_default;
     use tracing_subscriber::fmt::layer;
     use tracing_subscriber::fmt::writer::MakeWriterExt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::{registry, EnvFilter};
+    use tracing_subscriber::{EnvFilter, registry};
     drop(set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))
@@ -33,12 +33,12 @@ pub async fn new_test_connection() -> Stash {
 /// # Panics
 pub async fn new_test_connection_file() -> (Stash, TempDir) {
     use std::io::stdout;
-    use tracing::subscriber::set_global_default;
     use tracing::Level;
+    use tracing::subscriber::set_global_default;
     use tracing_subscriber::fmt::layer;
     use tracing_subscriber::fmt::writer::MakeWriterExt;
     use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::{registry, EnvFilter};
+    use tracing_subscriber::{EnvFilter, registry};
     drop(set_global_default(
         registry()
             .with(EnvFilter::new("debug,stash=debug"))

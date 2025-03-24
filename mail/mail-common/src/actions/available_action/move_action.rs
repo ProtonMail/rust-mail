@@ -1,8 +1,8 @@
 use crate::datatypes::labels::color_to_display;
 use crate::datatypes::{MovableSystemFolder, SystemLabelId};
 use crate::{
-    datatypes::labels::hierarchy::{self, Hierarchy},
     AppError,
+    datatypes::labels::hierarchy::{self, Hierarchy},
 };
 use proton_api_core::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId, SystemLabel};

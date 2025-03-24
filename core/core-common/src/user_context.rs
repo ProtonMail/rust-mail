@@ -1,5 +1,5 @@
 pub use self::keys::*;
-use crate::async_task::{spawn_task, AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};

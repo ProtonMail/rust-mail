@@ -4,7 +4,7 @@ use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{DraftAttachmentError, DraftAttachmentErrorReason, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
-use crate::{uniffi_async, AsyncLiveQueryCallback};
+use crate::{AsyncLiveQueryCallback, uniffi_async};
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::attachments::{
     DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,

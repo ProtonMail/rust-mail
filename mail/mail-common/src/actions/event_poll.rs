@@ -2,8 +2,8 @@ use crate::MailUserContext;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
 };
-use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError;
+use proton_event_loop::subscriber::SubscriberError;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 

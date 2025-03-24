@@ -8,10 +8,10 @@ use crate::{
 use anyhow::Context as _;
 use indoc::indoc;
 use proton_api_core::services::proton::LabelId;
+use proton_core_common::DeleteFilesSafeError;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelExtension as _;
 use proton_core_common::os::safe_write_async;
-use proton_core_common::DeleteFilesSafeError;
 use proton_crypto_inbox::attachment::DecryptableAttachment as _;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -27,8 +27,8 @@ use stash::utils::placeholders;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, error};
@@ -363,10 +363,10 @@ impl Attachment {
         let remote_attachment_id = match &self.attachment_type {
             crate::models::AttachmentType::Remote(Some(id)) => id,
             crate::models::AttachmentType::Remote(None) => {
-                return Err(MailContextError::CalledFetchedAttachmentLocalAttachment)
+                return Err(MailContextError::CalledFetchedAttachmentLocalAttachment);
             }
             crate::models::AttachmentType::Pgp => {
-                return Err(MailContextError::CalledFetchedAttachmentOnPgp)
+                return Err(MailContextError::CalledFetchedAttachmentOnPgp);
             }
         };
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
@@ -532,7 +532,9 @@ impl Attachment {
                 // This will almost never happen in practice. This means that for whatever reason a
                 // file move failed (?) of a file that hasn't been touched for a long time
                 // (otherwise the atime would have been modified)
-                error!("Could not move some of the files to the deletion dir. There's nothing we can do. {e:?}");
+                error!(
+                    "Could not move some of the files to the deletion dir. There's nothing we can do. {e:?}"
+                );
             }
             Err(DeleteFilesSafeError::Moved(e)) => {
                 error!("Could not delete files now, but will delete them later. {e:?}");

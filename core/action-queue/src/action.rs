@@ -10,8 +10,8 @@ use stash::exports::{
 use stash::sql_using_serde;
 use stash::stash::{Bond, IntoTransaction, StashError, Tether};
 use std::any::Any;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::marker::PhantomData;

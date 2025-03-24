@@ -1,4 +1,4 @@
-use crate::values::date::{is_date_value, DateValue};
+use crate::values::date::{DateValue, is_date_value};
 
 #[test]
 fn date_struct() {

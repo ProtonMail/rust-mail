@@ -5,9 +5,9 @@ use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSet
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
 use proton_core_common::models::{Label, ModelIdExtension};
+use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
-use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;

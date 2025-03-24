@@ -16,11 +16,11 @@ use crate::parameters::time_zone::TimeZone;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    any_debug, list_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
+    VcardProperty, any_debug, list_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
 use crate::values::check_list;
-use crate::values::list_component::{is_list_component_value, ListComponent};
+use crate::values::list_component::{ListComponent, is_list_component_value};
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

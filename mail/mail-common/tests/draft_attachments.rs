@@ -1,7 +1,7 @@
 use crate::drafts_common::{draft_message, draft_test_params, expected_create_draft_params};
 use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::UserId;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{
     AttachmentId, DraftAttachmentKeyPackets, MessageAttachmentHeaders, NewAttachmentDisposition,
@@ -12,12 +12,12 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature, KeyPackets,
 };
+use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::attachments::DraftAttachmentState;
 use proton_mail_common::draft::{Draft, DraftSyncStatus};
 use proton_mail_common::models::Attachment;
-use proton_mail_common::MailUserContext;
-use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
+use proton_mail_test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::stash::Tether;
 use std::path::Path;

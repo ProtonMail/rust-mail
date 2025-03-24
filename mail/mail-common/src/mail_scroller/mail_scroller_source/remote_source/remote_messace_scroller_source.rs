@@ -3,16 +3,16 @@ use proton_api_core::{
     session::{CoreSession, Session},
 };
 use proton_api_mail::services::proton::{
-    common::MessageId, prelude::GetMessagesOptions, ProtonMail,
+    ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
 use crate::{
+    MailContextError, MailUserContext,
     datatypes::ReadFilter,
     models::{Message, MessageScrollData},
-    MailContextError, MailUserContext,
 };
 
 use super::{MailPaginatorJoinHandle, RemoteSource};

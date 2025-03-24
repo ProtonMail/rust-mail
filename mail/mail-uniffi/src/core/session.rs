@@ -2,11 +2,11 @@ use std::{borrow::Borrow, sync::Arc};
 
 use crate::core::datatypes::AccountDetails;
 use proton_api_core::services::proton::SessionId;
+use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_core_common::{
     datatypes::{PasswordMode, TfaStatus},
     db::account::{CoreAccount, CoreSession},
 };
-use proton_core_common::{CoreAccountState, CoreSessionState};
 use uniffi::{Enum, Record};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

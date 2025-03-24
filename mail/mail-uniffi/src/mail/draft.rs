@@ -8,11 +8,11 @@ use crate::errors::{
     EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
     VoidDraftUndoSendResult,
 };
+use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
-use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,

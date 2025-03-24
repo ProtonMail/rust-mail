@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::parameters::type_related::RELATED_VALUES;
 use crate::parameters::type_tel::TEL_VALUES;
-use crate::values::iana_token::{is_iana_token_value, IanaToken};
-use crate::values::x_name::{is_x_name_value, XName};
+use crate::values::iana_token::{IanaToken, is_iana_token_value};
+use crate::values::x_name::{XName, is_x_name_value};
 use crate::{ParameterType, PropertyKind};
 
 /// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class

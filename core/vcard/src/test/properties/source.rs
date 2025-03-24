@@ -1,7 +1,7 @@
-use crate::properties::source::{validate_source, Source};
+use crate::ParameterType;
+use crate::properties::source::{Source, validate_source};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::uri::Uri;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

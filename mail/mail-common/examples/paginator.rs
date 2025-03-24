@@ -1,6 +1,6 @@
 use clap::Parser;
-use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::services::proton::LabelId;
+use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
@@ -16,8 +16,8 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::info;
-use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::filter::LevelFilter;
 
 struct InitCallback;
 

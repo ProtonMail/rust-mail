@@ -5,7 +5,7 @@ mod tests;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use stash::stash::Tether;
 
-use crate::{models::MailSettings, AppError};
+use crate::{AppError, models::MailSettings};
 
 use super::SwipeAction;
 

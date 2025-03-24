@@ -5,8 +5,8 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, MailSettings as ApiMailSettings, MessageCount as ApiMessageCount, ShowMoved,
 };
 use proton_core_common::models::{Label, ModelIdExtension};
-use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Sidebar;
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::MailTestContext;
 use std::default::Default;

@@ -1,6 +1,6 @@
+use crate::PropertyKind;
 use crate::parameters::type_generic::is_type_param;
 use crate::parameters::type_related::RelatedType;
-use crate::PropertyKind;
 
 #[test]
 fn tel_type_enum() {

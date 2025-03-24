@@ -1,8 +1,8 @@
-use crate::properties::key::{validate_key, Key, KeyValue};
+use crate::ParameterType;
+use crate::properties::key::{Key, KeyValue, validate_key};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
 use crate::values::uri::Uri;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

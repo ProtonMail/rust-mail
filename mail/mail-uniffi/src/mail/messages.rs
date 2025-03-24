@@ -11,16 +11,17 @@
 use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox};
+use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId};
 use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::PaginatorSearchOptions;
-use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{LiveQueryCallback, WatchHandle, async_runtime, uniffi_async, watch_channel};
 use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
+use proton_mail_common::MailUserContext;
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
@@ -30,7 +31,6 @@ use proton_mail_common::errors::{
 };
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::{self, Message as RealMessage};
-use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
 use tokio::sync::Mutex;

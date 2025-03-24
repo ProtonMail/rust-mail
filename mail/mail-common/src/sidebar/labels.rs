@@ -8,10 +8,10 @@ use stash::params;
 use stash::{orm::Model, stash::Tether};
 use tracing::error;
 
+use crate::datatypes::SystemLabelId;
 use crate::datatypes::labels::custom_folder::CustomFolder;
 use crate::datatypes::labels::custom_labels::CustomLabel;
 use crate::datatypes::labels::system_labels::SystemLabel;
-use crate::datatypes::SystemLabelId;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::models::{LabelWithCounters, MailSettings};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};

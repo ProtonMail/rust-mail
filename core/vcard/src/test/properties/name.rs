@@ -1,7 +1,7 @@
-use crate::properties::name::{validate_n, Name};
+use crate::ParameterType;
+use crate::properties::name::{Name, validate_n};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::list_component::ListComponent;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

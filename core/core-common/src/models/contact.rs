@@ -14,6 +14,7 @@ use futures::future::try_join;
 use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
+use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use proton_api_core::consts::General;
 use proton_api_core::services::proton::ContactId;
 use proton_api_core::services::proton::ContactUID;
@@ -22,7 +23,6 @@ use proton_api_core::services::proton::{
 };
 use proton_api_core::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::{Proton, ProtonCore};
-use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;

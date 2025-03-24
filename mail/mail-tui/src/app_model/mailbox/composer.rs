@@ -1,7 +1,7 @@
 use crate::app::Command;
+use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ComposerMessage, Message};
-use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState, TextInput, TextInputState};
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -11,15 +11,15 @@ use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentSta
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
-    recipients, Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode,
+    Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
 };
 use proton_mail_common::models::{Attachment, MailSettings, MetadataId};
 use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
+use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
-use ratatui::Frame;
 use stash::stash::{Stash, StashError, Tether};
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -490,18 +490,26 @@ impl StateHandler for Composer {
             area
         };
 
-        let [sender_area, to_area, cc_area, bcc_area, subject_area, _, message_area, footer] =
-            Layout::vertical([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(1),
-                Constraint::Percentage(100),
-                Constraint::Length(1),
-            ])
-            .areas(area);
+        let [
+            sender_area,
+            to_area,
+            cc_area,
+            bcc_area,
+            subject_area,
+            _,
+            message_area,
+            footer,
+        ] = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(1),
+            Constraint::Percentage(100),
+            Constraint::Length(1),
+        ])
+        .areas(area);
 
         for (title, state, area, input_selection) in [
             ("From: ", &mut self.sender_input_state, sender_area, None),

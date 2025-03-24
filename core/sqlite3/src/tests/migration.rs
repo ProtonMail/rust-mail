@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use file::embedded_migrations;
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use stash::stash::Stash;
 
 use super::*;

@@ -1,6 +1,6 @@
 //! Migrations for the data model.
-use include_dir::{include_dir, Dir};
-use proton_sqlite3::{file::embedded_migrations, Migrator, MigratorError};
+use include_dir::{Dir, include_dir};
+use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
 use stash::stash::Stash;
 
 mod v001_proton_mail_default_labels;

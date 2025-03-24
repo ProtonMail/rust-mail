@@ -13,10 +13,10 @@ use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    any_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
+    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::text_list::{is_text_list_value, TextList};
+use crate::values::text_list::{TextList, is_text_list_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

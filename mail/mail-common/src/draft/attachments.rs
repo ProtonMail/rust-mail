@@ -1,9 +1,9 @@
+use crate::MailUserContext;
 use crate::datatypes::AttachmentMetadata;
 use crate::models::{
     DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState, DraftMetadata,
     MetadataId,
 };
-use crate::MailUserContext;
 use proton_mail_ids::LocalAttachmentId;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::ReadDir;
 use tracing::log::trace;
-use tracing::{debug, debug_span, error, Instrument};
+use tracing::{Instrument, debug, debug_span, error};
 
 /// Represent an attachment associated with a draft.
 pub struct DraftAttachment {

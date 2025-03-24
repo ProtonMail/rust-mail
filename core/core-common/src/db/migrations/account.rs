@@ -1,6 +1,6 @@
 //! Migrations for account based table information.
-use include_dir::{include_dir, Dir};
-use proton_sqlite3::{file::embedded_migrations, Migration, Migrator, MigratorError};
+use include_dir::{Dir, include_dir};
+use proton_sqlite3::{Migration, Migrator, MigratorError, file::embedded_migrations};
 use stash::stash::Stash;
 
 /// Migrate the accounts database.

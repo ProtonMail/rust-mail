@@ -4,7 +4,7 @@
 #[path = "tests/message_detector.rs"]
 mod tests;
 
-use kuchikiki::{iter::NodeEdge, NodeData, NodeRef};
+use kuchikiki::{NodeData, NodeRef, iter::NodeEdge};
 use lazy_static::lazy_static;
 
 const BLOCKQUOTE_SELECTORS: [&str; 22] = [

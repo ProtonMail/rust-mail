@@ -1,13 +1,13 @@
 use proton_api_core::consts::CoreBundle;
-use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::GetKeysAllResponse;
 use proton_api_core::services::proton::UserId;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_mail_common::draft::recipients::{
     ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
     ValidatingRecipientList, ValidationState,
 };
 use proton_mail_test_utils::init::Params;
-use proton_mail_test_utils::message_body::{message_body_test_user_secret, TEST_USER_ID};
+use proton_mail_test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
 use proton_mail_test_utils::test_context::MailTestContext;
 use test_case::test_case;
 

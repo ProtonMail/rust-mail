@@ -1,5 +1,5 @@
-use crate::datatypes::MessageRecipient;
 use crate::MailUserContext;
+use crate::datatypes::MessageRecipient;
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_api_core::service::ApiServiceError;

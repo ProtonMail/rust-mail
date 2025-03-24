@@ -18,7 +18,7 @@ pub mod mail_scroller;
 mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
-pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
+pub use mailbox::{DecryptedAttachment, Mailbox, MailboxError, MailboxResult, decrypted_message};
 use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::{

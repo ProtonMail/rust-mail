@@ -1,5 +1,5 @@
 use crate::widgets::utils::format_senders;
-use crate::widgets::{utils, AsTable};
+use crate::widgets::{AsTable, utils};
 use proton_mail_common::datatypes::ContextualConversation;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;

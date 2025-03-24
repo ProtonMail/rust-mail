@@ -5,8 +5,8 @@ use pretty_assertions::assert_eq;
 use proton_core_test_utils::test_context::TestContext;
 use test_case::test_case;
 use wiremock::{
-    matchers::{method, path},
     Mock, ResponseTemplate,
+    matchers::{method, path},
 };
 
 fn test_address() -> String {

@@ -13,12 +13,12 @@ use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
 use crate::properties::{
-    any_debug, get_value_type, loop_debug, optional_debug, validate_parameters, VcardProperty,
+    VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::text::{is_text_value, Text};
-use crate::values::uri::{is_uri_value, Uri};
-use crate::values::utc_offset::{is_utc_offset_value, UTCOffset};
+use crate::values::text::{Text, is_text_value};
+use crate::values::uri::{Uri, is_uri_value};
+use crate::values::utc_offset::{UTCOffset, is_utc_offset_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

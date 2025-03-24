@@ -1,13 +1,13 @@
 use crate::core::datatypes::MigrationData;
 use crate::errors::{LoginError, VoidLoginResult};
-use crate::mail::state::MailUserContextMap;
 use crate::mail::MailUserSession;
+use crate::mail::state::MailUserContextMap;
 use crate::{async_runtime, uniffi_async};
 use futures::TryFutureExt;
 use proton_api_core::login::Flow as CoreLoginFlow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::MailContext;
+use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

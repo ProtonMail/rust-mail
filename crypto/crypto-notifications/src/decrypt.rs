@@ -1,6 +1,6 @@
 use proton_crypto_account::proton_crypto::{
-    crypto::{DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerifiedData},
     CryptoError,
+    crypto::{DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerifiedData},
 };
 use serde::Deserialize;
 

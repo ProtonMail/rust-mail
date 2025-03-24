@@ -3,8 +3,8 @@ use crate::app_model::Popup;
 use crate::messages::Messages;
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyEvent};
-use ratatui::layout::Rect;
 use ratatui::Frame;
+use ratatui::layout::Rect;
 use ratatui_explorer::FileExplorer;
 use std::path::Path;
 

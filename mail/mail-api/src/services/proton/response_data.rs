@@ -24,9 +24,9 @@
 //!
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
-use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::GetEventResponse;
 use proton_api_core::services::proton::LabelEvent;
+use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::{
     Action, AddressEvent, ContactEmailEvent, ContactEvent, ProductUsedSpace, User, UserSettings,
 };
@@ -39,7 +39,7 @@ use serde::Serialize;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
+use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
 use smart_default::SmartDefault;
 use std::collections::{BTreeMap, HashMap};
 

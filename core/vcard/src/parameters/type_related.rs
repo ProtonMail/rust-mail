@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::ParameterType;
+use crate::errors::{VCardParameterError, VCardParameterResult};
 
 // /// The TYPE parameter has multiple, different uses.  In general, it is a way of specifying class
 // /// characteristics of the associated property.

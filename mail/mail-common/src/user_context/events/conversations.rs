@@ -1,6 +1,6 @@
+use crate::AppError;
 use crate::events::ConversationEvent;
 use crate::models::Conversation;
-use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
 use stash::stash::Bond;

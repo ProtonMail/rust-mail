@@ -11,9 +11,9 @@ mod tests;
 
 use html5ever::namespace_url;
 use html5ever::ns;
-use kuchikiki::iter::NodeEdge;
 use kuchikiki::ExpandedName;
 use kuchikiki::NodeRef;
+use kuchikiki::iter::NodeEdge;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

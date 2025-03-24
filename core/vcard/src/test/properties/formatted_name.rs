@@ -1,7 +1,7 @@
-use crate::properties::formatted_name::{validate_fn, FormattedName};
+use crate::ParameterType;
+use crate::properties::formatted_name::{FormattedName, validate_fn};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
-use crate::ParameterType;
 use velcro::hash_set;
 
 #[test]

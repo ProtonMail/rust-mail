@@ -1,13 +1,13 @@
 use std::collections::BTreeSet;
 use std::time::Instant;
 
+use crate::AppError;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
 };
 use crate::models::{Attachment, Conversation, ConversationLabel, Message, MessageLabel};
-use crate::AppError;
 use futures::try_join;
 use itertools::Itertools;
 use proton_api_core::services::proton::LabelId;

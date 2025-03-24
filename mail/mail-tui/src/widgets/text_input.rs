@@ -3,8 +3,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::{Masked, StatefulWidget, Stylize, Text};
 use ratatui::widgets::{Block, Borders, Paragraph, Widget, Wrap};
-use tui_input::backend::crossterm::EventHandler;
 use tui_input::Input;
+use tui_input::backend::crossterm::EventHandler;
 
 pub struct TextInputState {
     selected: bool,

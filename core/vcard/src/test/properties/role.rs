@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::role::{validate_role, Role};
+use crate::ParameterType;
+use crate::properties::role::{Role, validate_role};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text::Text;
-use crate::ParameterType;
 
 #[test]
 fn role_struct() {

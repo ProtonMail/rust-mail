@@ -9,7 +9,7 @@ use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
 use crate::properties::{any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::timestamp::{is_timestamp_value, Timestamp};
+use crate::values::timestamp::{Timestamp, is_timestamp_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

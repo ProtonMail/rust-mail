@@ -16,7 +16,7 @@ use crate::mail::datatypes::{
     ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
 };
 use crate::mail::{MailUserSession, Mailbox};
-use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
 use proton_api_core::session::Session;
 use proton_core_common::models::Label as RealLabel;

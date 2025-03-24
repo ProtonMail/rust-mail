@@ -37,9 +37,11 @@ impl GroupedContacts {
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
     ) -> Vec<Self> {
-        debug_assert!(contact_groups
-            .iter()
-            .all(|group| group.label_type == LabelType::ContactGroup));
+        debug_assert!(
+            contact_groups
+                .iter()
+                .all(|group| group.label_type == LabelType::ContactGroup)
+        );
 
         let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
             .into_iter()
@@ -257,9 +259,11 @@ impl ContactSuggestions {
         contact_groups: Vec<Label>,
         device_contacts: Vec<DeviceContact>,
     ) -> Self {
-        debug_assert!(contact_groups
-            .iter()
-            .all(|group| group.label_type == LabelType::ContactGroup));
+        debug_assert!(
+            contact_groups
+                .iter()
+                .all(|group| group.label_type == LabelType::ContactGroup)
+        );
 
         let label_ids = contacts
             .iter()

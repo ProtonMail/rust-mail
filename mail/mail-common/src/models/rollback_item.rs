@@ -2,17 +2,17 @@
 #[path = "../tests/models/rollback_item.rs"]
 mod tests;
 
+use crate::AppError;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message, MessageBodyMetadata};
-use crate::AppError;
 use futures::stream::{self, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::ProtonCore;
+use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::Label;
 use stash::orm::Model;
 use stash::params;

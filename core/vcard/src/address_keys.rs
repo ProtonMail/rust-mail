@@ -1,11 +1,11 @@
 use crate::{parameters::preference::Preference, properties::key::KeyValue, vcard::VCard};
-use base64::{prelude::BASE64_STANDARD as BASE_64, DecodeError, Engine as _};
+use base64::{DecodeError, Engine as _, prelude::BASE64_STANDARD as BASE_64};
 
 use proton_crypto_account::{
     keys::{PGPScheme, PinnedPublicKeys},
     proton_crypto::{
-        crypto::{DataEncoding, PGPProviderSync, PublicKey},
         CryptoError,
+        crypto::{DataEncoding, PGPProviderSync, PublicKey},
     },
 };
 use thiserror::Error;

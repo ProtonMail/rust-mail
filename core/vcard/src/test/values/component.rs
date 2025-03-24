@@ -1,4 +1,4 @@
-use crate::values::component::{is_component_value, Component};
+use crate::values::component::{Component, is_component_value};
 
 #[test]
 fn component_struct() {

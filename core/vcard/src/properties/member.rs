@@ -12,9 +12,9 @@ use crate::parameters::mediatype::MediaType;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, optional_debug, validate_parameters, VcardProperty};
+use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{is_uri_value, Uri};
+use crate::values::uri::{Uri, is_uri_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 

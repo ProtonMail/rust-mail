@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::nickname::{validate_nickname, Nickname};
+use crate::ParameterType;
+use crate::properties::nickname::{Nickname, validate_nickname};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::text_list::TextList;
-use crate::ParameterType;
 
 #[test]
 fn nickname_struct() {

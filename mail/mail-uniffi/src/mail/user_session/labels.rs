@@ -1,15 +1,15 @@
 use crate::errors::UserSessionError;
+use crate::mail::MailUserSession;
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
-use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_api_core::services::proton::LabelId as RealLabelId;
 use proton_core_common::datatypes::LabelType as RealLabelType;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec as _;
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
-use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 #[uniffi_export]

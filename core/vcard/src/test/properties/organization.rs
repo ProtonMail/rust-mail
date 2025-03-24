@@ -1,9 +1,9 @@
 use velcro::hash_set;
 
-use crate::properties::organization::{validate_org, Organization};
+use crate::ParameterType;
+use crate::properties::organization::{Organization, validate_org};
 use crate::test::{make_property, property_reject_parameters};
 use crate::values::component::Component;
-use crate::ParameterType;
 
 #[test]
 fn organization_struct() {

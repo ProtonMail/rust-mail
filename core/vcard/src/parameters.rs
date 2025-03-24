@@ -7,6 +7,7 @@ use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 
+use crate::PropertyKind;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
@@ -25,7 +26,6 @@ use crate::parameters::type_tel::TelType;
 use crate::parameters::value::ValueType;
 use crate::validation::get_property_kind;
 use crate::values::param_value::ParamValue;
-use crate::PropertyKind;
 
 pub mod alternative_id;
 pub mod any;

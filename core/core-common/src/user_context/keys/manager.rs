@@ -19,10 +19,10 @@ use stash::stash::Tether;
 use std::{collections::HashMap, time::Duration};
 
 use super::{
-    cache::{
-        CacheOption, CachedAddressKey, CachedUserKey, ADDRESS_KEY_LIFETIME, USER_KEY_LIFETIME,
-    },
     CachedAddressKeys, CachedUserKeys,
+    cache::{
+        ADDRESS_KEY_LIFETIME, CacheOption, CachedAddressKey, CachedUserKey, USER_KEY_LIFETIME,
+    },
 };
 
 /// Manages an caches the PGP keys.

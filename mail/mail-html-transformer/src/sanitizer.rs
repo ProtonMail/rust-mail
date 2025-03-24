@@ -2,7 +2,7 @@
 #[path = "tests/sanitizer.rs"]
 mod tests;
 
-use kuchikiki::{iter::NodeEdge, NodeData, NodeRef};
+use kuchikiki::{NodeData, NodeRef, iter::NodeEdge};
 use std::{collections::HashSet, sync::LazyLock};
 use velcro::hash_set;
 

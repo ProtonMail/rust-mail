@@ -7,15 +7,15 @@ use crate::datatypes::{
 };
 use crate::models::ModelExtension;
 use crate::os::StoreInKeyChain;
-use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
+use aes_gcm::aead::consts::U12;
 use aes_gcm::aes::Aes256;
 use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key, KeySizeUser,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
 };
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use derive_more::{AsRef, Deref};
 use proton_api_core::auth::{Tokens, UserKeySecret};
 use proton_api_core::services::proton::{SessionId, UserId};

@@ -1,6 +1,6 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
-use crate::draft::{compose::html_to_text, PackageError, SaveOrSendError};
+use crate::draft::{PackageError, SaveOrSendError, compose::html_to_text};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_action_queue::action::WriterGuard;
@@ -16,12 +16,12 @@ use proton_crypto_inbox::keys::{
     ComposerPreference, CryptoMailSettings, InboxSessionKey, PackageCryptoType, SendPreferences,
 };
 use proton_crypto_inbox::message::packages::{
-    package_body_encrypt, EncryptedPackageBody, PackageMimeType,
+    EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use stash::stash::Bond;
 use std::collections::{HashMap, HashSet};
-use tracing::{debug, debug_span, error, Instrument};
+use tracing::{Instrument, debug, debug_span, error};
 
 /// Loads the send preferences for each recipient of the message.
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(

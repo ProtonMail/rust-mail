@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Formatter};
 
-use crate::errors::{VCardParameterError, VCardParameterResult};
-use crate::values::param_value::{is_param_value, ParamValue};
 use crate::ParameterType;
+use crate::errors::{VCardParameterError, VCardParameterResult};
+use crate::values::param_value::{ParamValue, is_param_value};
 
 /// An ADR can include a "LABEL" parameter to present a delivery address label for the address.  Its
 /// value is a plain-text string representing the formatted address.

@@ -43,12 +43,12 @@ pub use self::contact_email::*;
 pub use self::device::*;
 pub use self::labels::*;
 
+use crate::CoreContextResult;
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, DateFormat, Density, Email,
     Flags, HighSecurity, LocalAddressId, LocalIdMarker, LogAuth, Password, Phone, ProductUsedSpace,
     Referral, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
-use crate::CoreContextResult;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_api_core::services::proton::Proton;

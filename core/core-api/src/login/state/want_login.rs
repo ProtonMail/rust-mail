@@ -1,15 +1,15 @@
 use crate::login::state::StateData;
-use crate::login::{state::State, LoginError};
+use crate::login::{LoginError, state::State};
 use crate::service::ApiServiceError;
-use crate::services::observability::metrics::AuthV4RequestMetric;
 use crate::services::observability::ApiServiceObservabilityResponse;
+use crate::services::observability::metrics::AuthV4RequestMetric;
 use crate::services::proton::Proton;
 use crate::services::proton::{SessionId, UserId};
 use crate::session::SessionParts;
 use crate::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use futures::TryFutureExt;
-use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::PasswordMode::{One, Two};
+use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::{Auth, Tokens};
 use secrecy::{ExposeSecret, SecretString};
 use tracing::info;

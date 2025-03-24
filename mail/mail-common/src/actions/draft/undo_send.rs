@@ -1,5 +1,5 @@
 use crate::actions::draft::{
-    local_all_draft_label_id, local_draft_label_id, local_sent_label_id, SEND_ACTION_GROUP,
+    SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_sent_label_id,
 };
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
@@ -10,8 +10,8 @@ use proton_action_queue::action::{
 };
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::ProtonMail;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};

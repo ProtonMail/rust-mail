@@ -1,5 +1,5 @@
 use crate::app::Command;
-use crate::app_model::{mailbox, AppState, AppStateHandler};
+use crate::app_model::{AppState, AppStateHandler, mailbox};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;

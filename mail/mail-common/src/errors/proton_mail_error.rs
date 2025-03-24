@@ -4,18 +4,19 @@ use crate::draft::{AttachmentError, PackageError, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{
+    AppError, MailContextError, MailboxError, SidebarError,
     draft::DiscardError as DraftDiscardError, draft::Error as DraftError,
     draft::OpenError as DraftOpenError, draft::SaveOrSendError as DraftSaveOrSendError,
-    draft::UndoError as DraftUndoError, AppError, MailContextError, MailboxError, SidebarError,
+    draft::UndoError as DraftUndoError,
 };
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
-use proton_core_common::models::LabelError;
 use proton_core_common::ContactError;
-use proton_event_loop::subscriber::SubscriberError;
+use proton_core_common::models::LabelError;
 use proton_event_loop::EventLoopError;
+use proton_event_loop::subscriber::SubscriberError;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
