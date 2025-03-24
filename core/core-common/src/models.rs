@@ -32,6 +32,7 @@
 mod tests;
 
 mod address;
+mod app_settings;
 mod contact;
 mod contact_card;
 mod contact_email;
@@ -41,6 +42,7 @@ mod user;
 mod user_settings;
 
 pub use self::address::*;
+pub use self::app_settings::*;
 pub use self::contact::*;
 pub use self::contact_card::*;
 pub use self::contact_email::*;

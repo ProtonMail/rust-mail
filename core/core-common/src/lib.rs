@@ -10,6 +10,7 @@ pub mod events;
 #[allow(clippy::unused_async)]
 pub mod models;
 pub mod os;
+pub mod pin_code;
 mod user_context;
 pub mod utils;
 pub mod watch_handle;

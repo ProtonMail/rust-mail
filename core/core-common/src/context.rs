@@ -9,7 +9,7 @@ use crate::datatypes::{
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
-use crate::os::{KeyChain, KeyChainError, KeyChainExt};
+use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
@@ -696,13 +696,10 @@ impl Context {
     }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
-        let Some(key) = self
-            .key_chain
-            .load::<SessionEncryptionKey>()
-            .map_err(CoreContextError::KeyChain)?
-        else {
+        let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
+
         Ok(key)
     }
 
@@ -732,6 +729,14 @@ impl Context {
             .store::<StoredDevicePrivateKey>(private_key)?;
 
         Ok(StoredDevicePublicKey::from(public_key))
+    }
+
+    pub fn store_secret<S: StoreInKeyChain>(&self, secret: S) -> CoreContextResult<()> {
+        Ok(self.key_chain.store::<S>(secret)?)
+    }
+
+    pub fn load_secret<S: StoreInKeyChain>(&self) -> CoreContextResult<Option<S>> {
+        Ok(self.key_chain.load::<S>()?)
     }
 
     fn user_db_path(&self, user_id: &UserId) -> PathBuf {
