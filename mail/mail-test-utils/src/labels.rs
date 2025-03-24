@@ -133,6 +133,7 @@ impl ApiLabelTestUtils for ApiLabel {
             id if id == SystemLabelId::snoozed() => {
                 label_name = "Snoozed";
             }
+
             id if id == SystemLabelId::category_social() => {
                 label_name = "Category Social";
                 label_type = LabelType::Label;
