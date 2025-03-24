@@ -1,5 +1,7 @@
 pub use rusqlite;
 use rusqlite::{Connection, Error, OpenFlags};
+use sqlite_watcher::connection::State;
+use sqlite_watcher::statement::Statement;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use tempdir::TempDir;
@@ -77,8 +79,8 @@ impl r2d2::ManageConnection for StashConnectionManager {
     type Connection = Connection;
     type Error = rusqlite::Error;
 
-    fn connect(&self) -> Result<Connection, Error> {
-        match self.source {
+    fn connect(&self) -> Result<Self::Connection, Error> {
+        let connection = match self.source {
             Source::File(ref path) => Connection::open_with_flags(path, self.flags),
             Source::TmpFile(ref tmp) => {
                 Connection::open_with_flags(tmp.path().join("test"), self.flags)
@@ -87,14 +89,19 @@ impl r2d2::ManageConnection for StashConnectionManager {
         .and_then(|mut c| match self.init {
             None => Ok(c),
             Some(ref init) => init(&mut c).map(|_| c),
-        })
+        })?;
+
+        State::set_pragmas().execute(&connection)?;
+        State::start_tracking().execute(&connection)?;
+
+        Ok(connection)
     }
 
-    fn is_valid(&self, conn: &mut Connection) -> Result<(), Error> {
+    fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Error> {
         conn.execute_batch("SELECT 1")
     }
 
-    fn has_broken(&self, _: &mut Connection) -> bool {
+    fn has_broken(&self, _: &mut Self::Connection) -> bool {
         false
     }
 }
