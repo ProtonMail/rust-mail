@@ -34,10 +34,8 @@ use r2d2::Pool;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
-use sqlite_watcher::connection::SqlConnectionAsync;
-use sqlite_watcher::connection::SqlExecutorAsync;
-use sqlite_watcher::connection::SqlTransactionAsync;
 use sqlite_watcher::connection::State;
+use sqlite_watcher::statement::Statement;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
@@ -76,14 +74,29 @@ enum Operation {
     Execution(OperationExec),
 }
 
+/// Distinguishes transaction change detection behavior
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum TransactionTrackingPolicy {
+    /// Use change tracking system.
+    Tracking,
+    /// Do not use change tracking system.
+    Quiet,
+}
+
 #[derive(Debug)]
 /// Only the operations related to a transaction.
 enum OperationTransaction {
     /// Starts a new transaction.
-    Start(OneshotSender<Result<(), StashError>>),
+    Start(
+        TransactionTrackingPolicy,
+        OneshotSender<Result<(), StashError>>,
+    ),
 
     /// Commits a transaction, i.e. finalises it.
-    Commit(OneshotSender<Result<(), StashError>>),
+    Commit(
+        TransactionTrackingPolicy,
+        OneshotSender<Result<(), StashError>>,
+    ),
 
     /// Rolls back a transaction, i.e. abandons it.
     Rollback(OneshotSender<Result<(), StashError>>),
@@ -473,8 +486,6 @@ impl Stash {
                         PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
                         PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
                     ", BUSY_TIMEOUT.as_millis()))?;
-                State::start_tracking(connection)?;
-
                 Ok(())
             });
 
@@ -583,10 +594,6 @@ pub struct Tether {
     sender: StdSender<Operation>,
 
     watcher: Arc<Watcher>,
-
-    /// State needed for the connection to be updated on transaction start and
-    /// published at the end.
-    state: Option<State>,
 }
 
 impl Tether {
@@ -945,8 +952,8 @@ impl Tether {
     /// * [`Stash::connection()`]
     ///
     pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
-        self.listen_for_changes().await?;
-        self.quiet_transaction().await
+        self.transaction_impl(TransactionTrackingPolicy::Tracking)
+            .await
     }
 
     /// The transaction will produce no any notifications.
@@ -958,8 +965,16 @@ impl Tether {
     ///
     /// see [`Tether::transaction()`]
     pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
+        self.transaction_impl(TransactionTrackingPolicy::Quiet)
+            .await
+    }
+
+    async fn transaction_impl(
+        &mut self,
+        policy: TransactionTrackingPolicy,
+    ) -> Result<Bond<'_>, StashError> {
         let (sender, receiver) = oneshot::channel();
-        let operation = Operation::Transaction(OperationTransaction::Start(sender));
+        let operation = Operation::Transaction(OperationTransaction::Start(policy, sender));
 
         self.sender
             .send(operation)
@@ -969,38 +984,6 @@ impl Tether {
             .expect("Tether closed its channel with handles still open")?;
 
         Ok(Bond::new(self))
-    }
-
-    /// Listens for changes to the database.
-    async fn listen_for_changes(&mut self) -> Result<(), StashError> {
-        let Some(mut state) = self.state.take() else {
-            tracing::error!(
-                "No state found for Tether, something is very wrong with notification system"
-            );
-            return Err(StashError::Critical(anyhow!("No state found for Tether")));
-        };
-        let watcher = Arc::clone(&self.watcher);
-        let result = state.sync_tables_async(self, &watcher).await;
-
-        self.state = Some(state);
-
-        result
-    }
-
-    /// Publishes changes to the database.
-    async fn publish_changes(&mut self) -> Result<(), StashError> {
-        let Some(mut state) = self.state.take() else {
-            tracing::error!(
-                "No state found for Tether, something is very wrong with notification system"
-            );
-            return Err(StashError::Critical(anyhow!("No state found for Tether")));
-        };
-        let watcher = Arc::clone(&self.watcher);
-        let result = state.publish_changes_async(self, &watcher).await;
-
-        self.state = Some(state);
-
-        result
     }
 
     /// Starts a new tethered worker thread.
@@ -1032,6 +1015,7 @@ impl Tether {
         // return the results to the original caller via oneshot channels.
         debug!("Spawning worker task...");
         // TODO: replace me with a thread pool.
+        let watcher = stash.watcher.clone();
         let thread_builder = thread::Builder::new().name("Tether worker".to_string());
         _ = thread_builder.spawn(move || {
             debug!("Creating worker thread");
@@ -1052,9 +1036,9 @@ impl Tether {
                     error!("Critical error creating worker {e:?}");
                     match op {
                         Operation::Transaction(
-                            OperationTransaction::Start(ch)
+                            OperationTransaction::Start(_, ch)
                             | OperationTransaction::Rollback(ch)
-                            | OperationTransaction::Commit(ch),
+                            | OperationTransaction::Commit(_, ch),
                         ) => {
                             _ = ch.send(Err(e));
                         }
@@ -1091,6 +1075,8 @@ impl Tether {
             let mut sm = TetheredWorkerStateMachine {
                 transaction: None,
                 connection: &connection,
+                state: State::new(),
+                watcher: &watcher,
             };
             sm.handle_operation(first_operation);
 
@@ -1103,7 +1089,6 @@ impl Tether {
         Self {
             sender: tether_sender,
             watcher: stash.watcher.clone(),
-            state: Some(State::new()),
         }
     }
 }
@@ -1111,80 +1096,6 @@ impl Tether {
 impl Debug for Tether {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tether").finish_non_exhaustive()
-    }
-}
-
-#[allow(clippy::manual_async_fn)]
-impl SqlExecutorAsync for Tether {
-    type Error = StashError;
-    #[allow(clippy::indexing_slicing)]
-    fn sql_query_values(
-        &mut self,
-        query: &str,
-    ) -> impl Future<Output = Result<Vec<usize>, Self::Error>> + Send {
-        async {
-            let Some((one, two)) = query.split_once(" FROM ") else {
-                return Err(StashError::Critical(anyhow!(
-                    "Invalid query format. Expected 'SELECT ... FROM ...'"
-                )));
-            };
-
-            let query = format!("{one} as value FROM {two}");
-            let res = self
-                .query_values::<_, usize>(&query, vec![])
-                .await
-                .with_context(|| {
-                    format!("rusqlite_watcher::sql_query_values: Query {query} failed")
-                })?;
-            Ok(res)
-        }
-    }
-
-    #[allow(unused_results)]
-    fn sql_execute(&mut self, query: &str) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        async {
-            let query = query.to_owned();
-            self.execute(&query, vec![])
-                .await
-                .with_context(|| format!("rusqlite_watcher::sql_execute: Query {query} failed"))?;
-            Ok(())
-        }
-    }
-}
-
-#[allow(clippy::manual_async_fn)]
-impl SqlConnectionAsync for Tether {
-    fn sql_transaction(
-        &mut self,
-    ) -> impl Future<Output = Result<impl SqlTransactionAsync<Error = Self::Error> + '_, Self::Error>>
-           + Send {
-        async {
-            Ok(self
-                .quiet_transaction()
-                .await
-                .context("rusqlite_watcher::sql_transaction: Error starting transaction")?)
-        }
-    }
-}
-
-#[allow(clippy::manual_async_fn)]
-impl SqlExecutorAsync for Bond<'_> {
-    type Error = StashError;
-    fn sql_query_values(
-        &mut self,
-        query: &str,
-    ) -> impl Future<Output = Result<Vec<usize>, Self::Error>> + Send {
-        self.tether.sql_query_values(query)
-    }
-
-    fn sql_execute(&mut self, query: &str) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        self.tether.sql_execute(query)
-    }
-}
-
-impl SqlTransactionAsync for Bond<'_> {
-    fn sql_commit_transaction(self) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        self.commit_(false)
     }
 }
 
@@ -1243,7 +1154,7 @@ impl<'tether> Bond<'tether> {
     ///     committing the transaction.
     ///
     pub async fn commit(self) -> Result<(), StashError> {
-        self.commit_(true).await
+        self.commit_(TransactionTrackingPolicy::Tracking).await
     }
 
     /// Do not notify watchers about a changes, use in par with `quiet_transaction`.
@@ -1256,7 +1167,7 @@ impl<'tether> Bond<'tether> {
     /// see [`Bond::commit()`]
     ///
     pub async fn quiet_commit(self) -> Result<(), StashError> {
-        self.commit_(false).await
+        self.commit_(TransactionTrackingPolicy::Quiet).await
     }
 
     #[allow(clippy::mem_forget)]
@@ -1269,9 +1180,13 @@ impl<'tether> Bond<'tether> {
     ///
     /// see [`Bond::commit()`]
     ///
-    async fn commit_(self, publish_changes: bool) -> Result<(), StashError> {
+    async fn commit_(
+        self,
+        transaction_policy: TransactionTrackingPolicy,
+    ) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
-        let operation = Operation::Transaction(OperationTransaction::Commit(sender));
+        let operation =
+            Operation::Transaction(OperationTransaction::Commit(transaction_policy, sender));
         self.sender
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
@@ -1283,9 +1198,6 @@ impl<'tether> Bond<'tether> {
             error!("Commit error: {e:?}");
             self.rollback().await?;
             return Ok(());
-        } else if publish_changes {
-            debug!("Publishing changes after commit.");
-            self.tether.publish_changes().await?;
         }
         // Transaction commited, skip the drop logic
         mem::forget(self);
@@ -1375,6 +1287,8 @@ struct TetheredWorkerStateMachine<'a> {
     transaction: Option<Transaction<'a>>,
     /// The sender we use to communicate with the main worker thread.
     connection: &'a Connection,
+    state: State,
+    watcher: &'a Watcher,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {
@@ -1411,11 +1325,11 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     }
     fn handle_transaction(&mut self, operation: OperationTransaction) {
         match operation {
-            OperationTransaction::Start(send_back) => {
+            OperationTransaction::Start(policy, send_back) => {
                 // In theory this should be impossible since we require a `&mut Tether` to start a
                 // transaction
                 assert!(self.transaction.is_none(), "Started transaction twice");
-                match self.start_transaction() {
+                match self.start_transaction(policy) {
                     Ok(transaction) => {
                         self.transaction = Some(transaction);
                         _ = send_back.send(Ok(()));
@@ -1425,8 +1339,12 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                     }
                 };
             }
-            OperationTransaction::Commit(send_back) => {
-                match self.transaction.take().map(|tx| tx.commit()) {
+            OperationTransaction::Commit(policy, send_back) => {
+                match self
+                    .transaction
+                    .take()
+                    .map(|tx| self.commit_transaction(tx, policy))
+                {
                     Some(Ok(())) => {
                         trace!("Commited transaction");
                         _ = send_back.send(Ok(()));
@@ -1473,7 +1391,20 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         }
     }
 
-    fn start_transaction(&self) -> Result<Transaction<'a>, SqliteError> {
+    fn start_transaction(
+        &mut self,
+        transaction_tracking_policy: TransactionTrackingPolicy,
+    ) -> Result<Transaction<'a>, SqliteError> {
+        if transaction_tracking_policy == TransactionTrackingPolicy::Tracking {
+            if let Err(e) = self
+                .state
+                .sync_tables(self.watcher)
+                .execute(self.connection)
+            {
+                error!("Failed to sync tables: {e:?}");
+                return Err(e);
+            }
+        }
         // We call new_unchecked() here because new() requires a mutable borrow.
         // Being unchecked does not matter, as we perform the necessary checks
         // ourselves.
@@ -1520,6 +1451,21 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             // the generally-described behaviour of these features.
             TransactionBehavior::Immediate,
         )
+    }
+
+    fn commit_transaction(
+        &mut self,
+        transaction: Transaction<'_>,
+        transaction_tracking_policy: TransactionTrackingPolicy,
+    ) -> Result<(), rusqlite::Error> {
+        transaction.commit()?;
+        if transaction_tracking_policy == TransactionTrackingPolicy::Tracking {
+            self.state
+                .publish_changes(self.watcher)
+                .execute(self.connection)
+                .inspect_err(|e| error!("Failed to report tracked changes: {e:?}"))?;
+        }
+        Ok(())
     }
 
     fn handle_exec(&self, operation: OperationExec) {
