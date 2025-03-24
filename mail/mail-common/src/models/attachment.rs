@@ -88,7 +88,7 @@ use uuid::Uuid;
 /// *ALWAYS* use [`Attachment::save()`].
 ///
 ///
-#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, Default)]
 #[TableName("attachments")]
 pub struct Attachment {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -188,7 +188,6 @@ pub struct Attachment {
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
-    #[serde(skip)]
     pub row_id: Option<u64>,
 }
 
@@ -286,7 +285,7 @@ impl Attachment {
         if let Some(local_id) = self.local_id {
             // There is currently a race because we try to write too much data at the same time
             // rather than what really changed. It's highly unlikely that we ever want to remove
-            // the remote id of an attachment that already has one. This happens in the
+            // any of these from an attachment that already has one. This happens in the
             // context of drafts, where a local change to the message body metadata can
             // accidentally reset the attachment remote id to nothing, causing the send
             // to fail.
