@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+
+ - Log spam from deferred draft attachment cleaner.
+
 ## [0.62.0] - 2025-03-20
 
 ### Added
