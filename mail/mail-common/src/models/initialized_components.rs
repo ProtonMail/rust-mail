@@ -23,7 +23,6 @@ pub struct InitializedComponent {
     pub row_id: Option<u64>,
 }
 
-#[allow(dead_code)] // TODO (ET-2558): Remove me after those methods are used
 impl InitializedComponent {
     /// Checks whether component has been initialized
     ///
@@ -38,18 +37,30 @@ impl InitializedComponent {
         Ok(Self::find_by_id(key, tether).await?.is_some())
     }
 
-    /// Mark component as initialized.
+    /// Mark component as initialized by running initialization async closure.
     /// This operation is **idempotent**. If the component is already initialized, it becomes no-op.
     ///
     /// # Errors
     ///
     /// Returns an error if the database query fails.
     ///
-    pub async fn initialize(key: InitializedComponentKey, tx: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn initialize<E>(
+        key: InitializedComponentKey,
+        tx: &Bond<'_>,
+        f: impl AsyncFnOnce(&Bond<'_>) -> Result<(), E> + '_,
+    ) -> Result<(), E>
+    where
+        E: From<StashError>,
+    {
         if Self::initialized(key, tx).await? {
             // We already initialized it
             return Ok(());
         }
-        Self { key, row_id: None }.save(tx).await
+
+        f(tx).await?;
+
+        Self { key, row_id: None }.save(tx).await?;
+
+        Ok(())
     }
 }

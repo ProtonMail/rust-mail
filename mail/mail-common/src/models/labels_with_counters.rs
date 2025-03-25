@@ -3,11 +3,11 @@
 mod labels_with_counters;
 
 use indoc::formatdoc;
-use proton_api_core::services::proton::LabelId;
+use proton_api_core::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, LabelError};
 use sqlite_watcher::watcher::TableObserver;
-use stash::stash::{Stash, WatcherHandle};
+use stash::stash::{Bond, Stash, WatcherHandle};
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -16,6 +16,9 @@ use stash::{
     stash::{StashError, Tether},
 };
 
+use crate::datatypes::InitializedComponentKey;
+
+use super::initialized_components::InitializedComponent;
 use super::{ConversationCounters, MessageCounters};
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
@@ -109,6 +112,32 @@ pub struct LabelWithCounters {
 }
 
 impl LabelWithCounters {
+    /// It initializes labels by sincing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize<API>(api: &API, tx: &Bond<'_>) -> Result<(), LabelError>
+    where
+        API: ProtonCore,
+    {
+        InitializedComponent::initialize::<LabelError>(
+            InitializedComponentKey::Labels,
+            tx,
+            async |tx| {
+                let labels = Label::all_labels(api).await?;
+                let label_ids = Label::sync_labels(tx, labels).await?;
+                for local_id in label_ids {
+                    ConversationCounters::new(local_id).save(&tx).await?;
+                    MessageCounters::new(local_id).save(&tx).await?;
+                }
+                Ok(())
+            },
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Performs INNER JOIN to load both resources at the same time.
     ///
     /// # Returns

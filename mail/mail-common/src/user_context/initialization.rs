@@ -1,12 +1,12 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
+use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::future::try_join;
 use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
-use proton_core_common::models::{Address, Contact, Label, User};
+use proton_core_common::models::{Address, Contact, User};
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
@@ -93,17 +93,13 @@ impl MailUserContext {
                 Contact::sync(ctx_clone2.api(), ctx_clone2.user_stash()).await
             });
 
-            let labels = Label::all_labels(ctx_clone.api()).await?;
+            // let labels = Label::all_labels(ctx_clone.api()).await?;
 
             let api = ctx_clone.api().to_owned();
             let counters = ctx_clone.spawn(async move { StoreLabelCounters::new(&api).await });
             let mut tether = ctx_clone.user_stash().connection();
             let tx = tether.transaction().await?;
-            let label_ids = Label::sync_labels(&tx, labels).await?;
-            for local_id in label_ids {
-                ConversationCounters::new(local_id).save(&tx).await?;
-                MessageCounters::new(local_id).save(&tx).await?;
-            }
+            LabelWithCounters::initialize(ctx_clone.api(), &tx).await?;
 
             tx.commit().await?;
 
