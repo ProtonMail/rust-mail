@@ -1,7 +1,10 @@
+#![allow(clippy::print_stdout)]
+
 use async_trait::async_trait;
 use clap::{Args, Parser, Subcommand};
 use futures::TryFutureExt;
 use proton_api_core::login::Flow;
+use proton_api_core::services::proton::ProtonPayments;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::services::proton::muon::util::BoxErrExt;
 use proton_api_core::session::Config;
@@ -74,16 +77,21 @@ impl Cli {
 #[derive(Debug, Subcommand)]
 enum Cmd {
     Login(LoginCmd),
+
+    #[command(subcommand)]
+    Payments(PaymentsCmd),
 }
 
 impl Cmd {
     async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
         match self {
             Self::Login(cmd) => cmd.run(ctx).await,
+            Self::Payments(cmd) => cmd.run(ctx).await,
         }
     }
 }
 
+/// Login to an account.
 #[derive(Debug, Args)]
 struct LoginCmd {
     username: String,
@@ -119,6 +127,63 @@ impl LoginCmd {
             .await?;
 
         Ok(())
+    }
+}
+
+/// Manage payments.
+#[derive(Debug, Subcommand)]
+enum PaymentsCmd {
+    Subscription(SubscriptionPaymentsCmd),
+}
+
+impl PaymentsCmd {
+    async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
+        match self {
+            Self::Subscription(cmd) => cmd.run(ctx).await,
+        }
+    }
+}
+
+/// Display the active subscription for the given user.
+#[derive(Debug, Args)]
+struct SubscriptionPaymentsCmd {
+    username: String,
+}
+
+impl SubscriptionPaymentsCmd {
+    async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
+        let plan = self
+            .get_user_ctx(&ctx)
+            .await?
+            .api()
+            .get_payments_subscription()
+            .await?;
+
+        println!("{plan:#?}");
+
+        Ok(())
+    }
+
+    async fn get_user_ctx(&self, ctx: &Arc<MailContext>) -> Result<Arc<MailUserContext>> {
+        for acc in ctx.get_accounts().await? {
+            if acc.name_or_addr != self.username {
+                continue;
+            }
+
+            let Some(CoreAccountState::LoggedIn(mut s)) =
+                ctx.get_account_state(acc.remote_id.clone()).await?
+            else {
+                continue;
+            };
+
+            let Some(session) = ctx.get_session(s.pop().unwrap()).await? else {
+                continue;
+            };
+
+            return Ok(ctx.user_context_from_session(&session, None).await?);
+        }
+
+        Err("account not found")?
     }
 }
 
