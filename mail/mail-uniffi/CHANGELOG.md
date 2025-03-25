@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-736] Human Verification
   - [ET-2438] PGP/Mime attachment forward + Reply support.
+  - Expose user settings via `MailUserSession::user_settings` method
+
 
 ### Fixed
 
@@ -28,8 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
- - [ET-548]: Report an issue feature is fully implemeneted
- - SystemLabel has two new locations: `Blocked`, `Pinned`.
+  - [ET-548]: Report an issue feature is fully implemeneted
+  - SystemLabel has two new locations: `Blocked`, `Pinned`.
 
 
 ## [0.62.1] - 2025-03-24

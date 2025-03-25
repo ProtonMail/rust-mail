@@ -3,6 +3,7 @@ use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::models::UserSettings;
 use crate::{Context, CoreContextError, CoreContextResult};
 use anyhow::Context as _;
 use proton_action_queue::queue::Queue;
@@ -145,6 +146,19 @@ impl UserContext {
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
         let account = self.core_account().await?;
         Ok(account.details())
+    }
+
+    /// Retrieves the user's settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub async fn user_settings(&self) -> CoreContextResult<UserSettings> {
+        let user_id = self.user_id();
+        let tether = self.context.account_stash().connection();
+        let settings = UserSettings::load(user_id.to_owned(), &tether).await?;
+
+        settings.ok_or_else(|| CoreContextError::SettingsMissing(user_id.to_owned()))
     }
 
     /// Retrieves the current user's account.

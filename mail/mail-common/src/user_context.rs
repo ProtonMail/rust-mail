@@ -22,7 +22,7 @@ use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
-use proton_core_common::models::{Address, User};
+use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
@@ -220,6 +220,15 @@ impl MailUserContext {
     pub async fn account_details(&self) -> MailContextResult<AccountDetails> {
         let account_details = self.user_context.account_details().await?;
         Ok(account_details)
+    }
+
+    /// Retrieves the user's settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub async fn user_settings(&self) -> MailContextResult<UserSettings> {
+        Ok(self.user_context.user_settings().await?)
     }
 
     /// Returns the unlocked user keys of this user.

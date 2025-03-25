@@ -6,6 +6,7 @@ mod labels;
 use crate::core::datatypes::{
     AccountDetails, ConnectionStatus, GetPaymentsPlansOptions, Id, NewSubscription,
     NewSubscriptionValues, PaymentReceipt, PaymentToken, PaymentsPlans, Subscriptions, User,
+    UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
@@ -163,6 +164,22 @@ impl MailUserSession {
         uniffi_async(async move {
             let account_details = ctx.account_details().await?;
             Result::<_, RealProtonMailError>::Ok(account_details.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Retrieves the user's settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub async fn user_settings(&self) -> Result<UserSettings, UserSessionError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            let settings = ctx.user_settings().ok_into().await?;
+
+            Result::<_, RealProtonMailError>::Ok(settings)
         })
         .await
         .map_err(UserSessionError::from)

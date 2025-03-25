@@ -41,6 +41,8 @@ pub enum MailContextError {
     SessionMissing(SessionId),
     #[error("Account with user id {0} is missing in the DB")]
     AccountMissing(UserId),
+    #[error("Settings for user with id {0} are missing in the DB")]
+    SettingsMissing(UserId),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error(transparent)]
@@ -141,7 +143,8 @@ impl From<WriterGuardError> for MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
-            CoreContextError::AccountMissing(user_id) => MailContextError::AccountMissing(user_id),
+            CoreContextError::AccountMissing(id) => MailContextError::AccountMissing(id),
+            CoreContextError::SettingsMissing(id) => MailContextError::SettingsMissing(id),
             CoreContextError::Build(err) => MailContextError::Build(err),
             CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),

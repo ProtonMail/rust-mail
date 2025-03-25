@@ -44,6 +44,8 @@ use tracing::{Level, error, info, warn};
 pub enum CoreContextError {
     #[error("Account with user id {0} is missing in the DB")]
     AccountMissing(UserId),
+    #[error("Settings for user with id {0} are missing in the DB")]
+    SettingsMissing(UserId),
     #[error("Build error: {0}")]
     Build(#[from] BuildError),
     #[error("Login error: {0}")]
