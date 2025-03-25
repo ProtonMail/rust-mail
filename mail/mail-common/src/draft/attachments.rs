@@ -126,7 +126,17 @@ impl DraftStagingAreaCleaner {
     }
 
     /// Start the cleaner background task.
-    pub fn run(self, context: Arc<MailUserContext>) {
+    ///
+    /// We also create the staging area directory if it does not exist yet.
+    ///
+    /// # Errors
+    ///
+    /// If we failed to create the staging area.
+    pub fn run(self, context: Arc<MailUserContext>) -> std::io::Result<()> {
+        let staging_area = context.attachment_staging_path();
+        std::fs::create_dir_all(&staging_area)
+            .inspect_err(|e| error!("failed to create draft staging area: {e:?}"))?;
+
         let weak_context = Arc::downgrade(&context);
         context.spawn(
             async move {
@@ -134,7 +144,6 @@ impl DraftStagingAreaCleaner {
                     let Some(ctx) = weak_context.upgrade() else {
                         return;
                     };
-                    let staging_area = ctx.attachment_staging_path();
                     debug!("Starting draft staging cleanup");
                     match tokio::fs::read_dir(&staging_area).await {
                         Ok(dir_reader) => {
@@ -152,6 +161,7 @@ impl DraftStagingAreaCleaner {
             }
             .instrument(debug_span!("draft-staging-cleanup")),
         );
+        Ok(())
     }
 
     async fn run_cleanup(mut dir_reader: ReadDir, tether: &Tether) {

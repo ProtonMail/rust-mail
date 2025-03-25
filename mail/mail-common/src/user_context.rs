@@ -87,7 +87,7 @@ impl MailUserContext {
         });
 
         // Start draft staging area cleaner.
-        DraftStagingAreaCleaner::new().run(Arc::clone(&this));
+        DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
 
         this.user_context
             .queue()
