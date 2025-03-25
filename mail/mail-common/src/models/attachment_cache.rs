@@ -475,7 +475,10 @@ impl Attachment {
         // 2. If an attachment is scheduled for deletion (the attachment row has been deleted but not in the fs)
         let mut tether = ctx.user_stash().connection();
         let current_size = tether
-            .query_value::<_, u64>("SELECT SUM(size) AS value FROM attachment_cache", vec![])
+            .query_value::<_, u64>(
+                "SELECT IFNULL(SUM(size),0) AS value FROM attachment_cache",
+                vec![],
+            )
             .await
             .context("Error getting total cache utilization")?;
 
