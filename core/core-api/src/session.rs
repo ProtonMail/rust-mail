@@ -9,6 +9,7 @@ use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
+use crate::services::observability::store::InMemoryMetricStore;
 use crate::services::observability::{ObservabilityManager, ObservabilityMetric};
 use crate::services::proton::{self, BuildError, Proton};
 use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
@@ -19,6 +20,7 @@ pub use muon::common::{Endpoint, Server};
 pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
 
+const OBSERVABILITY_BATCH_SIZE: usize = 500;
 /// Core session trait which provides access to the API.
 pub trait CoreSession {
     #[must_use]
@@ -163,7 +165,13 @@ impl Builder {
         let client = proton::build(&config, &store, status.observer(), challenge.clone())?;
 
         status.initialize(client.clone());
-        let observability = ObservabilityManager::new(client.clone());
+        let observability = ObservabilityManager::create_and_start(
+            client.clone(),
+            InMemoryMetricStore::new(),
+            status.observer(),
+            tokio::time::Duration::from_secs(60),
+            OBSERVABILITY_BATCH_SIZE,
+        );
 
         Ok(Session {
             client,
