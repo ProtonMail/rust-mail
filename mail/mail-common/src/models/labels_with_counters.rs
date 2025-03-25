@@ -7,7 +7,7 @@ use proton_api_core::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::{Label, LabelError};
 use sqlite_watcher::watcher::TableObserver;
-use stash::stash::{Bond, Stash, WatcherHandle};
+use stash::stash::{Stash, WatcherHandle};
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -19,7 +19,7 @@ use stash::{
 use crate::datatypes::InitializedComponentKey;
 
 use super::initialized_components::InitializedComponent;
-use super::{ConversationCounters, MessageCounters};
+use super::{ConversationCounters, InitializationError, MessageCounters};
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
 ///
@@ -117,25 +117,31 @@ impl LabelWithCounters {
     ///
     /// This function is idempotent. If successfully initialized in the past.
     ///
-    pub async fn initialize<API>(api: &API, tx: &Bond<'_>) -> Result<(), LabelError>
+    pub async fn initialize<API>(
+        api: &API,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<LabelError>>
     where
         API: ProtonCore,
     {
-        InitializedComponent::initialize::<LabelError>(
+        InitializedComponent::initialize::<LabelError, Vec<Label>>(
             InitializedComponentKey::Labels,
-            tx,
-            async |tx| {
+            &[],
+            stash.connection(),
+            async || {
                 let labels = Label::all_labels(api).await?;
+                Ok(labels)
+            },
+            async |tx, labels| {
                 let label_ids = Label::sync_labels(tx, labels).await?;
                 for local_id in label_ids {
-                    ConversationCounters::new(local_id).save(&tx).await?;
-                    MessageCounters::new(local_id).save(&tx).await?;
+                    ConversationCounters::new(local_id).save(tx).await?;
+                    MessageCounters::new(local_id).save(tx).await?;
                 }
                 Ok(())
             },
         )
-        .await?;
-        Ok(())
+        .await
     }
 
     /// Performs INNER JOIN to load both resources at the same time.

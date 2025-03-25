@@ -43,6 +43,7 @@ mod rollback_item;
 pub use attachment::*;
 pub use conversation::*;
 pub use draft::*;
+pub use initialized_components::*;
 pub use labels_with_counters::*;
 pub use mail_scroller::*;
 pub use mail_settings::*;

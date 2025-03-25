@@ -12,8 +12,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
-    LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
-    ReadFilter, SystemLabelId,
+    InitializedComponentKey, LocalMessageId, MessageAttachmentInfos, MessageLabelsCount,
+    MessageRecipients, MessageSenders, ReadFilter, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -21,6 +21,7 @@ use crate::{AppError, actions::conversations::Delete};
 use anyhow::{Context, anyhow};
 use futures::future;
 use indoc::{formatdoc, indoc};
+use initialized_components::InitializedComponent;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_api_core::service::ApiServiceError;
@@ -3558,26 +3559,35 @@ impl ConversationCounters {
     }
 }
 
-// TODO: Refactor this at 1.85 into an AsyncFnOnce
-/// This acts like a closure that on `new` syncs the label counters and on `store` actually stores
-/// them to the db.
-/// This is useful to split the store and fetch behavior since we need labels to exist in the db
-/// before storing them.
+/// Used to initialize counters by syncing it with the Backend
 pub struct StoreLabelCounters(Vec<ConversationLabelsCount>, Vec<MessageLabelsCount>);
 impl StoreLabelCounters {
-    pub async fn new(api: &impl ProtonMail) -> Result<Self, AppError> {
-        let (a, b) =
-            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
-        Ok(Self(a, b))
-    }
-
-    pub async fn store(self, stash: &Stash) -> Result<(), AppError> {
-        let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
-        ConversationLabelsCount::create_or_update_conversation_counts(self.0, &tx).await?;
-        MessageLabelsCount::create_or_update_message_counts(self.1, &tx).await?;
-        tx.commit().await?;
-        Ok(())
+    /// It initializes counters by sincing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize(
+        api: &impl ProtonMail,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<AppError>> {
+        InitializedComponent::initialize::<AppError, Self>(
+            InitializedComponentKey::Counters,
+            &[InitializedComponentKey::Labels],
+            stash.connection(),
+            async || {
+                let (a, b) =
+                    future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api))
+                        .await?;
+                Ok(Self(a, b))
+            },
+            async |tx, Self(a, b)| {
+                ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
+                MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
+                Ok(())
+            },
+        )
+        .await
     }
 }
 

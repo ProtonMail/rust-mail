@@ -191,6 +191,11 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::DuplicateContext(_remote_id) => {
                 Self::reason(ContextErrorReason::DuplicateContext)
             }
+            MailContextError::InitializationFailed(_e) =>
+            // TODO (ET-2558) Use proper error message. Mobile app must handle it differently.
+            {
+                Self::Unexpected(Unexpected::Internal)
+            }
             MailContextError::Label(label_error) => Self::from(label_error),
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
             MailContextError::MissingContext => Self::Unexpected(Unexpected::Internal),

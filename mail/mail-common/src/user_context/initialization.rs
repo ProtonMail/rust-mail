@@ -1,12 +1,17 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
+use crate::datatypes::InitializedComponentKey;
+use crate::models::{
+    InitializationError, InitializedComponent, LabelWithCounters, MailSettings, StoreLabelCounters,
+};
 use crate::{MailContextError, MailUserContext};
-use futures::future::try_join;
 use futures::try_join;
+use proton_api_core::services::proton::Proton;
+use proton_core_common::CoreContextError;
 use proton_core_common::async_task::AsyncTaskResult;
-use proton_core_common::models::{Address, Contact, User};
+use proton_core_common::models::{Address, Contact, SyncedContacts, User};
+use stash::stash::Stash;
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
@@ -16,9 +21,9 @@ pub enum MailUserContextLoadingStage {
     MailSettings,
     Addresses,
     Events,
-    /// TODO: Split into Labels and Contacts
-    LabelsAndContacts,
+    Labels,
     Counters,
+    Contacts,
     Finished,
 }
 pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
@@ -29,7 +34,9 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 impl MailUserContext {
     /// Initialize a component.
     #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-    async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
+    async fn initial_sync_for_old<
+        E: Into<MailContextError> + std::fmt::Debug + Send + Sync + 'static,
+    >(
         stage: MailUserContextLoadingStage,
         handle: JoinHandle<AsyncTaskResult<Result<(), E>>>,
         cb: &dyn MailUserContextInitializationCallback,
@@ -65,6 +72,45 @@ impl MailUserContext {
         }
     }
 
+    /// Initialize a component.
+    #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
+    async fn initial_sync_for<E: std::fmt::Debug + Send + Sync + 'static>(
+        stage: MailUserContextLoadingStage,
+        handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
+        cb: &dyn MailUserContextInitializationCallback,
+    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        Self::initial_sync_for_old(stage, handle, cb).await
+        // let t = Instant::now();
+        // debug!("Begin syncing for {stage:?}");
+
+        // let result = handle.await;
+        // let elapsed = t.elapsed();
+        // if elapsed > Duration::from_secs(1) {
+        //     warn!("Slow sync for {stage:?}: {elapsed:?}");
+        // } else {
+        //     debug!("Syncing {stage:?} took {elapsed:?}");
+        // }
+
+        // cb.on_stage(stage);
+        // match result {
+        //     Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
+        //     Ok(AsyncTaskResult::Completed(Err(e))) => {
+        //         let e = e.into();
+        //         error!("Failed to sync {stage:?}: {e:?}");
+        //         Err((stage, e))
+        //     }
+        //     Ok(AsyncTaskResult::Cancelled) => {
+        //         error!("Called while syncing {stage:?}");
+        //         Err((stage, MailContextError::TaskCancelled))
+        //     }
+        //     Err(e) => {
+        //         let e = e.into();
+        //         error!("Panicked while syncing {stage:?}: {e:?}");
+        //         Err((stage, e))
+        //     }
+        // }
+    }
+
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
@@ -85,43 +131,18 @@ impl MailUserContext {
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let t0 = Instant::now();
         let ctx_clone = ctx.clone();
-        let labels_and_contacts = ctx.spawn(async move {
-            // Since contact syncing is the slowest part let's leave it downloading in parallel while we
-            // setup all of the rest of the futures.
-            let ctx_clone2 = ctx_clone.clone();
-            let contact_sync_dl_fut = ctx_clone.spawn(async move {
-                Contact::sync(ctx_clone2.api(), ctx_clone2.user_stash()).await
-            });
-
-            // let labels = Label::all_labels(ctx_clone.api()).await?;
-
-            let api = ctx_clone.api().to_owned();
-            let counters = ctx_clone.spawn(async move { StoreLabelCounters::new(&api).await });
-            let mut tether = ctx_clone.user_stash().connection();
-            let tx = tether.transaction().await?;
-            LabelWithCounters::initialize(ctx_clone.api(), &tx).await?;
-
-            tx.commit().await?;
-
-            let (contact_fut, counters) = try_join(contact_sync_dl_fut, counters)
-                .await
-                .expect("Can't fail to join");
-
-            // FIXME:(perf): This should be a different future that requests contact
-            // group labels
-            match contact_fut {
-                AsyncTaskResult::Completed(f) => f?.await?,
-                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
-            }
-            match counters {
-                AsyncTaskResult::Completed(counters) => {
-                    counters?.store(ctx_clone.user_stash()).await?
-                }
-                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
-            }
-
-            Ok::<_, MailContextError>(())
+        let labels = ctx.spawn(async move {
+            LabelWithCounters::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
         });
+        let ctx_clone = ctx.clone();
+        let counters = ctx.spawn(async move {
+            StoreLabelCounters::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
+        });
+        let ctx_clone = ctx.clone();
+        let contacts =
+            ctx.spawn(
+                async move { initialize_contacts(ctx_clone.api(), ctx_clone.user_stash()).await },
+            );
 
         let ctx_clone = ctx.clone();
         let event_loop = ctx.spawn(async move {
@@ -143,15 +164,21 @@ impl MailUserContext {
             ctx.spawn(async move { Address::sync(ctx_clone.api(), ctx_clone.user_stash()).await });
 
         try_join!(
-            Self::initial_sync_for(
-                MailUserContextLoadingStage::LabelsAndContacts,
-                labels_and_contacts,
+            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters, cb),
+            Self::initial_sync_for_old(MailUserContextLoadingStage::Events, event_loop, cb),
+            Self::initial_sync_for_old(
+                MailUserContextLoadingStage::UserSettings,
+                user_settings,
                 cb
             ),
-            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
+            Self::initial_sync_for_old(
+                MailUserContextLoadingStage::MailSettings,
+                mail_settings,
+                cb
+            ),
+            Self::initial_sync_for_old(MailUserContextLoadingStage::Addresses, addresses, cb),
         )?;
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
@@ -159,4 +186,21 @@ impl MailUserContext {
 
         Ok(())
     }
+}
+
+async fn initialize_contacts(
+    api: &Proton,
+    stash: &Stash,
+) -> Result<(), InitializationError<CoreContextError>> {
+    InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+        InitializedComponentKey::Contacts,
+        &[InitializedComponentKey::Labels],
+        stash.connection(),
+        async move || Contact::sync(api).await,
+        async |tx, res| {
+            res.store(tx).await?;
+            Ok(())
+        },
+    )
+    .await
 }

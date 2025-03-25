@@ -4,5 +4,6 @@
 
 CREATE TABLE initialized_components (
     -- A key is an integer. To see what it means, look at [`InitializedComponentKey`]
-    key INTEGER NOT NULL PRIMARY KEY    
+    key INTEGER NOT NULL PRIMARY KEY,
+    state INTEGER NOT NULL DEFAULT 0
 );

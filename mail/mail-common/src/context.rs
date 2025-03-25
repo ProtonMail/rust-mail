@@ -1,4 +1,5 @@
 use crate::actions::MailActionError;
+use crate::models::InitializationError;
 use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -100,6 +101,9 @@ pub enum MailContextError {
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
 
+    #[error("Could not initialize user context: {0}")]
+    InitializationFailed(anyhow::Error),
+
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -162,6 +166,19 @@ impl From<CoreContextError> for MailContextError {
         }
     }
 }
+
+impl<E: std::fmt::Debug + Send + Sync + 'static> From<InitializationError<E>> for MailContextError {
+    fn from(value: InitializationError<E>) -> Self {
+        match value {
+            InitializationError::InitializationFailed(_)
+            | InitializationError::DependencyFailed(_) => {
+                Self::InitializationFailed(anyhow::Error::from(value))
+            }
+            InitializationError::Stash(stash_error) => Self::Stash(stash_error),
+        }
+    }
+}
+
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
 impl<T: Action<Error: Into<MailContextError>>> From<QueueActionError<T>> for MailContextError {
