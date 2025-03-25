@@ -10,8 +10,8 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Bond;
+use stash::stash::StashError;
 use stash::stash::Tether;
-use stash::stash::{Stash, StashError};
 
 use crate::models::ModelIdExtension;
 
@@ -129,33 +129,26 @@ impl Address {
         <Self as Model>::save(self, bond).await
     }
 
-    /// Download and store user addresses into the database
+    /// Download user addresses. Returns an object that can be stored in DB.
     ///
     /// # Parameters
     ///
     /// * `api`   - The API instance to use to download the addresses.
-    /// * `stash` - The database instance to store the addresses.
     ///
     /// # Errors
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+    pub async fn sync(api: &Proton) -> CoreContextResult<SyncedAddresses> {
         let addresses = api
             .get_addresses()
             .await?
             .addresses
             .into_iter()
-            .map(Address::from);
+            .map(Address::from)
+            .collect();
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
-        for mut address in addresses {
-            address.save(&tx).await?;
-        }
-        tx.commit().await?;
-
-        Ok(())
+        Ok(SyncedAddresses { addresses })
     }
 
     /// Loads the address for the given e-mail from the database if any.
@@ -196,5 +189,23 @@ impl From<ApiAddress> for Address {
             status: value.status.into(),
             row_id: None,
         }
+    }
+}
+
+/// This is a manual implementation of `Address::sync` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+pub struct SyncedAddresses {
+    addresses: Vec<Address>,
+}
+
+impl SyncedAddresses {
+    /// Consume this manual closure by storing data in the Database.
+    ///
+    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+        for mut address in self.addresses {
+            address.save(tx).await?;
+        }
+        Ok(())
     }
 }

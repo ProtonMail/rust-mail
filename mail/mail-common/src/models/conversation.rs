@@ -3562,7 +3562,7 @@ impl ConversationCounters {
 /// Used to initialize counters by syncing it with the Backend
 pub struct StoreLabelCounters(Vec<ConversationLabelsCount>, Vec<MessageLabelsCount>);
 impl StoreLabelCounters {
-    /// It initializes counters by sincing with the Backend.
+    /// It initializes counters by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
     /// This function is idempotent. If successfully initialized in the past.

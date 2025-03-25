@@ -24,7 +24,7 @@ async fn test_double_init_does_not_fail() {
     let user_ctx = ctx.mail_user_context().await;
     let init_params = TestParams::default_basic();
 
-    ctx.setup_user_repeated(init_params, 2).await;
+    ctx.setup_user_repeated(init_params, 1).await;
     ctx.init_user(user_ctx.clone()).await;
     ctx.init_user(user_ctx.clone()).await;
 }

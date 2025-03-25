@@ -45,7 +45,7 @@ impl InitializedComponent {
     ///
     /// Returns an error if the query fails
     ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(existing) = Self::find_by_id(self.key, bond).await? {
             self.row_id = existing.row_id;
         }
@@ -53,7 +53,9 @@ impl InitializedComponent {
         <Self as Model>::save(self, bond).await
     }
 
-    async fn state_for_many(
+    /// Returns a state of all dependencies with a single SQL query
+    ///
+    async fn state_for_deps(
         keys: &[InitializedComponentKey],
         tether: &Tether,
     ) -> Result<InitializedComponentState, StashError> {
@@ -104,8 +106,20 @@ impl InitializedComponent {
         Ok(matches!(state, InitializedComponentState::Succeeded))
     }
 
-    /// Mark component as initialized by running initialization async closure.
+    /// Mark component as initialized by running initialization async closure s.
     /// This operation is **idempotent**. If the component is already initialized, it becomes no-op.
+    ///
+    /// # Dependencies
+    ///
+    /// Dependency is an another component that needs to be initialized before this one.
+    /// In case of leaf components, leave `&[]`.
+    ///
+    /// # Async Closures
+    ///
+    /// There are two closures:
+    ///
+    /// * `fetch` that does not require a transaction, and does not wait for the dependencies,
+    /// * `store` that provides a transaction, and is executed only if all dependencies are initialized
     ///
     /// # Errors
     ///
@@ -195,6 +209,10 @@ impl InitializedComponent {
         Ok(())
     }
 
+    /// Wait until dependencies are initialized.
+    /// If dependency fails to initialize, this component also fails.
+    /// That creates a cascade effect.
+    ///
     async fn wait_for_dependencies(
         key: InitializedComponentKey,
         dependencies: &[InitializedComponentKey],
@@ -234,12 +252,16 @@ impl InitializedComponent {
         }
     }
 
+    /// Check if all dependencies are initialized.
+    /// If at least one fails, it returns error.
+    /// If all succeeed, it returns true.
+    /// Otherwise, false
     async fn check_dependencies(
         key: InitializedComponentKey,
         dependencies: &[InitializedComponentKey],
         tether: &Tether,
     ) -> Result<bool, DependencyInitializationError> {
-        let state = Self::state_for_many(dependencies, tether).await?;
+        let state = Self::state_for_deps(dependencies, tether).await?;
         tracing::debug!("Checking state of dependencies: {state:?}");
 
         match state {
@@ -252,6 +274,8 @@ impl InitializedComponent {
     }
 }
 
+/// Error that happened during the initialization of user context
+///
 #[derive(Debug, thiserror::Error)]
 pub enum InitializationError<E> {
     #[error("Initialization failed: {0:?}")]
@@ -275,6 +299,7 @@ impl<E> From<DependencyInitializationError> for InitializationError<E> {
     }
 }
 
+/// Error that happened while waiting for the dependency
 #[derive(Debug, thiserror::Error)]
 pub enum DependencyInitializationError {
     #[error("Initialization of the dependency for {0:?} failed")]

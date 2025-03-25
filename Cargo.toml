@@ -209,8 +209,8 @@ version = "1.2"
 registry = "proton"
 
 [patch.proton]
-# muon = { git = "https://gitlab.protontech.ch/ProtonVPN/rust/muon.git", branch = "master"}
-muon = { git = "ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git", branch = "master"}
+muon = { git = "https://gitlab.protontech.ch/ProtonVPN/rust/muon.git", branch = "master"}
+# muon = { git = "ssh://git@gitlab.protontech.ch/ProtonVPN/rust/muon.git", branch = "master"}
 
 [workspace.dependencies.proton-core-test-utils]
 version = "0.1"

@@ -7,7 +7,7 @@ use proton_api_core::services::proton::UserId;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::Bond;
-use stash::stash::{Stash, StashError};
+use stash::stash::StashError;
 
 use super::{ModelExtension as _, UserSettings};
 
@@ -187,17 +187,34 @@ impl User {
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync_user_and_settings(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        let mut user = User::from(api.get_users().await?.user);
+    pub async fn sync_user_and_settings(api: &Proton) -> CoreContextResult<SyncedUserSettings> {
+        let user = User::from(api.get_users().await?.user);
         let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
         settings.remote_id.clone_from(&user.remote_id);
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
-        user.save(&tx).await?;
-        settings.save(&tx).await?;
-        tx.commit().await?;
+        Ok(SyncedUserSettings { user, settings })
+    }
+}
 
+#[must_use]
+/// This is a manual implementation of `User::sync_user_and_settings` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+pub struct SyncedUserSettings {
+    user: User,
+    settings: UserSettings,
+}
+
+impl SyncedUserSettings {
+    /// Consume this manual closure by storing data in the Database.
+    ///
+    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+        let Self {
+            mut user,
+            mut settings,
+        } = self;
+        user.save(tx).await?;
+        settings.save(tx).await?;
         Ok(())
     }
 }
