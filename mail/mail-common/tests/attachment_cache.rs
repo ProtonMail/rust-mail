@@ -315,7 +315,7 @@ async fn integration() -> anyhow::Result<()> {
 
         // Then override locally ;)
         at_cache.attachment_id = at.local_id.unwrap();
-        at_cache.path = path;
+        at_cache.path = path.into_os_string().into_string().unwrap();
         at_cache.row_id = Some(n.try_into().unwrap()); // Evil rowid hack
         at_cache.save(&tx).await?;
     }
