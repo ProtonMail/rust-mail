@@ -3202,7 +3202,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.2.0"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#73ea080dc1506e8a17cb2481f8ab33c6df5433f6"
+source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#3efab841e6f21086d39ad765a3c2960bc87357ea"
 dependencies = [
  "muon-impl",
  "muon-proc",
@@ -3211,7 +3211,7 @@ dependencies = [
 [[package]]
 name = "muon-impl"
 version = "0.13.1"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#73ea080dc1506e8a17cb2481f8ab33c6df5433f6"
+source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#3efab841e6f21086d39ad765a3c2960bc87357ea"
 dependencies = [
  "async-channel",
  "async-executor",
@@ -3263,7 +3263,7 @@ dependencies = [
 [[package]]
 name = "muon-proc"
 version = "0.5.0"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#73ea080dc1506e8a17cb2481f8ab33c6df5433f6"
+source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?branch=master#3efab841e6f21086d39ad765a3c2960bc87357ea"
 dependencies = [
  "cfg-if",
  "proc-macro2",
