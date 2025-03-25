@@ -26,7 +26,7 @@ use stash::stash::{Bond, StashError};
 use stash::utils::placeholders;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
@@ -88,7 +88,7 @@ impl Attachment {
         &self,
         ctx: &MailUserContext,
         into_transaction: &mut impl IntoTransaction,
-    ) -> MailContextResult<String> {
+    ) -> MailContextResult<PathBuf> {
         if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
             self.local_id.unwrap(),
             into_transaction,
@@ -208,7 +208,7 @@ impl Attachment {
                 filename: attachment.filename,
                 size: attachment.size,
             },
-            data_path: data_path.into(),
+            data_path,
         })
     }
 
@@ -216,7 +216,7 @@ impl Attachment {
     async fn path_from_cache_and_update_metadata_atomic(
         id: LocalAttachmentId,
         into_transaction: &mut impl IntoTransaction,
-    ) -> MailContextResult<Option<String>> {
+    ) -> MailContextResult<Option<PathBuf>> {
         let tx = into_transaction
             .transaction()
             .await
@@ -234,7 +234,7 @@ impl Attachment {
     pub async fn path_from_cache_and_update_metadata(
         id: LocalAttachmentId,
         tx: &Bond<'_>,
-    ) -> Result<Option<String>, StashError> {
+    ) -> Result<Option<PathBuf>, StashError> {
         let path = tx
             .query_value::<_, String>(
                 indoc! {
@@ -261,7 +261,7 @@ impl Attachment {
                     params![id],
                 )
                 .await?;
-                Ok(Some(path))
+                Ok(Some(PathBuf::from(path)))
             }
             Err(e) => Err(e),
         }
@@ -276,7 +276,7 @@ impl Attachment {
         id: LocalAttachmentId,
         data: Vec<u8>,
         bond: &Bond<'_>,
-    ) -> MailContextResult<String> {
+    ) -> MailContextResult<PathBuf> {
         // We will write the attachment to
         // {CACHE_PATH}/attachments/{id}/{name}
         // The reason for this scheme is twofold:
@@ -286,10 +286,11 @@ impl Attachment {
         path.push(format!("{id}"));
         tokio::fs::create_dir_all(&path).await?;
         path.push(name);
-        let path = path
+        let path_string = path
+            .clone()
             .into_os_string()
             .into_string()
-            // This is infailable since all pieces exist as a string at some point.
+            // This is infallible since all pieces exist as a string at some point.
             .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
 
         let data_len = data.len();
@@ -299,7 +300,7 @@ impl Attachment {
             "INSERT INTO attachment_cache (attachment_id, path, size)
             VALUES (?, ?, ?)",
                     },
-            params![id, path.clone(), data_len],
+            params![id, path_string, data_len],
         )
         .await?;
         // Execute the cleanup routine in the background.
@@ -322,7 +323,7 @@ impl Attachment {
         id: LocalAttachmentId,
         attachment_path: &Path,
         bond: &Bond<'_>,
-    ) -> MailContextResult<String> {
+    ) -> MailContextResult<PathBuf> {
         let metadata = tokio::fs::metadata(attachment_path).await?;
         let data_size = metadata.size();
         // We will write the attachment to
@@ -339,10 +340,11 @@ impl Attachment {
             .await
             .inspect_err(|e| error!("Failed to copy attachment: {e:?}"))?;
 
-        let path = path
+        let path_string = path
+            .clone()
             .into_os_string()
             .into_string()
-            // This is infailable since all pieces exist as a string at some point.
+            // This is infallible since all pieces exist as a string at some point.
             .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
 
         bond.execute(
@@ -350,7 +352,7 @@ impl Attachment {
             "INSERT INTO attachment_cache (attachment_id, path, size)
             VALUES (?, ?, ?)",
                     },
-            params![id, path.clone(), data_size],
+            params![id, path_string, data_size],
         )
         .await?;
         Ok(path)
