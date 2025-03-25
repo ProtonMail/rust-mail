@@ -252,6 +252,7 @@ impl From<InboxSessionKey> for ExposedKey {
 }
 
 /// Defines newly created attachment disposition.
+#[derive(Debug)]
 pub enum NewAttachmentDisposition {
     /// Regular mail attachment.
     Attachment,
@@ -260,6 +261,7 @@ pub enum NewAttachmentDisposition {
 }
 
 /// Parameters required to create a new attachment.
+#[derive(Debug)]
 pub struct NewAttachmentParams {
     /// File name of the attachment.
     pub filename: String,

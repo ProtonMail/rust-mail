@@ -135,6 +135,8 @@ pub enum AppError {
     AttachmentHasNoAddressId(LocalAttachmentId),
     #[error("Attachment {0} does not have key packets")]
     AttachmentMissingKeyPackets(LocalAttachmentId),
+    #[error("Attachment {0} is not in the cache")]
+    AttachmentIsNotInCache(LocalAttachmentId),
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

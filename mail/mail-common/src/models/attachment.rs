@@ -821,6 +821,80 @@ impl Attachment {
             Err(e) => Err(e),
         }
     }
+
+    /// Clone an attachment.
+    ///
+    /// This will create a copy of an existing attachment in the database and the cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we can't perform the clone operation or the attachment data is not
+    /// in the cache.
+    pub async fn clone_attachment_by_id(
+        ctx: &MailUserContext,
+        address_id: AddressId,
+        attachment_id: LocalAttachmentId,
+        bond: &Bond<'_>,
+    ) -> Result<Attachment, MailContextError> {
+        let Some(attachment) = Self::find_by_id(attachment_id, bond).await? else {
+            return Err(AppError::AttachmentMissing(attachment_id).into());
+        };
+
+        Self::clone_attachment(ctx, address_id, attachment, bond).await
+    }
+
+    /// Clone an attachment.
+    ///
+    /// This will create a copy of an existing attachment in the database and the cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we can't perform the clone operation or the attachment data is not
+    /// in the cache.
+    pub async fn clone_attachment(
+        ctx: &MailUserContext,
+        address_id: AddressId,
+        attachment: Attachment,
+        bond: &Bond<'_>,
+    ) -> Result<Attachment, MailContextError> {
+        let mut new_attachment = attachment;
+        let attachment_id = new_attachment.local_id.unwrap();
+
+        let Some(current_path) =
+            Attachment::path_from_cache_and_update_metadata(attachment_id, bond).await?
+        else {
+            return Err(AppError::AttachmentIsNotInCache(attachment_id).into());
+        };
+
+        new_attachment.local_id = None;
+        new_attachment.row_id = None;
+        new_attachment.attachment_type = AttachmentType::Remote(None);
+        new_attachment.local_message_id = None;
+        new_attachment.remote_message_id = None;
+        new_attachment.local_conversation_id = None;
+        new_attachment.remote_conversation_id = None;
+        new_attachment.local_address_id =
+            Address::remote_id_counterpart(address_id.clone(), bond).await?;
+        new_attachment.remote_address_id = Some(address_id);
+        debug_assert!(new_attachment.local_address_id.is_some());
+
+        new_attachment
+            .save(bond)
+            .await
+            .inspect_err(|e| error!("Failed to stave new attachment: {e:?}"))?;
+
+        Self::copy_attachment_to_cache(
+            ctx,
+            &new_attachment.filename,
+            new_attachment.local_id.unwrap(),
+            &current_path,
+            bond,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to clone pgp attachment in cache: {e:?}"))?;
+
+        Ok(new_attachment)
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't

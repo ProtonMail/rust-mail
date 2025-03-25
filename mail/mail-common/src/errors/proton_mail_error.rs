@@ -151,6 +151,7 @@ impl From<AppError> for ProtonMailError {
             AppError::UnknownCid(_, _) => Self::reason(ActionErrorReason::UnknownContentId),
             AppError::AttachmentHasNoAddressId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissingKeyPackets(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::AttachmentIsNotInCache(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

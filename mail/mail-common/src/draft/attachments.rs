@@ -33,6 +33,8 @@ pub enum DraftAttachmentState {
     Error(DraftAttachmentUploadError),
     /// Could not upload due to lack of network,
     Offline,
+    /// Attachment is awaiting upload.
+    Pending,
 }
 
 impl DraftAttachmentState {
@@ -40,6 +42,7 @@ impl DraftAttachmentState {
         match metadata.state() {
             DraftAttachmentUploadState::Uploading => Self::Uploading,
             DraftAttachmentUploadState::Uploaded => Self::Uploaded,
+            DraftAttachmentUploadState::Pending => Self::Pending,
             DraftAttachmentUploadState::Error => {
                 let error = metadata
                     .error

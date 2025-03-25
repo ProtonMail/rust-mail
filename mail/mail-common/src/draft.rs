@@ -14,7 +14,7 @@ use crate::draft::compose::{
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
-    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
+    Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
     DraftSendResult, DraftSendResultOrigin, EmbeddedAttachmentInfo, MailSettings, Message,
     MetadataId,
 };
@@ -611,9 +611,32 @@ impl Draft {
         )
         .await;
 
-        for (order, attachment) in attachments.iter().enumerate() {
+        for (order, attachment) in attachments.into_iter().enumerate() {
             let mut attachment_metadata =
-                DraftAttachmentMetadata::inherited(metadata.id.unwrap(), attachment, order);
+                if matches!(attachment.attachment_type, AttachmentType::Pgp) {
+                    // PGP attachments need to be cloned and uploaded to the server so it can be sent.
+                    debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
+                    let new_attachment = Attachment::clone_attachment(
+                        context,
+                        address.remote_id.clone().unwrap(),
+                        attachment,
+                        &tx,
+                    )
+                    .await
+                    .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
+                    debug!(
+                        "PGP attachment cloned as {} ",
+                        new_attachment.local_id.unwrap()
+                    );
+                    DraftAttachmentMetadata::pending(
+                        metadata.id.unwrap(),
+                        new_attachment.local_id.unwrap(),
+                        order,
+                    )
+                } else {
+                    DraftAttachmentMetadata::inherited(metadata.id.unwrap(), &attachment, order)
+                };
+
             attachment_metadata
                 .save(&tx)
                 .await
@@ -917,6 +940,7 @@ impl Draft {
     pub fn to_save_action(&self) -> DraftSaveActionQueuer {
         DraftSaveActionQueuer::new(
             self.metadata_id,
+            self.address_id.clone(),
             Save::new(self, DraftSendResultOrigin::Save),
         )
     }
@@ -1197,12 +1221,17 @@ impl Draft {
 /// context.
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
+    address_id: AddressId,
     action: Save,
 }
 
 impl DraftSaveActionQueuer {
-    fn new(id: MetadataId, action: Save) -> Self {
-        Self { id, action }
+    fn new(id: MetadataId, address_id: AddressId, action: Save) -> Self {
+        Self {
+            id,
+            address_id,
+            action,
+        }
     }
 
     /// Consume and queue this action.
@@ -1211,12 +1240,38 @@ impl DraftSaveActionQueuer {
         self,
         queue: &Queue,
         tether: &Tether,
-    ) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
+    ) -> Result<QueuedActionOutput<Save>, MailContextError> {
+        // find all attachments that need to be manually queued.
+        let pending_attachment_ids =
+            DraftAttachmentMetadata::pending_attachments(self.id, tether).await?;
         // We need to be aware of the last save action id to try and replace the existing one.
         // On failure, we only execute after the previous one has finished,
         let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-        queue_or_replace_draft_save(queue, self.action, self.id, last_draft_save_action_id, [])
-            .await
+        let output =
+            queue_or_replace_draft_save(queue, self.action, self.id, last_draft_save_action_id, [])
+                .await?;
+
+        //TODO: queue batching so we can fail everything together.
+        for attachment_id in pending_attachment_ids {
+            let metadata = MetadataBuilder::new()
+                .with_resource(&self.id)
+                .expect("This should never fail")
+                .with_dependency(output.id)
+                .build();
+            queue
+                .queue_action_with_metadata(
+                    AttachmentUpload::new(
+                        self.id,
+                        self.address_id.clone(),
+                        attachment_id,
+                        AttachmentUploadMode::Create,
+                    ),
+                    metadata,
+                )
+                .await?;
+        }
+
+        Ok(output)
     }
 }
 

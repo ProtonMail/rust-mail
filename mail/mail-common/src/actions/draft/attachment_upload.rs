@@ -117,8 +117,8 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
                     .await
                     .inspect_err(|e| error!("Failed to get the next display order: {e:?}"))?;
             DraftAttachmentMetadata::new(
-                action.attachment_id,
                 action.metadata_id,
+                action.attachment_id,
                 next_display_order,
             )
         };

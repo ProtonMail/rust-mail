@@ -153,7 +153,7 @@ impl Composer {
                         Ok(_) => Command::none(),
                         Err(e) => {
                             error!("Failed to save draft: {e:?}");
-                            Command::message(MailContextError::from(e).into())
+                            Command::message(e.into())
                         }
                     },
                 ])
@@ -562,6 +562,7 @@ impl StateHandler for Composer {
                         DraftAttachmentState::Uploaded => Span::from("D:"),
                         DraftAttachmentState::Error(_) => Span::from("E:").fg(Color::Red),
                         DraftAttachmentState::Offline => Span::from("O:"),
+                        DraftAttachmentState::Pending => Span::from("P:"),
                     }
                     .bold(),
                     Span::from(if a.disposition == Disposition::Inline {

@@ -514,7 +514,7 @@ impl Save {
             // API always returns the same amount, but tests may not.
             debug_assert_eq!(
                 new_message_body_metadata.attachments.len(),
-                attachments.len()
+                attachments.iter().filter_map(|a| a.remote_id()).count()
             );
 
             for (index, original_attachment) in attachments
