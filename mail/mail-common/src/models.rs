@@ -31,6 +31,7 @@ mod attachment;
 pub mod attachment_cache;
 mod conversation;
 mod draft;
+mod initialized_components;
 mod labels_with_counters;
 mod mail_scroller;
 mod mail_settings;
